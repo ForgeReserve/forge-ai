@@ -452,3 +452,6 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
   .thread { scroll-behavior: auto; }
 }
+.hint.warn { color: var(--warn); }
+.hint.err { color: var(--err); }
+#setLockKey { font-family: var(--mono); font-size: 13px; }

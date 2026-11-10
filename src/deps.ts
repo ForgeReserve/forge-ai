@@ -13,7 +13,7 @@ export function buildDeps(
   opts: {
     rateSources?: RateSource[];
     env?: NodeJS.ProcessEnv;
-    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean };
+    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
     fundingFaults?: FundingFaults;
   } = {},
 ): Deps {

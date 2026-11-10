@@ -8,6 +8,8 @@ import {
   getTokenMetadata,
   MintOperationError,
   type OperationCounters,
+  type OutputDataLike,
+  type OutputType,
   type Proof,
   serializeProofs,
   serializeSwapPreview,
@@ -89,6 +91,11 @@ interface OutgoingRow {
   preview: string | null;
   counters: string | null;
   token: string | null;
+  error: string | null;
+  /** NUT-11: the send outputs are P2PK-locked to this compressed key (random secrets, not NUT-13). */
+  lock_pubkey: string | null;
+  /** 1: pays out exactly the proofs reserved under op_id = id (other-mint change and refunds). */
+  pinned: number;
 }
 
 export interface WalletOptions {
@@ -97,7 +104,7 @@ export interface WalletOptions {
   maxTokenBytes: number;
   seed?: Uint8Array;
   /** Test-only fault injection: throw after the mint swap, before the DB write. */
-  faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean };
+  faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
 }
 
 class SqliteCounterSource implements CounterSource {
@@ -419,13 +426,46 @@ export class GatewayWallet {
   // ---------------------------------------------------------------- outgoing
 
   /** Records an amount owed to someone; caller provides the transaction. */
-  oweRaw(p: { mint: string; unit: Unit; amount: number; purpose: OutgoingRow['purpose']; accountId?: string | null; requestId?: string | null }): string {
+  oweRaw(p: {
+    mint: string;
+    unit: Unit;
+    amount: number;
+    purpose: OutgoingRow['purpose'];
+    accountId?: string | null;
+    requestId?: string | null;
+    /** NUT-11: lock the token to this compressed key (from parseLockPubkey). */
+    lockPubkey?: string | null;
+    pinned?: boolean;
+  }): string {
     const id = 'out_' + randomUUID();
     this.db
       .prepare(
-        "INSERT INTO outgoing (id, mint, unit, amount, purpose, account_id, request_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'owed', ?, ?)",
+        "INSERT INTO outgoing (id, mint, unit, amount, purpose, account_id, request_id, status, lock_pubkey, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'owed', ?, ?, ?, ?)",
       )
-      .run(id, normalizeMintUrl(p.mint), p.unit, p.amount, p.purpose, p.accountId ?? null, p.requestId ?? null, now(), now());
+      .run(id, normalizeMintUrl(p.mint), p.unit, p.amount, p.purpose, p.accountId ?? null, p.requestId ?? null, p.lockPubkey ?? null, p.pinned ? 1 : 0, now(), now());
+    return id;
+  }
+
+  /**
+   * Owes exactly a given set of proofs, re-issued locked to lockPubkey (other-mint change and refunds,
+   * which the gateway must not mix with its own eCash). Pass `proofs` not yet stored, or `fromOpId` to
+   * take over the proofs another operation holds. The payout is the proofs' value less the lock swap's
+   * input fee; issue() works it out. Caller provides the transaction.
+   */
+  owePinned(p: {
+    mint: string;
+    unit: Unit;
+    purpose: OutgoingRow['purpose'];
+    requestId: string;
+    lockPubkey: string;
+    proofs?: Proof[];
+    fromOpId?: string;
+  }): string {
+    const id = this.oweRaw({ mint: p.mint, unit: p.unit, amount: 0, purpose: p.purpose, requestId: p.requestId, lockPubkey: p.lockPubkey, pinned: true });
+    if (p.proofs?.length) this.insertProofs(p.proofs, p.mint, p.unit, 'reserved', id);
+    if (p.fromOpId) this.db.prepare("UPDATE proofs SET op_id = ? WHERE op_id = ? AND state = 'reserved'").run(id, p.fromOpId);
+    const amount = sumProofs(this.heldProofs(id));
+    this.db.prepare('UPDATE outgoing SET amount = ? WHERE id = ?').run(amount, id);
     return id;
   }
 
@@ -460,6 +500,8 @@ export class GatewayWallet {
         if (row.status === 'done') return row.token!;
       }
       const w = await this.wallet(row.mint, row.unit);
+      const lock = row.lock_pubkey;
+      if (row.pinned) return await this.issuePinned(row, w);
       const amount = row.amount;
       const selected = tx(this.db, () => {
         const rows = this.db.prepare("SELECT proof FROM proofs WHERE mint = ? AND unit = ? AND state = 'unspent'").all(row!.mint, row!.unit) as Array<{
@@ -479,40 +521,73 @@ export class GatewayWallet {
       });
 
       const fees = w.getFeesForProofs(selected).toNumber();
-      if (sumProofs(selected) - fees === amount) {
+      // An exact match hands over our own (NUT-13) proofs; a locked payout always needs the swap.
+      if (!lock && sumProofs(selected) - fees === amount) {
         const token = getEncodedToken({ mint: row.mint, unit: row.unit, proofs: selected });
         this.finalizeOutgoing(id, token, []);
         return token;
       }
 
-      let counters: OperationCounters | undefined;
-      const preview = await w.prepareSwapToSend(
-        amount,
-        selected,
-        { includeFees: true, onCountersReserved: (c) => (counters = c) },
-        { send: { type: 'deterministic', counter: 0 }, keep: { type: 'deterministic', counter: 0 } },
-      );
-      this.db
-        .prepare("UPDATE outgoing SET status = 'prepared', preview = ?, counters = ?, updated_at = ? WHERE id = ?")
-        .run(JSON.stringify(serializeSwapPreview(preview)), JSON.stringify(counters ?? null), now(), id);
-      let res;
-      try {
-        res = await w.completeSwap(preview);
-      } catch (e) {
-        if (isDefinitiveSpent(e)) {
-          // Our own proofs were spent elsewhere (should not happen). Burn them and re-owe.
-          this.reowe(id, true);
-          throw new PaymentError('wallet_inconsistent', 'gateway proofs were already spent; retry', 503);
-        }
-        throw new PaymentError('mint_unavailable', `mint did not answer; payout is saved and can be retried: ${errText(e)}`, 503);
-      }
-      if (this.opts.faults?.afterSendSwap) throw new Error('fault injected after send swap');
-      const token = getEncodedToken({ mint: row.mint, unit: row.unit, proofs: res.send });
-      this.finalizeOutgoing(id, token, res.keep);
-      return token;
+      return await this.swapOut(row, w, amount, selected, true);
     } finally {
       this.inflight.delete(id);
     }
+  }
+
+  /**
+   * Swaps the reserved inputs into a payout. Send outputs are NUT-13 deterministic, or P2PK-locked
+   * with random secrets when the row has a lock key; keep outputs are always deterministic. The whole
+   * preview (secrets and blinding factors included) is stored before the mint sees the request, so
+   * recovery can replay it (NUT-19) or restore its signatures (NUT-09).
+   */
+  private async swapOut(row: OutgoingRow, w: Wallet, amount: number, inputs: Proof[], includeFees: boolean): Promise<string> {
+    const id = row.id;
+    const send: OutputType = row.lock_pubkey ? { type: 'p2pk', options: { pubkey: row.lock_pubkey } } : { type: 'deterministic', counter: 0 };
+    let counters: OperationCounters | undefined;
+    const preview = await w.prepareSwapToSend(
+      amount,
+      inputs,
+      { includeFees, onCountersReserved: (c) => (counters = c) },
+      { send, keep: { type: 'deterministic', counter: 0 } },
+    );
+    this.db
+      .prepare("UPDATE outgoing SET status = 'prepared', preview = ?, counters = ?, error = NULL, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(serializeSwapPreview(preview)), JSON.stringify(counters ?? null), now(), id);
+    let res;
+    try {
+      res = await w.completeSwap(preview);
+    } catch (e) {
+      if (isDefinitiveSpent(e)) {
+        // Our own proofs were spent elsewhere (should not happen). Burn them and re-owe.
+        this.reowe(id, true);
+        throw new PaymentError('wallet_inconsistent', 'gateway proofs were already spent; retry', 503);
+      }
+      throw new PaymentError('mint_unavailable', `mint did not answer; payout is saved and can be retried: ${errText(e)}`, 503);
+    }
+    if (this.opts.faults?.afterSendSwap) throw new Error('fault injected after send swap');
+    const token = getEncodedToken({ mint: row.mint, unit: row.unit, proofs: res.send });
+    this.finalizeOutgoing(id, token, res.keep);
+    return token;
+  }
+
+  /** A pinned payout: exactly the proofs held under op_id = row.id, less the swap's input fee. */
+  private async issuePinned(row: OutgoingRow, w: Wallet): Promise<string> {
+    const held = this.heldProofs(row.id);
+    if (!held.length) {
+      this.db.prepare("UPDATE outgoing SET status = 'failed', error = 'no proofs held for this payout', updated_at = ? WHERE id = ?").run(now(), row.id);
+      throw new PaymentError('issue_failed', 'this payout failed');
+    }
+    const amount = sumProofs(held) - w.getFeesForProofs(held).toNumber();
+    if (!row.lock_pubkey || amount < 1) {
+      // Nothing to lock, or the lock swap's fee would take it all: hand the proofs over as they are.
+      const token = getEncodedToken({ mint: row.mint, unit: row.unit, proofs: held });
+      this.db.prepare('UPDATE outgoing SET amount = ? WHERE id = ?').run(sumProofs(held), row.id);
+      this.finalizeOutgoing(row.id, token, []);
+      if (row.lock_pubkey) log.warn('outgoing_lock_skipped', { id: row.id, reason: 'fee exceeds value' });
+      return token;
+    }
+    this.db.prepare('UPDATE outgoing SET amount = ? WHERE id = ?').run(amount, row.id);
+    return this.swapOut({ ...row, amount }, w, amount, held, false);
   }
 
   private finalizeOutgoing(id: string, token: string, keep: Proof[]) {
@@ -526,6 +601,19 @@ export class GatewayWallet {
   }
 
   private reowe(id: string, inputsSpent: boolean) {
+    const row = this.getOutgoing(id);
+    if (row?.pinned) {
+      // Pinned proofs stay with this payout. If they are gone there is nothing left to pay from.
+      tx(this.db, () => {
+        if (inputsSpent) {
+          this.db.prepare("UPDATE proofs SET state = 'spent' WHERE op_id = ? AND state = 'reserved'").run(id);
+          this.db.prepare("UPDATE outgoing SET status = 'failed', error = 'inputs spent elsewhere', updated_at = ? WHERE id = ?").run(now(), id);
+        } else {
+          this.db.prepare("UPDATE outgoing SET status = 'owed', preview = NULL, counters = NULL, updated_at = ? WHERE id = ?").run(now(), id);
+        }
+      });
+      return;
+    }
     tx(this.db, () => {
       this.db.prepare(`UPDATE proofs SET state = ?, op_id = NULL WHERE op_id = ? AND state = 'reserved'`).run(inputsSpent ? 'spent' : 'unspent', id);
       this.db.prepare("UPDATE outgoing SET status = 'owed', inputs = NULL, preview = NULL, counters = NULL, updated_at = ? WHERE id = ?").run(now(), id);
@@ -544,12 +632,13 @@ export class GatewayWallet {
       try {
         const res = await w.completeSwap(preview);
         this.finalizeOutgoing(row.id, getEncodedToken({ mint: row.mint, unit: row.unit, proofs: res.send }), res.keep);
-        log.info('outgoing_recovered', { id: row.id, via: 'replay' });
+        log.info('outgoing_recovered', { id: row.id, via: 'replay', locked: !!row.lock_pubkey });
         return;
       } catch (e) {
         if (!isMintRejection(e)) throw e;
       }
     }
+    if (row.lock_pubkey) return this.recoverLockedOutgoing(row, w, preview);
     const c = row.counters ? (JSON.parse(row.counters) as OperationCounters | null) : null;
     if (c && c.count > 0) {
       const { proofs } = await w.restore(c.start, c.count, { keysetId: c.keysetId });
@@ -565,6 +654,63 @@ export class GatewayWallet {
     const states = await w.checkProofsStates(preview.inputs);
     this.reowe(row.id, !states.every((s) => s.state === 'UNSPENT'));
     log.warn('outgoing_reowed', { id: row.id });
+  }
+
+  /**
+   * Recovery of a locked payout whose replay was refused. Its send secrets are random, so the counter
+   * range cannot find them; the stored blinded messages can: NUT-09 restore returns the signatures the
+   * mint made for exactly those outputs. The mint either signed all outputs of the swap or none.
+   *  - all signed: build the proofs from the stored secrets and blinding factors, finalize once.
+   *  - none signed: the swap never happened with these outputs; re-owe like an unlocked payout.
+   *  - anything else (restore refused or unsupported, partial answer): the outcome is unknown. The row
+   *    stays prepared and owed, is never paid a second time, and is retried on the next issue/startup.
+   */
+  private async recoverLockedOutgoing(row: OutgoingRow, w: Wallet, preview: SwapPreview): Promise<void> {
+    const sendOut = preview.sendOutputs ?? [];
+    const keepOut = preview.keepOutputs ?? [];
+    let restored: Array<Proof | null> | null = null;
+    if (!this.opts.faults?.noRestoreOnRecovery) {
+      try {
+        restored = await this.restoreOutputs(w, [...sendOut, ...keepOut]);
+      } catch (e) {
+        if (!isMintRejection(e)) throw e; // offline: try later
+      }
+    }
+    if (restored && restored.every((p) => p !== null)) {
+      const proofs = restored as Proof[];
+      const send = proofs.slice(0, sendOut.length);
+      const keep = proofs.slice(sendOut.length);
+      this.finalizeOutgoing(row.id, getEncodedToken({ mint: row.mint, unit: row.unit, proofs: send }), keep);
+      log.info('outgoing_recovered', { id: row.id, via: 'restore', locked: true });
+      return;
+    }
+    if (restored && restored.every((p) => p === null)) {
+      const states = await w.checkProofsStates(preview.inputs);
+      this.reowe(row.id, !states.every((s) => s.state === 'UNSPENT'));
+      log.warn('outgoing_reowed', { id: row.id, locked: true });
+      return;
+    }
+    const why = restored ? 'the mint restored only part of the locked outputs' : 'the mint would neither replay the swap nor restore its signatures';
+    this.db.prepare('UPDATE outgoing SET error = ?, updated_at = ? WHERE id = ?').run(`outcome unknown: ${why}`, now(), row.id);
+    log.error('outgoing_outcome_unknown', { id: row.id, locked: true });
+    throw new PaymentError('payout_unknown', 'the mint has not confirmed whether this payout was made; it stays owed and is never paid twice. Retry later', 503);
+  }
+
+  /** NUT-09 restore of specific outputs: the proof for each output the mint signed, else null. */
+  private async restoreOutputs(w: Wallet, outputs: OutputDataLike[]): Promise<Array<Proof | null>> {
+    if (!outputs.length) return [];
+    const res = await w.mint.restore({ outputs: outputs.map((o) => o.blindedMessage) });
+    const sigs = new Map<string, (typeof res.signatures)[number]>();
+    res.outputs.forEach((o, i) => {
+      const sig = res.signatures[i];
+      if (sig) sigs.set(o.B_, sig);
+    });
+    const ids = [...new Set([...sigs.values()].map((s) => s.id))];
+    if (ids.length) await w.ensureOperableKeysets(ids);
+    return outputs.map((o) => {
+      const sig = sigs.get(o.blindedMessage.B_);
+      return sig ? o.toProof(sig, w.getKeyset(sig.id)) : null;
+    });
   }
 
   /** Startup recovery for every interrupted mint operation. */

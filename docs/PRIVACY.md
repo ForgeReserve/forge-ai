@@ -6,6 +6,7 @@ What the gateway can see depends on the tier and on whether the client encrypts.
 
 - Prompt and completion content. Logs and the `requests` table hold only request id, model, supplier, token counts, how usage was measured, cost, status and latency.
 - Balance keys (only a SHA-256 is stored) and invite codes (same).
+- P2PK lock keys (`X-Cashu-Pubkey`, `pubkey`) are not logged. They are public keys, stored with the request, payout or funding they lock (`requests.lock_pubkey`, `outgoing.lock_pubkey`, `fundings.f_lock_pubkey`) so a payout made after a crash is still locked, and returned to the payer as `locked_to`.
 
 Streams are read in memory as they pass, to count tokens when the supplier does not report usage. Only counters are kept.
 
@@ -19,7 +20,7 @@ Streams are read in memory as they pass, to count tokens when the supplier does 
 | Gateway sees | Model, sizes, usage, timing, client IP | Same | Model name, body size, max output tokens, frame count, timing, client IP, usage numbers reported by Tinfoil |
 | How usage is measured | Upstream `usage` | Upstream `usage` | `X-Tinfoil-Usage-Metrics` response header (non-streaming) or HTTP trailer (streaming); else flat schedule |
 
-Payment links: with a balance key, every request on that key is linkable to the others. With NUT-24, requests are not linked by the gateway, but the mint knows its own swaps. Client IPs reach the gateway (and Caddy); use Tor or a VPN to hide them.
+Payment links: with a balance key, every request on that key is linkable to the others. A P2PK lock key is a stable identifier: reusing one key links the payouts locked to it, at the gateway and at the mint, which sees the key in the locked proofs when they are redeemed. Use a fresh key per payout (cashu.me warns when a key was used before) if that matters. With NUT-24, requests are not linked by the gateway, but the mint knows its own swaps. Client IPs reach the gateway (and Caddy); use Tor or a VPN to hide them.
 
 ## Funding
 
@@ -49,7 +50,7 @@ The page at `/` is static files from the gateway's own origin (`public/`), with 
 What the browser stores, all of it local to that browser:
 
 - **Chats** in IndexedDB (`forge-chat`): messages, attached images (downscaled and re-encoded, which drops EXIF data such as location), reasoning text, and per-message cost and token counts. They are never uploaded; a request carries only the messages of the chat being continued. Settings has "Delete all chats". If IndexedDB is unavailable (some private windows) chats live in page memory only.
-- **Balance key and settings** in `localStorage` (`forge.balanceKey`, `forge.settings`: theme, default model, reasoning effort, system prompt, encrypt toggle, uncensored opt-in). If the gateway stops recognizing a stored key (a first funding that expired removes the empty balance), the page moves it to `forge.unrecognizedKey` rather than deleting it.
+- **Balance key and settings** in `localStorage` (`forge.balanceKey`, `forge.settings`: theme, default model, reasoning effort, system prompt, encrypt toggle, uncensored opt-in; `forge.lockPubkey`: the optional "Lock refunds to my wallet key" public key, sent with refunds and other-mint funding). If the gateway stops recognizing a stored key (a first funding that expired removes the empty balance), the page moves it to `forge.unrecognizedKey` rather than deleting it.
 
 What the page sends:
 

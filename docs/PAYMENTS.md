@@ -94,7 +94,16 @@ Fedimint notes need a Fedimint client to reissue them in their federation and pa
 
 Received proofs are stored in the `proofs` table with state `unspent`, `reserved` (selected for a payout in progress) or `spent`. The database is the wallet: back it up, and protect it like a hot wallet.
 
-Payouts (change, refunds, revenue export) select proofs, and if no exact set exists, swap them into a send part and a kept part. All outputs are deterministic (NUT-13) from the gateway seed, with counters stored in SQLite.
+Payouts (change, refunds, revenue export) select proofs, and if no exact set exists, swap them into a send part and a kept part. All outputs are deterministic (NUT-13) from the gateway seed, with counters stored in SQLite, except the send part of a locked payout (below). Kept outputs are always deterministic.
+
+### Locked payouts (NUT-11 P2PK)
+
+A deterministic token can be re-derived from the gateway seed, so until the customer redeems it the gateway could spend it. A customer who gives a public key (`X-Cashu-Pubkey` on a NUT-24 request, `pubkey` on a refund or other-mint funding) gets a token whose send outputs are P2PK-locked to that key: secret `["P2PK", {nonce, data: <key>}]`, plain lock, no locktime and no refund keys (a refund key held by the gateway would bring back exactly the spending power the lock removes). The mint refuses to spend those proofs without a signature from the key, so the gateway cannot spend them at all.
+
+- The key is stored with the payout (`outgoing.lock_pubkey`, and `requests.lock_pubkey` / `fundings.f_lock_pubkey` so change owed after a crash is still locked). It is not logged.
+- A locked payout always swaps, even when an exact set of the gateway's proofs exists.
+- Other-mint change and refunds are proofs at the token's mint, not the gateway's. With a key, those proofs are moved to a "pinned" payout (`outgoing.pinned = 1`) that swaps exactly them into locked outputs at that mint. The token's mint charges its input fee for that swap, so the locked token is worth slightly less than the unlocked one would be. If the fee would take the whole value, the proofs are handed over unlocked.
+- Locked secrets are random, so NUT-13 restore by counter cannot find them. Recovery uses the stored preview instead (next section).
 
 `pnpm admin revenue:export` sweeps eCash that is not backing customer balances or owed payouts into a token you can redeem elsewhere.
 
@@ -131,6 +140,16 @@ A NUT-24 request interrupted after payment (process died during the upstream cal
 
 If the mint rejects a payout because the gateway's own proofs are already spent (a restored backup, for example), those proofs are marked spent and the payout goes back to `owed`.
 
+### Locked payouts: recovery
+
+The full swap preview, including the locked outputs' secrets and blinding factors, is stored (`status=prepared`) before the swap is sent. Recovery of a locked row:
+
+1. **Replay** the stored request (NUT-19). The Forge mint and the test mints (Nutshell 0.22.1) cache `POST /v1/swap` for 7 days (`nuts.19.ttl = 604800`), so the same signatures come back and the stored secrets turn them into the same locked proofs.
+2. If the mint refuses the replay, **restore by blinded message** (NUT-09): the stored blinded messages of every output are sent to `/v1/restore`. The mint returns the signatures it made for exactly those outputs. All signed: build the proofs from the stored secrets, finalize once. None signed: the swap never happened with these outputs, so the row is re-owed as an unlocked payout would be.
+3. If neither works (no cache entry and restore refused or unsupported, or a partial answer), the outcome is **unknown**. The row stays `prepared`, counts as owed in `revenue:show`, gets `error = "outcome unknown: ..."` and the API answers `503 payout_unknown`. It is never re-owed and never paid a second time; every later issue attempt and every startup tries steps 1 and 2 again. If the mint never answers, an operator resolves it by hand from the stored preview.
+
+Restoring by counter range (the unlocked path) is never used for a locked row: it would find only the kept outputs and hand over an empty token.
+
 ### Reservations
 
 At startup every active reservation is released without charge (nothing is in flight in a fresh process), and a periodic sweep releases any older than `FORGE_STALE_RESERVATION_SECONDS`. A crash mid-request therefore costs the gateway the upstream bill for that request, never the user.
@@ -138,6 +157,8 @@ At startup every active reservation is released without charge (nothing is in fl
 ### What these tests prove
 
 `test/e2e/recovery.e2e.test.ts` injects a fault after the mint swap and before the database write, restarts the gateway on the same database, and checks the balance is credited exactly once (through replay and through restore), that a retry is idempotent, that an interrupted refund is recovered by restore and the token redeems at the mint, and that an interrupted NUT-24 request owes full change.
+
+`test/e2e/p2pk.e2e.test.ts` checks locked NUT-24 change, refunds and other-mint change and refunds: the token's proofs all carry the key, a swap at the mint without a witness is refused, a plain wallet and the gateway's own wallet cannot redeem it, and the key holder receives exactly the amount. It crashes a locked refund after the swap and recovers it by replay, by restore of the stored blinded messages, and with both disabled (row stays owed, no second payout) followed by a restart that settles it once.
 
 ## Known limits
 

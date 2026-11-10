@@ -2,6 +2,7 @@
 // and the balance key. Funding UX (invoice QR, copy, open in wallet, countdown, live status) follows
 // the cashucard.org/fund kit.
 import { renderQR, playAnimatedQR, STATIC_MAX } from './qr.js';
+import { lockKey, shortKey } from './lockkey.js';
 import { $, el, icon, api, errMsg, toast, announce, copyText, download, confirmDialog, fmtUnits, fmtBalance, unitName, fmtInt, loadScript } from './ui.js';
 
 let S; // shared app state: {key, unit, balanceMsub, availableMsub, inviteOnly, units, mints}
@@ -610,7 +611,7 @@ function foreignPanel(panel) {
     check.disabled = true;
     msg.set('Asking the mint for a quote');
     try {
-      const r = await api('/v1/wallet/fund/foreign/quote', { key: S.key, json: { token, unit, invite: inviteFor() } });
+      const r = await api('/v1/wallet/fund/foreign/quote', { key: S.key, json: { token, unit, invite: inviteFor(), pubkey: lockKey() || undefined } });
       if (r.body?.key) hooks.setKey(r.body.key);
       if (!r.res.ok) {
         if (r.body?.error?.code === 'use_topup') {
@@ -658,22 +659,31 @@ function foreignQuoteView(f, token, panel) {
   const expiry = el('span', { class: 'hint small' });
   const buttons = el('div', { class: 'row' }, confirm, cancel, expiry);
   let cd = f.expires_at ? countdown(expiry, f.expires_at, () => st.getAttribute('data-kind') === 'waiting' && (st.set('error', 'This quote expired. Check the token again.'), (confirm.disabled = true))) : null;
+  let told = false;
+  // A token locked to the wallet key needs one more swap at the other mint; keep polling until it is issued.
+  const lockedNote = (xf) => (xf.locked_to ? el('p', { class: 'hint small', text: `Locked to your wallet key ${shortKey(xf.locked_to)}. Only the wallet holding that key can redeem it.` }) : null);
+  const pendingNote = () => el('p', { class: 'hint small', text: 'Locking the returned eCash to your wallet key. It appears here in a moment.' });
   const update = (x) => {
     const xf = x.foreign ?? q;
     if (TERMINAL.has(x.state)) buttons.hidden = true;
     if (x.state === 'done') {
       const t = `Added ${fmtUnits(x.credited, x.unit)} to your balance.`;
       st.set('ok', t);
-      announce(t);
-      toast(t);
-      hooks.refresh();
-      if (xf.change_token) tokenBox.replaceChildren(el('h3', { text: `Unused fees, returned as eCash from ${host(xf.mint)}`, style: 'font-size:14px;margin:0' }), tokenView(xf.change_token, { label: 'Change' }));
-      return true;
+      if (!told) {
+        told = true;
+        announce(t);
+        toast(t);
+        hooks.refresh();
+      }
+      if (xf.change_token) tokenBox.replaceChildren(el('h3', { text: `Unused fees, returned as eCash from ${host(xf.mint)}`, style: 'font-size:14px;margin:0' }), ...[lockedNote(xf)].filter(Boolean), tokenView(xf.change_token, { label: 'Change' }));
+      else if (xf.payout_pending) tokenBox.replaceChildren(pendingNote());
+      return !xf.payout_pending;
     }
     if (x.state === 'refunded') {
       st.set('error', x.error ? `The payment did not go through: ${x.error}. Your eCash is returned below.` : 'The payment did not go through. Your eCash is returned below.');
-      if (xf.refund_token) tokenBox.replaceChildren(tokenView(xf.refund_token, { amount: xf.token_amount, unit: xf.unit, label: 'eCash' }));
-      return true;
+      if (xf.refund_token) tokenBox.replaceChildren(...[lockedNote(xf)].filter(Boolean), tokenView(xf.refund_token, { amount: xf.token_amount, unit: xf.unit, label: 'eCash' }));
+      else if (xf.payout_pending) tokenBox.replaceChildren(pendingNote());
+      return !xf.payout_pending;
     }
     if (x.state === 'failed') {
       st.set('error', x.error ?? 'This funding failed.');
@@ -720,6 +730,7 @@ function foreignQuoteView(f, token, panel) {
       el('dd', { class: 'total', text: fmtUnits(q.credit, f.unit) }),
     ),
     el('p', { class: 'hint small', text: `Fees are the other mint's own charges and the Lightning routing reserve. Any reserve the payment does not use comes back to you as eCash from ${host(q.mint)}.` }),
+    ...(q.locked_to ? [el('p', { class: 'hint small', text: `Returned eCash will be locked to your wallet key ${shortKey(q.locked_to)} (Settings). Only that wallet can redeem it.` })] : []),
     buttons,
     st,
     msg,
@@ -740,11 +751,15 @@ function refundForm(holder, refundable) {
     go.disabled = true;
     msg.set('Creating your eCash');
     try {
-      const r = await api('/v1/wallet/refund', { key: S.key, json: { amount: n } });
+      const pk = lockKey();
+      const r = await api('/v1/wallet/refund', { key: S.key, json: { amount: n, pubkey: pk || undefined } });
       if (!r.res.ok && r.res.status !== 202) return msg.set(errMsg(r), 'err');
       await hooks.refresh();
       if (!r.body.token) return msg.set('The mint did not answer. The refund is saved; open the wallet again in a minute to collect it.', 'err');
-      const t = `Refunded ${fmtUnits(r.body.amount, r.body.unit)} as eCash. Save it in a Cashu wallet.`;
+      const locked = r.body.locked_to;
+      const t = locked
+        ? `Refunded ${fmtUnits(r.body.amount, r.body.unit)} as eCash locked to your wallet key ${shortKey(locked)}. Only the wallet holding that key can redeem it.`
+        : `Refunded ${fmtUnits(r.body.amount, r.body.unit)} as eCash. Save it in a Cashu wallet.`;
       announce(t);
       holder.replaceChildren(status('ok', t), tokenView(r.body.token, { amount: r.body.amount, unit: r.body.unit }));
 
@@ -757,6 +772,9 @@ function refundForm(holder, refundable) {
   holder.append(
     el('div', { class: 'field' }, el('label', { for: 'refundAmount', text: `Amount in ${S.unit === 'usd' ? 'cents' : 'sats'}` }), input),
     el('p', { class: 'hint small', text: 'Whole units only. A fraction of a cent or sat stays on the balance.' }),
+    lockKey()
+      ? el('p', { class: 'hint small', text: `The token will be locked to your wallet key ${shortKey(lockKey())} (set in Settings). Only the wallet holding that key can redeem it; if that is not your wallet, the eCash is lost.` })
+      : el('p', { class: 'hint small', text: 'Tip: set "Lock refunds to my wallet key" in Settings so only your wallet can redeem the token.' }),
     el('div', { class: 'row' }, go, el('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => holder.replaceChildren() })),
     msg,
   );
@@ -821,7 +839,7 @@ function historySection() {
     if (f?.res.ok) for (const x of (f.body?.data ?? []).slice(0, 8)) items.push({ what: names[x.method] ?? x.method, amount: x.credited ? fmtUnits(x.credited, x.unit) : x.amount ? fmtUnits(x.amount, x.unit) : '', state: states[x.state] ?? x.state });
     if (r?.res.ok)
       for (const x of (r.body?.data ?? []).slice(-5).reverse()) {
-        const li = { what: 'Refund', amount: fmtUnits(x.amount, x.unit), state: x.status === 'done' ? 'issued' : 'pending', token: x.token };
+        const li = { what: x.locked_to ? 'Refund (locked to your key)' : 'Refund', amount: fmtUnits(x.amount, x.unit), state: x.status === 'done' ? 'issued' : 'pending', token: x.token };
         items.push(li);
       }
     if (!items.length) return;

@@ -52,6 +52,7 @@ export interface FundingRow {
   f_attempts: number;
   f_change_token: string | null;
   f_refund_token: string | null;
+  f_lock_pubkey: string | null;
   error: string | null;
   created_at: number;
   updated_at: number;
@@ -308,6 +309,9 @@ export class FundingService {
               fee_max: r.f_fee_max,
               change_token: r.f_change_token,
               refund_token: r.f_refund_token,
+              locked_to: r.f_lock_pubkey,
+              // A locked change or refund the mint has not issued yet (it is retried on every status poll).
+              payout_pending: this.undeliveredPayouts(r.id).length > 0,
             }
           : undefined,
       error: r.error ?? undefined,
@@ -394,7 +398,7 @@ export class FundingService {
    * the token's mint, shrinking the credit until the melt (amount + fee reserve + input fees) fits.
    * Nothing is spent; the token stays with the client until confirm.
    */
-  async quoteForeign(accountId: string, unit: Unit, token: string): Promise<FundingRow> {
+  async quoteForeign(accountId: string, unit: Unit, token: string, lockPubkey: string | null = null): Promise<FundingRow> {
     const m = await this.methods();
     if (!m.foreign.enabled || !m.lightning.units.includes(unit)) throw new PaymentError('method_unavailable', `funding in ${unit} from other mints is not available`, 400);
     let meta: { mint: string };
@@ -461,16 +465,19 @@ export class FundingService {
       f_amount: rawAmount,
       f_melt_quote: mq.quote,
       f_fee_max: feeMax,
+      f_lock_pubkey: lockPubkey,
     });
     log.info('fund_created', { id: row.id, method: 'foreign', unit, amount: credit, foreign_unit: t.unit, foreign_amount: rawAmount });
     return row;
   }
 
   /** Takes the token: receive at its mint (held for this funding), then melt into the Forge quote. */
-  async confirmForeign(id: string, token: string): Promise<FundingRow> {
+  async confirmForeign(id: string, token: string, lockPubkey: string | null = null): Promise<FundingRow> {
     const row = this.get(id);
     if (!row || row.method !== 'foreign') throw new PaymentError('not_found', 'unknown funding', 404);
     if (row.state !== 'quoted') return row;
+    // A key given at confirm replaces the one given at quote; neither is required.
+    if (lockPubkey) this.set(id, { f_lock_pubkey: lockPubkey });
     if (row.expires_at && now() > row.expires_at - 15_000) throw new PaymentError('quote_expired', 'this quote expired; ask for a new one', 409);
     const t = await this.wallet.inspect(token, undefined, { foreign: true });
     if (t.hash !== row.f_token_hash) throw new PaymentError('token_mismatch', 'this is not the token that was quoted', 400);
@@ -493,6 +500,7 @@ export class FundingService {
       await this.melt(this.get(id)!);
       const after = this.get(id)!;
       if (after.state === 'pending') await this.checkQuote(after);
+      await this.deliverPayouts(id);
       return this.get(id)!;
     } finally {
       this.inflight.delete(id);
@@ -504,7 +512,18 @@ export class FundingService {
   /** One step for a funding; safe to call from the poller and the status endpoint at once. */
   async advance(id: string): Promise<FundingRow | undefined> {
     const row = this.get(id);
-    if (!row || TERMINAL.includes(row.state) || this.inflight.has(id)) return row;
+    if (!row || this.inflight.has(id)) return row;
+    if (TERMINAL.includes(row.state)) {
+      if (row.method === 'foreign' && this.undeliveredPayouts(id).length) {
+        this.inflight.add(id);
+        try {
+          await this.deliverPayouts(id);
+        } finally {
+          this.inflight.delete(id);
+        }
+      }
+      return this.get(id);
+    }
     this.inflight.add(id);
     try {
       switch (row.state) {
@@ -524,6 +543,7 @@ export class FundingService {
           await this.checkQuote(row);
           break;
       }
+      await this.deliverPayouts(id);
     } catch (e) {
       const r = this.get(id)!;
       const err = errText(e);
@@ -759,8 +779,11 @@ export class FundingService {
   /** Gives the held foreign proofs back to the user as a token from their mint. */
   private refund(row: FundingRow, reason: string) {
     const proofs = this.wallet.heldProofs(row.id);
-    const token = proofs.length ? getEncodedToken({ mint: row.f_mint!, unit: row.f_unit!, proofs }) : null;
+    const lock = row.f_lock_pubkey && proofs.length ? row.f_lock_pubkey : null;
+    const token = proofs.length && !lock ? getEncodedToken({ mint: row.f_mint!, unit: row.f_unit!, proofs }) : null;
     tx(this.db, () => {
+      // Locked: the held proofs move to a payout that swaps them into outputs only the key can spend.
+      if (lock) this.wallet.owePinned({ mint: row.f_mint!, unit: row.f_unit!, purpose: 'refund', requestId: row.id, lockPubkey: lock, fromOpId: row.id });
       this.db.prepare("UPDATE proofs SET state = 'spent' WHERE op_id = ? AND state = 'reserved'").run(row.id);
       this.db
         .prepare("UPDATE fundings SET state = 'refunded', f_refund_token = ?, f_melt_op = NULL, error = ?, updated_at = ? WHERE id = ?")
@@ -857,17 +880,47 @@ export class FundingService {
 
   /** Melt paid: hand the unused fee reserve back as eCash from the token's mint, then wait for the Forge quote. */
   private meltPaid(row: FundingRow, change: Proof[]) {
-    const token = change.length ? getEncodedToken({ mint: row.f_mint!, unit: row.f_unit!, proofs: change }) : null;
+    const lock = row.f_lock_pubkey && change.length ? row.f_lock_pubkey : null;
+    const token = change.length && !lock ? getEncodedToken({ mint: row.f_mint!, unit: row.f_unit!, proofs: change }) : null;
     tx(this.db, () => {
       const r = this.get(row.id)!;
       if (r.state !== 'melting') return;
       this.db.prepare("UPDATE proofs SET state = 'spent' WHERE op_id = ? AND state = 'reserved'").run(row.id);
+      if (lock) this.wallet.owePinned({ mint: row.f_mint!, unit: row.f_unit!, purpose: 'change', requestId: row.id, lockPubkey: lock, proofs: change });
       // The Forge invoice is paid; it no longer expires from our side.
       this.db
         .prepare("UPDATE fundings SET state = 'pending', f_change_token = ?, f_melt_op = NULL, expires_at = NULL, error = NULL, next_check = ?, updated_at = ? WHERE id = ?")
         .run(token, now(), now(), row.id);
     });
     log.info('fund_melted', { id: row.id, change: change.reduce((s, p) => s + num(p.amount), 0) });
+  }
+
+  /** Locked change or refund tokens of a funding that are not issued yet. */
+  private undeliveredPayouts(id: string) {
+    return this.wallet.listOutgoing({ requestId: id }).filter((o) => o.pinned && o.status !== 'done' && o.status !== 'failed');
+  }
+
+  /**
+   * Issues the locked change/refund tokens of a funding (a swap at the token's mint) and copies each
+   * token onto the funding. Safe to repeat: wallet.issue() returns a stored token, recovers an
+   * interrupted swap, and never pays a payout twice.
+   */
+  private async deliverPayouts(id: string): Promise<void> {
+    for (const o of this.wallet.listOutgoing({ requestId: id }).filter((x) => x.pinned)) {
+      if (o.status === 'failed') continue;
+      let token = o.token;
+      if (o.status !== 'done') {
+        try {
+          token = await this.wallet.issue(o.id);
+        } catch (e) {
+          log.warn('fund_payout_deferred', { id, out: o.id, err: errText(e) });
+          continue;
+        }
+      }
+      const cur = this.get(id)!;
+      if (o.purpose === 'refund' && cur.f_refund_token !== token) this.set(id, { f_refund_token: token });
+      if (o.purpose === 'change' && cur.f_change_token !== token) this.set(id, { f_change_token: token });
+    }
   }
 
   // ------------------------------------------------------------------ esplora (optional)

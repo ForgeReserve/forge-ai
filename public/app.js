@@ -5,6 +5,7 @@ import { renderMarkdown, enhance } from './js/markdown.js';
 import { chats, newId } from './js/store.js';
 import { $, el, icon, store, load, toast, announce, copyText, confirmDialog, fmtBalance, fmtCost, fmtInt, api, errMsg } from './js/ui.js';
 import { initWallet, openWallet, syncWalletBalance } from './js/wallet.js';
+import { lockKey, parseLockKey, saveLockKey, shortKey } from './js/lockkey.js';
 
 const KEY_STORE = 'forge.balanceKey';
 const SETTINGS_STORE = 'forge.settings';
@@ -875,6 +876,8 @@ function openSettings() {
   fillSettingsModels();
   $('setEffort').value = settings.effort;
   $('setPrompt').value = settings.systemPrompt;
+  $('setLockKey').value = lockKey();
+  $('lockKeyMsg').textContent = lockKey() ? `Refunds are locked to ${shortKey(lockKey())}.` : 'Not set: refunds are ordinary eCash tokens.';
   $('settingsDialog').showModal();
 }
 
@@ -912,6 +915,31 @@ function wireSettings() {
     settings.systemPrompt = DEFAULT_PROMPT;
     saveSettings();
     toast('Default system prompt restored');
+  });
+  const lockMsg = (text, err = false) => {
+    $('lockKeyMsg').textContent = text;
+    $('lockKeyMsg').classList.toggle('err', err);
+  };
+  $('saveLockKey').addEventListener('click', () => {
+    const v = $('setLockKey').value.trim();
+    if (!v) {
+      saveLockKey('');
+      return lockMsg('Not set: refunds are ordinary eCash tokens.');
+    }
+    try {
+      const hex = parseLockKey(v);
+      saveLockKey(hex);
+      $('setLockKey').value = hex;
+      lockMsg(`Saved. Refunds are locked to ${shortKey(hex)}.`);
+      toast('Refunds will be locked to your wallet key');
+    } catch (e) {
+      lockMsg(e.message, true);
+    }
+  });
+  $('clearLockKey').addEventListener('click', () => {
+    $('setLockKey').value = '';
+    saveLockKey('');
+    lockMsg('Not set: refunds are ordinary eCash tokens.');
   });
   $('deleteAll').addEventListener('click', async () => {
     if (!(await confirmDialog('Delete all chats?', 'Every chat stored in this browser is removed. Your balance and key are not affected.', 'Delete all', true))) return;

@@ -121,6 +121,7 @@ Payment headers:
 
 - `Authorization: Bearer sk-forge-...` spends from a balance.
 - `X-Cashu: cashuB...` pays this request (NUT-24). Add `X-Forge-Invite` while invite-only.
+- `X-Cashu-Pubkey: 02...` (optional) locks this request's change to your wallet key (NUT-11 P2PK). See [Locking tokens to your wallet key](#locking-tokens-to-your-wallet-key).
 - Neither: `402 Payment Required` with `X-Cashu: creqA...` (NUT-18: amount, unit, accepted mints). The amount is the request's maximum cost. `X-Forge-Unit: sat` asks for a sat quote.
 
 Response headers: `X-Forge-Request-Id`, `X-Forge-Unit`, `X-Forge-Charged-Msub`, `X-Forge-Balance-Msub` (balance payments), `X-Forge-Privacy` (`standard`, `enclave-plaintext`, `enclave-encrypted`), and for NUT-24 `X-Cashu-Change` plus `X-Forge-Change-Url`.
@@ -144,8 +145,8 @@ OpenAI model list plus `tier` (`enclave` or `standard`), `uncensored`, `max_outp
 | - | - | - |
 | `POST /v1/wallet/topup` | `{"token": "cashuB...", "invite": "inv-..."}`; optional `Authorization: Bearer sk-forge-...` to top up an existing key, or to choose your own key for a new balance | `{key?, account_id, unit, credited, balance_msub}`. `key` is returned only when the gateway generated it |
 | `GET /v1/wallet` | bearer key | `{unit, balance_msub, available_msub, refundable}` |
-| `POST /v1/wallet/refund` | bearer key; optional `{"amount": N}` in whole units | `{token, amount, unit, status}`. Sub-unit remainders stay on the balance |
-| `GET /v1/wallet/refunds` | bearer key | Every withdrawal with its token, for re-delivery |
+| `POST /v1/wallet/refund` | bearer key; optional `{"amount": N, "pubkey": "02..."}`, amount in whole units | `{token, amount, unit, status, locked_to}`. Sub-unit remainders stay on the balance. With `pubkey` the token is P2PK-locked to it |
+| `GET /v1/wallet/refunds` | bearer key | Every withdrawal with its token and `locked_to`, for re-delivery |
 | `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request |
 
 A balance has one unit, set by its first topup. Topping up with another unit is rejected.
@@ -157,7 +158,7 @@ Each method opens a balance on first use (an invite is required while invite-onl
 ```
 {id, method: "lightning"|"onchain"|"foreign", state, unit, amount, request, expires_at, credited, balance_msub, account_id,
  onchain?: {confirmations_required, paid_sat, seen_sat, confirmed_sat, confirmations, watch_until},
- foreign?: {mint, unit, token_amount, credit, fee_max, change_token, refund_token}, error?, key?}
+ foreign?: {mint, unit, token_amount, credit, fee_max, change_token, refund_token, locked_to, payout_pending}, error?, key?}
 ```
 
 `credited` is the exact amount, in whole units of `unit`, added to the balance so far.
@@ -167,12 +168,21 @@ Each method opens a balance on first use (an invite is required while invite-onl
 | `GET /v1/wallet/fund/methods` | | What the Forge mint and config allow: Lightning units and limits, on-chain minimum and confirmations, other-mint limits |
 | `POST /v1/wallet/fund/lightning` | `{amount, unit, invite?}` | `request` is a bolt11 invoice from the Forge mint; `state` goes `pending` -> `minting` -> `done` (or `expired`) |
 | `POST /v1/wallet/fund/onchain` | `{invite?}` | `request` is a bitcoin address (sat only). Each deposit the mint counts as paid is minted and credited; the address is watched for `FORGE_ONCHAIN_WATCH_DAYS` |
-| `POST /v1/wallet/fund/foreign/quote` | `{token, unit, invite?}` | Prices a token from another mint: `foreign.credit` is what the balance gets, `foreign.fee_max` the most the token's mint can keep. Nothing is spent yet. A token from an accepted mint gets `use_topup` |
-| `POST /v1/wallet/fund/foreign/confirm` | `{id, token}` + bearer | Receives the token at its mint, melts it to pay the Forge invoice, mints and credits `credit`. Unused fee reserve comes back as `foreign.change_token`; if the melt cannot go through, the token's value comes back as `foreign.refund_token` (state `refunded`) |
+| `POST /v1/wallet/fund/foreign/quote` | `{token, unit, invite?, pubkey?}` | Prices a token from another mint: `foreign.credit` is what the balance gets, `foreign.fee_max` the most the token's mint can keep. Nothing is spent yet. A token from an accepted mint gets `use_topup` |
+| `POST /v1/wallet/fund/foreign/confirm` | `{id, token, pubkey?}` + bearer | Receives the token at its mint, melts it to pay the Forge invoice, mints and credits `credit`. Unused fee reserve comes back as `foreign.change_token`; if the melt cannot go through, the token's value comes back as `foreign.refund_token` (state `refunded`). With `pubkey` (here or at quote) both are locked to it; `payout_pending` is true until the locking swap at the token's mint is done, and polling the status finishes it |
 | `GET /v1/wallet/fund/{id}` | bearer | Status; polling also moves the funding forward |
 | `GET /v1/wallet/fund` | bearer | Recent fundings of this balance |
 
 Fedimint eCash is not accepted yet; see [docs/PAYMENTS.md](docs/PAYMENTS.md#not-yet-fedimint).
+
+### Locking tokens to your wallet key
+
+Every token the gateway hands back (NUT-24 change, refunds, other-mint change and refunds) is by default ordinary eCash made from the gateway's seed, so until you redeem it the gateway could spend it too. Give a public key and the token is P2PK-locked to it (NUT-11, plain lock, no timelock or refund key): only the wallet holding the private key can redeem it, and the gateway cannot spend it at all.
+
+- NUT-24: `X-Cashu-Pubkey` request header. Refunds: `"pubkey"` in the body. Other-mint funding: `"pubkey"` at quote or confirm.
+- Accepted forms: a 33-byte compressed key in hex (`02...`/`03...`, 66 characters; cashu.me shows it as "P2PK Key" under Receive > eCash, and in Settings > P2PK), an `npub1...`, or a 64-hex x-only key. The last two become `"02" + x`, the convention cashu.me, Minibits and cashu-ts use for nostr keys. Anything else, including a point not on secp256k1 or an uncompressed key, is `400 invalid_pubkey` before any eCash moves.
+- Redeem with any NUT-11 wallet that holds the key (cashu-ts: `wallet.receive(token, { privkey })`; `examples/agent-pays.ts` shows it with `CASHU_PUBKEY=generate`).
+- A token locked to a key you do not hold is lost. Nobody, including Forge, can unlock it.
 
 ### Other
 
@@ -181,7 +191,7 @@ Fedimint eCash is not accepted yet; see [docs/PAYMENTS.md](docs/PAYMENTS.md#not-
 
 ### Errors
 
-OpenAI-style `{"error": {"message", "type", "code"}}`. Payment problems: `untrusted_mint`, `wrong_unit`, `insufficient_amount`, `token_spent`, `invalid_token` (400, per NUT-24); `insufficient_balance` (402); `invite_required`, `invite_used` (403); `mint_unavailable` (503, retry with the same token). Funding adds `method_unavailable`, `invalid_amount`, `use_topup`, `mint_not_allowed`, `amount_too_large`, `token_mismatch`, `foreign_mint_error` (400), `quote_expired` (409) and `too_many_pending` (429). Upstream failures charge nothing and return all NUT-24 change.
+OpenAI-style `{"error": {"message", "type", "code"}}`. Payment problems: `untrusted_mint`, `wrong_unit`, `insufficient_amount`, `token_spent`, `invalid_token`, `invalid_pubkey` (400, per NUT-24); `payout_unknown` (503: a locked payout whose outcome the mint has not confirmed; it stays owed and is never paid twice); `insufficient_balance` (402); `invite_required`, `invite_used` (403); `mint_unavailable` (503, retry with the same token). Funding adds `method_unavailable`, `invalid_amount`, `use_topup`, `mint_not_allowed`, `amount_too_large`, `token_mismatch`, `foreign_mint_error` (400), `quote_expired` (409) and `too_many_pending` (429). Upstream failures charge nothing and return all NUT-24 change.
 
 ## Admin CLI
 
@@ -199,7 +209,7 @@ pnpm admin prices:show [--unit sat]
 
 ## Chat page
 
-`/` serves a chat app from `public/` (plain ES modules, no build step, nothing from third-party origins). It has a chat history sidebar kept in the browser's IndexedDB (search, rename, delete), streaming replies with a reasoning disclosure, Markdown with highlighted code and tables, stop, regenerate, edit and resend, copy, image attachments for models with `vision: true`, per-message cost and token counts, a model picker grouped by tier with price and speed hints (uncensored models behind an explicit opt-in), and Settings for theme, default model, reasoning effort and the system prompt. The wallet drawer adds funds by eCash (paste or camera scan, including animated NUT-16 codes), Lightning, on-chain and eCash from other mints, and refunds as eCash with copy, a text-file download and a QR code (animated for long tokens). Keyboard shortcuts are listed under `Ctrl+/`.
+`/` serves a chat app from `public/` (plain ES modules, no build step, nothing from third-party origins). It has a chat history sidebar kept in the browser's IndexedDB (search, rename, delete), streaming replies with a reasoning disclosure, Markdown with highlighted code and tables, stop, regenerate, edit and resend, copy, image attachments for models with `vision: true`, per-message cost and token counts, a model picker grouped by tier with price and speed hints (uncensored models behind an explicit opt-in), and Settings for theme, default model, reasoning effort, the system prompt and "Lock refunds to my wallet key" (a P2PK key kept in localStorage; refunds and other-mint change are then locked to it). The wallet drawer adds funds by eCash (paste or camera scan, including animated NUT-16 codes), Lightning, on-chain and eCash from other mints, and refunds as eCash with copy, a text-file download and a QR code (animated for long tokens). Keyboard shortcuts are listed under `Ctrl+/`.
 
 First-load JavaScript is about 56 KB gzipped. The highlighter, QR, scanner and Tinfoil SDK load on first use. Rebuild the vendored libraries with `scripts/vendor.sh`. Privacy details: [docs/PRIVACY.md](docs/PRIVACY.md#chat-page).
 
@@ -218,7 +228,7 @@ pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env
 
 `docker-compose.test.yml` runs three FakeWallet mints: `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
 
-The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
+The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), P2PK-locked change and refunds (locked to the key: a plain wallet and the gateway's own wallet cannot redeem them, the key holder can; invalid keys 400; crash after a locked swap recovered by replay, by NUT-09 restore of the stored blinded messages, and left owed when neither answers), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
 
 ## License
 

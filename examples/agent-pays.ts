@@ -4,12 +4,19 @@
  *   FORGE_URL=http://localhost:8787 FORGE_INVITE=inv-... MODEL=mock-echo \
  *   CASHU_TOKEN=cashuB...            # eCash to spend from (any trusted mint), or:
  *   DEMO_FAKE_MINT=1                 # mint test eCash from a FakeWallet mint named in the 402
+ *   CASHU_PUBKEY=02...               # optional: lock the change to this key (NUT-11 P2PK)
+ *   CASHU_PRIVKEY=...                # optional: the matching private key, to redeem locked change
  *   pnpm demo:agent "What is eCash?"
+ *
+ * With CASHU_PUBKEY the gateway locks the change to that key (X-Cashu-Pubkey), so only the holder of
+ * the private key can redeem it; not even the gateway can. Set CASHU_PUBKEY=generate to make a fresh
+ * key pair for this run (it is printed so the change is not lost).
  *
  * Steps: call with no credentials -> 402 + X-Cashu payment request (NUT-18 creqA) -> build a token
  * for the requested amount at an accepted mint -> retry with X-Cashu: cashuB... -> answer + change.
  */
-import { getEncodedToken, getTokenMetadata, PaymentRequest, type Proof, Wallet } from '@cashu/cashu-ts';
+import { randomBytes } from 'node:crypto';
+import { getEncodedToken, getPubKeyFromPrivKey, getTokenMetadata, PaymentRequest, type Proof, Wallet } from '@cashu/cashu-ts';
 
 const FORGE = process.env.FORGE_URL ?? 'http://localhost:8787';
 const MODEL = process.env.MODEL ?? 'mock-echo';
@@ -17,6 +24,15 @@ const prompt = process.argv[2] ?? 'In one sentence, what is eCash?';
 const headers: Record<string, string> = { 'content-type': 'application/json' };
 if (process.env.FORGE_INVITE) headers['X-Forge-Invite'] = process.env.FORGE_INVITE;
 if (process.env.UNIT) headers['X-Forge-Unit'] = process.env.UNIT;
+// Optional NUT-11 lock for the change. The private key never leaves this process.
+let lockPriv = process.env.CASHU_PRIVKEY;
+let lockPub = process.env.CASHU_PUBKEY;
+if (lockPub === 'generate') {
+  lockPriv = randomBytes(32).toString('hex');
+  lockPub = Buffer.from(getPubKeyFromPrivKey(Buffer.from(lockPriv, 'hex'))).toString('hex');
+  console.log(`Generated a lock key for this run. Private key (keep it to redeem locked change): ${lockPriv}`);
+}
+if (lockPub) headers['X-Cashu-Pubkey'] = lockPub;
 // Reasoning models can spend the whole token budget thinking; REASONING_EFFORT=none skips that where supported.
 const body = JSON.stringify({
   model: MODEL,
@@ -70,10 +86,15 @@ console.log(`Charged: ${Number(paid.headers.get("x-forge-charged-msub")) / 1000}
 // 4. Take the change back.
 let change = 0;
 const changeToken = paid.headers.get('x-cashu-change');
-if (changeToken) {
-  const back = await wallet.receive(changeToken);
+if (changeToken && lockPub && !lockPriv) {
+  // Locked to a key this script does not hold: hand it on to the wallet that does.
+  console.log(`Change is locked to ${lockPub}; redeem it in the wallet holding that key: ${changeToken}`);
+} else if (changeToken) {
+  // A locked token is redeemed by signing its proofs with the private key (cashu-ts does this given privkey).
+  const back = await wallet.receive(changeToken, lockPriv ? { privkey: lockPriv } : undefined);
   change = back.reduce((s, p) => s + p.amount.toNumber(), 0);
   keep.push(...back);
+  if (lockPub) console.log(`Change was locked to ${lockPub} and redeemed with its private key`);
 }
 console.log(`Change returned: ${change} ${unitName}; wallet now holds ${keep.reduce((s, p) => s + p.amount.toNumber(), 0)} ${unitName}`);
 

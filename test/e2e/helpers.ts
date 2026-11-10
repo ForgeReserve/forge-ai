@@ -122,7 +122,7 @@ export async function startGateway(
     env?: Record<string, string>;
     enclavePort?: number;
     dbPath?: string;
-    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean };
+    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
     fundingFaults?: FundingFaults;
     recover?: boolean;
   } = {},

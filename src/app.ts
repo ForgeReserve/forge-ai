@@ -6,6 +6,7 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
+import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import type { Config, ModelConfig, Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
@@ -47,6 +48,7 @@ const ALLOW = [
   'Authorization',
   'Content-Type',
   'X-Cashu',
+  'X-Cashu-Pubkey',
   'X-Forge-Invite',
   'X-Forge-Unit',
   'Ehbp-Encapsulated-Key',
@@ -242,12 +244,13 @@ export function createApp(d: Deps) {
     });
   });
 
-  const outgoingView = (r: { id: string; amount: number; unit: string; status: string; token: string | null; created_at?: number }) => ({
+  const outgoingView = (r: { id: string; amount: number; unit: string; status: string; token: string | null; lock_pubkey?: string | null }) => ({
     id: r.id,
     amount: r.amount,
     unit: r.unit,
     status: r.status,
     token: r.token,
+    locked_to: r.lock_pubkey ?? null,
   });
 
   app.get('/v1/wallet/refunds', (c) => {
@@ -263,6 +266,7 @@ export function createApp(d: Deps) {
     } catch {
       /* empty body is fine */
     }
+    const lockPubkey = parseOptionalLockPubkey(body?.pubkey);
     // Retry anything still owed to this account first.
     for (const r of wallet.listOutgoing({ accountId: a.id })) {
       if (r.status !== 'done' && r.status !== 'failed') await wallet.issue(r.id).catch(() => {});
@@ -277,7 +281,7 @@ export function createApp(d: Deps) {
     if (!mint) return apiError(c, 503, 'wallet_insufficient', 'gateway cannot cover this refund from a single mint right now');
     const outId = tx(db, () => {
       ledger.debitRaw(a.id, units * MSUB_PER_UNIT, 'refund', 'pending');
-      return wallet.oweRaw({ mint, unit: a.unit, amount: units, purpose: 'refund', accountId: a.id });
+      return wallet.oweRaw({ mint, unit: a.unit, amount: units, purpose: 'refund', accountId: a.id, lockPubkey });
     });
     let token: string | null = null;
     try {
@@ -286,7 +290,7 @@ export function createApp(d: Deps) {
       log.warn('refund_issue_deferred', { id: outId, err: errText(e) });
     }
     const after = ledger.get(a.id)!;
-    log.info('refund', { account: a.id, unit: a.unit, amount: units, issued: !!token });
+    log.info('refund', { account: a.id, unit: a.unit, amount: units, issued: !!token, locked: !!lockPubkey });
     return c.json(
       {
         id: outId,
@@ -294,6 +298,7 @@ export function createApp(d: Deps) {
         amount: units,
         unit: a.unit,
         status: token ? 'done' : 'owed',
+        locked_to: lockPubkey,
         balance_msub: after.balance_msub,
         refunds: wallet.listOutgoing({ accountId: a.id }).map(outgoingView),
       },
@@ -359,7 +364,8 @@ export function createApp(d: Deps) {
     const unit = unitOf(body?.unit);
     const token = String(body?.token ?? '').trim();
     if (!token.startsWith('cashuB')) return apiError(c, 400, 'invalid_token', 'expected a cashuB token');
-    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.quoteForeign(id, unit, token));
+    const lockPubkey = parseOptionalLockPubkey(body?.pubkey);
+    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.quoteForeign(id, unit, token, lockPubkey));
     return fundingResponse(c, result, key);
   });
 
@@ -372,8 +378,9 @@ export function createApp(d: Deps) {
 
   app.post('/v1/wallet/fund/foreign/confirm', async (c) => {
     const body = await readJson(c);
+    const lockPubkey = parseOptionalLockPubkey(body?.pubkey);
     const row = ownFunding(c, String(body?.id ?? ''));
-    const out = await funding.confirmForeign(row.id, String(body?.token ?? '').trim());
+    const out = await funding.confirmForeign(row.id, String(body?.token ?? '').trim(), lockPubkey);
     return fundingResponse(c, out);
   });
 
@@ -394,7 +401,9 @@ export function createApp(d: Deps) {
   // NUT-24 change re-delivery: the request id is an unguessable capability returned only to the payer.
   app.get('/v1/change/:id', async (c) => {
     const id = c.req.param('id');
-    const rows = wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change');
+    // Other-mint funding change shares purpose 'change' but is delivered with the funding, behind its key.
+    const isRequest = !!db.prepare('SELECT 1 FROM requests WHERE id = ?').get(id);
+    const rows = isRequest ? wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change') : [];
     if (!rows.length) {
       const req = db.prepare('SELECT status FROM requests WHERE id = ?').get(id) as { status: string } | undefined;
       if (req && !['settled', 'failed', 'aborted'].includes(req.status)) return apiError(c, 409, 'not_settled', 'request still running', { 'Retry-After': '2' });
@@ -483,6 +492,8 @@ export function createApp(d: Deps) {
     // 2. Payment kind and unit.
     const key = bearer(c);
     const cashu = c.req.header('x-cashu');
+    // NUT-11: lock this request's change to the payer's key. Stored with the request, never logged.
+    const lockPubkey = parseOptionalLockPubkey(c.req.header('x-cashu-pubkey'));
     let account: Account | undefined;
     let unit: Unit;
     if (key) {
@@ -534,8 +545,8 @@ export function createApp(d: Deps) {
     } else {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code');
       db.prepare(
-        "INSERT INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?)",
-      ).run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, now());
+        "INSERT INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, lock_pubkey, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?, ?)",
+      ).run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, lockPubkey, now());
       try {
         const r = await wallet.receive(cashu, {
           purpose: 'nut24',
@@ -582,7 +593,7 @@ export function createApp(d: Deps) {
           if (res.changeUnits > 0) {
             const p = pay;
             const changeUnits = res.changeUnits;
-            res.changeId = tx(db, () => wallet.oweRaw({ mint: p.mint, unit, amount: changeUnits, purpose: 'change', requestId }));
+            res.changeId = tx(db, () => wallet.oweRaw({ mint: p.mint, unit, amount: changeUnits, purpose: 'change', requestId, lockPubkey }));
           }
         }
         db.prepare(
@@ -619,6 +630,7 @@ export function createApp(d: Deps) {
           reserved_msub: reserveMsub,
           charged_msub: res.chargedMsub,
           change_units: res.changeUnits,
+          change_locked: res.changeId ? !!lockPubkey : undefined,
           latency_ms: Date.now() - t0,
         });
         return res;
@@ -847,12 +859,12 @@ export async function startupRecovery(d: Deps, olderThanMs = 0): Promise<void> {
   const w = await d.wallet.recover();
   const released = d.ledger.releaseStale(olderThanMs);
   const stuck = d.db
-    .prepare("SELECT id, unit, paid_units FROM requests WHERE payment = 'nut24' AND status IN ('paid', 'running') AND created_at <= ?")
-    .all(Date.now() - olderThanMs) as Array<{ id: string; unit: Unit; paid_units: number }>;
+    .prepare("SELECT id, unit, paid_units, lock_pubkey FROM requests WHERE payment = 'nut24' AND status IN ('paid', 'running') AND created_at <= ?")
+    .all(Date.now() - olderThanMs) as Array<{ id: string; unit: Unit; paid_units: number; lock_pubkey: string | null }>;
   for (const r of stuck) {
     const inc = d.db.prepare("SELECT mint FROM incoming WHERE request_id = ? AND status = 'done'").get(r.id) as { mint: string } | undefined;
     tx(d.db, () => {
-      if (inc && r.paid_units > 0) d.wallet.oweRaw({ mint: inc.mint, unit: r.unit, amount: r.paid_units, purpose: 'change', requestId: r.id });
+      if (inc && r.paid_units > 0) d.wallet.oweRaw({ mint: inc.mint, unit: r.unit, amount: r.paid_units, purpose: 'change', requestId: r.id, lockPubkey: r.lock_pubkey });
       d.db.prepare("UPDATE requests SET status = 'aborted', change_units = ? WHERE id = ?").run(r.paid_units, r.id);
     });
   }

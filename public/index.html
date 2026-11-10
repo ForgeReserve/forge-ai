@@ -162,6 +162,16 @@
         <div class="row"><button type="button" class="btn small" id="resetPrompt">Restore default</button><p class="hint small grow">Sent with every chat. Leave empty to send none.</p></div>
       </div>
       <div class="section">
+        <h3>Lock refunds to my wallet key</h3>
+        <p class="hint small">Refunds, and change or returned eCash from other-mint funding, are locked to this key (Cashu NUT-11 P2PK). Only the wallet holding the matching private key can redeem them, and the gateway cannot spend them. Find the key in cashu.me under Receive, then eCash, then the lock icon (or Settings, P2PK), shown as "P2PK Key" starting 02. Minibits and other nostr-based wallets lock to your npub. Leave it empty for ordinary tokens.</p>
+        <div class="field">
+          <label for="setLockKey">Wallet public key (02… or npub1…)</label>
+          <input id="setLockKey" class="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="02… or npub1…" aria-describedby="lockKeyMsg lockKeyWarn">
+        </div>
+        <div class="row"><button type="button" class="btn small" id="saveLockKey">Save key</button><button type="button" class="btn small" id="clearLockKey">Clear</button><p class="hint small grow" id="lockKeyMsg" role="status"></p></div>
+        <p class="hint small warn" id="lockKeyWarn">Use a key from a wallet you control. eCash locked to a key you do not hold is lost: nobody, including Forge, can unlock it.</p>
+      </div>
+      <div class="section">
         <h3>Data</h3>
         <p class="hint">Chats are stored only in this browser (IndexedDB). The gateway never stores them.</p>
         <div class="row"><button type="button" class="btn danger" id="deleteAll"><svg class="i"><use href="#i-trash"/></svg>Delete all chats</button></div>

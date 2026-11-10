@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS outgoing (
   counters TEXT,
   token TEXT,
   error TEXT,
+  lock_pubkey TEXT,                 -- NUT-11: send outputs locked to this key (random secrets, not NUT-13)
+  pinned INTEGER NOT NULL DEFAULT 0, -- 1: pays out exactly the proofs reserved under op_id = id
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -135,6 +137,7 @@ CREATE TABLE IF NOT EXISTS fundings (
   f_attempts INTEGER NOT NULL DEFAULT 0,
   f_change_token TEXT,
   f_refund_token TEXT,
+  f_lock_pubkey TEXT,               -- foreign: lock change and refund tokens to this key (NUT-11)
   error TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -161,9 +164,18 @@ CREATE TABLE IF NOT EXISTS requests (
   paid_units INTEGER,
   change_units INTEGER,
   latency_ms INTEGER,
+  lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
   created_at INTEGER NOT NULL
 );
 `;
+
+/** Columns added after the first release: CREATE TABLE IF NOT EXISTS does not add them to an existing file. */
+const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
+  ['outgoing', 'lock_pubkey', 'TEXT'],
+  ['outgoing', 'pinned', 'INTEGER NOT NULL DEFAULT 0'],
+  ['fundings', 'f_lock_pubkey', 'TEXT'],
+  ['requests', 'lock_pubkey', 'TEXT'],
+];
 
 export type DB = DatabaseSync;
 
@@ -172,6 +184,10 @@ export function openDb(path: string): DB {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
+  for (const [table, column, decl] of ADDED_COLUMNS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
   return db;
 }
 
