@@ -227,6 +227,22 @@ async function renderOverview() {
       </section>`
       : `<section class="card"><div class="card-head"><h3>Tinfoil credit</h3><span class="badge err">unavailable</span></div><p class="sub">${esc(tf.error)}</p></section>`;
 
+  const tk = o.tokenfactory;
+  const tokenFactoryCard = !tk
+    ? ''
+    : tk.ok
+      ? `
+      <section class="card">
+        <div class="card-head"><h3>Token Factory key</h3>${tk.blocked ? '<span class="badge err">blocked</span>' : '<span class="unit-tag">usd</span>'}</div>
+        <div class="grid">
+          <div class="kpi"><div class="label">Spend on this key</div><div class="value">${usd(tk.spent_usd)}</div><div class="sub">as Token Factory costs it${tk.alias ? ` · key ${esc(tk.alias)}` : ''}</div></div>
+          <div class="kpi"><div class="label">Budget</div><div class="value">${tk.max_budget_usd == null ? 'No limit' : usd(tk.max_budget_usd)}</div><div class="sub">${tk.remaining_usd == null ? 'free during the beta' : usd(tk.remaining_usd) + ' left'}${tk.budget_duration ? ` · resets ${esc(tk.budget_duration)}` : ''}</div></div>
+          <div class="kpi"><div class="label">Limits</div><div class="value">${tk.rpm_limit ? nf(tk.rpm_limit) + '/min' : 'None'}</div><div class="sub">${tk.expires ? 'key expires ' + esc(String(tk.expires).slice(0, 10)) : 'key does not expire'}</div></div>
+        </div>
+        <p class="sub" style="margin-top:10px">From the key's own record at Token Factory, refreshed every minute. If other tools share this key, its spend includes theirs.</p>
+      </section>`
+      : `<section class="card"><div class="card-head"><h3>Token Factory key</h3><span class="badge err">unavailable</span></div><p class="sub">${esc(tk.error)}</p></section>`;
+
   const moneyCols = [
     { h: 'Requests', num: true, v: (r) => nf(r.requests) },
     { h: 'Failed', num: true, v: (r) => (r.failed ? `<span class="badge err">${nf(r.failed)}</span>` : '0') },
@@ -250,6 +266,7 @@ async function renderOverview() {
     <div class="stack">
       ${unitCards}
       ${tinfoilCard}
+      ${tokenFactoryCard}
       <section class="card">
         <div class="card-head"><h3>Activity</h3>
           <div class="seg" id="win">${[['today', 'Today (UTC)'], ['d7', '7 days'], ['d30', '30 days']].map(([k, l]) => `<button type="button" data-k="${k}" class="${k === windowKey ? 'on' : ''}">${l}</button>`).join('')}</div>

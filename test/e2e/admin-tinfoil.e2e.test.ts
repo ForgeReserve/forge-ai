@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Gateway, startGateway } from './helpers.ts';
+import { type Gateway, startGateway, startGatewayWithCatalog } from './helpers.ts';
 
 const TOKEN = 'e2e-admin-token-' + randomBytes(8).toString('hex');
 
@@ -60,5 +60,32 @@ describe('admin overview: Tinfoil credit', () => {
     expect(tf.auth.every((a) => a === 'Bearer admin_test')).toBe(true);
     // The admin key never reaches the browser.
     expect(JSON.stringify(o)).not.toContain('admin_test');
+  });
+});
+
+describe('admin overview: Token Factory key', () => {
+  it('reads spend, budget and limits from LiteLLM /key/info without exposing the key', async () => {
+    const seen: string[] = [];
+    const server: Server = createServer((req, res) => {
+      seen.push(`${req.url} ${req.headers.authorization}`);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ key: 'sk-secret', info: { key_alias: 'forge-ai', spend: 1.5, max_budget: 10, rpm_limit: 500, expires: '2027-10-13T01:51:27Z', blocked: null } }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const catalog = {
+      suppliers: { tokenfactory: { type: 'openai', tier: 'standard', baseUrl: `${base}/v1`, apiKeyEnv: 'TF_TEST_KEY', pricing: 'metered' } },
+      models: [{ id: 'tf-model', supplier: 'tokenfactory', upstream: 'tf-model', input_usd_per_mtok: 1, output_usd_per_mtok: 4 }],
+    };
+    const g = await startGatewayWithCatalog(catalog, { TF_TEST_KEY: 'sk-secret', FORGE_ADMIN_TOKEN_HASH: createHash('sha256').update(TOKEN).digest('hex') });
+    try {
+      const o = (await (await fetch(`${g.url}/admin/api/overview`, { headers: { 'X-Forge-Admin-Token': TOKEN } })).json()) as any;
+      expect(o.tokenfactory).toMatchObject({ ok: true, alias: 'forge-ai', spent_usd: 1.5, max_budget_usd: 10, remaining_usd: 8.5, rpm_limit: 500, blocked: false });
+      expect(seen).toContain('/key/info Bearer sk-secret');
+      expect(JSON.stringify(o)).not.toContain('sk-secret');
+    } finally {
+      await g.close();
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });

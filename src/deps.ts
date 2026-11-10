@@ -5,6 +5,7 @@ import { openDb } from './db.ts';
 import { Invites, Ledger } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
 import { type FundingFaults, FundingService } from './funding.ts';
+import { setSupplierKeyEnv } from './admin-api.ts';
 import { buildSuppliers } from './suppliers/index.ts';
 import type { Deps } from './app.ts';
 
@@ -40,7 +41,7 @@ export function buildDeps(
     maxStaleMs: env.FORGE_RATE_MAX_STALE_SECONDS * 1000,
   });
   const funding = new FundingService({ db, ledger, wallet, env, rates, mint: env.FORGE_FUND_MINT ?? config.trustedMints[0]!, faults: opts.fundingFaults });
-  return {
+  const deps: Deps = {
     config,
     db,
     ledger,
@@ -51,4 +52,6 @@ export function buildDeps(
     suppliers: buildSuppliers(config, opts.env ?? process.env),
     publicDir: resolve(import.meta.dirname, '..', 'public'),
   };
+  setSupplierKeyEnv(deps, opts.env ?? process.env);
+  return deps;
 }

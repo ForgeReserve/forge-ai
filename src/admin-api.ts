@@ -57,6 +57,13 @@ export function inviteMessage(code: string): string {
   ].join('\n');
 }
 
+/** Where supplier API keys are read from: the env given to buildDeps (tests), else the process env. */
+const keyEnvs = new WeakMap<object, NodeJS.ProcessEnv>();
+export function setSupplierKeyEnv(d: object, env: NodeJS.ProcessEnv) {
+  keyEnvs.set(d, env);
+}
+const supplierKeyEnv = (d: object): NodeJS.ProcessEnv => keyEnvs.get(d) ?? process.env;
+
 export function createAdminRouter(d: Deps): Hono {
   const { config, db, ledger, invites, wallet, rates, funding } = d;
   const env = config.env;
@@ -235,6 +242,42 @@ export function createAdminRouter(d: Deps): Hono {
     return value;
   };
 
+  // ---------------------------------------------------------------- Token Factory key (LiteLLM /key/info)
+  // The inference key can read its own record: spend as Token Factory costs it, budget, limits, expiry.
+  let tfCache: { at: number; value: unknown } | undefined;
+  const tokenFactoryKey = async () => {
+    const s = config.catalog.suppliers.tokenfactory as { baseUrl?: string; apiKeyEnv?: string } | undefined;
+    const key = s?.apiKeyEnv ? supplierKeyEnv(d)[s.apiKeyEnv] : undefined;
+    if (!s?.baseUrl || typeof key !== 'string' || !key) return null;
+    if (tfCache && Date.now() - tfCache.at < 60_000) return tfCache.value;
+    let value;
+    try {
+      const base = s.baseUrl.replace(/\/v1\/?$/, '');
+      const res = await fetch(`${base}/key/info`, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Token Factory /key/info: HTTP ${res.status}`);
+      const info = ((await res.json()) as any)?.info ?? {};
+      const spent = Number(info.spend ?? 0);
+      const budget = info.max_budget == null ? null : Number(info.max_budget);
+      value = {
+        ok: true,
+        alias: typeof info.key_alias === 'string' ? info.key_alias : null,
+        spent_usd: spent,
+        max_budget_usd: budget,
+        remaining_usd: budget == null ? null : budget - spent,
+        budget_duration: info.budget_duration ?? null,
+        budget_reset_at: info.budget_reset_at ?? null,
+        rpm_limit: info.rpm_limit ?? null,
+        tpm_limit: info.tpm_limit ?? null,
+        expires: info.expires ?? null,
+        blocked: !!info.blocked,
+      };
+    } catch (e) {
+      value = { ok: false, error: errText(e) };
+    }
+    tfCache = { at: Date.now(), value };
+    return value;
+  };
+
   // ---------------------------------------------------------------- stats
   type Money = Partial<Record<Unit, number>>;
   const add = (m: Money, unit: Unit, v: number) => (m[unit] = (m[unit] ?? 0) + v);
@@ -343,6 +386,7 @@ export function createAdminRouter(d: Deps): Hono {
       units,
       holdings: holdings(d),
       tinfoil: await tinfoilBilling(),
+      tokenfactory: await tokenFactoryKey(),
       windows: {
         today: windowStats(midnight.getTime(), rate),
         d7: windowStats(t - 7 * DAY, rate),
