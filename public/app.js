@@ -188,9 +188,12 @@ function renderModel() {
     effortSel = pickEffort(efforts, settings.effort);
     sel.value = effortSel;
   } else effortSel = '';
+  renderEffort();
   $('encryptChip').hidden = !(m?.tier === 'enclave' && m?.encrypted_passthrough);
   $('encrypt').checked = settings.encrypt;
   $('encryptChip').classList.toggle('on', settings.encrypt);
+  $('encryptChip').setAttribute('aria-pressed', String(settings.encrypt));
+  $('encryptChip').title = `Encrypt in browser: ${settings.encrypt ? 'on' : 'off'}`;
   renderTierLine(m);
 }
 
@@ -1123,7 +1126,35 @@ function wire() {
     addImages(e.target.files);
     e.target.value = '';
   });
-  $('effort').addEventListener('change', (e) => (effortSel = e.target.value));
+  $('effort').addEventListener('change', (e) => {
+    effortSel = e.target.value;
+    renderEffort();
+  });
+  $('effortBtn').addEventListener('click', () => ($('effortPop').hidden ? openEffort() : closeEffort()));
+  $('effortPop').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b) return;
+    const sel = $('effort');
+    sel.value = b.dataset.value;
+    sel.dispatchEvent(new Event('change'));
+    closeEffort(true);
+  });
+  $('effortPop').addEventListener('keydown', (e) => {
+    const items = [...$('effortPop').querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); closeEffort(true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!$('effortPop').hidden && !e.target.closest('#effortChip')) closeEffort();
+  });
+  $('encryptChip').addEventListener('click', () => {
+    const box = $('encrypt');
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+    toast(box.checked ? 'Encryption in browser on' : 'Encryption in browser off: the gateway can read this chat', 2600);
+  });
   $('encrypt').addEventListener('change', (e) => {
     settings.encrypt = e.target.checked;
     saveSettings();
@@ -1253,3 +1284,33 @@ if (initial) await openChat(initial);
 else newChat();
 booted = true;
 if (!isMobile()) $('composer-input').focus();
+
+// ------------------------------------------------------------------ composer controls
+
+/** The effort button: an icon with a one-letter badge; its menu lists the options of the hidden select. */
+function renderEffort() {
+  const sel = $('effort');
+  const opt = sel.selectedOptions[0];
+  const v = sel.value;
+  const badge = $('effortBadge');
+  badge.hidden = !v;
+  badge.textContent = v ? v[0].toUpperCase() : '';
+  $('effortLabel').textContent = `Reasoning effort: ${opt ? opt.text.replace(/ effort$/i, '').toLowerCase() : 'default'}`;
+  $('effortBtn').classList.toggle('on', !!v);
+  $('effortPop').replaceChildren(
+    ...[...sel.options].map((o) =>
+      el('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(o.value === v), 'data-value': o.value, class: o.value === v ? 'on' : '', text: o.text.replace(/ effort$/i, '') }),
+    ),
+  );
+}
+function openEffort() {
+  const pop = $('effortPop');
+  pop.hidden = false;
+  $('effortBtn').setAttribute('aria-expanded', 'true');
+  (pop.querySelector('[aria-checked="true"]') ?? pop.querySelector('button'))?.focus();
+}
+function closeEffort(refocus = false) {
+  $('effortPop').hidden = true;
+  $('effortBtn').setAttribute('aria-expanded', 'false');
+  if (refocus) $('effortBtn').focus();
+}

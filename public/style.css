@@ -468,7 +468,7 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer textarea:focus-visible { outline: 0; }
-.composer-bar { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.composer-bar { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: nowrap; }
 .composer-bar .spacer { flex: 1; }
 .send-btn {
   position: relative; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-text);
@@ -770,3 +770,21 @@ html.sheet-open .thread { overflow: hidden; }
 .hint.warn { color: var(--warn); }
 .hint.err { color: var(--err); }
 .mono { font-family: var(--mono); font-size: 14px; }
+
+/* ---------- composer controls: icon buttons ---------- */
+.ctl { position: relative; display: inline-flex; }
+.ctl-btn { position: relative; width: 36px; height: 36px; border-radius: 50%; color: var(--text-2); border: 1px solid transparent; }
+.ctl-btn.on { color: var(--text); border-color: var(--line); }
+.ctl-badge { position: absolute; top: 1px; right: -1px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 99px; background: var(--text); color: var(--bg); font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center; }
+.pop { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; min-width: 168px; padding: 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-elev); box-shadow: var(--shadow-2); transform-origin: bottom left; animation: pop-in var(--dur-2, 200ms) var(--ease-out, ease-out); }
+.pop button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font-size: 14px; text-align: left; }
+.pop button:hover, .pop button:focus-visible { background: var(--bg-hover); }
+.pop button.on::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--brass-hi, var(--text)); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
+.enc-toggle .ic-unlock { display: none; }
+.enc-toggle[aria-pressed="false"] .ic-lock { display: none; }
+.enc-toggle[aria-pressed="false"] .ic-unlock { display: block; }
+.enc-toggle.on { color: var(--enc); background: var(--enc-bg); border-color: var(--enc-line); }
+.enc-toggle.on .ic-lock { animation: lock-snap var(--dur-3, 320ms) var(--ease-spring, ease-out); }
+@keyframes lock-snap { 0% { transform: translateY(-2px) scale(0.9); } 60% { transform: translateY(1px) scale(1.06); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pop, .enc-toggle.on .ic-lock { animation: none; } }

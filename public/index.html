@@ -121,15 +121,19 @@
           <div class="composer-bar">
             <button type="button" class="icon-btn" id="attachBtn" aria-label="Attach images" title="Attach images" hidden><svg class="i"><use href="#i-image"/></svg></button>
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
-            <label class="chip" id="effortChip" hidden title="Reasoning effort">
-              <svg class="i" aria-hidden="true"><use href="#i-brain"/></svg>
-              <span class="sr-only">Reasoning effort</span>
-              <select id="effort"></select>
-            </label>
-            <label class="chip" id="encryptChip" hidden title="Encrypt each request in this browser to the enclave's key">
-              <input type="checkbox" id="encrypt" checked>
-              <svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Encrypt in browser
-            </label>
+            <div class="ctl" id="effortChip" hidden>
+              <button type="button" class="icon-btn ctl-btn" id="effortBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="effortPop" title="Reasoning effort">
+                <svg class="i" aria-hidden="true"><use href="#i-brain"/></svg><span class="ctl-badge" id="effortBadge" hidden></span>
+                <span class="sr-only" id="effortLabel">Reasoning effort: default</span>
+              </button>
+              <div class="pop" id="effortPop" role="menu" aria-label="Reasoning effort" hidden></div>
+              <select id="effort" hidden tabindex="-1" aria-hidden="true"></select>
+            </div>
+            <button type="button" class="icon-btn ctl-btn enc-toggle" id="encryptChip" hidden aria-pressed="true" title="Encrypt in browser: on">
+              <svg class="i ic-lock" aria-hidden="true"><use href="#i-lock"/></svg><svg class="i ic-unlock" aria-hidden="true"><use href="#i-unlock"/></svg>
+              <span class="sr-only">Encrypt in browser</span>
+            </button>
+            <input type="checkbox" id="encrypt" checked hidden tabindex="-1" aria-hidden="true">
             <span class="spacer"></span>
             <button type="submit" class="send-btn" id="sendBtn" aria-label="Send message" title="Send (Enter)" disabled><svg class="i ic-send"><use href="#i-up"/></svg><svg class="i ic-stop"><use href="#i-stop"/></svg></button>
           </div>
