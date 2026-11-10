@@ -199,7 +199,7 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .balance-chip {
   display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 99px;
   border: 1px solid var(--line-strong); background: var(--bg-elev); font-weight: 600; font-size: 14px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
 }
 .balance-chip:hover { background: var(--bg-hover); }
 .balance-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
@@ -433,7 +433,9 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
   .app.sb-collapsed .sidebar { margin-left: 0; transform: translateX(-105%); box-shadow: none; }
   .app .topbar .when-collapsed { display: inline-grid !important; }
   .topbar { padding: 8px 8px; gap: 2px; }
-  .model-btn { font-size: 15px; padding: 0 8px; max-width: 52vw; }
+  .model-btn { font-size: 15px; padding: 0 8px; max-width: none; min-width: 0; flex: 0 1 auto; }
+  .balance-chip { padding: 0 10px; font-size: 13px; gap: 6px; }
+  .balance-chip .label { display: none; }
   .model-btn .tier-badge { display: none; }
   .thread-inner, .empty, .composer-wrap { padding-left: 16px; padding-right: 16px; }
   .composer-wrap { padding-left: 12px; padding-right: 12px; }
@@ -443,10 +445,6 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
   .msg .actions { opacity: 1; }
   .modal { width: calc(100vw - 24px); }
   .jump { bottom: 150px; }
-}
-@media (max-width: 400px) {
-  .balance-chip { padding: 0 10px; font-size: 13px; }
-  .balance-chip .label { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
