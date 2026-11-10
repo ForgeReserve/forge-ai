@@ -49,6 +49,12 @@ export const EnvSchema = z.object({
   /** Per-funding limits for Lightning, in whole units. */
   // Mint quote checks per minute across all fundings: the gateway's one IP shares Nutshell's 20/min limit.
   FORGE_MINT_QUOTE_CHECKS_PER_MIN: z.coerce.number().int().min(1).default(12),
+  // Tinfoil admin key (read-only billing calls from the admin page) and the credit Tinfoil granted at sign-up,
+  // which its transaction history does not list.
+  TINFOIL_ADMIN_KEY: z.string().optional(),
+  FORGE_TINFOIL_ADMIN_URL: z.string().url().default('https://api.tinfoil.sh'),
+  FORGE_TINFOIL_OPENING_CREDIT_USD: z.coerce.number().min(0).default(5),
+  FORGE_TINFOIL_LOW_USD: z.coerce.number().min(0).default(1),
   FORGE_FUND_MAX_SAT: z.coerce.number().int().min(1).default(1_000_000),
   FORGE_FUND_MAX_USD: z.coerce.number().int().min(1).default(50_000),
   /** On-chain (NUT-30) funding. Off by default: shapes come from the Forge Nutshell branch, not a live test. */

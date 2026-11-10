@@ -190,6 +190,51 @@ export function createAdminRouter(d: Deps): Hono {
     return value;
   };
 
+  // ---------------------------------------------------------------- Tinfoil credit (read-only admin API)
+  // Tinfoil has no balance endpoint: remaining = opening credit + credits added - all-time spend.
+  let tinfoilCache: { at: number; value: unknown } | undefined;
+  const tinfoilBilling = async () => {
+    const key = env.TINFOIL_ADMIN_KEY;
+    if (!key) return null;
+    if (tinfoilCache && Date.now() - tinfoilCache.at < 60_000) return tinfoilCache.value;
+    const get = async (path: string) => {
+      const res = await fetch(`${env.FORGE_TINFOIL_ADMIN_URL}${path}`, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Tinfoil admin API ${path.split('?')[0]}: HTTP ${res.status}`);
+      return (await res.json()) as any;
+    };
+    let value;
+    try {
+      const [all, d30, tx] = await Promise.all([get('/api/billing/usage'), get('/api/billing/usage?time=30d'), get('/api/billing/transactions')]);
+      const transactions: any[] = Array.isArray(tx?.transactions) ? tx.transactions : [];
+      // The transaction format is not documented and the list is empty so far: count positive amounts as credit added.
+      const added = transactions.reduce((s, x) => {
+        const v = Number(x?.amount_usd ?? x?.amount ?? 0);
+        return Number.isFinite(v) && v > 0 ? s + v : s;
+      }, 0);
+      const spent = Number(all?.cost ?? 0);
+      const opening = env.FORGE_TINFOIL_OPENING_CREDIT_USD;
+      const remaining = opening + added - spent;
+      value = {
+        ok: true,
+        opening_usd: opening,
+        added_usd: added,
+        transactions: transactions.length,
+        spent_usd: spent,
+        spent_30d_usd: Number(d30?.cost ?? 0),
+        requests: Number(all?.requests ?? 0),
+        requests_30d: Number(d30?.requests ?? 0),
+        tokens: Number(all?.tokens ?? 0),
+        remaining_usd: remaining,
+        low: remaining < env.FORGE_TINFOIL_LOW_USD,
+        low_threshold_usd: env.FORGE_TINFOIL_LOW_USD,
+      };
+    } catch (e) {
+      value = { ok: false, error: errText(e) };
+    }
+    tinfoilCache = { at: Date.now(), value };
+    return value;
+  };
+
   // ---------------------------------------------------------------- stats
   type Money = Partial<Record<Unit, number>>;
   const add = (m: Money, unit: Unit, v: number) => (m[unit] = (m[unit] ?? 0) + v);
@@ -297,6 +342,7 @@ export function createAdminRouter(d: Deps): Hono {
       rate: rs ? { btc_usd: rs.rate, age_s: Math.round(rs.ageMs / 1000), sources: rs.sources, usable: rates.current() !== undefined } : null,
       units,
       holdings: holdings(d),
+      tinfoil: await tinfoilBilling(),
       windows: {
         today: windowStats(midnight.getTime(), rate),
         d7: windowStats(t - 7 * DAY, rate),

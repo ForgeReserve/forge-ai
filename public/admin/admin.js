@@ -210,6 +210,23 @@ async function renderOverview() {
     )
     .join('');
 
+  const tf = o.tinfoil;
+  const usd = (v, dp = 2) => `$${Number(v).toFixed(v !== 0 && Math.abs(v) < 0.01 ? 5 : dp)}`;
+  const tinfoilCard = !tf
+    ? ''
+    : tf.ok
+      ? `
+      <section class="card">
+        <div class="card-head"><h3>Tinfoil credit</h3>${tf.low ? `<span class="badge err">below ${usd(tf.low_threshold_usd)}</span>` : '<span class="unit-tag">usd</span>'}</div>
+        <div class="grid">
+          <div class="kpi ${tf.low ? '' : 'accent'}"><div class="label">Remaining</div><div class="value">${usd(tf.remaining_usd)}</div><div class="sub">${usd(tf.opening_usd)} starting credit${tf.added_usd ? ` + ${usd(tf.added_usd)} added` : ''}</div></div>
+          <div class="kpi"><div class="label">Spent, all time</div><div class="value">${usd(tf.spent_usd)}</div><div class="sub">${nf(tf.requests)} requests · ${nf(tf.tokens)} tokens</div></div>
+          <div class="kpi"><div class="label">Spent, 30 days</div><div class="value">${usd(tf.spent_30d_usd)}</div><div class="sub">${nf(tf.requests_30d)} requests</div></div>
+        </div>
+        <p class="sub" style="margin-top:10px">From Tinfoil's billing API, refreshed every minute. Remaining is worked out as starting credit plus credit added minus spend, since Tinfoil has no balance figure.</p>
+      </section>`
+      : `<section class="card"><div class="card-head"><h3>Tinfoil credit</h3><span class="badge err">unavailable</span></div><p class="sub">${esc(tf.error)}</p></section>`;
+
   const moneyCols = [
     { h: 'Requests', num: true, v: (r) => nf(r.requests) },
     { h: 'Failed', num: true, v: (r) => (r.failed ? `<span class="badge err">${nf(r.failed)}</span>` : '0') },
@@ -232,6 +249,7 @@ async function renderOverview() {
     ${head('Overview', `Markup ×${esc(o.markup)} · BTC/USD ${rate ? '$' + nf(rate.btc_usd, 0) + ` <span class="muted">(${esc(rate.age_s)}s old${rate.usable ? '' : ', stale'})</span>` : '<span class="badge err">no rate</span>'}`)}
     <div class="stack">
       ${unitCards}
+      ${tinfoilCard}
       <section class="card">
         <div class="card-head"><h3>Activity</h3>
           <div class="seg" id="win">${[['today', 'Today (UTC)'], ['d7', '7 days'], ['d30', '30 days']].map(([k, l]) => `<button type="button" data-k="${k}" class="${k === windowKey ? 'on' : ''}">${l}</button>`).join('')}</div>
