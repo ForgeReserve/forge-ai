@@ -39,6 +39,15 @@ export class BetaWaitlist {
     return this.db.prepare('SELECT * FROM beta_signups ORDER BY created_at').all() as unknown as BetaSignup[];
   }
 
+  get(id: string): BetaSignup | undefined {
+    return this.db.prepare('SELECT * FROM beta_signups WHERE id = ?').get(id) as BetaSignup | undefined;
+  }
+
+  /** Removes a signup entirely (on request). */
+  delete(id: string): boolean {
+    return Number(this.db.prepare('DELETE FROM beta_signups WHERE id = ?').run(id).changes) > 0;
+  }
+
   markInvited(id: string): boolean {
     return Number(this.db.prepare('UPDATE beta_signups SET invited_at = ? WHERE id = ? AND invited_at IS NULL').run(now(), id).changes) > 0;
   }

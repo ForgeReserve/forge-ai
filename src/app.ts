@@ -6,6 +6,7 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
+import { createAdminRouter } from './admin-api.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
@@ -848,6 +849,9 @@ export function createApp(d: Deps) {
     if (created) log.info('beta_signup', { kind: parsed.kind });
     return c.json({ ok: true });
   });
+
+  // ------------------------------------------------------------------ operator admin (404 unless FORGE_ADMIN_TOKEN_HASH is set)
+  app.route('/', createAdminRouter(d));
 
   // ------------------------------------------------------------------ static chat page
   if (d.publicDir) {

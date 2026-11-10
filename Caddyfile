@@ -1,6 +1,14 @@
 # Placeholder domain: change before deploying.
 ai.forge-reserve.com {
 	encode zstd gzip
+
+	# Operator admin page and API: HTTP basic auth first, then the gateway's own admin token
+	# (FORGE_ADMIN_TOKEN_HASH). The bcrypt hash comes from the environment at deploy time and is
+	# never committed; see docs/ADMIN.md. Caddy refuses to start if it is unset.
+	basic_auth /admin* {
+		{$FORGE_ADMIN_BASIC_AUTH_USER:admin} {$FORGE_ADMIN_BASIC_AUTH_HASH}
+	}
+
 	# Streams (SSE and EHBP frames) must not be buffered.
 	reverse_proxy gateway:8787 {
 		flush_interval -1

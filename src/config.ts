@@ -69,6 +69,16 @@ export const EnvSchema = z.object({
   /** Unfinished fundings (quotes not yet paid) per balance. */
   FORGE_FUND_MAX_PENDING: z.coerce.number().int().min(1).default(5),
   FORGE_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  /** Admin page and /admin/api: SHA-256 (hex) of the admin token. Unset: the admin API answers 404. */
+  FORGE_ADMIN_TOKEN_HASH: z
+    .string()
+    .trim()
+    .regex(/^[0-9a-f]{64}$/i, 'FORGE_ADMIN_TOKEN_HASH must be the sha256 hex of the admin token')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  /** Origin admin POSTs must come from (e.g. https://ai.forge-reserve.com). Unset: the request's own Host. */
+  FORGE_ADMIN_ORIGIN: z.string().url().optional(),
+  FORGE_ADMIN_RATE_LIMIT_RPM: z.coerce.number().int().min(1).default(120),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

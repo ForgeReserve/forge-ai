@@ -83,6 +83,7 @@ export class Ledger {
     return tx(this.db, () => {
       const a = this.get(accountId);
       if (!a) throw new LedgerError('invalid_key', 'unknown account', 401);
+      if (this.isFrozen(accountId)) throw new LedgerError('account_frozen', 'this balance is frozen by the operator; refunds still work', 403);
       const avail = a.balance_msub - this.reservedMsub(accountId);
       if (avail < msub) {
         throw new LedgerError('insufficient_balance', `balance too low: need ${msub} msub, available ${avail} msub`, 402);
@@ -127,6 +128,17 @@ export class Ledger {
     const r = this.db.prepare('UPDATE accounts SET balance_msub = balance_msub - ? WHERE id = ? AND balance_msub >= ?').run(msub, accountId, msub);
     if (Number(r.changes) !== 1) throw new LedgerError('insufficient_balance', 'balance changed, retry', 409);
     this.db.prepare('INSERT INTO ledger (account_id, kind, amount_msub, ref, created_at) VALUES (?, ?, ?, ?, ?)').run(accountId, kind, -msub, ref, now());
+  }
+
+  isFrozen(accountId: string): boolean {
+    const r = this.db.prepare('SELECT frozen_at FROM accounts WHERE id = ?').get(accountId) as { frozen_at: number | null } | undefined;
+    return !!r?.frozen_at;
+  }
+
+  /** Operator freeze: blocks reserve() (all spending). Refunds (debitRaw) and credits still work. */
+  setFrozen(accountId: string, frozen: boolean): boolean {
+    const r = this.db.prepare('UPDATE accounts SET frozen_at = ? WHERE id = ?').run(frozen ? now() : null, accountId);
+    return Number(r.changes) > 0;
   }
 
   list(): Array<Account & { reserved_msub: number }> {

@@ -13,7 +13,8 @@ import { loadConfig, type Unit } from './config.ts';
 import { BetaWaitlist } from './beta.ts';
 import { buildDeps } from './deps.ts';
 import { setLogSilent } from './log.ts';
-import { displayPrice, MSUB_PER_UNIT, msubToUnitsCeil } from './pricing.ts';
+import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
+import { ExportError, issueExport, oweExport, planExport, revenue } from './revenue.ts';
 
 setLogSilent(true);
 const [cmd, ...rest] = process.argv.slice(2);
@@ -29,14 +30,6 @@ const d = buildDeps(config);
 function table(rows: object[]) {
   if (values.json) console.log(JSON.stringify(rows, null, 2));
   else console.table(rows);
-}
-
-function revenue(unit: Unit) {
-  const holdings = d.wallet.holdings().filter((h) => h.unit === unit);
-  const unspent = holdings.reduce((s, h) => s + h.unspent, 0);
-  const owed = holdings.reduce((s, h) => s + h.owed, 0);
-  const liabilities = msubToUnitsCeil(d.ledger.liabilities()[unit] ?? 0);
-  return { unit, holdings, unspent, owed, liabilities, sweepable: Math.max(0, unspent - owed - liabilities) };
 }
 
 switch (cmd) {
@@ -70,6 +63,7 @@ switch (cmd) {
         unit: a.unit,
         balance: a.balance_msub / MSUB_PER_UNIT,
         reserved: a.reserved_msub / MSUB_PER_UNIT,
+        frozen: d.ledger.isFrozen(a.id),
         created: new Date(a.created_at).toISOString(),
       })),
     );
@@ -77,29 +71,23 @@ switch (cmd) {
   case 'revenue:show':
     table(
       config.env.FORGE_UNITS.map((u) => {
-        const r = revenue(u);
-        return { unit: u, wallet: r.unspent, owed_payouts: r.owed, customer_balances: r.liabilities, sweepable: r.sweepable };
+        const r = revenue(d, u);
+        return { unit: u, wallet: r.unspent, other_mints: r.other_unspent, owed_payouts: r.owed, customer_balances: r.liabilities, sweepable: r.sweepable };
       }),
     );
     break;
   case 'revenue:export': {
     const unit = (values.unit ?? 'usd') as Unit;
-    const r = revenue(unit);
-    const mint = values.mint ?? r.holdings.sort((a, b) => b.unspent - a.unspent)[0]?.mint;
-    if (!mint) {
-      console.error('no eCash held for this unit');
+    let plan;
+    try {
+      plan = planExport(d, unit, { mint: values.mint, amount: values.amount ? Number(values.amount) : undefined });
+    } catch (e) {
+      console.error(e instanceof ExportError ? e.message : String(e));
       process.exit(1);
     }
-    const atMint = r.holdings.find((h) => h.mint === mint)?.unspent ?? 0;
-    const max = Math.min(atMint, r.sweepable);
-    const amount = values.amount ? Number(values.amount) : max;
-    if (!Number.isInteger(amount) || amount < 1 || amount > max) {
-      console.error(`amount must be 1..${max} ${unit} (wallet ${r.unspent}, owed ${r.owed}, customer balances ${r.liabilities})`);
-      process.exit(1);
-    }
-    const id = d.wallet.oweRaw({ mint, unit, amount, purpose: 'export' });
-    const token = await d.wallet.issue(id);
-    console.error(`Exported ${amount} ${unit} from ${mint} (payout ${id}). Store this token safely:`);
+    const { id } = oweExport(d, { unit, mint: plan.mint, amount: plan.amount, source: 'cli' });
+    const token = await issueExport(d, id);
+    console.error(`Exported ${plan.amount} ${unit} from ${plan.mint} (export ${id}). Store this token safely:`);
     console.log(token);
     break;
   }

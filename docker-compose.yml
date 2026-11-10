@@ -23,6 +23,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # Basic auth in front of /admin*. Set both in .env (see docs/ADMIN.md); the hash is single-quoted
+      # there because bcrypt hashes contain "$". Compose stops with an error if the hash is missing.
+      FORGE_ADMIN_BASIC_AUTH_USER: ${FORGE_ADMIN_BASIC_AUTH_USER:-admin}
+      FORGE_ADMIN_BASIC_AUTH_HASH: ${FORGE_ADMIN_BASIC_AUTH_HASH:?set FORGE_ADMIN_BASIC_AUTH_HASH in .env, see docs/ADMIN.md}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

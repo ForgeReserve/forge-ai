@@ -55,6 +55,8 @@ docker compose up -d
 docker compose exec gateway node src/admin.ts invites:create --count 10
 ```
 
+`docker compose` needs `FORGE_ADMIN_BASIC_AUTH_HASH` in `.env` for the admin page's basic auth; see [docs/ADMIN.md](docs/ADMIN.md).
+
 The SQLite database in the `forge-data` volume is the gateway's eCash wallet. Back it up. See [docs/PAYMENTS.md](docs/PAYMENTS.md).
 
 ## Configuration
@@ -91,6 +93,9 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Mint allowlist (empty = any https mint) and denylist |
 | `FORGE_FOREIGN_MAX_SAT` / `FORGE_FOREIGN_MAX_USD` | `100000` / `5000` | Largest token from another mint, in sat / cents |
 | `FORGE_FUND_MAX_PENDING` | `5` | Unfinished fundings per balance |
+| `FORGE_ADMIN_TOKEN_HASH` | unset | SHA-256 (hex) of the admin token. Unset: `/admin` answers 404. See [docs/ADMIN.md](docs/ADMIN.md) |
+| `FORGE_ADMIN_ORIGIN` | request `Host` | Origin admin changes must come from |
+| `FORGE_ADMIN_RATE_LIMIT_RPM` | `120` | Admin API requests per minute per IP |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys |
 
 ### Model catalog
@@ -205,7 +210,11 @@ pnpm admin revenue:export --unit usd [--mint URL] [--amount N]   # sweep revenue
 pnpm admin prices:show [--unit sat]
 ```
 
-`revenue:export` never exports eCash that backs customer balances or unpaid change.
+`revenue:export` never exports eCash that backs customer balances or unpaid change. Exports are recorded in `revenue_exports` (amount, lock, token hash; never the token).
+
+## Admin page
+
+`/admin/` is an operator page for the same tasks and more: revenue, liabilities and wallet holdings, activity by model, tier and supplier with estimated supplier cost, health (rate, supplier keys, mints, quote-check budget), revenue export as an eCash token (QR, copy, download, optional P2PK lock), invites, the beta waitlist (invite with a ready message, delete), balances with freeze, fundings with re-check, the request log and a read-only settings view. It is off (404) until `FORGE_ADMIN_TOKEN_HASH` is set, and in production Caddy adds basic auth on `/admin*`. Setup and the security model: [docs/ADMIN.md](docs/ADMIN.md).
 
 ## Chat page
 
@@ -227,6 +236,8 @@ pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env
 ```
 
 `docker-compose.test.yml` runs three FakeWallet mints: `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
+
+The admin tests (`test/unit/admin.test.ts`, `test/e2e/admin.e2e.test.ts`) cover access control (404 when off, 401 on a missing or wrong token, failed-login limit, Origin and JSON checks, no CORS), invites and revoke, the waitlist invite and delete, freeze (spending blocked, refunds allowed), revenue export (never above sweepable, locked export redeemable only with the key, history with token hash and no token, crash after the swap finished once by recovery) and overview numbers against the ledger.
 
 The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), P2PK-locked change and refunds (locked to the key: a plain wallet and the gateway's own wallet cannot redeem them, the key holder can; invalid keys 400; crash after a locked swap recovered by replay, by NUT-09 restore of the stored blinded messages, and left owed when neither answers), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
 

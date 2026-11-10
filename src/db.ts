@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   unit TEXT NOT NULL,
   balance_msub INTEGER NOT NULL DEFAULT 0 CHECK (balance_msub >= 0),
   invite_id TEXT,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  frozen_at INTEGER                 -- set by the operator: spending blocked, refunds allowed
 );
 
 CREATE TABLE IF NOT EXISTS reservations (
@@ -156,6 +157,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS fundings_quote ON fundings(mint, quote);
 CREATE INDEX IF NOT EXISTS fundings_due ON fundings(state, next_check);
 CREATE INDEX IF NOT EXISTS fundings_account ON fundings(account_id);
 
+-- Revenue exports from the admin page or CLI. The token itself is never stored here (the payout row
+-- in outgoing holds it for re-delivery, as for every payout); this is the operator's history.
+CREATE TABLE IF NOT EXISTS revenue_exports (
+  id TEXT PRIMARY KEY,
+  outgoing_id TEXT NOT NULL UNIQUE,
+  mint TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  locked INTEGER NOT NULL DEFAULT 0,
+  lock_pubkey TEXT,
+  source TEXT NOT NULL,             -- admin | cli
+  token_hash TEXT,                  -- sha256 of the issued token, set once it is issued
+  created_at INTEGER NOT NULL,
+  delivered_at INTEGER              -- when the token was handed to the operator (shown once)
+);
+
+CREATE INDEX IF NOT EXISTS ledger_account ON ledger(account_id);
+
 -- Metering log. No prompt or completion content, ever.
 CREATE TABLE IF NOT EXISTS requests (
   id TEXT PRIMARY KEY,
@@ -177,6 +196,8 @@ CREATE TABLE IF NOT EXISTS requests (
   lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
   created_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS requests_created ON requests(created_at);
+CREATE INDEX IF NOT EXISTS requests_account ON requests(account_id);
 `;
 
 /** Columns added after the first release: CREATE TABLE IF NOT EXISTS does not add them to an existing file. */
@@ -185,6 +206,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['outgoing', 'pinned', 'INTEGER NOT NULL DEFAULT 0'],
   ['fundings', 'f_lock_pubkey', 'TEXT'],
   ['requests', 'lock_pubkey', 'TEXT'],
+  ['accounts', 'frozen_at', 'INTEGER'],
 ];
 
 export type DB = DatabaseSync;

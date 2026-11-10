@@ -602,6 +602,15 @@ export class FundingService {
   private quoteChecks: number[] = [];
   private mintCooldownUntil = 0;
 
+  /** The shared quote-check budget and the 429 pause, for the admin page. Read-only. */
+  quoteCheckStatus(): { used: number; budget: number; cooldown_until: number | null; available: boolean } {
+    const t = now();
+    const used = this.quoteChecks.filter((x) => t - x < 60_000).length;
+    const budget = this.env.FORGE_MINT_QUOTE_CHECKS_PER_MIN;
+    const cooling = t < this.mintCooldownUntil;
+    return { used, budget, cooldown_until: cooling ? this.mintCooldownUntil : null, available: !cooling && used < budget };
+  }
+
   /** Whether a quote check may go to the mint now; records it when it may. */
   private takeQuoteCheck(): boolean {
     const t = now();
