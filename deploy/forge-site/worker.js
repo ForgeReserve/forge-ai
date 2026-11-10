@@ -2,6 +2,8 @@
 // The pages come from the mint server (forge.flashapp.me); the mint's own address stays forge.flashapp.me.
 const ORIGIN = 'https://forge.flashapp.me';
 const CANON = 'forge-reserve.com';
+const OLD_SUPPORT = 'cashu@getflash.io';
+const SUPPORT = 'support@forge-reserve.com';
 const AI_SECTION = `<section id="ai"><style>#ai .ai-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:40px;align-items:center}@media (max-width:760px){#ai .ai-row{grid-template-columns:1fr;gap:22px}}#ai p:not(.kicker){color:var(--ink2);margin:0 0 12px;max-width:640px}#ai .ai-join{display:inline-flex;align-items:center;gap:10px;padding:13px 20px;border-radius:12px;font-weight:600;text-decoration:none;background:var(--ink);color:var(--bg);white-space:nowrap}#ai .ai-join:hover{opacity:.9}</style>
   <div class="wrap ai-row">
     <div>
@@ -31,9 +33,12 @@ export default {
     h.delete('set-cookie');
     h.delete('content-length');
     h.set('x-served-from', 'forge.flashapp.me');
-    const res = new Response(r.body, { status: r.status, headers: h });
-    // The homepage gains the Forge AI section and a nav link; the page on the mint server is unchanged.
-    if (u.pathname === '/' && r.ok && (h.get('content-type') || '').includes('text/html')) {
+    const isHtml = (h.get('content-type') || '').includes('text/html');
+    // Pages on this domain give the Forge support address; the pages on the mint server are unchanged.
+    const body = isHtml && req.method === 'GET' ? (await r.text()).replaceAll(OLD_SUPPORT, SUPPORT) : r.body;
+    const res = new Response(body, { status: r.status, headers: h });
+    // The homepage gains the Forge AI section and a nav link.
+    if (u.pathname === '/' && r.ok && isHtml) {
       return new HTMLRewriter()
         .on('nav.site-nav a.cta', { element(e) { e.before('<a class="opt" href="/#ai">Forge AI</a>', { html: true }); } })
         .on('section#faq', { element(e) { e.before(AI_SECTION, { html: true }); } })
