@@ -40,6 +40,118 @@
   },
   "models": [
     {
+      "id": "tinfoil/gpt-oss-120b",
+      "supplier": "tinfoil",
+      "upstream": "gpt-oss-120b",
+      "input_usd_per_mtok": 0.15,
+      "output_usd_per_mtok": 0.6,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 131072,
+      "uncensored": false,
+      "vision": false,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "speed": "fast",
+      "name": "gpt-oss-120b"
+    },
+    {
+      "id": "tinfoil/kimi-k3-1-pro",
+      "supplier": "tinfoil",
+      "upstream": "kimi-k3-1-pro",
+      "input_usd_per_mtok": 4,
+      "output_usd_per_mtok": 20,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "name": "Kimi K3.1 Pro"
+    },
+    {
+      "id": "tinfoil/glm-5-3",
+      "supplier": "tinfoil",
+      "upstream": "glm-5-3",
+      "input_usd_per_mtok": 1.8,
+      "output_usd_per_mtok": 5.75,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 1048576,
+      "uncensored": false,
+      "vision": false,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "tinfoil/deepseek-v4-1-flash",
+      "supplier": "tinfoil",
+      "upstream": "deepseek-v4-1-flash",
+      "input_usd_per_mtok": 0.6,
+      "output_usd_per_mtok": 1.45,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 1048576,
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "speed": "fast",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "tinfoil/gemma4-31b",
+      "supplier": "tinfoil",
+      "upstream": "gemma4-31b",
+      "input_usd_per_mtok": 0.4,
+      "output_usd_per_mtok": 1.0,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "speed": "fast",
+      "name": "Gemma 4 31B"
+    },
+    {
+      "id": "tinfoil/llama3-3-70b",
+      "supplier": "tinfoil",
+      "upstream": "llama3-3-70b",
+      "input_usd_per_mtok": 1.75,
+      "output_usd_per_mtok": 2.75,
+      "price_verified": true,
+      "max_output_tokens": 8192,
+      "context_length": 131072,
+      "uncensored": false,
+      "vision": false,
+      "reasoning": false,
+      "name": "Llama 3.3 70B"
+    },
+    {
       "id": "qwen3.8-27b",
       "supplier": "tokenfactory",
       "upstream": "qwen3.8-27b",
@@ -194,118 +306,6 @@
       "uncensored": true,
       "context_length": 917504,
       "name": "Kimi K3 Abliterated"
-    },
-    {
-      "id": "tinfoil/kimi-k3-1-pro",
-      "supplier": "tinfoil",
-      "upstream": "kimi-k3-1-pro",
-      "input_usd_per_mtok": 4,
-      "output_usd_per_mtok": 20,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 262144,
-      "uncensored": false,
-      "vision": true,
-      "reasoning": true,
-      "reasoning_efforts": [
-        "low",
-        "high",
-        "max"
-      ],
-      "name": "Kimi K3.1 Pro"
-    },
-    {
-      "id": "tinfoil/glm-5-3",
-      "supplier": "tinfoil",
-      "upstream": "glm-5-3",
-      "input_usd_per_mtok": 1.8,
-      "output_usd_per_mtok": 5.75,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 1048576,
-      "uncensored": false,
-      "vision": false,
-      "reasoning": true,
-      "reasoning_efforts": [
-        "low",
-        "high",
-        "max"
-      ],
-      "name": "GLM 5.3"
-    },
-    {
-      "id": "tinfoil/deepseek-v4-1-flash",
-      "supplier": "tinfoil",
-      "upstream": "deepseek-v4-1-flash",
-      "input_usd_per_mtok": 0.6,
-      "output_usd_per_mtok": 1.45,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 1048576,
-      "uncensored": false,
-      "vision": true,
-      "reasoning": true,
-      "reasoning_efforts": [
-        "low",
-        "high",
-        "max"
-      ],
-      "speed": "fast",
-      "name": "DeepSeek V4.1 Flash"
-    },
-    {
-      "id": "tinfoil/gemma4-31b",
-      "supplier": "tinfoil",
-      "upstream": "gemma4-31b",
-      "input_usd_per_mtok": 0.4,
-      "output_usd_per_mtok": 1.0,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 262144,
-      "uncensored": false,
-      "vision": true,
-      "reasoning": true,
-      "reasoning_efforts": [
-        "low",
-        "medium",
-        "high"
-      ],
-      "speed": "fast",
-      "name": "Gemma 4 31B"
-    },
-    {
-      "id": "tinfoil/gpt-oss-120b",
-      "supplier": "tinfoil",
-      "upstream": "gpt-oss-120b",
-      "input_usd_per_mtok": 0.15,
-      "output_usd_per_mtok": 0.6,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 131072,
-      "uncensored": false,
-      "vision": false,
-      "reasoning": true,
-      "reasoning_efforts": [
-        "low",
-        "medium",
-        "high"
-      ],
-      "speed": "fast",
-      "name": "gpt-oss-120b"
-    },
-    {
-      "id": "tinfoil/llama3-3-70b",
-      "supplier": "tinfoil",
-      "upstream": "llama3-3-70b",
-      "input_usd_per_mtok": 1.75,
-      "output_usd_per_mtok": 2.75,
-      "price_verified": true,
-      "max_output_tokens": 8192,
-      "context_length": 131072,
-      "uncensored": false,
-      "vision": false,
-      "reasoning": false,
-      "name": "Llama 3.3 70B"
     }
   ]
 }
