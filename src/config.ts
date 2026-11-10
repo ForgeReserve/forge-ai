@@ -130,5 +130,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverr
   const raw = catalogOverride ?? JSON.parse(readFileSync(resolve(env.FORGE_MODELS_FILE), 'utf8'));
   const cat = CatalogSchema.safeParse(raw);
   if (!cat.success) throw new Error(`invalid model catalog: ${z.prettifyError(cat.error)}`);
-  return { env, catalog: cat.data, trustedMints: env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl) };
+  // A supplier whose API key env var is unset is left out, so its models are neither listed nor routable.
+  const keyless = new Set(
+    Object.entries(cat.data.suppliers)
+      .filter(([, s]) => s.apiKeyEnv && !source[s.apiKeyEnv])
+      .map(([id]) => id),
+  );
+  const models = cat.data.models.filter((m) => !keyless.has(m.supplier));
+  if (models.length === 0) throw new Error('no models left: set the API key of at least one supplier');
+  return { env, catalog: { ...cat.data, models }, trustedMints: env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl) };
 }
