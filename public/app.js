@@ -3,8 +3,15 @@
 // the request being made. The balance key and settings live in localStorage.
 import { renderMarkdown, enhance } from './js/markdown.js';
 import { chats, newId } from './js/store.js';
-import { $, el, icon, store, load, toast, announce, copyText, confirmDialog, fmtBalance, fmtCost, fmtInt, api } from './js/ui.js';
+import { $, el, icon, store, load, toast, announce, copyText, confirmDialog, fmtBalance, fmtBytes, fmtCost, fmtInt, api } from './js/ui.js';
 import { anim, closeSheet, crossfade, DUR, EASE, isPhone, openSheet, reduced, rollText, viewTransition } from './js/motion.js';
+
+// Attachment helpers load after the first paint (and before any file or send needs them); document
+// extraction, and pdf.js behind it, loads on the first attached document.
+let FM = null;
+const filesMod = async () => (FM ??= await import('./js/files.js'));
+let X = null;
+const extractor = async () => (X ??= await import('./js/extract.js'));
 
 // The wallet (funding, QR codes, refunds) loads on first use, keeping the first page load small.
 let W = null;
@@ -19,6 +26,7 @@ const openWallet = (which) => wallet().then((w) => w.openWallet(which));
 
 const KEY_STORE = 'forge.balanceKey';
 const SETTINGS_STORE = 'forge.settings';
+const MODELS_STORE = 'forge.models'; // the public model list, for offline launches
 const MAX_OUT = 4096; // per-request cap the page asks for; the gateway reserves the worst case up front
 const MAX_IMAGES = 4;
 export const DEFAULT_PROMPT =
@@ -31,8 +39,11 @@ const settings = Object.assign({ theme: 'system', defaultModel: '', effort: '', 
 let list = []; // conversation summaries, newest first
 let chat = null; // the open conversation
 let gen = null; // {controller, chatId}
-let attachments = []; // [{url, bytes}]
+let attachments = []; // images {id, kind: 'image', url, bytes} and documents {id, kind, name, size, status, text, pages, ...}
 let effortSel = '';
+let online = navigator.onLine !== false;
+let installPrompt = null; // Chromium's deferred install prompt
+let swReg = null; // the service worker registration
 
 function safeParse(s) {
   try {
@@ -96,6 +107,8 @@ function renderBalance({ celebrate = false } = {}) {
   if (!S.key) {
     plain('Add funds');
     chip.classList.add('is-empty');
+  } else if (S.balanceMsub == null && !online) {
+    plain('Offline');
   } else if (S.balanceMsub == null) {
     plain('');
     text.append(el('span', { class: 'skel', style: 'width:4em', text: 'Balance' }));
@@ -115,15 +128,22 @@ const currentModel = () => S.models.find((m) => m.id === chat?.model) ?? S.model
 const visibleModels = () => S.models.filter((m) => settings.showUncensored || !m.uncensored);
 
 async function loadModels() {
+  let body = null;
   try {
     const r = await api('/v1/models');
-    S.models = r.body?.data ?? [];
-    S.inviteOnly = !!r.body?.invite_only;
-    S.units = r.body?.units ?? [];
-    S.mints = r.body?.mints ?? [];
+    if (r.res.ok && r.body?.data) {
+      body = r.body;
+      store(MODELS_STORE, JSON.stringify(body));
+    }
   } catch {
-    S.models = [];
+    /* offline */
   }
+  // Offline (or the gateway is down): the last list seen, so names and prices still show.
+  body ??= safeParse(load(MODELS_STORE));
+  S.models = body?.data ?? [];
+  S.inviteOnly = !!body?.invite_only;
+  S.units = body?.units ?? [];
+  S.mints = body?.mints ?? [];
   if (!S.models.some((m) => m.id === settings.defaultModel)) settings.defaultModel = visibleModels()[0]?.id ?? '';
   renderModel();
   fillSettingsModels();
@@ -174,12 +194,17 @@ function renderModel() {
     }
     shownModel = m.id;
   }
-  // Composer controls that depend on the model.
-  $('attachBtn').hidden = !m?.capabilities?.vision;
-  if (!m?.capabilities?.vision && attachments.length) {
-    attachments = [];
-    renderAttachments();
+  // Composer controls that depend on the model. Documents work with every model; images and scanned
+  // pages only with vision models.
+  const vision = !!m?.capabilities?.vision;
+  $('attachBtn').title = vision ? 'Attach files or images' : 'Attach files';
+  $('attachBtn').setAttribute('aria-label', $('attachBtn').title);
+  if (!vision && attachments.some((a) => a.kind === 'image' || a.sendPages)) {
+    attachments = attachments.filter((a) => a.kind !== 'image');
+    for (const a of attachments) (a.sendPages = false), (a.pageImages = undefined);
+    toast('Images removed: this model does not read images');
   }
+  if (attachments.length) renderAttachments();
   const efforts = m?.capabilities?.reasoning_efforts ?? [];
   $('effortChip').hidden = !efforts.length;
   if (efforts.length) {
@@ -380,7 +405,8 @@ async function openChat(id) {
 
 async function persist() {
   chat.updatedAt = Date.now();
-  if (!chat.title) chat.title = titleFrom(chat.messages.find((m) => m.role === 'user')?.content ?? 'New chat');
+  const first = chat.messages.find((m) => m.role === 'user');
+  if (!chat.title) chat.title = titleFrom(first?.content || first?.files?.[0]?.name || 'New chat');
   await chats.put(chat).catch(() => toast('Could not save this chat in the browser.'));
   if (location.hash !== `#/c/${chat.id}`) history.replaceState(null, '', `#/c/${chat.id}`);
   await refreshList();
@@ -391,7 +417,7 @@ function titleFrom(t) {
 }
 
 async function refreshList() {
-  list = (await chats.all().catch(() => [])).map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, text: c.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(' ').slice(0, 4000) }));
+  list = (await chats.all().catch(() => [])).map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, text: c.messages.map((m) => [...(m.files ?? []).map((f) => f.name), typeof m.content === 'string' ? m.content : ''].join(' ')).join(' ').slice(0, 4000) }));
   renderList();
 }
 
@@ -485,7 +511,7 @@ function renderThread() {
 }
 
 function renderNotice() {
-  $('fundNotice').hidden = !!(S.key && S.balanceMsub != null && S.balanceMsub > 0);
+  $('fundNotice').hidden = !online || !!(S.key && S.balanceMsub != null && S.balanceMsub > 0);
 }
 
 function markLast() {
@@ -497,7 +523,9 @@ function msgEl(m, i) {
   if (m.role === 'user') {
     const wrap = el('div', { class: 'msg user', 'data-i': i });
     if (m.images?.length) wrap.append(el('div', { class: 'imgs' }, ...m.images.map((u) => el('img', { src: u, alt: 'Attached image' }))));
-    wrap.append(el('div', { class: 'bubble', text: m.content }));
+    // Files show as chips; their text stays out of the thread.
+    if (m.files?.length) wrap.append(el('div', { class: 'msg-files', role: 'list', 'aria-label': 'Attached files' }, ...m.files.map((f) => fileChip(f, { listItem: true }))));
+    if (m.content) wrap.append(el('div', { class: 'bubble', text: m.content }));
     const actions = el('div', { class: 'actions' });
     actions.append(
       btnIcon('copy', 'Copy message', () => copyText(m.content, 'Message copied')),
@@ -593,26 +621,21 @@ async function regenerate() {
 
 // ------------------------------------------------------------------ sending
 
-function apiMessages(model) {
-  const out = [];
-  if (settings.systemPrompt.trim()) out.push({ role: 'system', content: settings.systemPrompt.trim() });
-  for (const m of chat.messages) {
-    if (m.meta?.error) continue;
-    if (m.role === 'assistant') {
-      if (m.content) out.push({ role: 'assistant', content: m.content });
-      continue;
-    }
-    if (m.images?.length && model?.capabilities?.vision) {
-      out.push({ role: 'user', content: [{ type: 'text', text: m.content }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))] });
-    } else out.push({ role: 'user', content: m.content });
-  }
-  return out;
+/** Messages for the API: each file goes in as a delimited text block before the user's text (js/files.js). */
+async function apiMessages(model, messages = chat.messages) {
+  return (await filesMod()).toApiMessages(messages, { systemPrompt: settings.systemPrompt, vision: !!model?.capabilities?.vision });
+}
+/** Same, once files.js is loaded (it is whenever there are attachments). */
+function apiMessagesNow(model, messages) {
+  return FM.toApiMessages(messages, { systemPrompt: settings.systemPrompt, vision: !!model?.capabilities?.vision });
 }
 
 async function submit() {
   const ta = $('composer-input');
   const text = ta.value.trim();
   if ((!text && !attachments.length) || gen) return;
+  if (!online) return toast("You're offline. Sending needs a connection.", 3000);
+  if (attachments.some((a) => a.status === 'reading')) return toast('Wait until the files are read');
   if (!S.key) {
     toast('Add funds to start chatting');
     openWallet();
@@ -620,13 +643,19 @@ async function submit() {
   }
   const model = currentModel();
   if (!model) return toast('No model available');
+  await filesMod();
+  const pending = pendingMessage(text, model);
+  if (!pending) return;
+  const est = estimateFor(model, pending);
+  if (est.overBody) return toast('This message is too large to send. Remove a file or start a new chat.', 4000);
+  if (est.overContext && !(await confirmDialog('Longer than this model can read', `This request is about ${fmtInt(est.tokens)} tokens and ${model.name ?? model.id} reads up to ${fmtInt(model.context_length)}. The model may reject it or ignore the start. Send anyway?`, 'Send anyway'))) return;
   if (!chat) newChat();
   chat.model = model.id;
-  const msg = { id: newId('m'), role: 'user', content: text };
-  if (attachments.length) msg.images = attachments.map((a) => a.url);
+  const msg = { id: newId('m'), ...pending };
   chat.messages.push(msg);
   enterNext = true;
   ta.value = '';
+  for (const a of attachments) X?.release(a.doc);
   attachments = [];
   renderAttachments();
   autosize();
@@ -675,7 +704,7 @@ async function generate() {
   setGenerating(true);
   const before = S.balanceMsub;
   const maxTokens = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const payload = { model: encrypted ? model.upstream_model : model.id, messages: apiMessages(model), stream: true, stream_options: { include_usage: true }, max_tokens: maxTokens };
+  const payload = { model: encrypted ? model.upstream_model : model.id, messages: await apiMessages(model), stream: true, stream_options: { include_usage: true }, max_tokens: maxTokens };
   if (effortSel) payload.reasoning_effort = effortSel;
   const body = JSON.stringify(payload);
 
@@ -850,7 +879,7 @@ function friendlyError(e) {
   if (e.code === 'insufficient_balance' || e.status === 402) return 'Your balance is too low for this request. Add funds, or choose a cheaper model.';
   if (e.code === 'invalid_key' || e.status === 401) return 'The gateway does not recognize this balance key.';
   if (e.code === 'rate_limited') return 'Too many requests. Wait a moment and try again.';
-  if (e.code === 'request_too_large' || e.status === 413) return 'This request is too large. Remove an image or start a new chat.';
+  if (e.code === 'request_too_large' || e.status === 413) return 'This request is too large. Remove a file or image, or start a new chat.';
   if (e instanceof TypeError) return 'The gateway could not be reached. Check your connection and try again.';
   return e.message;
 }
@@ -924,28 +953,218 @@ function autosize() {
 }
 function updateSend() {
   if (gen) return;
-  $('sendBtn').disabled = !$('composer-input').value.trim() && !attachments.length;
+  const ready = attachments.some((a) => a.status !== 'reading' && a.status !== 'error');
+  const reading = attachments.some((a) => a.status === 'reading');
+  $('sendBtn').disabled = !online || reading || (!$('composer-input').value.trim() && !ready);
 }
 
-async function addImages(files) {
+// ------------------------------------------------------------------ attachments
+// Files are read in this browser. Only their text (or, for scanned PDF pages and vision models, page
+// images) goes into the message. The file itself is never uploaded, and the thread shows chips only.
+
+const isDoc = (a) => a.kind !== 'image';
+let attachSeq = 0;
+
+/** Adds dropped, pasted or picked files: images for vision models, documents for every model. */
+async function addFiles(fileList) {
+  const list = [...fileList]; // copied first: the input's FileList empties when its value is reset
+  const { kindOf, MAX_FILES } = await filesMod();
   const model = currentModel();
-  if (!model?.capabilities?.vision) return toast('This model does not read images');
-  for (const f of [...files]) {
-    if (!f.type.startsWith('image/')) continue;
-    if (attachments.length >= MAX_IMAGES) {
-      toast(`Up to ${MAX_IMAGES} images per message`);
+  const vision = !!model?.capabilities?.vision;
+  const jobs = [];
+  let skippedImages = false;
+  for (const f of list) {
+    const kind = kindOf(f);
+    if (kind === 'image') {
+      if (!vision) {
+        skippedImages = true;
+        continue;
+      }
+      if (attachments.filter((a) => a.kind === 'image').length >= MAX_IMAGES) {
+        toast(`Up to ${MAX_IMAGES} images per message`);
+        continue;
+      }
+      try {
+        attachments.push({ id: ++attachSeq, kind: 'image', name: f.name, ...(await shrink(f)) });
+      } catch {
+        toast('That image could not be read');
+      }
+      continue;
+    }
+    if (!kind) {
+      toast(`${f.name}: this file type is not supported. Attach text, PDF or Word (.docx) files.`, 4000);
+      continue;
+    }
+    if (attachments.filter(isDoc).length >= MAX_FILES) {
+      toast(`Up to ${MAX_FILES} files per message`);
       break;
     }
-    try {
-      attachments.push(await shrink(f));
-    } catch {
-      toast('That image could not be read');
-    }
+    const a = { id: ++attachSeq, kind, name: f.name, size: f.size, status: 'reading', progress: '' };
+    attachments.push(a);
+    jobs.push(readDoc(a, f));
   }
-  const total = attachments.reduce((s, a) => s + a.bytes, 0);
+  if (skippedImages) toast('This model does not read images. Choose a model marked Images.', 3500);
+  const total = attachments.filter((a) => a.kind === 'image').reduce((s, a) => s + a.bytes, 0);
   if (total > 700_000) toast('Large images cost more: the gateway holds funds by request size until the reply is metered.', 4000);
   renderAttachments();
   updateSend();
+  await Promise.all(jobs);
+}
+
+async function readDoc(a, file) {
+  try {
+    const x = await extractor();
+    const r = await x.extract(file, {
+      onProgress: (n, total) => {
+        a.progress = `Reading page ${n} of ${total}`;
+        updateChip(a);
+      },
+    });
+    Object.assign(a, { status: 'ready', progress: '', text: r.text, pages: r.pages, emptyPages: r.emptyPages ?? [], doc: r.doc });
+    if (!r.text.trim() && !a.emptyPages.length) Object.assign(a, { status: 'error', error: 'No text found in this file.' });
+  } catch (e) {
+    Object.assign(a, { status: 'error', error: e?.code ? e.message : 'This file could not be read.' });
+  }
+  if (!attachments.includes(a)) return X?.release(a.doc);
+  renderAttachments();
+  updateSend();
+}
+
+function removeAttachment(a) {
+  attachments = attachments.filter((x) => x !== a);
+  X?.release(a.doc);
+  renderAttachments();
+  updateSend();
+  announce(`${a.name ?? 'Image'} removed`);
+}
+
+/** Renders a PDF's text-less pages as images (vision models only), within the per-message cap. */
+async function togglePages(a) {
+  if (a.sendPages) {
+    a.sendPages = false;
+    a.pageImages = undefined;
+    return renderAttachments();
+  }
+  const used = attachments.reduce((s, x) => s + (x !== a && x.pageImages ? x.pageImages.length : 0), 0);
+  const room = FM.MAX_PAGE_IMAGES - used;
+  if (room < 1) return toast(`Up to ${FM.MAX_PAGE_IMAGES} pages can be sent as images per message`);
+  a.sendPages = true;
+  a.status = 'reading';
+  a.progress = 'Rendering pages';
+  renderAttachments();
+  updateSend();
+  try {
+    a.pageImages = await X.renderPages(a.doc, a.emptyPages.slice(0, room));
+  } catch {
+    a.sendPages = false;
+    a.pageImages = undefined;
+    toast('Those pages could not be rendered');
+  }
+  a.status = 'ready';
+  a.progress = '';
+  if (!attachments.includes(a)) return;
+  renderAttachments();
+  updateSend();
+}
+
+/** What a document contributes to the stored message (its text is kept locally to resend with the chat). */
+const fileRecord = (a, vision) => ({ name: a.name, kind: a.kind, size: a.size, pages: a.pages, emptyPages: a.emptyPages?.length ? a.emptyPages : undefined, text: a.text, pageImages: vision && a.sendPages ? a.pageImages : undefined });
+
+/** The user message as it would be sent now, or null when there is nothing to send. */
+function pendingMessage(text, model) {
+  const vision = !!model?.capabilities?.vision;
+  const images = vision ? attachments.filter((a) => a.kind === 'image').map((a) => a.url) : [];
+  const docs = attachments.filter((a) => isDoc(a) && a.status === 'ready');
+  if (!text && !images.length && !docs.length) return null;
+  const msg = { role: 'user', content: text };
+  if (images.length) msg.images = images;
+  if (docs.length) msg.files = FM.applyBudget(docs.map((a) => fileRecord(a, vision)));
+  return msg;
+}
+
+/** Size and price of the next request, the whole conversation included (it is resent with every message). */
+function estimateFor(model, pending) {
+  const est = FM.estimateRequest(apiMessagesNow(model, [...(chat?.messages ?? []), pending]));
+  const unit = S.unit ?? 'usd';
+  const maxOut = Math.min(MAX_OUT, model?.max_output_tokens ?? MAX_OUT);
+  return {
+    ...est,
+    unit,
+    costMsub: FM.inputCostMsub(est.tokens, model, unit),
+    overContext: !!model?.context_length && est.tokens + maxOut > model.context_length,
+    overBody: est.bytes > FM.BODY_LIMIT * 0.98,
+  };
+}
+
+function fileMeta(f) {
+  const parts = [];
+  if (f.size != null) parts.push(fmtBytes(f.size));
+  if (f.pages) parts.push(`${f.pages} ${f.pages === 1 ? 'page' : 'pages'}`);
+  if (f.truncated) parts.push('truncated');
+  if (f.emptyPages?.length && !f.pageImages?.length) parts.push(`${f.emptyPages.length} without text`);
+  if (f.pageImages?.length) parts.push(`${f.pageImages.length} as images`);
+  return parts.join(' · ');
+}
+
+/** A file chip: icon, name, size and pages; in the composer also a progress state and a remove button. */
+function fileChip(f, { onRemove, listItem = false } = {}) {
+  const state = f.status ?? 'ready';
+  const ico = state === 'reading' ? el('span', { class: 'fc-spin', 'aria-hidden': 'true' }) : icon(f.kind === 'pdf' ? 'pdf' : 'file');
+  const meta = state === 'error' ? f.error : state === 'reading' ? f.progress || 'Reading' : fileMeta(f);
+  const chip = el(
+    'div',
+    { class: 'file-chip', 'data-state': state, 'data-id': f.id ?? null, role: listItem ? 'listitem' : null, title: f.name },
+    el('span', { class: 'fc-ico' }, ico),
+    el('span', { class: 'fc-text' }, el('span', { class: 'fc-name', text: f.name }), el('span', { class: 'fc-meta', text: meta })),
+  );
+  if (onRemove) chip.append(el('button', { type: 'button', class: 'fc-x', 'aria-label': `Remove ${f.name}`, title: 'Remove', onclick: onRemove }, icon('x')));
+  return chip;
+}
+
+function updateChip(a) {
+  const meta = $('attachments').querySelector(`.file-chip[data-id="${a.id}"] .fc-meta`);
+  if (meta) meta.textContent = a.progress || 'Reading';
+}
+
+function renderAttachments() {
+  const box = $('attachments');
+  box.hidden = !attachments.length;
+  const model = currentModel();
+  const vision = !!model?.capabilities?.vision;
+  // Show truncation as it will happen on send.
+  const ready = attachments.filter((a) => isDoc(a) && a.status === 'ready');
+  const budget = new Map(FM.applyBudget(ready.map((a) => fileRecord(a, vision))).map((f, i) => [ready[i], f]));
+  const chips = attachments.map((a, i) => {
+    if (a.kind === 'image')
+      return el('div', { class: 'attachment' }, el('img', { src: a.url, alt: `Attached image ${i + 1}` }), el('button', { type: 'button', 'aria-label': `Remove image ${i + 1}`, onclick: () => removeAttachment(a) }, icon('x')));
+    const view = { ...a, ...(budget.get(a) ? { truncated: budget.get(a).truncated } : {}), pageImages: a.sendPages ? a.pageImages : undefined };
+    const chip = fileChip(view, { onRemove: () => removeAttachment(a) });
+    if (vision && a.status === 'ready' && a.kind === 'pdf' && a.emptyPages?.length) {
+      const n = Math.min(a.emptyPages.length, FM.MAX_PAGE_IMAGES);
+      const b = el('button', { type: 'button', class: 'fc-pages', 'aria-pressed': String(!!a.sendPages), text: a.sendPages ? 'Sending pages as images' : `Send ${n} ${n === 1 ? 'page' : 'pages'} as images`, title: 'These pages have no text layer, so the model can only see them as images', onclick: () => togglePages(a) });
+      return el('div', { class: 'file-wrap' }, chip, b);
+    }
+    return chip;
+  });
+  box.replaceChildren(el('div', { class: 'att-row' }, ...chips), estimateLine(model));
+}
+
+/** Estimated tokens and price of the next request, with warnings for the context window and the body limit. */
+function estimateLine(model) {
+  const line = el('p', { class: 'attach-est', id: 'attachEst', 'aria-live': 'polite' });
+  if (!model || !attachments.some((a) => a.status === 'ready' || a.kind === 'image')) return line;
+  const pending = pendingMessage($('composer-input').value.trim(), model);
+  if (!pending) return line;
+  const est = estimateFor(model, pending);
+  const cost = est.costMsub != null ? `, about ${fmtCost(Math.max(1, est.costMsub), est.unit)} to read` : '';
+  if (est.overBody) {
+    line.dataset.level = 'error';
+    line.textContent = 'Too large to send in one message. Remove a file or start a new chat.';
+  } else if (est.overContext) {
+    line.dataset.level = 'warn';
+    line.textContent = `About ${fmtInt(est.tokens)} tokens: more than ${model.name ?? model.id} can read (${fmtInt(model.context_length)}). Remove a file or choose a model with a longer context.`;
+  } else line.textContent = `About ${fmtInt(est.tokens)} input tokens${cost}, plus the reply.`;
+  return line;
 }
 
 /** Downscales to at most 1024 px and re-encodes as JPEG, which also drops EXIF data such as location. */
@@ -966,21 +1185,6 @@ function shrink(file) {
     img.onerror = () => (URL.revokeObjectURL(url), reject(new Error('bad image')));
     img.src = url;
   });
-}
-
-function renderAttachments() {
-  const box = $('attachments');
-  box.hidden = !attachments.length;
-  box.replaceChildren(
-    ...attachments.map((a, i) =>
-      el(
-        'div',
-        { class: 'attachment' },
-        el('img', { src: a.url, alt: `Attached image ${i + 1}` }),
-        el('button', { type: 'button', 'aria-label': `Remove image ${i + 1}`, onclick: () => (attachments.splice(i, 1), renderAttachments(), updateSend()) }, icon('x')),
-      ),
-    ),
-  );
 }
 
 // ------------------------------------------------------------------ scrolling
@@ -1015,10 +1219,16 @@ function closeSidebarOnMobile() {
   if (isMobile()) setSidebar(false, false);
 }
 
+const THEME_COLOR = { light: '#f7f6f2', dark: '#0b0d10' };
 function applyTheme() {
   const t = settings.theme;
   if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
   else document.documentElement.removeAttribute('data-theme');
+  // The browser and installed-app chrome follow a theme picked in Settings, not only the system one.
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+    const sys = m.media.includes('dark') ? 'dark' : 'light';
+    m.content = THEME_COLOR[t === 'light' || t === 'dark' ? t : sys];
+  }
 }
 
 function fillSettingsModels() {
@@ -1100,7 +1310,12 @@ function renderSuggestions() {
 
 function wire() {
   const ta = $('composer-input');
-  ta.addEventListener('input', () => (autosize(), updateSend()));
+  let estTimer;
+  ta.addEventListener('input', () => {
+    autosize();
+    updateSend();
+    if (attachments.length) (clearTimeout(estTimer), (estTimer = setTimeout(() => $('attachEst')?.replaceWith(estimateLine(currentModel())), 300)));
+  });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isMobileKeyboard()) {
       e.preventDefault();
@@ -1108,23 +1323,36 @@ function wire() {
     }
   });
   ta.addEventListener('paste', (e) => {
-    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-    if (files.length && currentModel()?.capabilities?.vision) (e.preventDefault(), addImages(files));
+    // Pasted files (screenshots, copied documents) attach; pasted text stays text.
+    const files = [...(e.clipboardData?.files ?? [])];
+    if (files.length) (e.preventDefault(), addFiles(files));
   });
   const form = $('composer');
   form.addEventListener('submit', (e) => (e.preventDefault(), gen ? stop() : submit()));
-  form.addEventListener('dragover', (e) => {
-    if (currentModel()?.capabilities?.vision && [...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file')) (e.preventDefault(), form.classList.add('drag'));
+  // Drop files anywhere on the chat column (desktop); the composer shows where they land.
+  const main = $('main');
+  const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+  main.addEventListener('dragover', (e) => {
+    if (hasFiles(e)) (e.preventDefault(), form.classList.add('drag'));
   });
-  form.addEventListener('dragleave', () => form.classList.remove('drag'));
-  form.addEventListener('drop', (e) => {
+  main.addEventListener('dragleave', (e) => {
+    if (!main.contains(e.relatedTarget)) form.classList.remove('drag');
+  });
+  main.addEventListener('drop', (e) => {
     form.classList.remove('drag');
-    if (e.dataTransfer?.files?.length) (e.preventDefault(), addImages(e.dataTransfer.files));
+    if (e.dataTransfer?.files?.length) (e.preventDefault(), addFiles(e.dataTransfer.files));
   });
+  // The picker's type list comes with files.js, fetched once the page is idle.
+  const idle = window.requestIdleCallback ?? ((f) => setTimeout(f, 1500));
+  idle(() => filesMod().then((m) => ($('fileInput').accept = m.ACCEPT)).catch(() => {}));
   $('attachBtn').addEventListener('click', () => $('fileInput').click());
   $('fileInput').addEventListener('change', (e) => {
-    addImages(e.target.files);
+    addFiles(e.target.files);
     e.target.value = '';
+  });
+  // Chip buttons (remove, pages as images) keep the keyboard open like the other composer buttons.
+  $('attachments').addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button') && document.activeElement === $('composer-input')) e.preventDefault();
   });
   $('effort').addEventListener('change', (e) => {
     effortSel = e.target.value;
@@ -1222,6 +1450,7 @@ function wire() {
   $('thread').addEventListener('scroll', onScroll, { passive: true });
   $('jump').addEventListener('click', () => (scrollToBottom(true), onScroll()));
   window.addEventListener('hashchange', () => {
+    if (openFromHash()) return;
     const id = /^#\/c\/(.+)$/.exec(location.hash)?.[1];
     if (id && id !== chat?.id) openChat(id);
   });
@@ -1281,15 +1510,19 @@ applyTheme();
 fitViewport();
 wire();
 wireSettings();
+wireApp();
 renderSuggestions();
 S.key = load(KEY_STORE);
 setSidebar(isMobile() ? false : settings.sidebar !== false, false);
 renderBalance();
+renderOnline();
 await Promise.all([loadModels(), refreshBalance(), refreshList()]);
-const initial = /^#\/c\/(.+)$/.exec(location.hash)?.[1];
+const startHash = location.hash;
+const initial = /^#\/c\/(.+)$/.exec(startHash)?.[1];
 if (initial) await openChat(initial);
 else newChat();
 booted = true;
+if (startHash === '#fund' || startHash === '#new') openFromHash(startHash);
 if (!isMobile()) $('composer-input').focus();
 
 // ------------------------------------------------------------------ composer controls
@@ -1320,4 +1553,136 @@ function closeEffort(refocus = false) {
   $('effortPop').hidden = true;
   $('effortBtn').setAttribute('aria-expanded', 'false');
   if (refocus && document.activeElement !== $('composer-input')) $('effortBtn').focus();
+}
+
+// ------------------------------------------------------------------ installed app (PWA)
+
+/** App shortcuts from the manifest: #new opens a new chat, #fund the wallet. */
+function openFromHash(hash = location.hash) {
+  if (hash !== '#new' && hash !== '#fund') return false;
+  if (location.hash === hash) history.replaceState(null, '', location.pathname);
+  if (hash === '#new') {
+    if (chat?.messages.length) newChat();
+  } else openWallet();
+  return true;
+}
+
+/** Offline: the shell and the chat history still work; sending waits for a connection. */
+function renderOnline() {
+  $('offlineBar').hidden = online;
+  renderBalance();
+  renderNotice();
+  $('composer').classList.toggle('offline', !online);
+  updateSend();
+}
+
+function wireApp() {
+  addEventListener('online', () => {
+    online = true;
+    renderOnline();
+    refreshBalance();
+    if (!S.models.length) loadModels();
+  });
+  addEventListener('offline', () => {
+    online = false;
+    renderOnline();
+  });
+
+  // Chromium: offer "Install app" in Settings instead of the browser's own banner.
+  addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    renderInstall();
+  });
+  addEventListener('appinstalled', () => {
+    installPrompt = null;
+    renderInstall();
+    toast('Forge AI is installed');
+  });
+  $('installApp').addEventListener('click', async () => {
+    if (!installPrompt) return;
+    const p = installPrompt;
+    installPrompt = null;
+    await p.prompt();
+    renderInstall();
+  });
+  $('iosHintDone').addEventListener('click', () => {
+    store('forge.iosHintSeen', '1');
+    renderInstall();
+  });
+  $('updateReload').addEventListener('click', applyUpdate);
+  $('updateLater').addEventListener('click', () => hideUpdate());
+  registerServiceWorker();
+}
+
+function standalone() {
+  return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+function isIOS() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function renderInstall() {
+  const ios = isIOS() && !standalone() && !load('forge.iosHintSeen');
+  $('installRow').hidden = !installPrompt || standalone();
+  $('iosHint').hidden = !ios;
+  $('appSection').hidden = $('installRow').hidden && $('iosHint').hidden;
+}
+
+// The service worker keeps the app shell for offline launches. It is versioned by a hash of the shell
+// files (src/sw.ts), so a deploy installs a new worker; it takes over when the person taps Reload, or
+// by itself on the next launch. Old HTML and new JS are never mixed: each version serves its own cache.
+async function registerServiceWorker() {
+  renderInstall();
+  if (!('serviceWorker' in navigator)) return;
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  if (location.protocol !== 'https:' && !local) return;
+  // The very first worker claims this page without a reload; only a replacement reloads it.
+  const hadController = !!navigator.serviceWorker.controller;
+  try {
+    swReg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+  } catch {
+    return;
+  }
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading || !hadController) return;
+    reloading = true;
+    location.reload();
+  });
+  // A version that finished installing while the app was closed: take it now, before anything is typed.
+  if (swReg.waiting && navigator.serviceWorker.controller) {
+    if (!gen && !$('composer-input').value && !attachments.length) return swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    showUpdate();
+  }
+  swReg.addEventListener('updatefound', () => {
+    const w = swReg.installing;
+    w?.addEventListener('statechange', () => {
+      if (w.state === 'installed' && navigator.serviceWorker.controller) showUpdate();
+    });
+  });
+  // Installed apps stay open for days: look for a new version when brought back to the front.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && online) swReg.update().catch(() => {});
+  });
+}
+function showUpdate() {
+  const t = $('updateToast');
+  try {
+    t.showPopover();
+  } catch {
+    t.hidden = false;
+  }
+}
+function hideUpdate() {
+  try {
+    $('updateToast').hidePopover();
+  } catch {
+    $('updateToast').hidden = true;
+  }
+}
+function applyUpdate() {
+  if (gen) return toast('Wait for the reply to finish, then reload');
+  hideUpdate();
+  if (swReg?.waiting) swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  else location.reload();
 }

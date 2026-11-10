@@ -490,11 +490,51 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .chip select { border: 0; background: transparent; font-size: 13px; color: inherit; padding: 0; }
 .chip input { accent-color: var(--enc); margin: 0; }
 .chip.on { color: var(--enc); border-color: var(--enc-line); background: var(--enc-bg); }
-.attachments { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.attachment { position: relative; width: 64px; height: 64px; animation: rise var(--dur-3) var(--ease-spring); }
+.attachments { margin-bottom: 8px; }
+/* One row of chips; on phones it scrolls sideways so the composer stays short. */
+.att-row { display: flex; gap: 8px; align-items: flex-start; overflow-x: auto; padding: 6px 6px 2px 2px; margin: -6px -6px 0 -2px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.att-row::-webkit-scrollbar { display: none; }
+@media (min-width: 861px) { .att-row { flex-wrap: wrap; overflow: visible; } }
+.attachment { position: relative; flex: none; width: 64px; height: 64px; animation: rise var(--dur-3) var(--ease-spring); }
 .attachment img { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
 .attachment button { position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--bg-elev); display: grid; place-items: center; padding: 0; }
 .attachment button svg { width: 12px; height: 12px; }
+/* File chips: in the composer (removable, with a reading state) and on sent messages. */
+.file-wrap { flex: none; display: flex; flex-direction: column; gap: 4px; animation: rise var(--dur-3) var(--ease-spring); }
+.file-chip {
+  position: relative; flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; width: max-content; max-width: 240px; height: 52px; padding: 0 8px 0 8px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--bg-elev); animation: rise var(--dur-3) var(--ease-spring);
+}
+.file-wrap .file-chip { animation: none; }
+.file-chip .fc-ico { flex: none; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--bg-sunk); color: var(--text-2); }
+.file-chip .fc-ico .i { width: 18px; height: 18px; }
+.file-chip .fc-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.file-chip .fc-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chip .fc-meta { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chip[data-state="error"] { border-color: color-mix(in srgb, var(--err) 45%, var(--line)); }
+.file-chip[data-state="error"] .fc-meta { color: var(--err); white-space: normal; }
+.file-chip[data-state="error"] { height: auto; min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+.fc-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--brass-hi); animation: spin 0.9s linear infinite; }
+.file-chip .fc-x { flex: none; width: 32px; height: 32px; margin-left: 2px; border-radius: 50%; border: 0; background: transparent; color: var(--text-3); display: grid; place-items: center; padding: 0; }
+.file-chip .fc-x:hover { background: var(--bg-hover); color: var(--text); }
+.file-chip .fc-x svg { width: 14px; height: 14px; }
+.fc-pages { align-self: flex-start; border: 1px dashed var(--line-strong); background: transparent; border-radius: 99px; font-size: 12px; color: var(--text-2); padding: 3px 10px; min-height: 26px; }
+.fc-pages[aria-pressed="true"] { border-style: solid; color: var(--enc); border-color: var(--enc-line); background: var(--enc-bg); }
+.attach-est { margin: 6px 0 0; font-size: 12px; color: var(--text-3); line-height: 16px; }
+.attach-est:empty { display: none; }
+.attach-est[data-level="warn"] { color: var(--warn); }
+.attach-est[data-level="error"] { color: var(--err); }
+.msg.user .msg-files { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 6px; max-width: 100%; }
+.msg.user .msg-files .file-chip { animation: none; height: 46px; max-width: min(100%, 260px); }
+
+/* Offline: the history still opens; sending waits. */
+.offline-bar {
+  max-width: var(--col); margin: 0 auto 8px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px;
+  font-size: 13px; line-height: 18px; color: var(--text-2); background: var(--bg-sunk); border: 1px solid var(--line); animation: rise var(--dur-3) var(--ease-out);
+}
+.offline-bar[hidden] { display: none; }
+.offline-bar .i { flex: none; width: 18px; height: 18px; color: var(--warn); }
+.composer.offline .send-btn { opacity: 0.6; }
 .tier-line {
   max-width: var(--col); margin: 8px auto 0; font-size: 12px; line-height: 16px; min-height: 16px;
   display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-3);
@@ -703,6 +743,11 @@ details.adv > .adv-body { display: grid; gap: 22px; padding: 6px 0 8px; animatio
 }
 .toast:popover-open { animation: toastin 460ms var(--ease-spring); }
 @keyframes toastin { from { opacity: 0; transform: translateY(-14px) scale(0.92); } }
+.update-toast { display: none; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; inset: auto auto 16px 50%; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); }
+.update-toast:popover-open { display: flex; }
+.update-toast .btn.primary { background: var(--accent-text); color: var(--accent); border-color: transparent; }
+.update-toast .icon-btn { color: inherit; width: 36px; height: 36px; }
+.ios-hint { border: 1px dashed var(--line-strong); border-radius: 14px; padding: 4px 12px 10px; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {

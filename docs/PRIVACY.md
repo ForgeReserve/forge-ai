@@ -49,8 +49,10 @@ The page at `/` is static files from the gateway's own origin (`public/`), with 
 
 What the browser stores, all of it local to that browser:
 
-- **Chats** in IndexedDB (`forge-chat`): messages, attached images (downscaled and re-encoded, which drops EXIF data such as location), reasoning text, and per-message cost and token counts. They are never uploaded; a request carries only the messages of the chat being continued. Settings has "Delete all chats". If IndexedDB is unavailable (some private windows) chats live in page memory only.
+- **Chats** in IndexedDB (`forge-chat`): messages, attached images (downscaled and re-encoded, which drops EXIF data such as location), the text read from attached files (and any PDF pages sent as images), reasoning text, and per-message cost and token counts. They are never uploaded; a request carries only the messages of the chat being continued. Settings has "Delete all chats". If IndexedDB is unavailable (some private windows) chats live in page memory only.
 - **Balance key and settings** in `localStorage` (`forge.balanceKey`, `forge.settings`: theme, default model, reasoning effort, system prompt, encrypt toggle, uncensored opt-in; `forge.lockPubkey`: the optional "Lock refunds to my wallet key" public key, sent with refunds and other-mint funding). If the gateway stops recognizing a stored key (a first funding that expired removes the empty balance), the page moves it to `forge.unrecognizedKey` rather than deleting it.
+- **The public model list** in `localStorage` (`forge.models`, the last `GET /v1/models` answer), so model names and prices show when the app opens offline.
+- **The app shell** in Cache Storage, kept by the service worker (`public/sw.js`): the page, its scripts and styles, icons, the manifest, the offline page, and vendored libraries once used. No chat content, keys, API responses or files are put there.
 
 What the page sends:
 
@@ -64,3 +66,17 @@ Encryption for enclave models:
 - Unchecking it sends plaintext to the gateway, labelled as such under the message box.
 
 Camera scanning (eCash, Other mint, balance key) runs entirely in the browser with BarcodeDetector or jsQR; frames never leave the page.
+
+### Attached files
+
+Files are read on the device. The file itself is never uploaded: only its text, or for scanned PDF pages its page images, is sent, as part of the message.
+
+- Text files (`.txt`, `.md`, `.csv`, `.json`, `.html`, code and similar) are decoded in the browser (UTF-8 first, then UTF-16 or Windows-1252); binary files are refused. PDFs are read with pdf.js (`pdfjs-dist` 6.5.438, vendored in `public/vendor/pdfjs/` and run in a worker from the gateway's own origin; PDF scripts and forms never run). Word `.docx` files are unzipped with the browser's built-in `DecompressionStream` and their `word/document.xml` turned into text; no library is involved.
+- The text goes into the user message as a delimited block, `<file name="report.pdf" pages="12">...</file>`, before what was typed. At most 200,000 characters of file text go into one message; anything over that is cut, with a note saying so in the block. The page shows the estimated tokens and input cost before sending, and warns when the request is longer than the model's context.
+- PDF pages without a text layer (scans) are listed as such. For vision models the page offers to send up to 4 of them as images, rendered on the device to JPEG at most 1280 px on the long side.
+- The same tier rules as typed text apply: with "Encrypt in browser" on an enclave model, the file text is inside the HPKE-encrypted body and the gateway cannot read it; on a standard model or with encryption off, the gateway relays it in memory like any prompt. It is never logged or stored by the gateway (`test/e2e/files-privacy.e2e.test.ts` checks the logs and the database for it on both paths).
+- The thread shows file chips (name, size, pages), not the text. The text is kept with the chat in IndexedDB, because every later message in that chat sends the conversation again, files included.
+
+### Installed app and offline use
+
+The page is an installable web app (`manifest.webmanifest`). A service worker (`/sw.js`) keeps the app shell so the app opens without a connection: the chat history, stored on the device, can be read offline, and sending waits for a connection. The service worker never caches or intercepts `/v1/*`, `/admin`, `/beta`, POST requests, or any request with an `Authorization` or `X-Cashu` header; those always go to the network.

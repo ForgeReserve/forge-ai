@@ -60,6 +60,28 @@ echo "export { SecureClient } from 'tinfoil';" > tf-entry.js
   --external:zlib --external:'node:*' --external:ws --metafile=tf-meta.json --outfile=tinfoil.js --log-level=error
 { echo '/* tinfoil 1.4.0 browser SDK, Apache-2.0, https://github.com/tinfoilsh/tinfoil-js. Bundled with its dependencies; see licenses/tinfoil-bundle.txt */'; cat tinfoil.js; } > "$OUT/tinfoil.js"
 
+# PDF text extraction (pdf.js legacy build, which also runs on older Safari), loaded only when a PDF is
+# attached. The worker, CMaps (CJK text), standard fonts (page rendering) and image decoders (JPEG 2000,
+# JBIG2, colour profiles) are served from our origin too. The scripting sandbox (quickjs) is left out:
+# the page never runs PDF JavaScript.
+PJ=node_modules/pdfjs-dist
+rm -rf "$OUT/pdfjs"; mkdir -p "$OUT/pdfjs/wasm"
+{ echo '/* pdfjs-dist 6.5.438 legacy build, Apache-2.0, https://github.com/mozilla/pdf.js */'; cat "$PJ/legacy/build/pdf.min.mjs"; } > "$OUT/pdfjs/pdf.min.mjs"
+{ echo '/* pdfjs-dist 6.5.438 legacy build worker, Apache-2.0, https://github.com/mozilla/pdf.js */'; cat "$PJ/legacy/build/pdf.worker.min.mjs"; } > "$OUT/pdfjs/pdf.worker.min.mjs"
+cp -R "$PJ/cmaps" "$PJ/standard_fonts" "$PJ/iccs" "$OUT/pdfjs/"
+rm -f "$OUT"/pdfjs/standard_fonts/LICENSE_* "$OUT"/pdfjs/iccs/LICENSE
+cp "$PJ"/wasm/openjpeg.wasm "$PJ"/wasm/openjpeg_nowasm_fallback.js "$PJ"/wasm/jbig2.wasm "$PJ"/wasm/jbig2_nowasm_fallback.js "$PJ"/wasm/qcms_bg.wasm "$OUT/pdfjs/wasm/"
+{ for f in "$PJ"/standard_fonts/LICENSE_* "$PJ"/iccs/LICENSE "$PJ"/wasm/LICENSE_OPENJPEG "$PJ"/wasm/LICENSE_PDFJS_OPENJPEG "$PJ"/wasm/LICENSE_JBIG2 "$PJ"/wasm/LICENSE_PDFJS_JBIG2 "$PJ"/wasm/LICENSE_QCMS "$PJ"/wasm/LICENSE_PDFJS_QCMS; do
+    echo "==== pdfjs-dist 6.5.438: $(basename "$(dirname "$f")")/$(basename "$f")"; echo; cat "$f"; echo; done
+  echo "==== core-js 3.51.0 (MIT), polyfills compiled into the pdf.js legacy build"; echo
+  echo "Copyright (c) 2013-2025 Denis Pushkarev (zloirock.ru), 2025-2026 CoreJS Company (core-js.io)"
+  echo
+  echo 'Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:'
+  echo
+  echo 'The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.'
+  echo
+  echo 'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.'; } > "$OUT/licenses/pdfjs-dist-assets.txt"
+
 # Licenses: one file per library, plus every package inside the Tinfoil bundle.
 node - "$OUT/licenses" <<'EOF'
 const fs = require('fs'), path = require('path');
@@ -67,7 +89,7 @@ const out = process.argv[2];
 const lic = (dir) => { for (const n of fs.readdirSync(dir)) if (/^(licen[cs]e|copying)/i.test(n)) return fs.readFileSync(path.join(dir, n), 'utf8'); return null; };
 const pkgDir = (p) => { const m = p.match(/^(.*node_modules\/(@[^/]+\/[^/]+|[^/]+))\//); return m && m[1]; };
 const MIT = (who) => `MIT License\n\nCopyright (c) ${who}\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n`;
-const one = { 'marked.txt': 'node_modules/marked', 'dompurify.txt': 'node_modules/dompurify', 'highlight.js.txt': 'node_modules/@highlightjs/cdn-assets', 'jsqr.txt': 'node_modules/jsqr', 'bc-ur.txt': 'node_modules/@gandlaf21/bc-ur', 'buffer.txt': 'node_modules/buffer', 'tinfoil.txt': 'node_modules/tinfoil' };
+const one = { 'marked.txt': 'node_modules/marked', 'dompurify.txt': 'node_modules/dompurify', 'highlight.js.txt': 'node_modules/@highlightjs/cdn-assets', 'jsqr.txt': 'node_modules/jsqr', 'bc-ur.txt': 'node_modules/@gandlaf21/bc-ur', 'buffer.txt': 'node_modules/buffer', 'tinfoil.txt': 'node_modules/tinfoil', 'pdfjs-dist.txt': 'node_modules/pdfjs-dist' };
 for (const [f, d] of Object.entries(one)) fs.writeFileSync(path.join(out, f), lic(d) ?? MIT(JSON.parse(fs.readFileSync(d + '/package.json')).author?.name ?? d));
 fs.writeFileSync(path.join(out, 'qrcode-generator.txt'), MIT('2009 Kazuhiko Arase'));
 const meta = JSON.parse(fs.readFileSync('tf-meta.json'));

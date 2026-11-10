@@ -137,6 +137,11 @@ export function unitName(unit, n = 2) {
   return unit === 'usd' ? (n === 1 ? 'cent' : 'cents') : 'sat';
 }
 export const fmtInt = (n) => nf.format(n);
+export function fmtBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /** Fetch JSON from the gateway; returns {res, body}. Never throws for HTTP errors. */
 export async function api(path, { key, json, method, signal } = {}) {

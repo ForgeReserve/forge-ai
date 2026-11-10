@@ -20,6 +20,7 @@ import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, MS
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
+import { serviceWorkerScript } from './sw.ts';
 
 export interface Deps {
   config: Config;
@@ -860,6 +861,12 @@ export function createApp(d: Deps) {
     app.use('/*', async (c, next) => {
       await next();
       if (c.res.ok && !c.res.headers.has('cache-control')) c.header('Cache-Control', 'no-cache');
+    });
+    // The service worker, with its version (a hash of the app shell) filled in; see src/sw.ts.
+    const sw = serviceWorkerScript(d.publicDir);
+    app.get('/sw.js', (c) => {
+      const { body, version } = sw();
+      return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version });
     });
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
