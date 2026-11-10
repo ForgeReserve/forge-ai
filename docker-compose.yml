@@ -1,0 +1,34 @@
+# Production-shaped stack: gateway + Caddy (automatic HTTPS). Replace the placeholder domain.
+#   docker compose up -d
+#   docker compose exec gateway node src/admin.ts invites:create
+services:
+  gateway:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FORGE_DB_PATH: /data/forge.db
+      FORGE_TRUST_PROXY: "true"
+      HOST: 0.0.0.0
+      PORT: "8787"
+    volumes:
+      - forge-data:/data
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [gateway]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  forge-data:
+  caddy-data:
+  caddy-config:

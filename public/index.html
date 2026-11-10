@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge AI</title>
+  <meta name="description" content="Private AI chat paid per message with Cashu eCash.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">Forge AI</div>
+    <div class="balance" id="balance" aria-live="polite">No balance</div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" id="wallet">
+      <h2>Wallet</h2>
+      <p class="hint" id="walletHint">Paste an eCash token to open a balance, or paste a balance key you already have.</p>
+      <label for="pasteBox">eCash token or balance key</label>
+      <textarea id="pasteBox" rows="3" placeholder="cashuB... or sk-forge-..." spellcheck="false" autocomplete="off"></textarea>
+      <div id="inviteRow">
+        <label for="invite">Invite code</label>
+        <input id="invite" placeholder="inv-..." autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <button id="topupBtn" class="primary">Add funds</button>
+        <button id="refundBtn" disabled>Withdraw all</button>
+      </div>
+      <div id="walletMsg" class="msg" role="status"></div>
+      <div id="refundBox" class="refund" hidden>
+        <label for="refundToken">Your eCash (copy and keep it)</label>
+        <textarea id="refundToken" rows="4" readonly></textarea>
+        <button id="copyRefund">Copy</button>
+      </div>
+      <details class="keybox" id="keyDetails" hidden>
+        <summary>Balance key</summary>
+        <p class="hint">This key holds your balance. It is stored in this browser only. Save it somewhere safe to use it elsewhere.</p>
+        <code id="keyText"></code>
+        <div class="row">
+          <button id="copyKey">Copy key</button>
+          <button id="forgetKey">Forget on this device</button>
+        </div>
+      </details>
+    </aside>
+
+    <section class="chat">
+      <div class="controls">
+        <label for="model" class="sr">Model</label>
+        <select id="model"></select>
+        <label class="toggle"><input type="checkbox" id="showUncensored"> Show uncensored models</label>
+        <label class="toggle" id="encryptRow" hidden><input type="checkbox" id="encrypt" checked> Encrypt in browser</label>
+      </div>
+      <div class="modelinfo" id="modelInfo"></div>
+      <div id="log" class="log" aria-live="polite"></div>
+      <form id="form" class="composer">
+        <textarea id="input" rows="2" placeholder="Message" required></textarea>
+        <button class="primary" id="send" type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

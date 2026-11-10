@@ -1,0 +1,9 @@
+# Placeholder domain: change before deploying.
+ai.forge-reserve.com {
+	encode zstd gzip
+	# Streams (SSE and EHBP frames) must not be buffered.
+	reverse_proxy gateway:8787 {
+		flush_interval -1
+	}
+	# Request bodies are never logged. Access logs are off by default in Caddy; keep them off.
+}
