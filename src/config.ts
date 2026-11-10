@@ -43,6 +43,29 @@ export const EnvSchema = z.object({
   FORGE_UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1000).default(180_000),
   FORGE_UPSTREAM_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   FORGE_STALE_RESERVATION_SECONDS: z.coerce.number().int().min(60).default(900),
+  /** Mint used for Lightning / on-chain / other-mint funding. Default: the first trusted mint. */
+  FORGE_FUND_MINT: z.string().optional(),
+  FORGE_LIGHTNING_ENABLED: bool.default(true),
+  /** Per-funding limits for Lightning, in whole units. */
+  FORGE_FUND_MAX_SAT: z.coerce.number().int().min(1).default(1_000_000),
+  FORGE_FUND_MAX_USD: z.coerce.number().int().min(1).default(50_000),
+  /** On-chain (NUT-30) funding. Off by default: shapes come from the Forge Nutshell branch, not a live test. */
+  FORGE_ONCHAIN_ENABLED: bool.default(false),
+  /** Confirmations shown to users; the mint decides when a deposit is paid. */
+  FORGE_ONCHAIN_CONFIRMATIONS: z.coerce.number().int().min(1).default(3),
+  FORGE_ONCHAIN_WATCH_DAYS: z.coerce.number().int().min(1).default(30),
+  /** Optional Esplora API (e.g. a self-hosted mempool) for showing unconfirmed deposits. Unset: not used. */
+  FORGE_ESPLORA_URL: z.string().url().optional(),
+  /** eCash from other mints, melted into a Forge Lightning quote. */
+  FORGE_FOREIGN_ENABLED: bool.default(true),
+  FORGE_FOREIGN_ALLOW: csv.default([]),
+  FORGE_FOREIGN_DENY: csv.default([]),
+  FORGE_FOREIGN_MAX_SAT: z.coerce.number().int().min(1).default(100_000),
+  FORGE_FOREIGN_MAX_USD: z.coerce.number().int().min(1).default(5_000),
+  /** Tests only: allow http:// and private-address foreign mints. */
+  FORGE_FOREIGN_ALLOW_INSECURE: bool.default(false),
+  /** Unfinished fundings (quotes not yet paid) per balance. */
+  FORGE_FUND_MAX_PENDING: z.coerce.number().int().min(1).default(5),
   FORGE_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 export type Env = z.infer<typeof EnvSchema>;
@@ -87,6 +110,14 @@ const ModelSchema = z.object({
   max_output_tokens: z.number().int().positive().default(4096),
   context_length: z.number().int().positive().optional(),
   uncensored: z.boolean().default(false),
+  /** Accepts image parts in messages (OpenAI image_url content). */
+  vision: z.boolean().default(false),
+  /** Streams reasoning (reasoning_content / reasoning deltas). */
+  reasoning: z.boolean().default(false),
+  /** Values the chat page may send as reasoning_effort; empty means the control is hidden. */
+  reasoning_efforts: z.array(z.string()).default([]),
+  /** Rough speed hint for the chat page. */
+  speed: z.enum(['fast', 'balanced', 'slow']).optional(),
 });
 export type ModelConfig = z.infer<typeof ModelSchema>;
 

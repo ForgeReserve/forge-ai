@@ -43,6 +43,53 @@ Only a SHA-256 of each key is stored.
 - Encrypted pass-through: see PRIVACY.md. Usage comes from Tinfoil's `X-Tinfoil-Usage-Metrics` header or trailer; without it the supplier's flat schedule (if configured) or the reservation is charged.
 - `pricing: "flat"` suppliers always charge the flat schedule: a request-size bucket plus declared max output tokens.
 
+## Flow 3: funding a balance through the Forge mint
+
+For users who do not hold Forge eCash yet. In every method the gateway mints Forge eCash into its own wallet with deterministic (NUT-13) outputs and credits the balance with exactly the minted amount, in the same SQLite transaction that stores the proofs. A new balance needs an invite while invite-only; it is created (and the invite bound to it) when the first quote is made, and released again, with the invite reopened, if that funding expires or fails before anything is credited.
+
+### Lightning
+
+1. `POST /v1/wallet/fund/lightning {amount, unit}`: the gateway asks the Forge mint for a NUT-04 bolt11 mint quote in the balance unit, stores it (`fundings` row, `state=pending`) and only then returns the invoice.
+2. A poller (every 3 s for the first 10 minutes, then every 30 s) and every status request ask the mint for the quote state.
+3. On `PAID`: prepare the mint with deterministic outputs, store the outputs and the counter range (`state=minting`), call `POST /v1/mint/bolt11`.
+4. One transaction: proofs stored, balance credited `amount`, `state=done`.
+5. Unpaid a minute past the quote's expiry: `state=expired`.
+
+### On-chain (NUT-30)
+
+The Forge mint advertises `onchain` (sat) in NUT-04 on its Nutshell on-chain branch. The shapes used here come from that branch's source (`cashu/payment/onchain.py`, `cashu/core/models/mint_quote.py`): `POST /v1/mint/quote/onchain {unit, pubkey}` returns a reusable address with `amount_paid` and `amount_issued` and no expiry; `POST /v1/mint/onchain {quote, outputs, signature}` mints. The quote is locked (NUT-20) to a key the gateway generates per funding, so only the gateway can mint it.
+
+1. `POST /v1/wallet/fund/onchain`: quote created and stored, address returned.
+2. The poller checks the quote every minute. Whenever `amount_paid > amount_issued`, it mints the difference (same steps 3 and 4 as Lightning, signed for the quote key) and credits it. The address stays watched for `FORGE_ONCHAIN_WATCH_DAYS`, so later deposits are credited too.
+3. The mint decides when a deposit counts as paid (Forge: after its deposit wallet sees the configured confirmations). `FORGE_ONCHAIN_CONFIRMATIONS` is only what users are told. With `FORGE_ESPLORA_URL` set the status also shows unconfirmed and confirmed amounts seen on chain.
+
+`FORGE_ONCHAIN_ENABLED` is `false` by default: the flow is tested against a mock that follows those shapes (`test/e2e/onchain-mock.ts`), not against the live mint. Turn it on after one small live deposit.
+
+### eCash from another mint
+
+1. `POST /v1/wallet/fund/foreign/quote {token, unit}`. Policy first: foreign funding enabled, the mint is not one of ours (`use_topup`), passes `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY`, is `https` and resolves to public addresses only (SSRF guard), and the token is at most `FORGE_FOREIGN_MAX_SAT` / `_USD`. Then pricing: the gateway creates a Forge bolt11 mint quote for a credit and a melt quote for that invoice at the token's mint, shrinking the credit until the melt amount, its fee reserve and both input fees fit the token. Nothing is spent. The response shows the token amount, the exact credit and the most the token's mint can keep (`fee_max`).
+2. `POST /v1/wallet/fund/foreign/confirm {id, token}`: the token (checked to be the quoted one by the hash of its secrets) is received at its own mint through the normal receive path (`incoming` row, NUT-19/NUT-09 recoverable). The new proofs are stored `reserved` for this funding and never used for payouts.
+3. Melt: deterministic NUT-08 blank outputs and the counter range are stored before `POST /v1/melt/bolt11`. If the melt quote expired meanwhile, a new one is made for the same invoice; if it no longer fits, the held eCash goes back to the user as a token from their mint (`refund_token`, `state=refunded`).
+4. Melt paid: the unused fee reserve comes back as change signatures, which are returned to the user as `change_token`. The funding then continues as a Lightning funding whose invoice is already paid: mint at Forge, credit `credit`.
+
+The balance unit and the token unit may differ (a sat token can fund a usd balance); the quote uses the mint's own conversion through the Forge invoice.
+
+### Crash safety
+
+| State | What is stored | If the process dies here |
+| - | - | - |
+| `pending` | quote id and invoice/address, before the client sees them | The poller resumes the quote on restart |
+| `minting` | outputs (serialized) and counter range, before `POST /v1/mint/...` | Replay the identical mint (NUT-19, cached for bolt11 at Forge); else restore the counter range (NUT-09); else, if the quote is still mintable, mint with the same outputs. Credited once |
+| `quoted` | the plan, not the token | Nothing spent; the client keeps the token. Expires with the quotes |
+| `receiving` | the `incoming` row | `prepared`: replayed or restored now or at startup; `new`: back to `quoted`; rejected: `failed` |
+| `melting` | blank outputs and counter range, before `POST /v1/melt/bolt11` | Melt quote `PAID`: change from the quote's signatures or from restore, then mint. `UNPAID` with inputs unspent: retry once, then refund. `PENDING`: wait |
+
+Finalizing a mint runs in one transaction that checks the funding is still `minting` with the same stored outputs, so two pollers, a status request and a restart can race and the balance is credited once. The e2e suite injects faults after the mint, after the foreign swap and after the melt, restarts on the same database (with and without NUT-19 replay) and checks the credit is exact and single.
+
+### Not yet: Fedimint
+
+Fedimint notes need a Fedimint client to reissue them in their federation and pay out to Lightning. The cashucard.org fund kit does this with `fedimint-receiver`, a separate Rust service. Forge AI does not run one, so Fedimint is not offered. Adding it would mean deploying that receiver beside the gateway and treating it like a foreign mint: reissue, pay the Forge bolt11 quote from the federation, mint and credit.
+
 ## The gateway's wallet
 
 Received proofs are stored in the `proofs` table with state `unspent`, `reserved` (selected for a payout in progress) or `spent`. The database is the wallet: back it up, and protect it like a hot wallet.
@@ -98,3 +145,6 @@ At startup every active reservation is released without charge (nothing is in fl
 - The seed sits in the database unless `FORGE_WALLET_SEED` is set. Losing both the database and the seed loses the wallet.
 - Payouts come from one mint. With several trusted mints, a refund needs one mint to hold enough.
 - Sub-unit balance remainders cannot be withdrawn.
+- Other-mint funding trusts the token's mint for as long as the melt takes. A mint that takes the token and never pays leaves the funding in `melting`; the token's value is then lost to the user, as it would be with any wallet melting at that mint.
+- A foreign mint's address is checked against private ranges when quoted, but DNS can change between that check and later requests (rebinding). The gateway sends such a mint only Cashu API calls.
+- An on-chain address that receives a deposit after its watch window is not credited automatically. The quote stays at the mint; an operator can extend `expires_at` in `fundings` and set `state` back to `pending`.

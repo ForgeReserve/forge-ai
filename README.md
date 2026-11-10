@@ -7,6 +7,8 @@ Two ways to pay:
 - **Per request (NUT-24).** Call the API with no credentials. You get `HTTP 402` with an `X-Cashu` header holding a NUT-18 payment request. Retry with `X-Cashu: cashuB...`. The gateway runs the request, charges the actual cost, and returns the unused value as eCash change. No account, no key.
 - **Prepaid balance.** Send an eCash token to `POST /v1/wallet/topup` and get an `sk-forge-...` key. Use it as a normal bearer key. Withdraw the remainder as eCash at any time.
 
+A balance can also be funded without holding Forge eCash first: pay a Lightning invoice, send bitcoin on-chain (NUT-30, off by default), or hand over eCash from another Cashu mint, which the gateway melts into a Forge Lightning quote. The gateway mints Forge eCash for itself and credits the exact minted amount. See [Funding](#funding-a-balance).
+
 ## How it differs from Routstr
 
 [Routstr](https://github.com/routstr/routstr-core) is the established Cashu-paid AI proxy. Forge AI makes different choices:
@@ -78,6 +80,17 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
 | `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries on connection errors, 408, 429 and 5xx |
+| `FORGE_FUND_MINT` | first trusted mint | Mint used for Lightning, on-chain and other-mint funding |
+| `FORGE_LIGHTNING_ENABLED` | `true` | Lightning funding (NUT-04 bolt11 quotes) |
+| `FORGE_FUND_MAX_SAT` / `FORGE_FUND_MAX_USD` | `1000000` / `50000` | Largest Lightning funding, in sat / cents (the mint's own limit also applies) |
+| `FORGE_ONCHAIN_ENABLED` | `false` | On-chain funding (NUT-30). Off until tested against the live mint |
+| `FORGE_ONCHAIN_CONFIRMATIONS` | `3` | Confirmations shown to users; the mint decides when a deposit is paid |
+| `FORGE_ONCHAIN_WATCH_DAYS` | `30` | How long an on-chain address is watched for deposits |
+| `FORGE_ESPLORA_URL` | unset | Optional Esplora API used to show unconfirmed deposits. Unset: the gateway asks only the mint |
+| `FORGE_FOREIGN_ENABLED` | `true` | Accept eCash from other mints (melted into a Forge Lightning quote) |
+| `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Mint allowlist (empty = any https mint) and denylist |
+| `FORGE_FOREIGN_MAX_SAT` / `FORGE_FOREIGN_MAX_USD` | `100000` / `5000` | Largest token from another mint, in sat / cents |
+| `FORGE_FUND_MAX_PENDING` | `5` | Unfinished fundings per balance |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys |
 
 ### Model catalog
@@ -137,6 +150,30 @@ OpenAI model list plus `tier` (`enclave` or `standard`), `uncensored`, `max_outp
 
 A balance has one unit, set by its first topup. Topping up with another unit is rejected.
 
+### Funding a balance
+
+Each method opens a balance on first use (an invite is required while invite-only, exactly as for a topup) and returns `key` once when the gateway generated it. Send `Authorization: Bearer sk-forge-...` to fund an existing balance, or to choose your own key for a new one. Every response is a funding object:
+
+```
+{id, method: "lightning"|"onchain"|"foreign", state, unit, amount, request, expires_at, credited, balance_msub, account_id,
+ onchain?: {confirmations_required, paid_sat, seen_sat, confirmed_sat, confirmations, watch_until},
+ foreign?: {mint, unit, token_amount, credit, fee_max, change_token, refund_token}, error?, key?}
+```
+
+`credited` is the exact amount, in whole units of `unit`, added to the balance so far.
+
+| Endpoint | Body | Result |
+| - | - | - |
+| `GET /v1/wallet/fund/methods` | | What the Forge mint and config allow: Lightning units and limits, on-chain minimum and confirmations, other-mint limits |
+| `POST /v1/wallet/fund/lightning` | `{amount, unit, invite?}` | `request` is a bolt11 invoice from the Forge mint; `state` goes `pending` -> `minting` -> `done` (or `expired`) |
+| `POST /v1/wallet/fund/onchain` | `{invite?}` | `request` is a bitcoin address (sat only). Each deposit the mint counts as paid is minted and credited; the address is watched for `FORGE_ONCHAIN_WATCH_DAYS` |
+| `POST /v1/wallet/fund/foreign/quote` | `{token, unit, invite?}` | Prices a token from another mint: `foreign.credit` is what the balance gets, `foreign.fee_max` the most the token's mint can keep. Nothing is spent yet. A token from an accepted mint gets `use_topup` |
+| `POST /v1/wallet/fund/foreign/confirm` | `{id, token}` + bearer | Receives the token at its mint, melts it to pay the Forge invoice, mints and credits `credit`. Unused fee reserve comes back as `foreign.change_token`; if the melt cannot go through, the token's value comes back as `foreign.refund_token` (state `refunded`) |
+| `GET /v1/wallet/fund/{id}` | bearer | Status; polling also moves the funding forward |
+| `GET /v1/wallet/fund` | bearer | Recent fundings of this balance |
+
+Fedimint eCash is not accepted yet; see [docs/PAYMENTS.md](docs/PAYMENTS.md#not-yet-fedimint).
+
 ### Other
 
 - `GET /healthz`: liveness, current BTC/USD rate and age.
@@ -144,7 +181,7 @@ A balance has one unit, set by its first topup. Topping up with another unit is 
 
 ### Errors
 
-OpenAI-style `{"error": {"message", "type", "code"}}`. Payment problems: `untrusted_mint`, `wrong_unit`, `insufficient_amount`, `token_spent`, `invalid_token` (400, per NUT-24); `insufficient_balance` (402); `invite_required`, `invite_used` (403); `mint_unavailable` (503, retry with the same token). Upstream failures charge nothing and return all NUT-24 change.
+OpenAI-style `{"error": {"message", "type", "code"}}`. Payment problems: `untrusted_mint`, `wrong_unit`, `insufficient_amount`, `token_spent`, `invalid_token` (400, per NUT-24); `insufficient_balance` (402); `invite_required`, `invite_used` (403); `mint_unavailable` (503, retry with the same token). Funding adds `method_unavailable`, `invalid_amount`, `use_topup`, `mint_not_allowed`, `amount_too_large`, `token_mismatch`, `foreign_mint_error` (400), `quote_expired` (409) and `too_many_pending` (429). Upstream failures charge nothing and return all NUT-24 change.
 
 ## Admin CLI
 
@@ -160,6 +197,12 @@ pnpm admin prices:show [--unit sat]
 
 `revenue:export` never exports eCash that backs customer balances or unpaid change.
 
+## Chat page
+
+`/` serves a chat app from `public/` (plain ES modules, no build step, nothing from third-party origins). It has a chat history sidebar kept in the browser's IndexedDB (search, rename, delete), streaming replies with a reasoning disclosure, Markdown with highlighted code and tables, stop, regenerate, edit and resend, copy, image attachments for models with `vision: true`, per-message cost and token counts, a model picker grouped by tier with price and speed hints (uncensored models behind an explicit opt-in), and Settings for theme, default model, reasoning effort and the system prompt. The wallet drawer adds funds by eCash (paste or camera scan, including animated NUT-16 codes), Lightning, on-chain and eCash from other mints, and refunds as eCash with copy, a text-file download and a QR code (animated for long tokens). Keyboard shortcuts are listed under `Ctrl+/`.
+
+First-load JavaScript is about 56 KB gzipped. The highlighter, QR, scanner and Tinfoil SDK load on first use. Rebuild the vendored libraries with `scripts/vendor.sh`. Privacy details: [docs/PRIVACY.md](docs/PRIVACY.md#chat-page).
+
 ## Logs and privacy
 
 Logs are JSON lines with request id, model, supplier, token counts, cost, status and latency. Prompt and completion content is never logged or stored. See [docs/PRIVACY.md](docs/PRIVACY.md).
@@ -173,7 +216,9 @@ pnpm mint:up && pnpm test:e2e && pnpm mint:down    # end to end against real loc
 pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env if present)
 ```
 
-The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
+`docker-compose.test.yml` runs three FakeWallet mints: `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
+
+The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
 
 ## License
 

@@ -26,3 +26,11 @@ services:
     environment:
       <<: *env
       MINT_MNEMONIC: "legal winner thank year wave sausage worth useful legal winner thank yellow"
+  # A "foreign" mint for the other-mint funding tests: charges input fees so fee math is exercised.
+  mint-c:
+    <<: *mint
+    ports: ["127.0.0.1:3340:3338"]
+    environment:
+      <<: *env
+      MINT_INPUT_FEE_PPK: "100"
+      MINT_MNEMONIC: "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"

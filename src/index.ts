@@ -1,9 +1,13 @@
 import { serve } from '@hono/node-server';
+import { setGlobalRequestOptions } from '@cashu/cashu-ts';
 import { createApp, startupRecovery } from './app.ts';
 import { loadConfig } from './config.ts';
 import { buildDeps } from './deps.ts';
 import { errText, log, setLogLevel } from './log.ts';
 
+// Mint calls give up after 60 s (cashu-ts default: 5 min). A timeout is an unknown outcome; every
+// mint operation is persisted first and finished by replay or restore, so a slow mint cannot hold a request open.
+setGlobalRequestOptions({ requestTimeout: 60_000 });
 const config = loadConfig();
 setLogLevel(config.env.FORGE_LOG_LEVEL);
 const deps = buildDeps(config);
@@ -13,6 +17,8 @@ if (config.env.FORGE_UNITS.includes('sat')) {
 }
 // Periodic sweep for reservations orphaned by bugs (never for in-flight ones: those are younger).
 setInterval(() => deps.ledger.releaseStale(config.env.FORGE_STALE_RESERVATION_SECONDS * 1000), 60_000).unref();
+// Funding poller: watches unpaid quotes, finishes interrupted mints and melts (crash recovery included).
+deps.funding.start();
 
 const app = createApp(deps);
 const server = serve({ fetch: app.fetch, port: config.env.PORT, hostname: config.env.HOST }, (info) => {
@@ -22,6 +28,7 @@ const server = serve({ fetch: app.fetch, port: config.env.PORT, hostname: config
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     log.info('shutdown', { signal: sig });
+    deps.funding.stop();
     server.close(() => {
       deps.db.close();
       process.exit(0);

@@ -21,6 +21,12 @@ Streams are read in memory as they pass, to count tokens when the supplier does 
 
 Payment links: with a balance key, every request on that key is linkable to the others. With NUT-24, requests are not linked by the gateway, but the mint knows its own swaps. Client IPs reach the gateway (and Caddy); use Tor or a VPN to hide them.
 
+## Funding
+
+- Lightning and on-chain funding go through the Forge mint. The mint sees the quote, the invoice or address and when it is paid; the gateway's mint requests are not linked to the balance key on the mint's side. The gateway stores the quote id, invoice or address, and amounts with the balance id, never the key.
+- On-chain status comes from the mint only, unless `FORGE_ESPLORA_URL` is set; then the gateway asks that Esplora server about the deposit address (point it at your own node to keep addresses private).
+- eCash from another mint: the gateway contacts that mint from its own IP address to swap and melt the token. That mint learns the Forge invoice it paid. The change or refund token handed back is fresh eCash from that mint.
+
 ## Encrypted pass-through (Tinfoil EHBP)
 
 Tinfoil's Encrypted HTTP Body Protocol encrypts request and response bodies with HPKE to a key held inside an attested enclave, and leaves headers readable. Forge AI follows Tinfoil's proxy guide (docs.tinfoil.sh/guides/proxy-server):
@@ -38,6 +44,22 @@ Verified so far: the e2e suite runs these flows against a fake enclave (header a
 
 ## Chat page
 
-- The balance key is kept in `localStorage` (wrapped in try/catch). Nothing else is stored in the browser; conversations live in page memory only.
-- For enclave models, "Encrypt in browser" (on by default) uses Tinfoil's SDK: it verifies the enclave attestation in the browser, then encrypts each request to the enclave's key. The gateway origin proxies `/attestation` and `/.well-known/hpke-keys`, and over HTTPS the SDK fetches the attestation bundle through it. The SDK is loaded from a CDN at a pinned version; self-hosting it (with subresource integrity) is a follow-up.
-- Unchecking it sends plaintext to the gateway, labelled as such in the page.
+The page at `/` is static files from the gateway's own origin (`public/`), with no build step and nothing loaded from another origin: no CDN, web fonts, analytics or remote images. Third-party libraries are vendored in `public/vendor/` with their licenses in `public/vendor/licenses/`, rebuilt by `scripts/vendor.sh` from versions pinned in `scripts/vendor/package-lock.json`.
+
+What the browser stores, all of it local to that browser:
+
+- **Chats** in IndexedDB (`forge-chat`): messages, attached images (downscaled and re-encoded, which drops EXIF data such as location), reasoning text, and per-message cost and token counts. They are never uploaded; a request carries only the messages of the chat being continued. Settings has "Delete all chats". If IndexedDB is unavailable (some private windows) chats live in page memory only.
+- **Balance key and settings** in `localStorage` (`forge.balanceKey`, `forge.settings`: theme, default model, reasoning effort, system prompt, encrypt toggle, uncensored opt-in). If the gateway stops recognizing a stored key (a first funding that expired removes the empty balance), the page moves it to `forge.unrecognizedKey` rather than deleting it.
+
+What the page sends:
+
+- A default system prompt with every chat, editable or removable in Settings. It tells the model that "eCash" here means Cashu (Chaumian) eCash.
+- `stream_options.include_usage` on every request, so the page can show token counts next to the cost.
+- Model output is rendered as Markdown and sanitized with DOMPurify. Raw HTML in a reply is shown as text, links open with `noopener noreferrer`, and images in a reply become links, so a reply cannot make the browser fetch a third-party URL.
+
+Encryption for enclave models:
+
+- "Encrypt in browser" (on by default) uses Tinfoil's SDK (`tinfoil` 1.4.0, vendored as `public/vendor/tinfoil.js` and loaded only when an encrypted request is first sent). It verifies the enclave attestation in the browser, then encrypts each request to the enclave's key. The gateway origin proxies `/attestation` and `/.well-known/hpke-keys`, and over HTTPS the SDK fetches the attestation bundle through it. The bundle still contains Tinfoil's verification code paths, which can contact Tinfoil and Sigstore hosts during verification; which requests it makes behind this gateway has not been measured.
+- Unchecking it sends plaintext to the gateway, labelled as such under the message box.
+
+Camera scanning (eCash, Other mint, balance key) runs entirely in the browser with BarcodeDetector or jsQR; frames never leave the page.

@@ -7,6 +7,7 @@ import { getEncodedToken, type Proof, Wallet } from '@cashu/cashu-ts';
 import { createApp, type Deps, startupRecovery } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
+import type { FundingFaults } from '../../src/funding.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { fixedRateSource } from '../../src/rates.ts';
 
@@ -14,6 +15,8 @@ setLogSilent(process.env.FORGE_TEST_LOGS !== '1');
 
 export const MINT_A = process.env.TEST_MINT_A ?? 'http://127.0.0.1:3338';
 export const MINT_B = process.env.TEST_MINT_B ?? 'http://127.0.0.1:3339';
+/** The "foreign" mint for other-mint funding tests (input fees 100 ppk). */
+export const MINT_C = process.env.TEST_MINT_C ?? 'http://127.0.0.1:3340';
 export const BTC_USD = 100_000;
 
 export async function mintsUp(): Promise<boolean> {
@@ -115,7 +118,14 @@ export interface Gateway {
 }
 
 export async function startGateway(
-  opts: { env?: Record<string, string>; enclavePort?: number; dbPath?: string; faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean }; recover?: boolean } = {},
+  opts: {
+    env?: Record<string, string>;
+    enclavePort?: number;
+    dbPath?: string;
+    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean };
+    fundingFaults?: FundingFaults;
+    recover?: boolean;
+  } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
   const env = {
@@ -128,7 +138,7 @@ export async function startGateway(
     ...opts.env,
   };
   const config = loadConfig(env as NodeJS.ProcessEnv, testCatalog(opts.enclavePort));
-  const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv, faults: opts.faults });
+  const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv, faults: opts.faults, fundingFaults: opts.fundingFaults });
   if (opts.recover !== false) await startupRecovery(deps);
   const app = createApp(deps);
   const server: ServerType = await new Promise((resolve) => {

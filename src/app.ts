@@ -5,10 +5,12 @@ import { PaymentRequest } from '@cashu/cashu-ts';
 import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
+import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import type { Config, ModelConfig, Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
-import { type Account, type Invites, isApiKeyShape, type Ledger, LedgerError, newApiKey } from './ledger.ts';
+import type { FundingService } from './funding.ts';
+import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { FrameCounter, SseMeter, usageFromJson } from './meter.ts';
 import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage } from './pricing.ts';
@@ -24,6 +26,7 @@ export interface Deps {
   wallet: GatewayWallet;
   rates: RateOracle;
   suppliers: Map<string, Supplier>;
+  funding: FundingService;
   publicDir?: string;
 }
 
@@ -144,6 +147,8 @@ export function createApp(d: Deps) {
         privacy: s.tier,
         encrypted_passthrough: s.type === 'tinfoil',
         uncensored: m.uncensored,
+        capabilities: { vision: m.vision, reasoning: m.reasoning, reasoning_efforts: m.reasoning_efforts },
+        speed: m.speed ?? null,
         context_length: m.context_length ?? null,
         max_output_tokens: m.max_output_tokens,
         pricing: {
@@ -173,34 +178,11 @@ export function createApp(d: Deps) {
     const invite = typeof body?.invite === 'string' ? body.invite : c.req.header('x-forge-invite');
     const t = await wallet.inspect(token);
 
-    let key = bearer(c);
-    let generated = false;
-    let account = key ? ledger.findByKey(key) : undefined;
-    if (key && !account && !isApiKeyShape(key)) return apiError(c, 401, 'invalid_key', 'unknown balance key');
-    if (account && account.unit !== t.unit) return apiError(c, 400, 'wrong_unit', `this balance is in ${account.unit}; token is ${t.unit}`);
-    let created = false;
-    if (!account) {
-      if (env.FORGE_INVITE_ONLY) {
-        const inv = invite ? invites.lookup(invite) : undefined;
-        if (!inv) return apiError(c, 403, 'invite_required', 'an invite code is required to open a balance');
-        if (inv.status === 'redeemed') return apiError(c, 403, 'invite_used', 'invite code was already redeemed');
-        if (inv.status !== 'open') return apiError(c, 403, 'invite_invalid', 'invite code is not valid');
-      }
-      if (!key) {
-        key = newApiKey();
-        generated = true;
-      }
-      const k = key;
-      account = tx(db, () => {
-        const a = ledger.createAccountRaw(k, t.unit, null);
-        if (env.FORGE_INVITE_ONLY) {
-          const inviteId = invites.redeemRaw(invite!, a.id);
-          db.prepare('UPDATE accounts SET invite_id = ? WHERE id = ?').run(inviteId, a.id);
-        }
-        return a;
-      });
-      created = true;
-    }
+    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit });
+    const account = opened.account;
+    const created = opened.created;
+    const generated = !!opened.generatedKey;
+    const key = opened.generatedKey;
     const acct = account;
     try {
       const r = await wallet.receive(token, {
@@ -234,16 +216,8 @@ export function createApp(d: Deps) {
           503,
         );
       }
-      if (created) {
-        // Definitive rejection: undo the empty account so the invite can be used again.
-        tx(db, () => {
-          const a = ledger.get(acct.id);
-          if (a && a.balance_msub === 0) {
-            db.prepare("UPDATE invites SET status = 'open', account_id = NULL, redeemed_at = NULL WHERE account_id = ?").run(acct.id);
-            db.prepare('DELETE FROM accounts WHERE id = ?').run(acct.id);
-          }
-        });
-      }
+      // Definitive rejection: undo the empty account so the invite can be used again.
+      if (created) releaseIfEmpty(db, acct.id);
       throw e;
     }
   });
@@ -335,6 +309,85 @@ export function createApp(d: Deps) {
       .sort((a, b) => b.unspent - a.unspent)[0];
     return h && h.unspent >= amount ? h.mint : undefined;
   };
+
+  // ------------------------------------------------------------------ funding (Lightning, on-chain, other mints)
+
+  const { funding } = d;
+  const readJson = async (c: Context): Promise<any> => {
+    try {
+      return await c.req.json();
+    } catch {
+      throw new PaymentError('invalid_request', 'expected a JSON body');
+    }
+  };
+  const unitOf = (v: unknown): Unit => {
+    const u = String(v ?? env.FORGE_DEFAULT_UNIT) as Unit;
+    if (!env.FORGE_UNITS.includes(u)) throw new PaymentError('wrong_unit', `unit must be one of ${env.FORGE_UNITS.join(', ')}`);
+    return u;
+  };
+  const fundingResponse = (c: Context, row: Parameters<FundingService['view']>[0], key?: string) => c.json({ ...funding.view(row), key });
+  /** Opens the balance for a funding; a balance created here is released again if the quote cannot be made. */
+  const withAccount = async <T,>(c: Context, unit: Unit, invite: unknown, fn: (accountId: string) => Promise<T>): Promise<{ result: T; key?: string }> => {
+    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite: typeof invite === 'string' ? invite : undefined, unit });
+    try {
+      return { result: await fn(opened.account.id), key: opened.generatedKey };
+    } catch (e) {
+      if (opened.created) releaseIfEmpty(db, opened.account.id);
+      throw e;
+    }
+  };
+
+  app.get('/v1/wallet/fund/methods', async (c) => c.json({ ...(await funding.methods()), invite_only: env.FORGE_INVITE_ONLY }));
+
+  app.post('/v1/wallet/fund/lightning', async (c) => {
+    const body = await readJson(c);
+    const unit = unitOf(body?.unit);
+    const amount = Number(body?.amount);
+    if (!Number.isInteger(amount) || amount < 1) return apiError(c, 400, 'invalid_amount', 'amount must be a whole number of units');
+    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.createLightning(id, unit, amount));
+    return fundingResponse(c, result, key);
+  });
+
+  app.post('/v1/wallet/fund/onchain', async (c) => {
+    const body = await readJson(c).catch(() => ({}));
+    const { result, key } = await withAccount(c, 'sat', body?.invite, (id) => funding.createOnchain(id));
+    return fundingResponse(c, result, key);
+  });
+
+  app.post('/v1/wallet/fund/foreign/quote', async (c) => {
+    const body = await readJson(c);
+    const unit = unitOf(body?.unit);
+    const token = String(body?.token ?? '').trim();
+    if (!token.startsWith('cashuB')) return apiError(c, 400, 'invalid_token', 'expected a cashuB token');
+    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.quoteForeign(id, unit, token));
+    return fundingResponse(c, result, key);
+  });
+
+  const ownFunding = (c: Context, id: string) => {
+    const a = requireAccount(c);
+    const row = funding.get(id);
+    if (!row || row.account_id !== a.id) throw new PaymentError('not_found', 'unknown funding', 404);
+    return row;
+  };
+
+  app.post('/v1/wallet/fund/foreign/confirm', async (c) => {
+    const body = await readJson(c);
+    const row = ownFunding(c, String(body?.id ?? ''));
+    const out = await funding.confirmForeign(row.id, String(body?.token ?? '').trim());
+    return fundingResponse(c, out);
+  });
+
+  app.get('/v1/wallet/fund', (c) => {
+    const a = requireAccount(c);
+    return c.json({ data: funding.list(a.id).map((r) => funding.view(r)) });
+  });
+
+  app.get('/v1/wallet/fund/:id', async (c) => {
+    const row = ownFunding(c, c.req.param('id'));
+    // Polling drives progress too, so a funding completes even when the background poller is off.
+    const fresh = Date.now() - row.updated_at > 1500 || row.state === 'minting' ? ((await funding.advance(row.id)) ?? row) : row;
+    return fundingResponse(c, fresh);
+  });
 
   // NUT-24 change re-delivery: the request id is an unguessable capability returned only to the payer.
   app.get('/v1/change/:id', async (c) => {

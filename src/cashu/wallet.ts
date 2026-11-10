@@ -41,7 +41,9 @@ export interface InspectedToken {
 }
 
 export interface ReceiveOptions {
-  purpose: 'topup' | 'nut24';
+  purpose: 'topup' | 'nut24' | 'foreign';
+  /** Accept a token from a mint outside FORGE_TRUSTED_MINTS (the caller applies its own policy). */
+  foreign?: boolean;
   expectUnit?: Unit;
   minAmount?: number;
   accountId?: string;
@@ -65,7 +67,7 @@ interface IncomingRow {
   mint: string;
   unit: Unit;
   amount: number;
-  purpose: 'topup' | 'nut24';
+  purpose: 'topup' | 'nut24' | 'foreign';
   account_id: string | null;
   request_id: string | null;
   status: 'new' | 'prepared' | 'done' | 'rejected';
@@ -196,8 +198,11 @@ export class GatewayWallet {
     return p;
   }
 
-  /** Decodes and validates a token without contacting the mint beyond loading its keysets. */
-  async inspect(token: string, expectUnit?: Unit): Promise<InspectedToken> {
+  /**
+   * Decodes and validates a token without contacting the mint beyond loading its keysets.
+   * With opts.foreign the trusted-mint check is skipped: the caller must vet the mint URL first.
+   */
+  async inspect(token: string, expectUnit?: Unit, opts: { foreign?: boolean } = {}): Promise<InspectedToken> {
     if (typeof token !== 'string' || !token.startsWith('cashuB')) throw new PaymentError('invalid_token', 'expected a cashuB token');
     if (token.length > this.opts.maxTokenBytes) throw new PaymentError('invalid_token', 'token too large');
     let meta: { mint: string; unit: string };
@@ -207,9 +212,9 @@ export class GatewayWallet {
       throw new PaymentError('invalid_token', 'could not decode token');
     }
     const mint = normalizeMintUrl(meta.mint);
-    if (!this.isTrusted(mint)) throw new PaymentError('untrusted_mint', `mint not accepted: ${mint}. Accepted: ${this.trustedMints.join(', ')}`);
+    if (!opts.foreign && !this.isTrusted(mint)) throw new PaymentError('untrusted_mint', `mint not accepted: ${mint}. Accepted: ${this.trustedMints.join(', ')}`);
     const unit = (meta.unit ?? 'sat') as Unit;
-    if (!this.opts.units.includes(unit)) throw new PaymentError('wrong_unit', `unit not accepted: ${unit}`);
+    if (opts.foreign ? unit !== 'sat' && unit !== 'usd' : !this.opts.units.includes(unit)) throw new PaymentError('wrong_unit', `unit not accepted: ${unit}`);
     if (expectUnit && unit !== expectUnit) throw new PaymentError('wrong_unit', `expected unit ${expectUnit}, got ${unit}`);
     let w: Wallet;
     try {
@@ -254,7 +259,7 @@ export class GatewayWallet {
    * restores the signatures from the counter range (NUT-09), then finalizes exactly once.
    */
   async receive(token: string, o: ReceiveOptions): Promise<ReceiveResult> {
-    const t = await this.inspect(token, o.expectUnit);
+    const t = await this.inspect(token, o.expectUnit, { foreign: o.foreign });
     if (o.minAmount !== undefined && t.amount < o.minAmount) {
       throw new PaymentError('insufficient_amount', `token is worth ${t.amount} ${t.unit} after fees, need ${o.minAmount}`);
     }
@@ -268,7 +273,9 @@ export class GatewayWallet {
           row = this.db.prepare('SELECT * FROM incoming WHERE id = ?').get(row.id) as unknown as IncomingRow;
         }
         if (row.status === 'done') {
-          const same = row.purpose === o.purpose && row.purpose === 'topup' && row.account_id === (o.accountId ?? null);
+          const same =
+            row.purpose === o.purpose &&
+            ((row.purpose === 'topup' && row.account_id === (o.accountId ?? null)) || (row.purpose === 'foreign' && row.request_id === (o.requestId ?? null)));
           if (same) return { incomingId: row.id, mint: row.mint, unit: row.unit, amount: row.amount, replay: true };
           throw new PaymentError('token_spent', 'token was already redeemed');
         }
@@ -322,18 +329,32 @@ export class GatewayWallet {
     this.db.prepare("UPDATE incoming SET status = 'rejected', error = ?, updated_at = ? WHERE id = ?").run(error, now(), id);
   }
 
-  private insertProofs(proofs: Proof[], mint: string, unit: Unit, state: 'unspent' | 'spent' = 'unspent') {
+  /** Stores proofs in the gateway wallet. Caller provides the transaction when combined with other writes. */
+  insertProofs(proofs: Proof[], mint: string, unit: Unit, state: 'unspent' | 'reserved' | 'spent' = 'unspent', opId: string | null = null) {
     const stmt = this.db.prepare(
-      'INSERT INTO proofs (secret, mint, unit, keyset_id, amount, proof, state, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (secret) DO NOTHING',
+      'INSERT INTO proofs (secret, mint, unit, keyset_id, amount, proof, state, op_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (secret) DO NOTHING',
     );
-    for (const p of proofs) stmt.run(p.secret, mint, unit, p.id, proofAmount(p), serializeProofs(p)[0]!, state, now());
+    for (const p of proofs) stmt.run(p.secret, normalizeMintUrl(mint), unit, p.id, proofAmount(p), serializeProofs(p)[0]!, state, opId, now());
+  }
+
+  /** Proofs held for an operation (state reserved, op_id = opId). */
+  heldProofs(opId: string): Proof[] {
+    const rows = this.db.prepare("SELECT proof FROM proofs WHERE op_id = ? AND state = 'reserved'").all(opId) as Array<{ proof: string }>;
+    return deserializeProofs(rows.map((r) => r.proof));
+  }
+
+  /** NUT-13 seed, for operations outside this class that need deterministic outputs. */
+  get bip39seed(): Uint8Array {
+    return this.seed;
   }
 
   private finalizeIncoming(id: string, proofs: Proof[], onFinalize?: (amount: number) => void) {
     tx(this.db, () => {
       const row = this.db.prepare('SELECT * FROM incoming WHERE id = ?').get(id) as unknown as IncomingRow;
       if (row.status === 'done') return;
-      this.insertProofs(proofs, row.mint, row.unit);
+      // Foreign-mint tokens are held for the funding that will melt them, never used for payouts.
+      if (row.purpose === 'foreign') this.insertProofs(proofs, row.mint, row.unit, 'reserved', row.request_id);
+      else this.insertProofs(proofs, row.mint, row.unit);
       this.db.prepare("UPDATE incoming SET status = 'done', updated_at = ? WHERE id = ?").run(now(), id);
       onFinalize?.(row.amount);
     });
@@ -381,6 +402,18 @@ export class GatewayWallet {
     }
     this.markRejected(row.id, 'inputs spent elsewhere');
     log.warn('incoming_rejected_on_recovery', { id: row.id });
+  }
+
+  /** Settles an interrupted receive (status prepared) for a request id now, instead of at the next startup. */
+  async recoverIncomingFor(requestId: string): Promise<void> {
+    const row = this.db.prepare("SELECT * FROM incoming WHERE request_id = ? AND status = 'prepared'").get(requestId) as IncomingRow | undefined;
+    if (!row || this.inflight.has(row.token_hash)) return;
+    this.inflight.add(row.token_hash);
+    try {
+      await this.recoverIncoming(row);
+    } finally {
+      this.inflight.delete(row.token_hash);
+    }
   }
 
   // ---------------------------------------------------------------- outgoing

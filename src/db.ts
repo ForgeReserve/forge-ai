@@ -107,6 +107,42 @@ CREATE TABLE IF NOT EXISTS invites (
   redeemed_at INTEGER
 );
 
+-- Funding a balance through the Forge mint: Lightning (NUT-04 bolt11), on-chain (NUT-30) or eCash
+-- from another mint (received there, melted to pay a Forge bolt11 quote). Keys never appear here.
+CREATE TABLE IF NOT EXISTS fundings (
+  id TEXT PRIMARY KEY,
+  method TEXT NOT NULL,             -- lightning | onchain | foreign
+  account_id TEXT NOT NULL,
+  unit TEXT NOT NULL,               -- balance unit = unit of the Forge mint quote
+  mint TEXT NOT NULL,               -- Forge mint
+  quote TEXT,                       -- Forge mint quote id
+  request TEXT,                     -- bolt11 invoice or bitcoin address
+  amount INTEGER,                   -- units to mint (lightning, foreign); NULL for onchain
+  expires_at INTEGER,               -- ms; for onchain: end of the watch window
+  lock_key TEXT,                    -- onchain: NUT-20 private key the quote is locked to
+  state TEXT NOT NULL,              -- quoted | receiving | melting | pending | minting | done | expired | failed | refunded
+  credited INTEGER NOT NULL DEFAULT 0,
+  mint_op TEXT,                     -- JSON: in-flight mint (amount, outputs, counters); NUT-19 replay / NUT-09 restore
+  next_check INTEGER NOT NULL DEFAULT 0,
+  observed TEXT,                    -- JSON: last quote state seen at the mint
+  f_mint TEXT,                      -- foreign: the token's mint
+  f_unit TEXT,
+  f_token_hash TEXT,
+  f_amount INTEGER,                 -- foreign: token value after its input fees
+  f_melt_quote TEXT,
+  f_fee_max INTEGER,                -- foreign: most the foreign mint can keep (input fees + fee reserve)
+  f_melt_op TEXT,                   -- JSON: in-flight melt (outputs, counters)
+  f_attempts INTEGER NOT NULL DEFAULT 0,
+  f_change_token TEXT,
+  f_refund_token TEXT,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS fundings_quote ON fundings(mint, quote);
+CREATE INDEX IF NOT EXISTS fundings_due ON fundings(state, next_check);
+CREATE INDEX IF NOT EXISTS fundings_account ON fundings(account_id);
+
 -- Metering log. No prompt or completion content, ever.
 CREATE TABLE IF NOT EXISTS requests (
   id TEXT PRIMARY KEY,

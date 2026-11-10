@@ -8,6 +8,7 @@ import type { ChatCall, Supplier } from './types.ts';
  *  mock-nousage   streams without a usage chunk
  *  mock-fail      HTTP 500
  *  mock-flaky     HTTP 503 on every other call (retry tests)
+ *  mock-think     streams 12 reasoning tokens (delta.reasoning_content) before a markdown answer
  * It never inspects message content beyond its byte length.
  */
 export class MockSupplier implements Supplier {
@@ -28,9 +29,10 @@ export class MockSupplier implements Supplier {
 
     const maxTokens = Number(call.body.max_completion_tokens ?? call.body.max_tokens ?? 4096);
     const promptTokens = Math.ceil(JSON.stringify(call.body.messages ?? []).length / 4);
-    const words = name === 'mock-slow' ? 200 : 12;
+    const words = name === 'mock-slow' ? 200 : name === 'mock-think' ? THINK_ANSWER.length : 12;
     const n = Math.min(words, maxTokens);
-    const tokens = Array.from({ length: n }, (_, i) => (i === 0 ? 'Forge' : ' word'));
+    const tokens = name === 'mock-think' ? THINK_ANSWER.slice(0, n) : Array.from({ length: n }, (_, i) => (i === 0 ? 'Forge' : ' word'));
+    const reasoning = name === 'mock-think' ? THINK_REASONING : [];
     const id = 'chatcmpl-mock-' + this.calls;
     const created = Math.floor(Date.now() / 1000);
     const usage = { prompt_tokens: promptTokens, completion_tokens: n, total_tokens: promptTokens + n };
@@ -47,13 +49,18 @@ export class MockSupplier implements Supplier {
     }
 
     const includeUsage = name !== 'mock-nousage' && (call.body.stream_options as any)?.include_usage === true;
-    const delay = name === 'mock-slow' ? 20 : 0;
+    const delay = name === 'mock-slow' ? 20 : name === 'mock-think' ? 25 : 0;
     const enc = new TextEncoder();
     const signal = call.signal;
     const body = new ReadableStream<Uint8Array>({
       async start(ctrl) {
         const send = (o: unknown) => ctrl.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
         try {
+          for (const r of reasoning) {
+            if (signal.aborted) throw new Error('aborted');
+            await new Promise((res) => setTimeout(res, 15));
+            send({ id, object: 'chat.completion.chunk', created, model: name, choices: [{ index: 0, delta: { reasoning_content: r }, finish_reason: null }] });
+          }
           for (let i = 0; i < n; i++) {
             if (signal.aborted) throw new Error('aborted');
             if (delay) await new Promise((r) => setTimeout(r, delay));
@@ -71,3 +78,22 @@ export class MockSupplier implements Supplier {
     return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
   }
 }
+
+const THINK_REASONING = ['The', ' user', ' asked', ' a', ' question.', ' I', ' will', ' answer', ' with', ' a', ' short', ' example.'];
+const THINK_ANSWER = [
+  'Here',
+  ' is',
+  ' a',
+  ' **short**',
+  ' answer',
+  ' with',
+  ' code:\n\n',
+  '```js\n',
+  'const total = [1, 2, 3].reduce((a, b) => a + b, 0);\n',
+  'console.log(total);\n',
+  '```\n\n',
+  '| Unit | Meaning |\n',
+  '| - | - |\n',
+  '| sat | bitcoin |\n',
+  '| usd | cents |\n',
+];

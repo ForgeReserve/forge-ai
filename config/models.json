@@ -191,7 +191,14 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 262144,
-      "uncensored": false
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ]
     },
     {
       "id": "tinfoil/glm-5-3",
@@ -202,7 +209,14 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 1048576,
-      "uncensored": false
+      "uncensored": false,
+      "vision": false,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ]
     },
     {
       "id": "tinfoil/deepseek-v4-1-flash",
@@ -213,7 +227,15 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 1048576,
-      "uncensored": false
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "speed": "fast"
     },
     {
       "id": "tinfoil/gemma4-31b",
@@ -224,7 +246,15 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 262144,
-      "uncensored": false
+      "uncensored": false,
+      "vision": true,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "speed": "fast"
     },
     {
       "id": "tinfoil/gpt-oss-120b",
@@ -235,7 +265,15 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 131072,
-      "uncensored": false
+      "uncensored": false,
+      "vision": false,
+      "reasoning": true,
+      "reasoning_efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "speed": "fast"
     },
     {
       "id": "tinfoil/llama3-3-70b",
@@ -246,7 +284,9 @@
       "price_verified": true,
       "max_output_tokens": 8192,
       "context_length": 131072,
-      "uncensored": false
+      "uncensored": false,
+      "vision": false,
+      "reasoning": false
     }
   ]
 }
