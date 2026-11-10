@@ -1130,6 +1130,13 @@ function wire() {
     effortSel = e.target.value;
     renderEffort();
   });
+  // Composer buttons keep focus in the message box: on iOS a tap that blurs it closes the keyboard,
+  // the composer jumps while the viewport resizes, and the tap misses the button.
+  for (const id of ['effortBtn', 'encryptChip', 'attachBtn', 'effortPop']) {
+    $(id).addEventListener('pointerdown', (e) => {
+      if (document.activeElement === $('composer-input')) e.preventDefault();
+    });
+  }
   $('effortBtn').addEventListener('click', () => ($('effortPop').hidden ? openEffort() : closeEffort()));
   $('effortPop').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-value]');
@@ -1307,10 +1314,10 @@ function openEffort() {
   const pop = $('effortPop');
   pop.hidden = false;
   $('effortBtn').setAttribute('aria-expanded', 'true');
-  (pop.querySelector('[aria-checked="true"]') ?? pop.querySelector('button'))?.focus();
+  if (document.activeElement !== $('composer-input')) (pop.querySelector('[aria-checked="true"]') ?? pop.querySelector('button'))?.focus();
 }
 function closeEffort(refocus = false) {
   $('effortPop').hidden = true;
   $('effortBtn').setAttribute('aria-expanded', 'false');
-  if (refocus) $('effortBtn').focus();
+  if (refocus && document.activeElement !== $('composer-input')) $('effortBtn').focus();
 }

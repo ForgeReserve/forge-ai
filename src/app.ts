@@ -855,6 +855,12 @@ export function createApp(d: Deps) {
 
   // ------------------------------------------------------------------ static chat page
   if (d.publicDir) {
+    // Revalidate the page and its modules on every load (a cheap 304 when unchanged), so a phone never
+    // pairs a new index.html with a cached, older app.js.
+    app.use('/*', async (c, next) => {
+      await next();
+      if (c.res.ok && !c.res.headers.has('cache-control')) c.header('Cache-Control', 'no-cache');
+    });
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
 

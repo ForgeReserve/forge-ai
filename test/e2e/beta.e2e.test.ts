@@ -28,5 +28,8 @@ describe('beta waitlist signup', () => {
     const res = await fetch(`${g.url}/beta/`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('Join the Forge AI waitlist');
+    // Static files revalidate on every load, so a new page never runs with a cached older script.
+    expect(res.headers.get('cache-control')).toBe('no-cache');
+    expect((await fetch(`${g.url}/app.js`)).headers.get('cache-control')).toBe('no-cache');
   });
 });
