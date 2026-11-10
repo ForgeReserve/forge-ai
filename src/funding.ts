@@ -591,7 +591,8 @@ export class FundingService {
   }
 
   private nextPendingCheck(row: FundingRow): number {
-    if (row.method === 'onchain') return now() + 60_000;
+    // A credited address stays watched for later deposits, at a slower pace.
+    if (row.method === 'onchain') return now() + (row.credited > 0 ? 300_000 : 60_000);
     const age = now() - row.created_at;
     // Quick while someone is likely watching the invoice, then rarely: every check costs the
     // gateway's shared per-IP allowance at the mint.
@@ -633,7 +634,7 @@ export class FundingService {
       const paid = num(q.amount_paid);
       const issued = num(q.amount_issued);
       const obs: Observed = { state: (q as any).state, amount_paid: paid, amount_issued: issued, ...(await this.esplora(row.request!)) };
-      this.set(row.id, { observed: JSON.stringify(obs), next_check: this.nextPendingCheck(row) });
+      this.set(row.id, { observed: JSON.stringify(obs), next_check: this.nextPendingCheck(row), error: null });
       if (paid > issued) return this.mintNow(this.get(row.id)!, paid - issued, q);
       if (now() > (row.expires_at ?? Infinity)) {
         if (row.credited > 0) this.set(row.id, { state: 'done' });
@@ -642,7 +643,7 @@ export class FundingService {
       return;
     }
     const q = await w.checkMintQuoteBolt11(row.quote!);
-    this.set(row.id, { observed: JSON.stringify({ state: q.state }), next_check: this.nextPendingCheck(row) });
+    this.set(row.id, { observed: JSON.stringify({ state: q.state }), next_check: this.nextPendingCheck(row), error: null });
     if (q.state === 'PAID') return this.mintNow(this.get(row.id)!, row.amount!, q);
     if (q.state === 'ISSUED') {
       // Issued but no mint operation of ours is recorded: not something this gateway did.

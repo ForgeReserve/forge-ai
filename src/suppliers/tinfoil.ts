@@ -35,6 +35,11 @@ export class TinfoilSupplier extends OpenAISupplier {
     super(id, config, env, retry);
   }
 
+  /** Asks for X-Tinfoil-Usage-Metrics on plaintext calls too: its cost_usd is what the request cost us. */
+  protected override extraHeaders(): Record<string, string> {
+    return { [USAGE_REQUEST_HEADER]: 'true' };
+  }
+
   private defaultEnclave(): string {
     return this.config.enclaveUrl ?? new URL(this.config.baseUrl!).origin;
   }

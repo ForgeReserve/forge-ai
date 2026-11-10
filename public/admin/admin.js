@@ -5,7 +5,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
 const KEY = 'forge-admin-token';
-const SECTIONS = ['overview', 'export', 'invites', 'waitlist', 'balances', 'fundings', 'requests', 'settings'];
+const SECTIONS = ['overview', 'export', 'invites', 'waitlist', 'balances', 'fundings', 'requests', 'costs', 'settings'];
 
 // ------------------------------------------------------------------ helpers
 
@@ -188,61 +188,170 @@ window.addEventListener('hashchange', () => route());
 
 const head = (title, sub = '', right = '') => `<div class="section-head"><div><p class="kicker">Forge AI</p><h1>${esc(title)}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>${right}</div>`;
 
+// Dashboard building blocks shared by the overview and costs sections.
+
+/** nano-USD as dollars, with enough decimals to show small amounts (e.g. $0.000123). */
+const nusd = (n) => {
+  if (n == null || Number.isNaN(n)) return '–';
+  const v = n / 1e9;
+  const a = Math.abs(v);
+  const d = a === 0 || a >= 1 ? 2 : a >= 0.01 ? 4 : Math.min(9, Math.ceil(-Math.log10(a)) + 2);
+  return (v < 0 ? '−$' : '$') + nf(a, d);
+};
+const pct = (part, whole) => (whole ? nf((part / whole) * 100, 1) + '%' : '–');
+/** USD per million tokens. */
+const mtok = (v) => (v == null ? '–' : '$' + nf(v, v !== 0 && v < 1 ? 3 : 2));
+const usd = (v, dp = 2) => `$${Number(v).toFixed(v !== 0 && Math.abs(v) < 0.01 ? 5 : dp)}`;
+/** A KPI tile: label, big value, optional extra lines, quiet secondary line. */
+const tile = (label, value, sub = '', extra = '') =>
+  `<div class="tile"><div class="tile-label">${esc(label)}</div><div class="tile-value">${value}</div>${extra}${sub ? `<div class="tile-sub">${sub}</div>` : ''}</div>`;
+/** A compact status row with a colored dot; details collapse into a disclosure. */
+const srow = (state, label, value, detail = '') => {
+  const sum = `<span class="dot ${state}"></span><span class="srow-label">${esc(label)}</span><span class="srow-value">${value}</span>`;
+  return detail
+    ? `<details class="srow"><summary>${sum}</summary><div class="srow-body">${detail}</div></details>`
+    : `<div class="srow"><div class="srow-sum">${sum}</div></div>`;
+};
+/** Label and value rows; each entry is [label, value, label note?, value note?]. */
+const facts = (rows) =>
+  `<dl class="facts">${rows
+    .map(([l, v, ln, vn]) => `<div><dt>${esc(l)}${ln ? `<small>${ln}</small>` : ''}</dt><dd>${v}${vn ? `<small>${vn}</small>` : ''}</dd></div>`)
+    .join('')}</dl>`;
+/** A table cell value with a quiet note under it; one element, so phone card rows keep it together. */
+const note = (v, n) => `<span class="cell">${v}<span class="cell-note">${n}</span></span>`;
+const seg = (id, opts, on) => `<div class="seg" id="${id}">${opts.map(([k, l]) => `<button type="button" data-k="${k}" class="${String(k) === String(on) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+const onSeg = (id, fn) =>
+  $('#' + id).addEventListener('click', (e) => {
+    const k = e.target.closest('button')?.dataset.k;
+    if (k) fn(k);
+  });
+
 // ------------------------------------------------------------------ overview
 
 let windowKey = 'today';
+const WINDOWS = [
+  ['today', 'Today (UTC)'],
+  ['d7', '7 days'],
+  ['d30', '30 days'],
+];
 async function renderOverview() {
-  const o = await api('/overview');
+  const [o, costs] = await Promise.all([api('/overview'), api('/costs?days=30').catch(() => null)]);
   const w = o.windows[windowKey];
-  const unitCards = o.units
-    .map(
-      (u) => `
-      <section class="card">
-        <div class="card-head"><h3>Revenue and liabilities</h3><span class="unit-tag">${esc(u.unit)}</span></div>
-        <div class="grid">
-          <div class="kpi"><div class="label">Collected</div><div class="value">${msub(u.collected_msub, u.unit)}</div><div class="sub">all settled requests</div></div>
-          <div class="kpi accent"><div class="label">Sweepable now</div><div class="value">${units(u.sweepable, u.unit)}</div><div class="sub">${u.exported ? `${units(u.exported, u.unit)} exported so far` : 'nothing exported yet'}</div></div>
-          <div class="kpi"><div class="label">Customer balances</div><div class="value">${msub(u.customer_balances_msub, u.unit)}</div><div class="sub">${nf(u.accounts)} ${u.accounts === 1 ? 'balance' : 'balances'} · ${msub(u.reserved_msub, u.unit)} reserved</div></div>
-          <div class="kpi"><div class="label">Owed payouts</div><div class="value">${units(u.owed_payouts, u.unit)}</div><div class="sub">${u.owed_by_purpose.length ? u.owed_by_purpose.map((p) => `${nf(p.n)} ${esc(p.purpose)}`).join(', ') : 'none unfinished'}</div></div>
-          <div class="kpi"><div class="label">Wallet, trusted mints</div><div class="value">${units(u.wallet_trusted, u.unit)}</div><div class="sub">${u.wallet_other_mints ? units(u.wallet_other_mints, u.unit) + ' at other mints' : 'no other-mint eCash'}</div></div>
-        </div>
-      </section>`,
-    )
-    .join('');
+  const winLabel = { today: 'today (UTC)', d7: '7 days', d30: '30 days' }[windowKey];
+  const [first, ...rest] = o.units;
+  const alt = (f) => rest.map((u) => `<div class="tile-alt">${f(u)}</div>`).join('');
+  const rate = o.rate;
+  const h = o.health;
+  const q = h.quote_checks;
+
+  // ---- KPI row
+  const exportedAny = o.units.filter((u) => u.exported);
+  const accounts = o.units.reduce((s, u) => s + u.accounts, 0);
+  const ct = costs?.total;
+  const kpis = [
+    tile(
+      'Sweepable revenue',
+      units(first.sweepable, first.unit),
+      exportedAny.length ? `${exportedAny.map((u) => units(u.exported, u.unit)).join(' · ')} exported so far` : 'Nothing exported yet',
+      alt((u) => units(u.sweepable, u.unit)),
+    ),
+    tile(
+      'Customer balances',
+      msub(first.customer_balances_msub, first.unit),
+      `${nf(accounts)} ${accounts === 1 ? 'balance' : 'balances'} · ${o.units.map((u) => msub(u.reserved_msub, u.unit)).join(' · ')} reserved`,
+      alt((u) => msub(u.customer_balances_msub, u.unit)),
+    ),
+    tile(
+      `Requests, ${winLabel}`,
+      nf(w.total.requests),
+      `${nf(w.total.ok)} settled · ${w.total.failed ? `<span class="err-ink">${nf(w.total.failed)} failed</span>` : '0 failed'} · ${nf(w.total.encrypted)} encrypted`,
+    ),
+    !costs
+      ? tile('Margin, 30 days', '–', 'Cost data unavailable')
+      : !ct.requests
+        ? tile('Margin, 30 days', '–', 'No priced requests in 30 days')
+        : tile('Margin, 30 days', nusd(ct.price_nusd - ct.cost_nusd), `${pct(ct.price_nusd - ct.cost_nusd, ct.price_nusd)} of ${nusd(ct.price_nusd)} paid · <a href="#costs">costs</a>`),
+  ].join('');
+
+  // ---- status rows
+  const mintsUp = h.mints.filter((m) => m.ok).length;
+  const mintTable = table(
+    [
+      { h: 'Mint', v: (r) => `<span class="dot ${r.ok ? 'ok' : 'err'}"></span>${esc(r.mint)}${r.mint === h.fund_mint ? ' ' + badge('funding') : ''}` },
+      { h: 'Status', v: (r) => (r.ok ? `${esc(r.latency_ms)} ms${r.version ? ` <span class="muted small">${esc(r.version)}</span>` : ''}` : `<span class="err">${esc(r.error)}</span>`) },
+    ],
+    h.mints,
+  );
+  const needKey = h.suppliers.filter((s) => s.key_present !== null);
+  const keysSet = needKey.filter((s) => s.key_present).length;
+  const supplierTable = table(
+    [
+      { h: 'Supplier', v: (r) => `<span class="cell">${esc(r.id)} <span class="muted small">${esc(r.tier)}</span></span>` },
+      { h: 'Key', v: (r) => (r.key_present === null ? badge('none needed') : r.key_present ? badge('set', 'ok') : badge('missing', 'err')) },
+      { h: 'Models', num: true, v: (r) => nf(r.models) },
+    ],
+    h.suppliers,
+  );
 
   const tf = o.tinfoil;
-  const usd = (v, dp = 2) => `$${Number(v).toFixed(v !== 0 && Math.abs(v) < 0.01 ? 5 : dp)}`;
-  const tinfoilCard = !tf
+  const tinfoilRow = !tf
     ? ''
     : tf.ok
-      ? `
-      <section class="card">
-        <div class="card-head"><h3>Tinfoil credit</h3>${tf.low ? `<span class="badge err">below ${usd(tf.low_threshold_usd)}</span>` : '<span class="unit-tag">usd</span>'}</div>
-        <div class="grid">
-          <div class="kpi ${tf.low ? '' : 'accent'}"><div class="label">Remaining</div><div class="value">${usd(tf.remaining_usd)}</div><div class="sub">${usd(tf.opening_usd)} starting credit${tf.added_usd ? ` + ${usd(tf.added_usd)} added` : ''}</div></div>
-          <div class="kpi"><div class="label">Spent, all time</div><div class="value">${usd(tf.spent_usd)}</div><div class="sub">${nf(tf.requests)} requests · ${nf(tf.tokens)} tokens</div></div>
-          <div class="kpi"><div class="label">Spent, 30 days</div><div class="value">${usd(tf.spent_30d_usd)}</div><div class="sub">${nf(tf.requests_30d)} requests</div></div>
-        </div>
-        <p class="sub" style="margin-top:10px">From Tinfoil's billing API, refreshed every minute. Remaining is worked out as starting credit plus credit added minus spend, since Tinfoil has no balance figure.</p>
-      </section>`
-      : `<section class="card"><div class="card-head"><h3>Tinfoil credit</h3><span class="badge err">unavailable</span></div><p class="sub">${esc(tf.error)}</p></section>`;
+      ? srow(
+          tf.low ? 'err' : 'ok',
+          'Tinfoil credit',
+          `${usd(tf.remaining_usd)} left${tf.low ? ` ${badge('below ' + usd(tf.low_threshold_usd), 'err')}` : ''}`,
+          facts([
+            ['Remaining', usd(tf.remaining_usd), '', `${usd(tf.opening_usd)} starting credit${tf.added_usd ? ` + ${usd(tf.added_usd)} added` : ''}`],
+            ['Spent, all time', usd(tf.spent_usd), '', `${nf(tf.requests)} requests · ${nf(tf.tokens)} tokens`],
+            ['Spent, 30 days', usd(tf.spent_30d_usd), '', `${nf(tf.requests_30d)} requests`],
+          ]) +
+            `<p class="fine">From Tinfoil's billing API, refreshed every minute. Remaining is worked out as starting credit plus credit added minus spend, since Tinfoil has no balance figure.</p>`,
+        )
+      : srow('err', 'Tinfoil credit', 'Unavailable', `<p class="err small">${esc(tf.error)}</p>`);
 
   const tk = o.tokenfactory;
-  const tokenFactoryCard = !tk
+  const tokenFactoryRow = !tk
     ? ''
     : tk.ok
-      ? `
-      <section class="card">
-        <div class="card-head"><h3>Token Factory key</h3>${tk.blocked ? '<span class="badge err">blocked</span>' : '<span class="unit-tag">usd</span>'}</div>
-        <div class="grid">
-          <div class="kpi"><div class="label">Spend on this key</div><div class="value">${usd(tk.spent_usd)}</div><div class="sub">as Token Factory costs it${tk.alias ? ` · key ${esc(tk.alias)}` : ''}</div></div>
-          <div class="kpi"><div class="label">Budget</div><div class="value">${tk.max_budget_usd == null ? 'No limit' : usd(tk.max_budget_usd)}</div><div class="sub">${tk.remaining_usd == null ? 'free during the beta' : usd(tk.remaining_usd) + ' left'}${tk.budget_duration ? ` · resets ${esc(tk.budget_duration)}` : ''}</div></div>
-          <div class="kpi"><div class="label">Limits</div><div class="value">${tk.rpm_limit ? nf(tk.rpm_limit) + '/min' : 'None'}</div><div class="sub">${tk.expires ? 'key expires ' + esc(String(tk.expires).slice(0, 10)) : 'key does not expire'}</div></div>
-        </div>
-        <p class="sub" style="margin-top:10px">From the key's own record at Token Factory, refreshed every minute. If other tools share this key, its spend includes theirs.</p>
-      </section>`
-      : `<section class="card"><div class="card-head"><h3>Token Factory key</h3><span class="badge err">unavailable</span></div><p class="sub">${esc(tk.error)}</p></section>`;
+      ? srow(
+          tk.blocked ? 'err' : 'ok',
+          'Token Factory key',
+          `${usd(tk.spent_usd)} spent${tk.blocked ? ' ' + badge('blocked', 'err') : ''}`,
+          facts([
+            ['Spend on this key', usd(tk.spent_usd), '', `as Token Factory costs it${tk.alias ? ` · key ${esc(tk.alias)}` : ''}`],
+            ['Budget', tk.max_budget_usd == null ? 'No limit' : usd(tk.max_budget_usd), '', `${tk.remaining_usd == null ? 'free during the beta' : usd(tk.remaining_usd) + ' left'}${tk.budget_duration ? ` · resets ${esc(tk.budget_duration)}` : ''}`],
+            ['Limits', tk.rpm_limit ? nf(tk.rpm_limit) + '/min' : 'None', '', tk.expires ? 'key expires ' + esc(String(tk.expires).slice(0, 10)) : 'key does not expire'],
+          ]) + `<p class="fine">From the key's own record at Token Factory, refreshed every minute. If other tools share this key, its spend includes theirs.</p>`,
+        )
+      : srow('err', 'Token Factory key', 'Unavailable', `<p class="err small">${esc(tk.error)}</p>`);
 
+  const openN = h.fundings_open.reduce((s, f) => s + f.n, 0);
+  const statusRows = [
+    srow(
+      rate ? (rate.usable ? 'ok' : 'warn') : 'err',
+      'BTC/USD rate',
+      rate ? `$${nf(rate.btc_usd, 0)} <span class="muted">· ${esc(rate.age_s)}s old${rate.usable ? '' : ', stale'}</span>` : badge('no rate', 'err'),
+    ),
+    srow(mintsUp === h.mints.length ? 'ok' : 'err', 'Mints', `${nf(mintsUp)} of ${nf(h.mints.length)} up`, mintTable),
+    srow(keysSet === needKey.length ? 'ok' : 'err', 'Supplier keys', needKey.length ? `${nf(keysSet)} of ${nf(needKey.length)} set` : 'None needed', supplierTable),
+    tinfoilRow,
+    tokenFactoryRow,
+    srow(
+      q.cooldown_until ? 'err' : q.available ? 'ok' : 'warn',
+      'Quote checks',
+      `${nf(q.used)} of ${nf(q.budget)} this minute${q.cooldown_until ? ' ' + badge('paused by mint 429 until ' + new Date(q.cooldown_until).toLocaleTimeString(), 'err') : q.available ? '' : ' ' + badge('budget used', 'warn')}`,
+    ),
+    srow(
+      openN ? '' : 'ok',
+      'Open fundings',
+      openN ? `${nf(openN)} open · ${nf(h.fundings_due)} due` : `None · ${nf(h.fundings_due)} due`,
+      openN ? facts([...h.fundings_open.map((f) => [f.state, nf(f.n)]), ['Due for a check', nf(h.fundings_due)]]) + '<p class="fine"><a href="#fundings">Open fundings</a></p>' : '',
+    ),
+    srow(h.exports_unfinished ? 'warn' : 'ok', 'Revenue exports', h.exports_unfinished ? `${nf(h.exports_unfinished)} unfinished · <a href="#export">finish them</a>` : 'All finished'),
+  ].join('');
+
+  // ---- activity
   const moneyCols = [
     { h: 'Requests', num: true, v: (r) => nf(r.requests) },
     { h: 'Failed', num: true, v: (r) => (r.failed ? `<span class="badge err">${nf(r.failed)}</span>` : '0') },
@@ -255,83 +364,147 @@ async function renderOverview() {
     { h: 'Requests', num: true, v: (r) => nf(r.requests) },
     { h: 'Revenue', num: true, v: (r) => money(r.revenue_msub) },
     { h: 'Est. cost', num: true, v: (r) => money(r.cost_msub) },
-    { h: 'Margin', num: true, v: (r) => `${money(r.margin_msub)} <span class="muted small">${esc(usdEq(r.margin_usd_equiv))}</span>` },
+    { h: 'Margin', num: true, v: (r) => note(money(r.margin_msub), esc(usdEq(r.margin_usd_equiv))) },
   ];
-  const h = o.health;
-  const q = h.quote_checks;
-  const rate = o.rate;
+  const stat = (label, value, sub = '') => `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${value}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ''}</div>`;
+
+  // ---- money held, one column per unit
+  const ledger = table(
+    [
+      { h: 'Item', v: (r) => esc(r.label) },
+      ...o.units.map((u) => ({ h: u.unit, num: true, v: (r) => r.v(u) })),
+    ],
+    [
+      { label: 'Collected', v: (u) => note(msub(u.collected_msub, u.unit), 'all settled requests') },
+      { label: 'Sweepable now', v: (u) => note(units(u.sweepable, u.unit), u.exported ? `${units(u.exported, u.unit)} exported so far` : 'nothing exported yet') },
+      { label: 'Customer balances', v: (u) => note(msub(u.customer_balances_msub, u.unit), `${nf(u.accounts)} ${u.accounts === 1 ? 'balance' : 'balances'} · ${msub(u.reserved_msub, u.unit)} reserved`) },
+      { label: 'Owed payouts', v: (u) => note(units(u.owed_payouts, u.unit), u.owed_by_purpose.length ? u.owed_by_purpose.map((p) => `${nf(p.n)} ${esc(p.purpose)}`).join(', ') : 'none unfinished') },
+      { label: 'Wallet, trusted mints', v: (u) => note(units(u.wallet_trusted, u.unit), u.wallet_other_mints ? units(u.wallet_other_mints, u.unit) + ' at other mints' : 'no other-mint eCash') },
+    ],
+  );
 
   view.innerHTML = `
-    ${head('Overview', `Markup ×${esc(o.markup)} · BTC/USD ${rate ? '$' + nf(rate.btc_usd, 0) + ` <span class="muted">(${esc(rate.age_s)}s old${rate.usable ? '' : ', stale'})</span>` : '<span class="badge err">no rate</span>'}`)}
-    <div class="stack">
-      ${unitCards}
-      ${tinfoilCard}
-      ${tokenFactoryCard}
+    ${head(
+      'Overview',
+      `Markup ×${esc(o.markup)} · BTC/USD ${rate ? '$' + nf(rate.btc_usd, 0) : '<span class="badge err">no rate</span>'}`,
+      seg('win', WINDOWS, windowKey),
+    )}
+    <div class="dash">
+      <div class="tiles">${kpis}</div>
       <section class="card">
-        <div class="card-head"><h3>Activity</h3>
-          <div class="seg" id="win">${[['today', 'Today (UTC)'], ['d7', '7 days'], ['d30', '30 days']].map(([k, l]) => `<button type="button" data-k="${k}" class="${k === windowKey ? 'on' : ''}">${l}</button>`).join('')}</div>
-        </div>
-        <div class="grid">
-          <div class="kpi"><div class="label">Requests</div><div class="value">${nf(w.total.requests)}</div><div class="sub">${nf(w.total.ok)} settled · ${nf(w.total.failed)} failed · ${nf(w.total.encrypted)} encrypted</div></div>
-          <div class="kpi"><div class="label">Tokens in / out</div><div class="value">${nf(w.total.input_tokens)} / ${nf(w.total.output_tokens)}</div></div>
-          <div class="kpi accent"><div class="label">Revenue</div><div class="value">${money(w.total.revenue_msub)}</div><div class="sub">${esc(usdEq(w.total.revenue_usd_equiv))}</div></div>
-          <div class="kpi"><div class="label">Est. margin</div><div class="value">${money(w.total.margin_msub)}</div><div class="sub">cost ≈ revenue ÷ ${esc(o.markup)}</div></div>
-        </div>
+        <div class="card-head"><h3>Status</h3><span class="muted small">Checked ${esc(new Date(o.at).toLocaleTimeString())}</span></div>
+        <div class="status">${statusRows}</div>
       </section>
-      <div class="grid two">
+      <section class="card">
+        <div class="card-head"><h3>Activity</h3><span class="muted small">${esc(WINDOWS.find(([k]) => k === windowKey)[1])}</span></div>
+        <div class="stats">
+          ${stat('Requests', nf(w.total.requests), `${nf(w.total.ok)} settled · ${nf(w.total.failed)} failed · ${nf(w.total.encrypted)} encrypted`)}
+          ${stat('Tokens in / out', `${nf(w.total.input_tokens)} / ${nf(w.total.output_tokens)}`)}
+          ${stat('Revenue', money(w.total.revenue_msub), esc(usdEq(w.total.revenue_usd_equiv)))}
+          ${stat('Est. margin', money(w.total.margin_msub), `cost ≈ revenue ÷ ${esc(o.markup)}`)}
+        </div>
+        <h4 class="sub-head">By supplier</h4>
+        <p class="fine">Catalog prices include the markup, so cost is estimated as revenue ÷ ${esc(o.markup)}.</p>
+        ${table(costCols, w.by_supplier, 'No requests in this window.')}
+      </section>
+      <div class="split">
         <section class="card"><h3>By model</h3>${table([{ h: 'Model', v: (r) => esc(r.key) }, ...moneyCols], w.by_model, 'No requests in this window.')}</section>
         <section class="card"><h3>By tier</h3>${table([{ h: 'Tier', v: (r) => badge(r.key, r.key === 'enclave' ? 'brass' : '') }, ...moneyCols], w.by_tier, 'No requests in this window.')}</section>
       </div>
-      <section class="card"><h3>Supplier cost and margin</h3><p class="muted small">Catalog prices include the markup, so cost is estimated as revenue ÷ ${esc(o.markup)}.</p>${table(costCols, w.by_supplier, 'No requests in this window.')}</section>
-      <section class="card"><h3>Gateway wallet</h3>
-        ${table(
-          [
-            { h: 'Mint', v: (r) => `${esc(r.mint)} ${r.trusted ? '' : badge('other mint, held aside', 'warn')}` },
-            { h: 'Unit', v: (r) => esc(r.unit) },
-            { h: 'Unspent', num: true, v: (r) => units(r.unspent, r.unit) },
-            { h: 'Reserved', num: true, v: (r) => units(r.reserved, r.unit) },
-            { h: 'Owed', num: true, v: (r) => units(r.owed, r.unit) },
-          ],
-          o.holdings,
-          'The wallet holds no eCash yet.',
-        )}
-      </section>
-      <section class="card"><h3>Health</h3>
-        <div class="grid two">
-          <div>
-            ${table(
-              [
-                { h: 'Supplier', v: (r) => `${esc(r.id)} <span class="muted small">${esc(r.tier)}</span>` },
-                { h: 'Key', v: (r) => (r.key_present === null ? badge('none needed') : r.key_present ? badge('set', 'ok') : badge('missing', 'err')) },
-                { h: 'Models', num: true, v: (r) => nf(r.models) },
-              ],
-              h.suppliers,
-            )}
-          </div>
-          <div>
-            ${table(
-              [
-                { h: 'Mint', v: (r) => `<span class="dot ${r.ok ? 'ok' : 'err'}"></span>${esc(r.mint)}${r.mint === h.fund_mint ? ' ' + badge('funding') : ''}` },
-                { h: 'Status', v: (r) => (r.ok ? `${esc(r.latency_ms)} ms${r.version ? ` <span class="muted small">${esc(r.version)}</span>` : ''}` : `<span class="err">${esc(r.error)}</span>`) },
-              ],
-              h.mints,
-            )}
-            <dl class="kv spaced">
-              <dt>Open fundings</dt><dd>${h.fundings_open.length ? h.fundings_open.map((f) => `${nf(f.n)} ${esc(f.state)}`).join(', ') : 'none'} · ${nf(h.fundings_due)} due for a check</dd>
-              <dt>Quote checks</dt><dd>${nf(q.used)} of ${nf(q.budget)} this minute ${q.cooldown_until ? badge('paused by mint 429 until ' + new Date(q.cooldown_until).toLocaleTimeString(), 'err') : q.available ? badge('ok', 'ok') : badge('budget used', 'warn')}</dd>
-              <dt>Exports</dt><dd>${h.exports_unfinished ? badge(h.exports_unfinished + ' unfinished', 'warn') + ' <a href="#export">finish them</a>' : 'all finished'}</dd>
-            </dl>
-          </div>
-        </div>
-      </section>
+      <div class="split">
+        <section class="card"><h3>Revenue and liabilities</h3>${ledger}</section>
+        <section class="card"><h3>Gateway wallet</h3>
+          ${table(
+            [
+              { h: 'Mint', v: (r) => `${esc(r.mint)} ${r.trusted ? '' : badge('other mint, held aside', 'warn')}` },
+              { h: 'Unit', v: (r) => esc(r.unit) },
+              { h: 'Unspent', num: true, v: (r) => units(r.unspent, r.unit) },
+              { h: 'Reserved', num: true, v: (r) => units(r.reserved, r.unit) },
+              { h: 'Owed', num: true, v: (r) => units(r.owed, r.unit) },
+            ],
+            o.holdings,
+            'The wallet holds no eCash yet.',
+          )}
+        </section>
+      </div>
     </div>`;
-  $('#win').addEventListener('click', (e) => {
-    const k = e.target.closest('button')?.dataset.k;
-    if (k && k !== windowKey) {
+  onSeg('win', (k) => {
+    if (k !== windowKey) {
       windowKey = k;
       route(true);
     }
   });
+}
+
+// ------------------------------------------------------------------ costs
+
+let costDays = 30;
+const round4 = (v) => Math.round(v * 10_000) / 10_000;
+async function renderCosts() {
+  const r = await api('/costs?days=' + costDays);
+  const t = r.total;
+  const margin = t.price_nusd - t.cost_nusd;
+  const reported = r.models.reduce((s, m) => s + m.supplier_reported, 0);
+  const suggest = r.models
+    .filter((m) => m.derived)
+    .map((m) => ({ id: m.model, input_usd_per_mtok: round4(m.derived.input), output_usd_per_mtok: round4(m.derived.output) }));
+  const marginCell = (p, c) => note(nusd(p - c), pct(p - c, p));
+  const body = !t.requests
+    ? `<section class="card"><p class="empty">No priced requests in the last ${nf(costDays)} days.</p></section>`
+    : `
+      <div class="tiles">
+        ${tile('Customer paid', nusd(t.price_nusd), `${nf(t.requests)} settled ${t.requests === 1 ? 'request' : 'requests'}`)}
+        ${tile('Our cost', nusd(t.cost_nusd), `Supplier-reported for ${nf(reported)} of ${nf(t.requests)} requests. The rest is estimated at catalog cost.`)}
+        ${tile('Margin', nusd(margin), `${pct(margin, t.price_nusd)} of what customers paid`)}
+        ${tile('Markup', '×' + esc(r.markup), `${pct(1 - 1 / r.markup, 1)} margin at catalog cost`)}
+      </div>
+      <section class="card"><h3>By supplier</h3>${table(
+        [
+          { h: 'Supplier', v: (s) => esc(s.supplier) },
+          { h: 'Requests', num: true, v: (s) => nf(s.requests) },
+          { h: 'Paid', num: true, v: (s) => nusd(s.price_nusd) },
+          { h: 'Cost', num: true, v: (s) => nusd(s.cost_nusd) },
+          { h: 'Margin', num: true, v: (s) => marginCell(s.price_nusd, s.cost_nusd) },
+        ],
+        r.suppliers,
+      )}</section>
+      <section class="card">
+        <div class="card-head"><h3>By model</h3><button class="btn small" type="button" id="csug" ${suggest.length ? '' : 'disabled title="No model has enough supplier-reported requests for a fit yet"'}>Copy suggested prices${suggest.length ? ` (${nf(suggest.length)})` : ''}</button></div>
+        <p class="fine">Catalog and measured prices are USD per million tokens before the ×${esc(r.markup)} markup. Measured prices are fitted to the supplier's reported costs. Suggested prices are a JSON snippet for config/models.json; nothing changes on the gateway until you edit the catalog and restart.</p>
+        ${table(
+          [
+            {
+              h: 'Model',
+              wrap: true,
+              v: (m) =>
+                `<span class="cell">${esc(m.name || m.model)}${m.name && m.name !== m.model ? `<span class="cell-note mono">${esc(m.model)}</span>` : ''}${m.drift || !m.catalog.verified ? `<span class="tags">${m.drift ? badge('price changed', 'warn') : ''}${m.catalog.verified ? '' : badge('placeholder price', 'warn')}</span>` : ''}</span>`,
+            },
+            { h: 'Supplier', v: (m) => esc(m.supplier) },
+            { h: 'Requests', num: true, v: (m) => nf(m.requests) },
+            { h: 'Tokens in / out', num: true, v: (m) => `${nf(m.input_tokens)} / ${nf(m.output_tokens)}` },
+            { h: 'Paid', num: true, v: (m) => nusd(m.price_nusd) },
+            { h: 'Cost', num: true, v: (m) => note(nusd(m.cost_nusd), `${nf(m.supplier_reported)} of ${nf(m.requests)} reported`) },
+            { h: 'Margin', num: true, v: (m) => marginCell(m.price_nusd, m.cost_nusd) },
+            { h: 'Catalog in / out', num: true, v: (m) => `${mtok(m.catalog.input)} / ${mtok(m.catalog.output)}` },
+            {
+              h: 'Measured in / out',
+              num: true,
+              v: (m) => (m.derived ? note(`${mtok(m.derived.input)} / ${mtok(m.derived.output)}`, `${nf(m.derived.samples)} ${m.derived.samples === 1 ? 'sample' : 'samples'}`) : '<span class="muted">not enough data</span>'),
+            },
+          ],
+          r.models,
+        )}
+      </section>`;
+  view.innerHTML = `
+    ${head('Costs', `What customers paid against what suppliers charged, last ${nf(costDays)} days.`, seg('cdays', [[7, '7 days'], [30, '30 days'], [90, '90 days']], costDays))}
+    <div class="dash">${body}</div>`;
+  onSeg('cdays', (k) => {
+    if (Number(k) !== costDays) {
+      costDays = Number(k);
+      route(true);
+    }
+  });
+  $('#csug')?.addEventListener('click', () => copy(JSON.stringify(suggest, null, 2), `Copied ${suggest.length} suggested ${suggest.length === 1 ? 'price' : 'prices'}`));
 }
 
 // ------------------------------------------------------------------ export
@@ -706,22 +879,22 @@ async function renderFundings() {
     ${head(
       'Fundings',
       `Quote checks: ${nf(q.used)} of ${nf(q.budget)} this minute${q.cooldown_until ? ' · paused by the mint until ' + esc(new Date(q.cooldown_until).toLocaleTimeString()) : ''}. A re-check uses the same shared budget as the poller.`,
-      `<div class="seg" id="ff">${[['attention', 'Needs attention'], ['all', 'All']].map(([k, l]) => `<button type="button" data-k="${k}" class="${k === fundFilter ? 'on' : ''}">${l}</button>`).join('')}</div>`,
+      `<div class="seg" id="ff">${[['attention', 'Needs attention'], ['open', 'Open'], ['all', 'All']].map(([k, l]) => `<button type="button" data-k="${k}" class="${k === fundFilter ? 'on' : ''}">${l}</button>`).join('')}</div>`,
     )}
     <section class="card">${table(
       [
         { h: 'Age', v: (f) => when(f.created_at) },
         { h: 'Method', v: (f) => esc(f.method) + (f.foreign_mint ? `<div class="muted small">${esc(f.foreign_mint)}</div>` : '') },
-        { h: 'Amount', num: true, v: (f) => (f.amount != null ? units(f.amount, f.unit) : '–') },
+        { h: 'Amount', num: true, v: (f) => (f.amount != null ? units(f.amount, f.unit) : f.paid != null ? units(f.paid, f.unit) : 'any') },
         { h: 'Credited', num: true, v: (f) => units(f.credited, f.unit) },
-        { h: 'State', v: (f) => badge(f.state, stateKind(f.state)) },
+        { h: 'Status', wrap: true, v: (f) => badge(f.status, f.attention ? 'err' : f.status === 'credited' ? 'ok' : stateKind(f.state)) + (f.detail ? `<div class="muted small">${esc(f.detail)}</div>` : '') },
         { h: 'Balance', v: (f) => short(f.account_id, 12) },
         { h: 'Error', wrap: true, v: (f) => (f.error ? `<span class="err small">${esc(f.error)}</span>` : '') },
         { h: 'Next check', v: (f) => (f.open ? when(f.next_check) : '–') },
         { h: '', v: (f) => (f.open ? `<button class="btn small" data-recheck="${esc(f.id)}">Re-check now</button>` : '') },
       ],
       r.data,
-      fundFilter === 'all' ? 'No fundings yet.' : 'Nothing pending, failed or expired.',
+      fundFilter === 'all' ? 'No fundings yet.' : fundFilter === 'open' ? 'No open fundings.' : 'Nothing needs attention.',
     )}</section>`;
   $('#ff').addEventListener('click', (e) => {
     const k = e.target.closest('button')?.dataset.k;
@@ -842,6 +1015,7 @@ const RENDER = {
   balances: renderBalances,
   fundings: renderFundings,
   requests: renderRequests,
+  costs: renderCosts,
   settings: renderSettings,
 };
 

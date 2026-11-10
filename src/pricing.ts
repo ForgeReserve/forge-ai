@@ -11,6 +11,8 @@ export const MSUB_PER_UNIT = 1000;
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /** What the supplier says this request cost us, in USD, when it reports it. */
+  costUsd?: number;
 }
 
 /** Sale price per token in nano-USD, after markup. Rounded up so we never undercharge. */

@@ -194,6 +194,9 @@ CREATE TABLE IF NOT EXISTS requests (
   change_units INTEGER,
   latency_ms INTEGER,
   lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
+  price_nusd INTEGER,               -- what the request was priced at, nano-USD (before unit conversion)
+  supplier_cost_nusd INTEGER,       -- what it cost us, nano-USD
+  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost)
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS requests_created ON requests(created_at);
@@ -207,6 +210,9 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['fundings', 'f_lock_pubkey', 'TEXT'],
   ['requests', 'lock_pubkey', 'TEXT'],
   ['accounts', 'frozen_at', 'INTEGER'],
+  ['requests', 'price_nusd', 'INTEGER'],
+  ['requests', 'supplier_cost_nusd', 'INTEGER'],
+  ['requests', 'cost_source', 'TEXT'],
 ];
 
 export type DB = DatabaseSync;

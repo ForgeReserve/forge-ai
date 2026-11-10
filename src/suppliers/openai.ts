@@ -62,6 +62,11 @@ export class OpenAISupplier implements Supplier {
     return !!this.apiKey;
   }
 
+  /** Supplier-specific request headers. */
+  protected extraHeaders(): Record<string, string> {
+    return {};
+  }
+
   async chat(call: ChatCall): Promise<Response> {
     if (!this.apiKey) throw new UpstreamError(`supplier ${this.id} has no API key configured`, 503);
     const url = `${this.config.baseUrl!.replace(/\/$/, '')}/chat/completions`;
@@ -73,6 +78,7 @@ export class OpenAISupplier implements Supplier {
           'content-type': 'application/json',
           accept: call.stream ? 'text/event-stream' : 'application/json',
           authorization: `Bearer ${this.apiKey}`,
+          ...this.extraHeaders(),
         },
         body: JSON.stringify(call.body),
       },

@@ -22,7 +22,8 @@ import type { Deps } from './app.ts';
 import { BetaWaitlist } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { PaymentError } from './cashu/wallet.ts';
-import type { Unit } from './config.ts';
+import type { Config, Unit } from './config.ts';
+import type { DB } from './db.ts';
 import { LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
@@ -561,15 +562,39 @@ export function createAdminRouter(d: Deps): Hono {
     foreign_mint: f.f_mint,
     foreign_amount: f.f_amount,
     open: (OPEN_FUNDING_STATES as readonly string[]).includes(f.state),
+    ...fundingStatus(f),
   });
+
+  /** A plain reading of a funding for the admin page, and whether it needs the operator. */
+  const fundingStatus = (f: any): { status: string; detail: string; attention: boolean; paid: number | null } => {
+    let obs: any = {};
+    try {
+      obs = f.observed ? JSON.parse(f.observed) : {};
+    } catch {
+      /* ignore */
+    }
+    const paid = f.method === 'onchain' && Number.isFinite(Number(obs.amount_paid)) ? Number(obs.amount_paid) : null;
+    const stuck = ['receiving', 'melting', 'minting'].includes(f.state) && Date.now() - f.updated_at > 10 * 60_000;
+    const attention = f.state === 'failed' || stuck || (!!f.error && (OPEN_FUNDING_STATES as readonly string[]).includes(f.state));
+    if (f.state === 'pending' && f.method === 'onchain')
+      return f.credited > 0
+        ? { status: 'credited', detail: 'Credited; the address stays watched for more deposits', attention, paid }
+        : { status: 'awaiting deposit', detail: 'No deposit seen yet', attention, paid };
+    if (f.state === 'pending') return { status: 'awaiting payment', detail: obs.state ? `Mint says ${obs.state}` : 'Invoice not paid yet', attention, paid };
+    if (f.state === 'expired') return { status: 'expired', detail: 'Never paid; nothing to do', attention, paid };
+    if (f.state === 'refunded') return { status: 'refunded', detail: 'Returned to the customer as eCash', attention, paid };
+    return { status: f.state, detail: '', attention, paid };
+  };
 
   r.get('/admin/api/fundings', (c) => {
     const which = c.req.query('state') ?? 'attention';
-    const states = which === 'all' ? null : which === 'attention' ? [...OPEN_FUNDING_STATES, 'failed', 'expired'] : which.split(',');
+    const states = which === 'all' ? null : which === 'attention' ? [...OPEN_FUNDING_STATES, 'failed'] : which === 'open' ? [...OPEN_FUNDING_STATES] : which.split(',');
     const rows = states
       ? db.prepare(`SELECT * FROM fundings WHERE state IN (${states.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 500`).all(...states)
       : db.prepare('SELECT * FROM fundings ORDER BY created_at DESC LIMIT 500').all();
-    return json(c, 200, { data: rows.map(fundingRow), quote_checks: funding.quoteCheckStatus() });
+    let data = rows.map(fundingRow);
+    if (which === 'attention') data = data.filter((f) => f.attention);
+    return json(c, 200, { data, quote_checks: funding.quoteCheckStatus() });
   });
 
   r.post('/admin/api/fundings/:id/recheck', async (c) => {
@@ -589,6 +614,9 @@ export function createAdminRouter(d: Deps): Hono {
     audit('funding_recheck', { funding_id: id, before: f.state, after: after?.state });
     return json(c, 200, { data: after ? fundingRow(after) : null, quote_checks: funding.quoteCheckStatus() });
   });
+
+  // -------------------------------------------------------------- supplier costs and margin
+  r.get('/admin/api/costs', (c) => json(c, 200, supplierCosts(db, config, Math.min(365, Math.max(1, Number(c.req.query('days')) || 30)))));
 
   // -------------------------------------------------------------- requests log (no content is ever stored)
   r.get('/admin/api/requests', (c) => {
@@ -653,4 +681,83 @@ export function createAdminRouter(d: Deps): Hono {
   r.all('/admin/api/*', (c) => fail(c, 404, 'not_found', 'no such admin endpoint'));
 
   return r;
+}
+
+export interface ModelCost {
+  model: string;
+  name: string | null;
+  supplier: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  /** Customer price, nano-USD. */
+  price_nusd: number;
+  /** Our cost, nano-USD; supplier_reported of the requests used the supplier's own figure. */
+  cost_nusd: number;
+  supplier_reported: number;
+  /** Our catalog cost per million tokens (before markup). */
+  catalog: { input: number; output: number; verified: boolean };
+  /** Per-million prices fitted to the supplier's reported costs, when there is enough data. */
+  derived: { input: number; output: number; samples: number } | null;
+  /** Fitted price differs from the catalog by more than 10% (either way). */
+  drift: boolean;
+}
+
+/**
+ * Supplier cost per model over a window: what customers paid (price_nusd), what it cost us (the
+ * supplier's reported cost, else usage at catalog cost), and per-million prices fitted to the reported
+ * costs by least squares (cost = a*input + b*output), to replace placeholder catalog prices.
+ */
+export function supplierCosts(db: DB, config: Config, days: number) {
+  const since = Date.now() - days * 86_400_000;
+  const rows = db
+    .prepare(
+      `SELECT model, supplier, input_tokens AS i, output_tokens AS o, price_nusd AS p, supplier_cost_nusd AS c, cost_source AS s
+       FROM requests WHERE created_at >= ? AND status = 'settled' AND price_nusd IS NOT NULL`,
+    )
+    .all(since) as Array<{ model: string; supplier: string; i: number | null; o: number | null; p: number; c: number | null; s: string | null }>;
+  const by = new Map<string, typeof rows>();
+  for (const x of rows) by.set(x.model, [...(by.get(x.model) ?? []), x]);
+  const models: ModelCost[] = [];
+  for (const [id, rs] of by) {
+    const m = config.catalog.models.find((x: { id: string }) => x.id === id);
+    const rep = rs.filter((x) => x.s === 'supplier' && x.c != null && x.i != null && x.o != null);
+    let derived: ModelCost['derived'] = null;
+    if (rep.length >= 2) {
+      let ii = 0, io = 0, oo = 0, ic = 0, oc = 0;
+      for (const x of rep) {
+        ii += x.i! * x.i!; io += x.i! * x.o!; oo += x.o! * x.o!; ic += x.i! * x.c!; oc += x.o! * x.c!;
+      }
+      const det = ii * oo - io * io;
+      // Needs requests with different input/output mixes to separate the two prices.
+      if (det > 1e-9 * ii * oo) {
+        const a = (ic * oo - oc * io) / det;
+        const b = (oc * ii - ic * io) / det;
+        if (a >= 0 && b >= 0) derived = { input: a / 1000, output: b / 1000, samples: rep.length };
+      }
+    }
+    const catalog = { input: m?.input_usd_per_mtok ?? 0, output: m?.output_usd_per_mtok ?? 0, verified: !!m?.price_verified };
+    const off = (d: number, c: number) => (c === 0 ? d > 0 : Math.abs(d - c) / c > 0.1);
+    models.push({
+      model: id,
+      name: m?.name ?? null,
+      supplier: rs[0]!.supplier,
+      requests: rs.length,
+      input_tokens: rs.reduce((t, x) => t + (x.i ?? 0), 0),
+      output_tokens: rs.reduce((t, x) => t + (x.o ?? 0), 0),
+      price_nusd: rs.reduce((t, x) => t + x.p, 0),
+      cost_nusd: rs.reduce((t, x) => t + (x.c ?? 0), 0),
+      supplier_reported: rep.length,
+      catalog,
+      derived,
+      drift: !!derived && (off(derived.input, catalog.input) || off(derived.output, catalog.output)),
+    });
+  }
+  models.sort((a, b) => b.price_nusd - a.price_nusd);
+  const suppliers = [...new Set(models.map((x) => x.supplier))].map((id) => {
+    const ms = models.filter((x) => x.supplier === id);
+    return { supplier: id, requests: ms.reduce((t, x) => t + x.requests, 0), price_nusd: ms.reduce((t, x) => t + x.price_nusd, 0), cost_nusd: ms.reduce((t, x) => t + x.cost_nusd, 0) };
+  });
+  const total = { requests: rows.length, price_nusd: models.reduce((t, x) => t + x.price_nusd, 0), cost_nusd: models.reduce((t, x) => t + x.cost_nusd, 0) };
+  return { days, since, markup: config.env.FORGE_MARKUP, total, suppliers, models };
 }

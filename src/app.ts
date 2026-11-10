@@ -15,7 +15,8 @@ import { type DB, now, tx } from './db.ts';
 import type { FundingService } from './funding.ts';
 import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
-import { FrameCounter, SseMeter, usageFromJson } from './meter.ts';
+import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
+import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
 import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
@@ -583,6 +584,18 @@ export function createApp(d: Deps) {
           else if (usage) nano = costNanoUsd(model, usage, markup);
         }
         const actualMsub = nanoUsdToMsub(nano, unit, rate);
+        // Our cost: the supplier's own figure when it sends one, else the usage at our catalog cost (no markup).
+        let costNusd: number | null = null;
+        let costSource: string | null = null;
+        if (usage && (status === 'ok' || status === 'partial')) {
+          if (usage.costUsd !== undefined) {
+            costNusd = Math.round(usage.costUsd * 1e9);
+            costSource = 'supplier';
+          } else if (!alwaysFlat && source !== 'flat') {
+            costNusd = Math.round(costNanoUsd(model, usage, 1));
+            costSource = 'catalog';
+          }
+        }
         const res: SettleResult = { chargedMsub: 0 };
         if (pay.kind === 'balance') {
           const s = ledger.settle(pay.reservationId, actualMsub, requestId);
@@ -600,7 +613,7 @@ export function createApp(d: Deps) {
           }
         }
         db.prepare(
-          'UPDATE requests SET status = ?, input_tokens = ?, output_tokens = ?, usage_source = ?, charged_msub = ?, change_units = ?, latency_ms = ? WHERE id = ?',
+          'UPDATE requests SET status = ?, input_tokens = ?, output_tokens = ?, usage_source = ?, charged_msub = ?, change_units = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?',
         ).run(
           status === 'ok' || status === 'partial' ? 'settled' : 'failed',
           usage?.inputTokens ?? null,
@@ -609,6 +622,9 @@ export function createApp(d: Deps) {
           res.chargedMsub,
           res.changeUnits ?? null,
           Date.now() - t0,
+          Math.round(nano),
+          costNusd,
+          costSource,
           requestId,
         );
         if (res.changeId) {
@@ -630,6 +646,8 @@ export function createApp(d: Deps) {
           input_tokens: usage?.inputTokens,
           output_tokens: usage?.outputTokens,
           usage_source: source,
+          cost_nusd: costNusd,
+          cost_source: costSource,
           reserved_msub: reserveMsub,
           charged_msub: res.chargedMsub,
           change_units: res.changeUnits,
@@ -751,6 +769,8 @@ export function createApp(d: Deps) {
       } catch {
         /* ignore */
       }
+      const headerCost = costFromHeaders(res.headers) ?? parseUsageMetrics(res.headers.get(TINFOIL_USAGE_HEADER) ?? undefined)?.costUsd;
+      if (usage && usage.costUsd === undefined && headerCost !== undefined) usage.costUsd = headerCost;
       if (!usage) {
         source = flat ? 'flat' : 'estimate';
         usage = { inputTokens: estimateInput(), outputTokens: maxOut };

@@ -3,7 +3,7 @@
  * It keeps only counters (usage numbers, delta counts and lengths); content is never stored or logged.
  */
 export class SseMeter {
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: { inputTokens: number; outputTokens: number; costUsd?: number };
   deltaChunks = 0;
   deltaChars = 0;
   private buf = '';
@@ -82,13 +82,23 @@ export class SseMeter {
   }
 }
 
-export function usageFromJson(o: any): { inputTokens: number; outputTokens: number } | undefined {
+export function usageFromJson(o: any): { inputTokens: number; outputTokens: number; costUsd?: number } | undefined {
   const u = o?.usage;
   if (!u || typeof u !== 'object') return undefined;
   const inp = Number(u.prompt_tokens ?? u.input_tokens);
   const out = Number(u.completion_tokens ?? u.output_tokens);
   if (!Number.isFinite(inp) || !Number.isFinite(out)) return undefined;
-  return { inputTokens: inp, outputTokens: out };
+  // LiteLLM (Token Factory) adds the request's cost in USD to the usage object.
+  const cost = u.cost == null ? NaN : Number(u.cost);
+  return { inputTokens: inp, outputTokens: out, ...(Number.isFinite(cost) && cost >= 0 ? { costUsd: cost } : {}) };
+}
+
+/** LiteLLM's per-request cost header (USD), sent on non-streaming responses. */
+export function costFromHeaders(h: Headers): number | undefined {
+  const v = h.get('x-litellm-response-cost');
+  if (v == null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
 /**
