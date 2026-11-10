@@ -3,9 +3,19 @@
 // the request being made. The balance key and settings live in localStorage.
 import { renderMarkdown, enhance } from './js/markdown.js';
 import { chats, newId } from './js/store.js';
-import { $, el, icon, store, load, toast, announce, copyText, confirmDialog, fmtBalance, fmtCost, fmtInt, api, errMsg } from './js/ui.js';
-import { initWallet, openWallet, syncWalletBalance } from './js/wallet.js';
-import { lockKey, parseLockKey, saveLockKey, shortKey } from './js/lockkey.js';
+import { $, el, icon, store, load, toast, announce, copyText, confirmDialog, fmtBalance, fmtCost, fmtInt, api } from './js/ui.js';
+import { anim, closeSheet, crossfade, DUR, EASE, isPhone, openSheet, reduced, rollText, viewTransition } from './js/motion.js';
+
+// The wallet (funding, QR codes, refunds) loads on first use, keeping the first page load small.
+let W = null;
+async function wallet() {
+  if (!W) {
+    W = await import('./js/wallet.js');
+    W.initWallet(S, { setKey, refresh: refreshBalance });
+  }
+  return W;
+}
+const openWallet = (which) => wallet().then((w) => w.openWallet(which));
 
 const KEY_STORE = 'forge.balanceKey';
 const SETTINGS_STORE = 'forge.settings';
@@ -47,8 +57,10 @@ function setKey(key) {
   renderNotice();
 }
 
+let booted = false;
 async function refreshBalance() {
   if (!S.key) return renderBalance();
+  const before = S.balanceMsub;
   try {
     const r = await api('/v1/wallet', { key: S.key });
     if (r.res.ok) {
@@ -66,27 +78,34 @@ async function refreshBalance() {
   } catch {
     /* offline */
   }
-  renderBalance();
+  const celebrate = booted && S.balanceMsub != null && S.balanceMsub > (before ?? 0);
+  renderBalance({ celebrate });
   renderNotice();
-  syncWalletBalance();
+  W?.syncWalletBalance({ celebrate });
 }
 
-function renderBalance() {
+function renderBalance({ celebrate = false } = {}) {
   const chip = $('balanceChip');
   const text = $('balanceText');
   chip.classList.remove('is-empty', 'is-low');
+  const plain = (t) => {
+    delete text.dataset.roll;
+    text.removeAttribute('aria-label');
+    text.textContent = t;
+  };
   if (!S.key) {
-    text.textContent = 'Add funds';
+    plain('Add funds');
     chip.classList.add('is-empty');
   } else if (S.balanceMsub == null) {
-    text.textContent = 'Wallet';
-    chip.classList.add('is-empty');
+    plain('');
+    text.append(el('span', { class: 'skel', style: 'width:4em', text: 'Balance' }));
   } else {
-    text.textContent = fmtBalance(S.balanceMsub, S.unit);
+    rollText(text, fmtBalance(S.balanceMsub, S.unit), { celebrate });
     const low = S.unit === 'usd' ? 10_000 : 100_000;
     if (S.balanceMsub < low) chip.classList.add('is-low');
   }
-  chip.setAttribute('aria-label', S.key && S.balanceMsub != null ? `Balance ${text.textContent}. Open wallet` : 'Open wallet to add funds');
+  chip.toggleAttribute('data-glow', true);
+  chip.setAttribute('aria-label', S.key && S.balanceMsub != null ? `Balance ${fmtBalance(S.balanceMsub, S.unit)}. Open wallet` : 'Open wallet to add funds');
   updatePriceHints();
 }
 
@@ -119,13 +138,41 @@ function priceText(m) {
 const speedLabel = { fast: 'Fast', balanced: 'Balanced', slow: 'Slow' };
 const isEncrypted = (m) => m?.tier === 'enclave' && m?.encrypted_passthrough && settings.encrypt;
 
+/** Inline padlock (not a <use>, so the shackle can animate). Open for standard models. */
+function lockSvg(closed = true) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const s = document.createElementNS(ns, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('class', 'lock');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = closed ? '<rect x="4" y="11" width="16" height="10" rx="2"/><path class="shackle" d="M8 11V7a4 4 0 0 1 8 0v4"/>' : '<rect x="4" y="11" width="16" height="10" rx="2"/><path class="shackle" d="M8 11V7a4 4 0 0 1 7.5-2"/>';
+  return s;
+}
+const tierOf = (m) => (m?.tier === 'enclave' ? 'enclave' : 'standard');
+
+let shownModel = null;
 function renderModel() {
   const m = currentModel();
   $('modelName').textContent = m ? (m.name ?? m.id) : S.models.length ? 'Choose a model' : 'No models';
   const tier = $('modelTier');
   tier.hidden = !m;
+  const changed = m && shownModel && shownModel !== m.id;
+  const tierChanged = changed && tierOf(S.models.find((x) => x.id === shownModel)) !== tierOf(m);
   if (m) {
-    tier.replaceChildren(...(m.tier === 'enclave' ? [icon('lock'), 'Enclave'] : ['Standard']));
+    const t = tierOf(m);
+    tier.dataset.tier = t;
+    $('modelBtn').dataset.tier = t;
+    tier.title = t === 'enclave' ? 'Private: runs in a verified enclave' : 'Standard: the provider can read prompts';
+    const lock = lockSvg(t === 'enclave');
+    tier.replaceChildren(lock, el('span', { class: 't-label', text: t === 'enclave' ? 'Private' : 'Standard' }));
+    if (changed) {
+      const b = $('modelBtn');
+      b.classList.remove('sweep');
+      void b.offsetWidth;
+      b.classList.add('sweep');
+      if (t === 'enclave' && tierChanged && !reduced()) lock.classList.add('engage');
+    }
+    shownModel = m.id;
   }
   // Composer controls that depend on the model.
   $('attachBtn').hidden = !m?.capabilities?.vision;
@@ -144,13 +191,27 @@ function renderModel() {
   $('encryptChip').hidden = !(m?.tier === 'enclave' && m?.encrypted_passthrough);
   $('encrypt').checked = settings.encrypt;
   $('encryptChip').classList.toggle('on', settings.encrypt);
-  $('privacyNote').textContent = !m
-    ? ''
+  renderTierLine(m);
+}
+
+/** One short line under the composer, coloured by tier; it cross-fades when the tier changes. */
+function renderTierLine(m) {
+  const note = $('privacyNote');
+  const [kind, ico, text] = !m
+    ? ['', null, '']
     : m.tier !== 'enclave'
-      ? 'Standard model: the gateway and the model provider can read this chat. Chats are saved in this browser only.'
+      ? ['standard', 'cloud', 'Standard: the gateway and provider can read this chat.']
       : isEncrypted(m)
-        ? 'Enclave model, encrypted in this browser: only the attested enclave can read this chat.'
-        : 'Enclave model, not encrypted in the browser: the gateway can read this chat while relaying it.';
+        ? ['enclave', 'lock', 'Private: encrypted to a verified enclave.']
+        : ['open', 'unlock', 'Encryption off: the gateway can read this chat in transit.'];
+  if (note.dataset.kind === kind && note.textContent === text) return;
+  const apply = () => {
+    note.dataset.kind = kind;
+    note.dataset.tier = kind;
+    note.replaceChildren(...(ico ? [icon(ico), el('span', { text })] : []));
+  };
+  if (note.dataset.kind && note.dataset.kind !== kind) crossfade(note, apply);
+  else apply();
 }
 
 function pickEffort(efforts, want) {
@@ -168,51 +229,82 @@ function pickEffort(efforts, want) {
 }
 
 function updatePriceHints() {
-  if (!$('modelMenu').hidden) renderMenu();
+  if ($('modelMenu').open) renderMenu();
 }
 
 // model menu (a listbox popover)
 let menuFocus = -1;
 function openMenu() {
   const menu = $('modelMenu');
+  if (menu.open) return;
   renderMenu();
-  menu.hidden = false;
-  positionMenu();
+  // A bottom sheet on phones (modal, drag to dismiss); a dropdown under the button elsewhere.
+  if (isPhone()) {
+    menu.style.top = menu.style.left = '';
+    openSheet(menu);
+  } else {
+    openSheet(menu, { modal: false });
+    positionMenu();
+  }
   $('modelBtn').setAttribute('aria-expanded', 'true');
   const opts = [...menu.querySelectorAll('.opt')];
   menuFocus = Math.max(0, opts.findIndex((o) => o.getAttribute('aria-selected') === 'true'));
   focusOpt();
-  menu.focus();
+  $('modelList').focus({ preventScroll: true });
 }
 function closeMenu(refocus = true) {
-  $('modelMenu').hidden = true;
+  const menu = $('modelMenu');
   $('modelBtn').setAttribute('aria-expanded', 'false');
+  if (menu.open) closeSheet(menu);
   if (refocus) $('modelBtn').focus();
 }
 function positionMenu() {
-  const r = $('modelBtn').getBoundingClientRect();
   const menu = $('modelMenu');
+  if (!menu.open || menu.matches(':modal')) return;
+  const r = $('modelBtn').getBoundingClientRect();
   menu.style.top = `${r.bottom + 6}px`;
   const w = menu.offsetWidth;
   menu.style.left = `${Math.max(16, Math.min(r.left, window.innerWidth - w - 16))}px`;
 }
+const TIERS = {
+  enclave: { title: 'Private (enclave)', ico: 'shield', text: 'Encrypted from your device to a verified secure enclave. Nobody else can read it, including Forge and Tinfoil.' },
+  standard: { title: 'Standard', ico: 'cloud', text: 'The gateway and the model provider can read these chats.' },
+  uncensored: { title: 'Uncensored', ico: 'cloud', text: 'Standard privacy. Tuned to refuse less.' },
+};
+function shortPrice(m) {
+  const sat = (S.unit ?? 'usd') === 'sat' && m.pricing.sat_per_mtok;
+  const p = sat ? m.pricing.sat_per_mtok : m.pricing.usd_per_mtok;
+  const f = (n) => (sat ? fmtInt(Math.round(n)) : `$${n < 1 ? n.toFixed(2) : n.toFixed(n % 1 ? 2 : 0)}`);
+  return `${f(p.input)} in · ${f(p.output)} out${sat ? ' sat' : ''} per 1M`;
+}
 function renderMenu() {
-  const menu = $('modelMenu');
+  const list = $('modelList');
   const cur = currentModel();
-  const group = (title, sub, models) => {
+  const group = (key, models) => {
     if (!models.length) return [];
-    return [
-      el('h4', { role: 'presentation' }, title === 'Enclave' ? icon('lock') : null, title, sub ? el('small', { text: sub }) : null),
-      ...models.map((m) => {
-        const tags = [];
-        if (m.capabilities?.vision) tags.push(el('span', { class: 'tag', text: 'Images' }));
-        if (m.capabilities?.reasoning) tags.push(el('span', { class: 'tag', text: 'Reasoning' }));
-        if (m.speed) tags.push(el('span', { class: 'tag', text: speedLabel[m.speed] }));
-        const o = el('div', { class: 'opt', role: 'option', id: `opt-${m.id.replace(/[^\w-]/g, '_')}`, 'aria-selected': String(m.id === cur?.id), 'data-id': m.id }, el('span', { class: 'o-name', text: m.name ?? m.id }), el('span', { class: 'o-tags' }, ...tags), el('span', { class: 'o-sub', text: priceText(m) + (m.pricing?.verified === false ? ' (provisional price)' : '') }));
-        o.addEventListener('click', () => chooseModel(m.id));
-        return o;
-      }),
-    ];
+    const T = TIERS[key];
+    const head = el('div', { class: 'group-head', role: 'presentation' }, el('span', { class: 'g-ico' }, icon(T.ico)), el('h3', { text: T.title, id: `g-${key}` }), el('p', { text: T.text }));
+    const box = el('div', { class: 'menu-group', role: 'group', 'aria-labelledby': `g-${key}`, 'data-tier': key }, head);
+    for (const m of models) {
+      const enc = m.tier === 'enclave';
+      const tags = [
+        el('span', { class: 'tag ' + (enc ? 't-enc' : 't-std') }, lockSvg(enc), enc ? 'Private' : 'Standard'),
+        m.speed ? el('span', { class: 'tag' }, icon('gauge'), speedLabel[m.speed]) : null,
+        m.capabilities?.vision ? el('span', { class: 'tag', text: 'Images' }) : null,
+        m.capabilities?.reasoning ? el('span', { class: 'tag', text: 'Reasoning' }) : null,
+        el('span', { class: 'tag t-price', title: priceText(m), text: shortPrice(m) + (m.pricing?.verified === false ? ' (provisional)' : '') }),
+      ];
+      const o = el(
+        'div',
+        { class: 'opt', role: 'option', id: `opt-${m.id.replace(/[^\w-]/g, '_')}`, 'aria-selected': String(m.id === cur?.id), 'data-id': m.id, 'aria-description': `${enc ? 'Private' : 'Standard'}. ${priceText(m)}` },
+        el('span', { class: 'o-name', text: m.name ?? m.id }),
+        el('span', { class: 'o-check', 'aria-hidden': 'true' }, icon('check')),
+        el('span', { class: 'o-tags' }, ...tags),
+      );
+      o.addEventListener('click', () => chooseModel(m.id));
+      box.append(o);
+    }
+    return [box];
   };
   const vis = S.models.filter((m) => !m.uncensored);
   const unc = S.models.filter((m) => m.uncensored);
@@ -224,22 +316,22 @@ function renderMenu() {
     renderMenu();
     fillSettingsModels();
   });
-  menu.replaceChildren(
-    ...group('Enclave', 'Runs in an attested enclave', vis.filter((m) => m.tier === 'enclave')),
-    ...group('Standard', 'Provider can read prompts', vis.filter((m) => m.tier !== 'enclave')),
-    ...(settings.showUncensored ? group('Uncensored', 'Fewer refusals', unc) : []),
+  list.replaceChildren(
+    ...group('enclave', vis.filter((m) => m.tier === 'enclave')),
+    ...group('standard', vis.filter((m) => m.tier !== 'enclave')),
+    ...(settings.showUncensored ? group('uncensored', unc) : []),
     unc.length
       ? el('div', { class: 'menu-foot' }, el('label', { class: 'switch', for: 'uncToggle' }, toggle, el('span', {}, el('b', { text: 'Show uncensored models' }), 'They are tuned to refuse less and can write harmful or explicit text.')))
       : null,
   );
-  if (!S.models.length) menu.append(el('p', { class: 'hint', style: 'padding:10px', text: 'The gateway lists no models right now.' }));
+  if (!S.models.length) list.append(el('p', { class: 'hint', style: 'padding:10px', text: 'The gateway lists no models right now.' }));
 }
 function focusOpt() {
   const opts = [...$('modelMenu').querySelectorAll('.opt')];
   opts.forEach((o, i) => o.classList.toggle('focus', i === menuFocus));
   const o = opts[menuFocus];
   if (o) {
-    $('modelMenu').setAttribute('aria-activedescendant', o.id);
+    $('modelList').setAttribute('aria-activedescendant', o.id);
     o.scrollIntoView({ block: 'nearest' });
   }
 }
@@ -251,7 +343,8 @@ function chooseModel(id) {
   settings.defaultModel = id;
   saveSettings();
   closeMenu();
-  renderModel();
+  // Let the sheet start leaving, then play the switch on the top bar.
+  setTimeout(renderModel, isPhone() ? 140 : 0);
   $('setModel').value = id;
 }
 
@@ -261,11 +354,12 @@ function newChat() {
   if (gen) stop();
   chat = { id: newId('c'), title: '', model: currentModel()?.id ?? settings.defaultModel, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
   if (location.hash) history.replaceState(null, '', location.pathname);
-  renderThread();
+  if (booted) viewTransition(renderThread);
+  else renderThread();
   renderList();
   renderModel();
   closeSidebarOnMobile();
-  $('composer-input').focus();
+  if (!isMobile()) $('composer-input').focus();
 }
 
 async function openChat(id) {
@@ -273,7 +367,7 @@ async function openChat(id) {
   const c = await chats.get(id);
   if (!c) return newChat();
   chat = c;
-  renderThread();
+  viewTransition(renderThread);
   if (!list.some((x) => x.id === c.id)) await refreshList();
   else renderList();
   renderModel();
@@ -375,9 +469,12 @@ function chatItem(c) {
 
 // ------------------------------------------------------------------ thread rendering
 
+let enterNext = false;
 function renderThread() {
   const box = $('messages');
   box.replaceChildren(...(chat?.messages ?? []).map((m, i) => msgEl(m, i)));
+  if (enterNext) box.lastElementChild?.classList.add('enter');
+  enterNext = false;
   enhance(box);
   $('empty').hidden = !!chat?.messages.length;
   renderNotice();
@@ -525,6 +622,7 @@ async function submit() {
   const msg = { id: newId('m'), role: 'user', content: text };
   if (attachments.length) msg.images = attachments.map((a) => a.url);
   chat.messages.push(msg);
+  enterNext = true;
   ta.value = '';
   attachments = [];
   renderAttachments();
@@ -563,6 +661,7 @@ async function generate() {
   node.querySelector('.actions').replaceChildren();
   const content = node.querySelector('.content');
   content.append(el('span', { class: 'thinking-dots', text: 'Thinking' }));
+  node.classList.add('enter');
   box.append(node);
   $('empty').hidden = true;
   markLast();
@@ -580,6 +679,9 @@ async function generate() {
   let reasoningBox = null;
   let thinkStart = 0;
   let frame = 0;
+  const fresh = []; // [start, end, time] of text that arrived recently, faded in across repaints
+  let shownLen = 0;
+  const caret = el('span', { class: 'cursor', 'aria-hidden': 'true' });
   const paint = () => {
     frame = 0;
     if (reply.reasoning && !reasoningBox) {
@@ -595,7 +697,13 @@ async function generate() {
         reasoningBox.open = false;
       }
       content.innerHTML = renderMarkdown(reply.content);
-      content.append(el('span', { class: 'cursor', 'aria-hidden': 'true' }));
+      const now = performance.now();
+      const len = content.textContent.length;
+      if (len > shownLen) fresh.push([shownLen, len, now]);
+      shownLen = len;
+      while (fresh.length && now - fresh[0][2] > 280) fresh.shift();
+      if (!reduced()) markFresh(content, fresh, now);
+      caretTarget(content).append(caret);
     } else if (reply.reasoning) {
       content.replaceChildren();
     }
@@ -691,6 +799,41 @@ async function generate() {
   announce(reply.meta.error ? `Error: ${reply.meta.error}` : reply.meta.stopped ? 'Stopped.' : 'Reply complete.');
 }
 
+/** Wraps recently arrived text in fading spans; a negative delay keeps each fade continuous across repaints. */
+function markFresh(root, ranges, now) {
+  if (!ranges.length) return;
+  const nodes = [];
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let off = 0;
+  for (let n; (n = w.nextNode()); ) {
+    nodes.push([n, off]);
+    off += n.length;
+  }
+  for (let r = ranges.length - 1; r >= 0; r--) {
+    const [s, e, t] = ranges[r];
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const [n, o] = nodes[i];
+      const a = Math.max(s, o);
+      const b = Math.min(e, o + n.length);
+      if (a >= b || /^(TABLE|THEAD|TBODY|TR|UL|OL)$/.test(n.parentNode.nodeName) || !n.data.trim()) continue;
+      let mid = n;
+      if (a > o) mid = n.splitText(a - o);
+      if (b - a < mid.length) mid.splitText(b - a);
+      const span = document.createElement('span');
+      span.className = 'fresh';
+      span.style.animationDelay = `-${Math.round(now - t)}ms`;
+      mid.replaceWith(span);
+      span.append(mid);
+    }
+  }
+}
+/** The caret sits at the end of the last paragraph or list item, not on a line of its own. */
+function caretTarget(content) {
+  let t = content.lastElementChild;
+  while (t?.lastElementChild && /^(UL|OL|LI|BLOCKQUOTE)$/.test(t.tagName)) t = t.lastElementChild;
+  return t && /^(P|LI|H[1-6])$/.test(t.tagName) ? t : content;
+}
+
 function renderActionsOnly() {
   for (const node of $('messages').querySelectorAll('.msg.assistant')) {
     const i = Number(node.dataset.i);
@@ -754,21 +897,31 @@ function stop() {
   gen?.controller.abort();
 }
 
+/** One button morphs between send and stop. */
 function setGenerating(on) {
-  $('sendBtn').hidden = on;
-  $('stopBtn').hidden = !on;
-  if (!on) updateSend();
+  const b = $('sendBtn');
+  $('composer').classList.toggle('busy', on);
+  b.setAttribute('aria-label', on ? 'Stop generating' : 'Send message');
+  b.title = on ? 'Stop (Esc)' : 'Send (Enter)';
+  if (on) b.disabled = false;
+  else updateSend();
 }
 
 // ------------------------------------------------------------------ composer
 
+/** Grows the box to fit; the composer glides to its new place (FLIP on transform, no height animation). */
 function autosize() {
   const ta = $('composer-input');
+  const form = $('composer');
+  const before = form.getBoundingClientRect().top;
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.4) + 'px';
+  const dy = before - form.getBoundingClientRect().top;
+  if (Math.abs(dy) > 2 && !reduced()) anim(form, [{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: DUR.fast + 40, easing: EASE.out });
 }
 function updateSend() {
-  $('sendBtn').disabled = !!gen || (!$('composer-input').value.trim() && !attachments.length);
+  if (gen) return;
+  $('sendBtn').disabled = !$('composer-input').value.trim() && !attachments.length;
 }
 
 async function addImages(files) {
@@ -876,9 +1029,7 @@ function openSettings() {
   fillSettingsModels();
   $('setEffort').value = settings.effort;
   $('setPrompt').value = settings.systemPrompt;
-  $('setLockKey').value = lockKey();
-  $('lockKeyMsg').textContent = lockKey() ? `Refunds are locked to ${shortKey(lockKey())}.` : 'Not set: refunds are ordinary eCash tokens.';
-  $('settingsDialog').showModal();
+  openSheet($('settingsDialog'));
 }
 
 function wireSettings() {
@@ -886,7 +1037,7 @@ function wireSettings() {
     r.addEventListener('change', () => {
       settings.theme = r.value;
       saveSettings();
-      applyTheme();
+      viewTransition(applyTheme);
     });
   }
   $('setModel').addEventListener('change', (e) => {
@@ -916,35 +1067,10 @@ function wireSettings() {
     saveSettings();
     toast('Default system prompt restored');
   });
-  const lockMsg = (text, err = false) => {
-    $('lockKeyMsg').textContent = text;
-    $('lockKeyMsg').classList.toggle('err', err);
-  };
-  $('saveLockKey').addEventListener('click', () => {
-    const v = $('setLockKey').value.trim();
-    if (!v) {
-      saveLockKey('');
-      return lockMsg('Not set: refunds are ordinary eCash tokens.');
-    }
-    try {
-      const hex = parseLockKey(v);
-      saveLockKey(hex);
-      $('setLockKey').value = hex;
-      lockMsg(`Saved. Refunds are locked to ${shortKey(hex)}.`);
-      toast('Refunds will be locked to your wallet key');
-    } catch (e) {
-      lockMsg(e.message, true);
-    }
-  });
-  $('clearLockKey').addEventListener('click', () => {
-    $('setLockKey').value = '';
-    saveLockKey('');
-    lockMsg('Not set: refunds are ordinary eCash tokens.');
-  });
   $('deleteAll').addEventListener('click', async () => {
     if (!(await confirmDialog('Delete all chats?', 'Every chat stored in this browser is removed. Your balance and key are not affected.', 'Delete all', true))) return;
     await chats.clear();
-    $('settingsDialog').close();
+    closeSheet($('settingsDialog'));
     newChat();
     await refreshList();
     toast('All chats deleted');
@@ -961,8 +1087,8 @@ const SUGGESTIONS = [
 ];
 function renderSuggestions() {
   $('suggestions').replaceChildren(
-    ...SUGGESTIONS.map(([t, sub, prompt]) =>
-      el('button', { class: 'suggestion', type: 'button', onclick: () => ((($('composer-input').value = prompt), autosize(), updateSend()), S.key ? submit() : $('composer-input').focus()) }, el('strong', { text: t }), el('span', { text: sub })),
+    ...SUGGESTIONS.map(([t, sub, prompt], i) =>
+      el('button', { class: 'suggestion', type: 'button', style: `--i:${i}`, onclick: () => ((($('composer-input').value = prompt), autosize(), updateSend()), S.key ? submit() : $('composer-input').focus()) }, el('strong', { text: t }), el('span', { text: sub })),
     ),
   );
 }
@@ -983,7 +1109,7 @@ function wire() {
     if (files.length && currentModel()?.capabilities?.vision) (e.preventDefault(), addImages(files));
   });
   const form = $('composer');
-  form.addEventListener('submit', (e) => (e.preventDefault(), submit()));
+  form.addEventListener('submit', (e) => (e.preventDefault(), gen ? stop() : submit()));
   form.addEventListener('dragover', (e) => {
     if (currentModel()?.capabilities?.vision && [...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file')) (e.preventDefault(), form.classList.add('drag'));
   });
@@ -992,7 +1118,6 @@ function wire() {
     form.classList.remove('drag');
     if (e.dataTransfer?.files?.length) (e.preventDefault(), addImages(e.dataTransfer.files));
   });
-  $('stopBtn').addEventListener('click', stop);
   $('attachBtn').addEventListener('click', () => $('fileInput').click());
   $('fileInput').addEventListener('change', (e) => {
     addImages(e.target.files);
@@ -1005,7 +1130,8 @@ function wire() {
     renderModel();
   });
 
-  $('modelBtn').addEventListener('click', () => ($('modelMenu').hidden ? openMenu() : closeMenu()));
+  $('modelBtn').addEventListener('click', () => (!$('modelMenu').open ? openMenu() : closeMenu()));
+  $('modelMenu').addEventListener('close', () => $('modelBtn').setAttribute('aria-expanded', 'false'));
   $('modelMenu').addEventListener('keydown', (e) => {
     const opts = [...$('modelMenu').querySelectorAll('.opt')];
     if (e.key === 'ArrowDown') (e.preventDefault(), (menuFocus = Math.min(opts.length - 1, menuFocus + 1)), focusOpt());
@@ -1020,16 +1146,21 @@ function wire() {
     else if (e.key === 'Tab') closeMenu(false);
   });
   document.addEventListener('mousedown', (e) => {
-    if (!$('modelMenu').hidden && !$('modelMenu').contains(e.target) && !$('modelBtn').contains(e.target)) closeMenu(false);
+    if ($('modelMenu').open && !$('modelMenu').matches(':modal') && !$('modelMenu').contains(e.target) && !$('modelBtn').contains(e.target)) closeMenu(false);
   });
   window.addEventListener('resize', () => {
-    if (!$('modelMenu').hidden) positionMenu();
+    positionMenu();
     $('scrim').hidden = !(sidebarOpen() && isMobile());
   });
 
   $('balanceChip').addEventListener('click', () => openWallet());
+  for (const ev of ['pointerenter', 'touchstart']) $('balanceChip').addEventListener(ev, () => wallet(), { once: true, passive: true });
   document.addEventListener('click', (e) => {
-    if (e.target.closest?.('[data-open-wallet]')) openWallet();
+    const ow = e.target.closest?.('[data-open-wallet]');
+    if (ow) {
+      if ($('settingsDialog').open) closeSheet($('settingsDialog'));
+      openWallet(ow.dataset.openWallet || undefined);
+    }
     const cc = e.target.closest?.('.copy-code');
     if (cc) {
       const code = cc.closest('.code')?.querySelector('code')?.textContent ?? '';
@@ -1048,11 +1179,8 @@ function wire() {
     if (e.key === 'Escape') (($('search').value = ''), renderList(), $('composer-input').focus());
   });
   $('openSettings').addEventListener('click', openSettings);
-  $('openShortcuts').addEventListener('click', () => $('shortcutsDialog').showModal());
-  for (const d of document.querySelectorAll('dialog.modal')) {
-    d.querySelector('[data-close]')?.addEventListener('click', () => d.close());
-    d.addEventListener('click', (e) => e.target === d && d.close());
-  }
+  $('openShortcuts').addEventListener('click', () => openSheet($('shortcutsDialog')));
+  $('confirmDialog').addEventListener('click', (e) => e.target === $('confirmDialog') && $('confirmDialog').close());
   $('thread').addEventListener('scroll', onScroll, { passive: true });
   $('jump').addEventListener('click', () => (scrollToBottom(true), onScroll()));
   window.addEventListener('hashchange', () => {
@@ -1080,7 +1208,7 @@ function wire() {
       e.preventDefault();
       setSidebar(true, false);
       $('search').focus();
-    } else if (mod && k === '/') (e.preventDefault(), $('shortcutsDialog').showModal());
+    } else if (mod && k === '/') (e.preventDefault(), openSheet($('shortcutsDialog')));
     else if (e.key === '/' && !mod && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) && !document.querySelector('dialog[open]')) {
       e.preventDefault();
       $('composer-input').focus();
@@ -1089,16 +1217,33 @@ function wire() {
 }
 const isMobileKeyboard = () => window.matchMedia('(pointer: coarse)').matches && isMobile();
 
+/**
+ * Keeps the app inside the visible area when an on-screen keyboard opens. Android follows the
+ * interactive-widget=resizes-content viewport; iOS Safari ignores it and only shrinks the visual
+ * viewport, so the app takes the visual viewport's height and offset. Pinch zoom is left alone.
+ */
+function fitViewport() {
+  const vv = window.visualViewport;
+  const r = document.documentElement.style;
+  if (!vv || vv.scale > 1.01) {
+    r.removeProperty('--app-h');
+    r.removeProperty('--app-top');
+    return;
+  }
+  r.setProperty('--app-h', `${Math.round(vv.height)}px`);
+  r.setProperty('--app-top', `${Math.max(0, Math.round(vv.pageTop ?? vv.offsetTop))}px`);
+  if (document.activeElement?.id === 'composer-input' && stick) scrollToBottom();
+}
+window.visualViewport?.addEventListener('resize', fitViewport);
+window.visualViewport?.addEventListener('scroll', fitViewport);
+
 // ------------------------------------------------------------------ start
 
 applyTheme();
+fitViewport();
 wire();
 wireSettings();
 renderSuggestions();
-initWallet(S, {
-  setKey,
-  refresh: refreshBalance,
-});
 S.key = load(KEY_STORE);
 setSidebar(isMobile() ? false : settings.sidebar !== false, false);
 renderBalance();
@@ -1106,4 +1251,5 @@ await Promise.all([loadModels(), refreshBalance(), refreshList()]);
 const initial = /^#\/c\/(.+)$/.exec(location.hash)?.[1];
 if (initial) await openChat(initial);
 else newChat();
+booted = true;
 if (!isMobile()) $('composer-input').focus();
