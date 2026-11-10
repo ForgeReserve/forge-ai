@@ -526,8 +526,11 @@ export class FundingService {
       }
     } catch (e) {
       const r = this.get(id)!;
-      log.warn('fund_step_failed', { id, state: r.state, err: errText(e) });
-      this.set(id, { error: errText(e), next_check: now() + 15_000 });
+      const err = errText(e);
+      // The mint is rate limiting this gateway: pause every quote check, not just this one.
+      if (/\b429\b|too many requests/i.test(err)) this.mintCooldownUntil = now() + 60_000;
+      log.warn('fund_step_failed', { id, state: r.state, err });
+      this.set(id, { error: err, next_check: Math.max(now() + 15_000, this.mintCooldownUntil) });
     } finally {
       this.inflight.delete(id);
     }
@@ -570,11 +573,31 @@ export class FundingService {
   private nextPendingCheck(row: FundingRow): number {
     if (row.method === 'onchain') return now() + 60_000;
     const age = now() - row.created_at;
-    return now() + (age < 600_000 ? 3000 : 30_000);
+    // Quick while someone is likely watching the invoice, then rarely: every check costs the
+    // gateway's shared per-IP allowance at the mint.
+    return now() + (age < 120_000 ? 5000 : age < 600_000 ? 15_000 : age < 3_600_000 ? 60_000 : 300_000);
+  }
+
+  /** Mint quote checks share the gateway's single IP at the mint (Nutshell allows 20/min per IP). */
+  private quoteChecks: number[] = [];
+  private mintCooldownUntil = 0;
+
+  /** Whether a quote check may go to the mint now; records it when it may. */
+  private takeQuoteCheck(): boolean {
+    const t = now();
+    if (t < this.mintCooldownUntil) return false;
+    this.quoteChecks = this.quoteChecks.filter((x) => t - x < 60_000);
+    if (this.quoteChecks.length >= this.env.FORGE_MINT_QUOTE_CHECKS_PER_MIN) return false;
+    this.quoteChecks.push(t);
+    return true;
   }
 
   /** pending: ask the Forge mint whether the quote is paid; mint when it is. */
   private async checkQuote(row: FundingRow): Promise<void> {
+    if (!this.takeQuoteCheck()) {
+      this.set(row.id, { next_check: Math.max(now() + 5000, this.mintCooldownUntil) });
+      return;
+    }
     const w = await this.forgeWallet(row.unit);
     if (row.method === 'onchain') {
       const q = await w.checkMintQuoteOnchain(row.quote!);

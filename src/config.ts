@@ -47,6 +47,8 @@ export const EnvSchema = z.object({
   FORGE_FUND_MINT: z.string().optional(),
   FORGE_LIGHTNING_ENABLED: bool.default(true),
   /** Per-funding limits for Lightning, in whole units. */
+  // Mint quote checks per minute across all fundings: the gateway's one IP shares Nutshell's 20/min limit.
+  FORGE_MINT_QUOTE_CHECKS_PER_MIN: z.coerce.number().int().min(1).default(12),
   FORGE_FUND_MAX_SAT: z.coerce.number().int().min(1).default(1_000_000),
   FORGE_FUND_MAX_USD: z.coerce.number().int().min(1).default(50_000),
   /** On-chain (NUT-30) funding. Off by default: shapes come from the Forge Nutshell branch, not a live test. */

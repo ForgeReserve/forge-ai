@@ -384,8 +384,10 @@ export function createApp(d: Deps) {
 
   app.get('/v1/wallet/fund/:id', async (c) => {
     const row = ownFunding(c, c.req.param('id'));
-    // Polling drives progress too, so a funding completes even when the background poller is off.
-    const fresh = Date.now() - row.updated_at > 1500 || row.state === 'minting' ? ((await funding.advance(row.id)) ?? row) : row;
+    // Polling drives progress too, so a funding completes even when the background poller is off,
+    // but a pending quote only when it is due: a browser polling fast must not hammer the mint's quote checks.
+    const due = row.state === 'pending' ? row.next_check <= Date.now() : Date.now() - row.updated_at > 1500 || row.state === 'minting';
+    const fresh = due ? ((await funding.advance(row.id)) ?? row) : row;
     return fundingResponse(c, fresh);
   });
 

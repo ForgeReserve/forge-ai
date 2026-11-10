@@ -184,7 +184,9 @@ describe.skipIf(!up)('prepaid balance keys', () => {
   });
 
   it('lists models with tier, prices and the uncensored flag', async () => {
-    const m = await (await fetch(`${g.url}/v1/models`)).json();
+    // The previous test aborts a stream, which can leave a dead pooled socket behind: retry once on a reset.
+    const res = await fetch(`${g.url}/v1/models`).catch(() => fetch(`${g.url}/v1/models`));
+    const m = await res.json();
     const echo = m.data.find((x: any) => x.id === 'mock-echo');
     expect(echo.tier).toBe('standard');
     expect(echo.pricing.usd_per_mtok).toEqual({ input: 100, output: 1000 });

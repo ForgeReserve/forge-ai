@@ -148,3 +148,12 @@ At startup every active reservation is released without charge (nothing is in fl
 - Other-mint funding trusts the token's mint for as long as the melt takes. A mint that takes the token and never pays leaves the funding in `melting`; the token's value is then lost to the user, as it would be with any wallet melting at that mint.
 - A foreign mint's address is checked against private ranges when quoted, but DNS can change between that check and later requests (rebinding). The gateway sends such a mint only Cashu API calls.
 - An on-chain address that receives a deposit after its watch window is not credited automatically. The quote stays at the mint; an operator can extend `expires_at` in `fundings` and set `state` back to `pending`.
+
+## Checking quotes without tripping the mint's rate limit
+
+Every funding's quote checks come from the gateway's one IP, and Nutshell allows 20 transaction requests a minute per IP. So:
+
+- An unpaid Lightning quote is checked every 5 s for its first 2 minutes, then every 15 s to 10 minutes, every minute to an hour, and every 5 minutes after that.
+- The status endpoint advances a pending quote only when it is due, however fast a browser polls.
+- All quote checks share a budget of `FORGE_MINT_QUOTE_CHECKS_PER_MIN` (default 12).
+- A 429 from the mint pauses every quote check for 60 s.
