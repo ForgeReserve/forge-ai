@@ -16,7 +16,14 @@ const MODEL = process.env.MODEL ?? 'mock-echo';
 const prompt = process.argv[2] ?? 'In one sentence, what is eCash?';
 const headers: Record<string, string> = { 'content-type': 'application/json' };
 if (process.env.FORGE_INVITE) headers['X-Forge-Invite'] = process.env.FORGE_INVITE;
-const body = JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: 128 });
+if (process.env.UNIT) headers['X-Forge-Unit'] = process.env.UNIT;
+// Reasoning models can spend the whole token budget thinking; REASONING_EFFORT=none skips that where supported.
+const body = JSON.stringify({
+  model: MODEL,
+  messages: [{ role: 'user', content: prompt }],
+  max_tokens: Number(process.env.MAX_TOKENS ?? 512),
+  ...(process.env.REASONING_EFFORT ? { reasoning_effort: process.env.REASONING_EFFORT } : {}),
+});
 
 // 1. Ask without paying.
 const first = await fetch(`${FORGE}/v1/chat/completions`, { method: 'POST', headers, body });
@@ -44,6 +51,11 @@ async function fundedProofs(): Promise<{ wallet: Wallet; proofs: Proof[] }> {
   throw new Error('set CASHU_TOKEN (or DEMO_FAKE_MINT=1 against a FakeWallet test mint)');
 }
 const { wallet, proofs } = await fundedProofs();
+if (process.env.LEFTOVER_FILE) {
+  // Keep a copy of the received proofs until the run finishes, in case it fails midway.
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(`${process.env.LEFTOVER_FILE}.received`, getEncodedToken({ mint: wallet.mint.mintUrl, unit: pr.unit, proofs }) + '\n', { mode: 0o600 });
+}
 const { send, keep } = await wallet.send(amount, proofs, { includeFees: true });
 const payment = getEncodedToken({ mint: wallet.mint.mintUrl, unit: pr.unit, proofs: send });
 
@@ -64,3 +76,15 @@ if (changeToken) {
   keep.push(...back);
 }
 console.log(`Change returned: ${change} ${unitName}; wallet now holds ${keep.reduce((s, p) => s + p.amount.toNumber(), 0)} ${unitName}`);
+
+// 5. Hand back what the wallet holds, so no eCash is lost when the script exits.
+if (keep.length) {
+  const leftover = getEncodedToken({ mint: wallet.mint.mintUrl, unit: pr.unit, proofs: keep });
+  if (process.env.LEFTOVER_FILE) {
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(process.env.LEFTOVER_FILE, leftover + '\n', { mode: 0o600 });
+    console.log(`Leftover eCash written to ${process.env.LEFTOVER_FILE}`);
+  } else {
+    console.log(`Leftover eCash (receive it in a wallet): ${leftover}`);
+  }
+}
