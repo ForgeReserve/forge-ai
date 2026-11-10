@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS invites (
 
 -- Funding a balance through the Forge mint: Lightning (NUT-04 bolt11), on-chain (NUT-30) or eCash
 -- from another mint (received there, melted to pay a Forge bolt11 quote). Keys never appear here.
+-- Beta waitlist: one contact (email or Nostr npub) and an optional note. No IP or other metadata.
+CREATE TABLE IF NOT EXISTS beta_signups (
+  id TEXT PRIMARY KEY,
+  contact TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL,               -- email | npub
+  note TEXT,
+  created_at INTEGER NOT NULL,
+  invited_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS fundings (
   id TEXT PRIMARY KEY,
   method TEXT NOT NULL,             -- lightning | onchain | foreign

@@ -10,6 +10,7 @@
  */
 import { parseArgs } from 'node:util';
 import { loadConfig, type Unit } from './config.ts';
+import { BetaWaitlist } from './beta.ts';
 import { buildDeps } from './deps.ts';
 import { setLogSilent } from './log.ts';
 import { displayPrice, MSUB_PER_UNIT, msubToUnitsCeil } from './pricing.ts';
@@ -44,6 +45,14 @@ switch (cmd) {
     const out = Array.from({ length: n }, () => d.invites.create(values.label));
     table(out.map((o) => ({ id: o.id, code: o.code })));
     console.error('Codes are shown once; only their hashes are stored.');
+    break;
+  }
+  case 'beta:list':
+    table(new BetaWaitlist(d.db).list().map((s) => ({ ...s, created_at: new Date(s.created_at).toISOString(), invited_at: s.invited_at ? new Date(s.invited_at).toISOString() : '' })));
+    break;
+  case 'beta:invited': {
+    const ok = new BetaWaitlist(d.db).markInvited(positionals[0] ?? '');
+    console.log(ok ? 'marked invited' : 'not found or already invited');
     break;
   }
   case 'invites:list':
@@ -112,7 +121,7 @@ switch (cmd) {
     break;
   }
   default:
-    console.error('commands: invites:create invites:list invites:revoke balances:list revenue:show revenue:export prices:show');
+    console.error('commands: beta:list beta:invited invites:create invites:list invites:revoke balances:list revenue:show revenue:export prices:show');
     process.exit(cmd ? 1 : 0);
 }
 d.db.close();

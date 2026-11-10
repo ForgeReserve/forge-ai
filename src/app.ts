@@ -6,6 +6,7 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
+import { BetaWaitlist, parseContact } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import type { Config, ModelConfig, Unit } from './config.ts';
@@ -827,6 +828,25 @@ export function createApp(d: Deps) {
         ...(pay.kind === 'nut24' ? { 'X-Forge-Change-Url': `/v1/change/${requestId}` } : {}),
       },
     });
+  });
+
+  // ------------------------------------------------------------------ beta waitlist
+  // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
+  const waitlist = new BetaWaitlist(d.db);
+  const signupLimiter = new RateLimiter(3, 3);
+  app.get('/beta', (c) => c.redirect('/beta/', 301));
+  app.post('/v1/beta/signup', async (c) => {
+    const wait = signupLimiter.take('ip:' + clientIp(c));
+    if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many signups from here; try again later', { 'Retry-After': String(wait) });
+    const body = (await readJson(c).catch(() => ({}))) as { contact?: unknown; note?: unknown; website?: unknown };
+    // Honeypot field the page hides from people: bots that fill it get the same answer and nothing is stored.
+    if (body?.website) return c.json({ ok: true });
+    const parsed = parseContact(body?.contact);
+    if (!parsed) return apiError(c, 400, 'invalid_contact', 'enter an email address or a Nostr npub');
+    const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null;
+    const { created } = waitlist.add(parsed.contact, parsed.kind, note);
+    if (created) log.info('beta_signup', { kind: parsed.kind });
+    return c.json({ ok: true });
   });
 
   // ------------------------------------------------------------------ static chat page
