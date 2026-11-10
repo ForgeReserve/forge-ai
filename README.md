@@ -77,7 +77,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_RATE_LIMIT_RPM` | `60` | Requests per minute per key or IP |
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
-| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `60000` / `2` | Time to upstream response headers; retries on network errors, 408, 429 and 5xx |
+| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries on connection errors, 408, 429 and 5xx |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys |
 
 ### Model catalog

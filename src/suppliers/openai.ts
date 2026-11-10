@@ -11,6 +11,7 @@ const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 /**
  * fetch with retries on network errors and retryable statuses, before any body byte is consumed.
+ * A header timeout is final, since the supplier may already be working on the request.
  * timeoutMs bounds the time to response headers; the body is bounded only by the caller's signal.
  */
 export async function fetchWithRetry(url: string, init: RequestInit, signal: AbortSignal, o: RetryOptions): Promise<Response> {
@@ -31,6 +32,8 @@ export async function fetchWithRetry(url: string, init: RequestInit, signal: Abo
     } catch (e) {
       clearTimeout(timer);
       if (signal.aborted) throw new UpstreamError('client aborted', 499);
+      // The request reached the supplier and may still be running (and billing) there: never resend it.
+      if (headerTimeout.signal.aborted) throw new UpstreamError('upstream timeout', 504);
       lastErr = e;
     }
     log.warn('upstream_retry', { url: new URL(url).host, attempt, err: errText(lastErr) });

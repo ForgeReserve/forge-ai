@@ -40,7 +40,7 @@ export const EnvSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{128}$/i, 'FORGE_WALLET_SEED must be 64 bytes of hex')
     .optional(),
-  FORGE_UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1000).default(60_000),
+  FORGE_UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1000).default(180_000),
   FORGE_UPSTREAM_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   FORGE_STALE_RESERVATION_SECONDS: z.coerce.number().int().min(60).default(900),
   FORGE_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
