@@ -22,6 +22,12 @@ export const EnvSchema = z.object({
   FORGE_DB_PATH: z.string().default('data/forge.db'),
   FORGE_MODELS_FILE: z.string().default('config/models.json'),
   FORGE_TRUSTED_MINTS: csv.default(['https://forge.flashapp.me']),
+  /**
+   * Other addresses of the same mint, as alias=main pairs. Tokens under an alias are handled under the main
+   * address: one wallet pile and one counter per keyset. Two piles would restart the deterministic counter
+   * and re-derive outputs the mint has already signed.
+   */
+  FORGE_MINT_ALIASES: csv.default(['https://mint.forge-reserve.com=https://forge.flashapp.me']),
   FORGE_UNITS: csv.pipe(z.array(z.enum(UNITS)).min(1)).default(['usd', 'sat']),
   FORGE_DEFAULT_UNIT: z.enum(UNITS).default('usd'),
   FORGE_INVITE_ONLY: bool.default(true),
@@ -196,8 +202,23 @@ export interface Config {
   trustedMints: string[];
 }
 
+let mintAliases = new Map<string, string>();
+
+/** Sets the alias=main mint address pairs that normalizeMintUrl folds together. */
+export function setMintAliases(pairs: string[]): void {
+  const clean = (u: string) => u.trim().replace(/\/+$/, '');
+  mintAliases = new Map(
+    pairs.map((p) => {
+      const [alias, main] = p.split('=');
+      if (!alias || !main) throw new Error(`FORGE_MINT_ALIASES entry must be alias=main: ${p}`);
+      return [clean(alias), clean(main)];
+    }),
+  );
+}
+
 export function normalizeMintUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '');
+  const u = url.trim().replace(/\/+$/, '');
+  return mintAliases.get(u) ?? u;
 }
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverride?: unknown): Config {
@@ -206,6 +227,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverr
     throw new Error(`invalid environment: ${z.prettifyError(parsed.error)}`);
   }
   const env = parsed.data;
+  setMintAliases(env.FORGE_MINT_ALIASES);
   if (!env.FORGE_UNITS.includes(env.FORGE_DEFAULT_UNIT)) {
     throw new Error('FORGE_DEFAULT_UNIT must be one of FORGE_UNITS');
   }

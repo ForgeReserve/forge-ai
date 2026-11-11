@@ -66,6 +66,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | Variable | Default | Meaning |
 | - | - | - |
 | `FORGE_TRUSTED_MINTS` | `https://forge.flashapp.me` | Comma-separated mints whose eCash is accepted. Tokens from other mints get HTTP 400 |
+| `FORGE_MINT_ALIASES` | `https://mint.forge-reserve.com=https://forge.flashapp.me` | Other addresses of the same mint, as comma-separated `alias=main` pairs. Tokens under an alias are accepted and stored under the main address, so the wallet keeps one counter per keyset |
 | `FORGE_UNITS` | `usd,sat` | Accepted units |
 | `FORGE_DEFAULT_UNIT` | `usd` | Unit of a 402 request unless the client sends `X-Forge-Unit` |
 | `FORGE_INVITE_ONLY` | `true` | Require invites for topups and NUT-24 requests |
