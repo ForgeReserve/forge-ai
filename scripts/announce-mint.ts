@@ -16,7 +16,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 const URLS = ['https://forge.flashapp.me'];
-const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net', 'wss://relay.nostr.band', 'wss://relay.8333.space', 'wss://relay.cashumints.space'];
+// damus and primal are two of cashu.me's three discovery relays. nos.lol (the third) times out on writes from
+// this account, and relay.cashumints.space refuses kind 38172, so neither is used.
+const RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://relay.snort.social', 'wss://offchain.pub'];
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 function bech32Decode(s: string, hrp: string): Uint8Array {
