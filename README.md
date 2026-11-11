@@ -92,7 +92,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_FOREIGN_ENABLED` | `true` | Accept eCash from other mints (melted into a Forge Lightning quote) |
 | `FORGE_FOREIGN_POLICY` | `discovered` | Which other mints are accepted. `discovered`: `FORGE_FOREIGN_ALLOW` plus mints found through NIP-87 reviews (below). `allowlist`: `FORGE_FOREIGN_ALLOW` only. `any`: every https mint, limited to `FORGE_FOREIGN_ALLOW` when that is set. `FORGE_FOREIGN_DENY` always wins |
 | `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Operator list of accepted mints, and mints never accepted |
-| `FORGE_FOREIGN_MIN_REVIEWERS` | `3` | Distinct verified NIP-87 reviewers a discovered mint needs |
+| `FORGE_FOREIGN_MIN_REVIEWERS` | `2` | Distinct verified NIP-87 reviewers a discovered mint needs |
 | `FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT` | `false` | Also require the mint's own verified kind 38172 announcement (the Cashu Card provisioner's rule; few mints publish one today) |
 | `FORGE_FOREIGN_DISCOVERY_RELAYS` | `wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net` | Nostr relays read for mint announcements (kind 38172) and reviews (kind 38000). Empty: no discovery |
 | `FORGE_FOREIGN_DISCOVERY_TTL_MINUTES` | `60` | How long a discovered list is served before a background refresh (a failed refresh retries after a minute) |

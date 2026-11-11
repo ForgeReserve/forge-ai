@@ -81,7 +81,7 @@ export const EnvSchema = z.object({
    */
   FORGE_FOREIGN_POLICY: z.enum(['discovered', 'allowlist', 'any']).default('discovered'),
   /** Distinct verified NIP-87 reviewers a discovered mint needs. */
-  FORGE_FOREIGN_MIN_REVIEWERS: z.coerce.number().int().min(1).max(100).default(3),
+  FORGE_FOREIGN_MIN_REVIEWERS: z.coerce.number().int().min(1).max(100).default(2),
   /** Also require the mint's own NIP-87 announcement (the card provisioner's rule). Few mints publish one today. */
   FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT: bool.default(false),
   /** Nostr relays read for NIP-87 mint announcements and reviews. Empty: no discovery (tests). */
