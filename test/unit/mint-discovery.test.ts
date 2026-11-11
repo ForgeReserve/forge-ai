@@ -24,6 +24,7 @@ import {
   parseNip87,
   parseStored,
   probeMint,
+  rankCandidates,
   type RelayAnswer,
   type RelayQuery,
   type SocketLike,
@@ -607,5 +608,16 @@ describe('other-mint policy', () => {
       { url: LISTED, reviewers: 3, source: 'discovered' },
     ]);
     expect(service({ FORGE_FOREIGN_POLICY: 'allowlist' }).acceptedForeignMints().mints).toEqual([]);
+  });
+});
+
+describe('reviews-only rule (Forge default)', () => {
+  it('ranks an unannounced mint with enough reviewers only when the announcement is not required', () => {
+    const map = new Map([
+      ['https://reviewed.example', { announced: false, reviewers: new Set(['a', 'b', 'c']), ratings: new Map() }],
+      ['https://few.example', { announced: false, reviewers: new Set(['a']), ratings: new Map() }],
+    ]) as any;
+    expect(rankCandidates(map, 3, new Set(), true)).toEqual([]);
+    expect(rankCandidates(map, 3, new Set(), false).map((c: { url: string }) => c.url)).toEqual(["https://reviewed.example"]);
   });
 });

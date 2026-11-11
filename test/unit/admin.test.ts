@@ -234,7 +234,7 @@ describe('admin other-mint discovery', () => {
     const call = (path: string, method = 'GET') =>
       app.request(`${ORIGIN}${path}`, { method, headers: { host: HOST, 'x-forge-admin-token': TOKEN, ...(method === 'GET' ? {} : { origin: ORIGIN, 'content-type': 'application/json' }) }, body: method === 'GET' ? undefined : '{}' });
     const view = await (await call('/admin/api/mints/discovery')).json();
-    expect(view).toMatchObject({ policy: 'discovered', accepted: [], discovery: { enabled: true, min_reviewers: 1, relays: ['wss://relay.test'] } });
+    expect(view).toMatchObject({ policy: 'discovered', accepted: [], discovery: { enabled: true, min_reviewers: 3, require_announcement: false, relays: ['wss://relay.test'] } });
     const r1 = await call('/admin/api/mints/discovery/refresh', 'POST');
     expect(r1.status).toBe(200);
     expect((await r1.json()).discovery.last_refresh).toMatchObject({ ok: true, accepted: 0 });

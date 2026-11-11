@@ -1,8 +1,8 @@
 /**
  * NIP-87 discovery of other Cashu mints whose eCash Forge accepts for funding, the way
  * wallet.cashu.me finds mints: kind 38172 mint announcements and kind 38000 reviews (#k=38172) from
- * public relays, grouped by mint URL. A discovered mint is accepted only with a verified announcement
- * and at least `minReviewers` distinct verified reviewers, and only after it passes the probe below
+ * public relays, grouped by mint URL. A discovered mint is accepted only with at least `minReviewers`
+ * distinct verified reviewers (and, when requireAnnouncement is set, its own verified announcement), and only after it passes the probe below
  * (an active keyset in a Forge unit and NUT-05 bolt11 melt in that unit, since Forge melts there).
  *
  * Ported from cashucard/cashucard ops/src/discovery.ts @ b5ffe8a (ENG-832, D180): the event
@@ -470,6 +470,8 @@ export interface DiscoveryDeps {
   readonly query: RelayQuery;
   readonly relays: readonly string[];
   readonly minReviewers: number;
+  /** Also require the mint's own verified announcement (kind 38172). The card provisioner does; Forge defaults to reviews only. */
+  readonly requireAnnouncement?: boolean;
   readonly maxDiscovered: number;
   /** Units a mint must support (FORGE_UNITS). */
   readonly units: readonly string[];
@@ -512,9 +514,9 @@ function normalizedSet(list: readonly string[] | undefined): Set<string> {
 }
 
 /** Ranks the grouped evidence the way the refresh does: reviewers desc, then URL. */
-export function rankCandidates(map: Map<string, MintEvidence>, minReviewers: number, excluded: Set<string> = new Set()) {
+export function rankCandidates(map: Map<string, MintEvidence>, minReviewers: number, excluded: Set<string> = new Set(), requireAnnouncement = true) {
   return [...map]
-    .filter(([url, e]) => e.announced && e.reviewers.size >= minReviewers && !excluded.has(url))
+    .filter(([url, e]) => (e.announced || !requireAnnouncement) && e.reviewers.size >= minReviewers && !excluded.has(url))
     .map(([url, e]) => {
       const avg = averageRating(e);
       return avg === undefined ? { url, reviewers: e.reviewers.size } : { url, reviewers: e.reviewers.size, avg_rating: avg };
@@ -549,17 +551,18 @@ export async function discoverMints(deps: DiscoveryDeps): Promise<DiscoveryResul
   if (!fetched.answered) return { answered: false, mints: [], relays: fetched.relays, rejected: [], seen: 0, candidates: 0 };
 
   const excluded = normalizedSet(deps.excluded);
+  const requireAnn = deps.requireAnnouncement ?? true;
   const map = parseNip87(fetched.events, now());
   const rejected: RejectedMint[] = [];
   const reject = (r: RejectedMint) => {
     if (rejected.length < MAX_REJECTED) rejected.push(r);
   };
   // Announced but under the floor, best first: the ones an operator might want to know about.
-  for (const [url, e] of [...map].filter(([, e]) => e.announced && e.reviewers.size > 0 && e.reviewers.size < deps.minReviewers).sort((a, b) => b[1].reviewers.size - a[1].reviewers.size)) {
+  for (const [url, e] of [...map].filter(([, e]) => (e.announced || !requireAnn) && e.reviewers.size > 0 && e.reviewers.size < deps.minReviewers).sort((a, b) => b[1].reviewers.size - a[1].reviewers.size)) {
     reject({ url, reviewers: e.reviewers.size, reason: `${e.reviewers.size} of ${deps.minReviewers} reviewers` });
   }
   const maxCandidates = Math.max(MIN_CANDIDATES, Math.ceil(deps.maxDiscovered * 1.5));
-  const ranked = rankCandidates(map, deps.minReviewers, excluded).slice(0, maxCandidates);
+  const ranked = rankCandidates(map, deps.minReviewers, excluded, requireAnn).slice(0, maxCandidates);
 
   const results: (MintProbe | undefined)[] = new Array(ranked.length);
   let next = 0;
@@ -796,6 +799,7 @@ export function createDiscovery(options: DiscoveryOptions): MintDiscovery {
       enabled,
       relays: options.relays,
       min_reviewers: options.minReviewers,
+      require_announcement: options.requireAnnouncement ?? true,
       max_discovered: options.maxDiscovered,
       ttl_minutes: Math.round(ttlOkMs / 60_000),
       updated_at: committedAt,

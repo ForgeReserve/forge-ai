@@ -980,7 +980,7 @@ function otherMintsCard(d) {
     <div class="card-head"><h3>Other mints</h3><button class="btn small" type="button" id="mrefresh" ${disc.enabled ? '' : 'disabled title="No discovery relays are set"'}>Refresh</button></div>
     <dl class="kv">
       <dt>Policy</dt><dd>${badge(d.policy, d.policy === 'any' ? 'warn' : 'brass')} <span class="muted small">${esc(POLICY_TEXT[d.policy] || '')}</span></dd>
-      <dt>Review rule</dt><dd>announced, and ${nf(disc.min_reviewers)}+ distinct reviewers <span class="muted small">at most ${nf(disc.max_discovered)} mints, refreshed every ${nf(disc.ttl_minutes)} min</span></dd>
+      <dt>Review rule</dt><dd>${disc.require_announcement ? "announced, and " : ""}${nf(disc.min_reviewers)}+ distinct reviewers <span class="muted small">at most ${nf(disc.max_discovered)} mints, refreshed every ${nf(disc.ttl_minutes)} min</span></dd>
       <dt>Relays</dt><dd>${disc.enabled ? relays : badge('discovery off')}</dd>
       <dt>Last refresh</dt><dd>${lastText}</dd>
       <dt>List from</dt><dd>${when(disc.updated_at)}</dd>

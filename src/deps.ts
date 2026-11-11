@@ -48,6 +48,7 @@ export function buildDeps(
     query: opts.discovery?.query ?? createRelayQuery(),
     relays: env.FORGE_FOREIGN_DISCOVERY_RELAYS,
     minReviewers: env.FORGE_FOREIGN_MIN_REVIEWERS,
+    requireAnnouncement: env.FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT,
     maxDiscovered: env.FORGE_FOREIGN_MAX_DISCOVERED,
     units: env.FORGE_UNITS,
     // Forge's own mints and denied mints are never discovered (read once: both come from the env).

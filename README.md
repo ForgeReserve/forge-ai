@@ -92,7 +92,8 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_FOREIGN_ENABLED` | `true` | Accept eCash from other mints (melted into a Forge Lightning quote) |
 | `FORGE_FOREIGN_POLICY` | `discovered` | Which other mints are accepted. `discovered`: `FORGE_FOREIGN_ALLOW` plus mints found through NIP-87 reviews (below). `allowlist`: `FORGE_FOREIGN_ALLOW` only. `any`: every https mint, limited to `FORGE_FOREIGN_ALLOW` when that is set. `FORGE_FOREIGN_DENY` always wins |
 | `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Operator list of accepted mints, and mints never accepted |
-| `FORGE_FOREIGN_MIN_REVIEWERS` | `1` | Distinct verified NIP-87 reviewers a discovered mint needs, beside its own verified announcement |
+| `FORGE_FOREIGN_MIN_REVIEWERS` | `3` | Distinct verified NIP-87 reviewers a discovered mint needs |
+| `FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT` | `false` | Also require the mint's own verified kind 38172 announcement (the Cashu Card provisioner's rule; few mints publish one today) |
 | `FORGE_FOREIGN_DISCOVERY_RELAYS` | `wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net` | Nostr relays read for mint announcements (kind 38172) and reviews (kind 38000). Empty: no discovery |
 | `FORGE_FOREIGN_DISCOVERY_TTL_MINUTES` | `60` | How long a discovered list is served before a background refresh (a failed refresh retries after a minute) |
 | `FORGE_FOREIGN_MAX_DISCOVERED` | `25` | Most discovered mints accepted at once, best reviewed first |
@@ -105,7 +106,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 
 ### Other mints (NIP-87 discovery)
 
-Under `FORGE_FOREIGN_POLICY=discovered` the gateway accepts eCash from the mints the operator lists plus the mints Cashu wallets recommend, found the way wallet.cashu.me finds them: kind 38172 mint announcements and kind 38000 reviews (`#k=38172`) from `FORGE_FOREIGN_DISCOVERY_RELAYS`. Event ids and BIP-340 signatures are checked, reviews older than 24 months are ignored, and a reviewer counts once per mint. A mint is accepted when it has a verified mainnet announcement, at least `FORGE_FOREIGN_MIN_REVIEWERS` distinct reviewers, and passes a probe: `GET /v1/info` and `GET /v1/keysets` answer, an active keyset exists in a Forge unit, and NUT-05 bolt11 melt is enabled in that unit (the gateway melts the eCash there). The list is kept in the database, served at once after a restart, and refreshed in the background; a request never waits on a relay. The URL safety check still runs on every accepted mint. The code is ported from cashucard/cashucard `ops/src/discovery.ts`.
+Under `FORGE_FOREIGN_POLICY=discovered` the gateway accepts eCash from the mints the operator lists plus the mints Cashu wallets recommend, found the way wallet.cashu.me finds them: kind 38172 mint announcements and kind 38000 reviews (`#k=38172`) from `FORGE_FOREIGN_DISCOVERY_RELAYS`. Event ids and BIP-340 signatures are checked, reviews older than 24 months are ignored, and a reviewer counts once per mint. A mint is accepted when it has at least `FORGE_FOREIGN_MIN_REVIEWERS` distinct reviewers (plus a verified mainnet announcement when `FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT=true`) and passes a probe: `GET /v1/info` and `GET /v1/keysets` answer, an active keyset exists in a Forge unit, and NUT-05 bolt11 melt is enabled in that unit (the gateway melts the eCash there). The list is kept in the database, served at once after a restart, and refreshed in the background; a request never waits on a relay. The URL safety check still runs on every accepted mint. The code is ported from cashucard/cashucard `ops/src/discovery.ts`.
 
 ### Model catalog
 
