@@ -69,6 +69,7 @@ export function buildDeps(
     mint: env.FORGE_FUND_MINT ?? config.trustedMints[0]!,
     faults: opts.fundingFaults,
     discovery,
+    probe: opts.discovery?.probe,
   });
   const deps: Deps = {
     config,

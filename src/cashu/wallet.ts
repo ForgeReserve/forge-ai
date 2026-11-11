@@ -27,10 +27,13 @@ const SPENT = 11001;
 export class PaymentError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(code: string, message: string, status = 400) {
+  /** Extra top-level fields for the error response (e.g. the unlisted mint and its cap). */
+  readonly extra?: Record<string, unknown>;
+  constructor(code: string, message: string, status = 400, extra?: Record<string, unknown>) {
     super(message);
     this.code = code;
     this.status = status;
+    if (extra) this.extra = extra;
   }
 }
 

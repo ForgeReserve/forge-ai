@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS fundings (
   f_change_token TEXT,
   f_refund_token TEXT,
   f_lock_pubkey TEXT,               -- foreign: lock change and refund tokens to this key (NUT-11)
+  f_unlisted INTEGER NOT NULL DEFAULT 0, -- foreign: 1 when the customer chose a mint that is not accepted (lower cap)
   error TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -156,6 +157,15 @@ CREATE TABLE IF NOT EXISTS fundings (
 CREATE UNIQUE INDEX IF NOT EXISTS fundings_quote ON fundings(mint, quote);
 CREATE INDEX IF NOT EXISTS fundings_due ON fundings(state, next_check);
 CREATE INDEX IF NOT EXISTS fundings_account ON fundings(account_id);
+
+-- Other mints the operator accepts from the admin page, on top of FORGE_FOREIGN_ALLOW. url is the
+-- normalized key (mintKey in funding.ts); name is the mint's own /v1/info name at the time it was added.
+CREATE TABLE IF NOT EXISTS operator_mints (
+  url TEXT PRIMARY KEY,
+  name TEXT,
+  note TEXT,
+  added_at INTEGER NOT NULL
+);
 
 -- Revenue exports from the admin page or CLI. The token itself is never stored here (the payout row
 -- in outgoing holds it for re-delivery, as for every payout); this is the operator's history.
@@ -213,6 +223,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['requests', 'price_nusd', 'INTEGER'],
   ['requests', 'supplier_cost_nusd', 'INTEGER'],
   ['requests', 'cost_source', 'TEXT'],
+  ['fundings', 'f_unlisted', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 export type DB = DatabaseSync;

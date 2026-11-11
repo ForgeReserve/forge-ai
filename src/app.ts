@@ -128,7 +128,8 @@ export function createApp(d: Deps) {
   });
 
   app.onError((e, c) => {
-    if (e instanceof PaymentError || e instanceof LedgerError) return apiError(c, e.status, e.code, e.message);
+    if (e instanceof PaymentError) return apiError(c, e.status, e.code, e.message, {}, e.extra ?? {});
+    if (e instanceof LedgerError) return apiError(c, e.status, e.code, e.message);
     if (e instanceof UpstreamError) return apiError(c, e.status, 'upstream_error', e.message);
     log.error('unhandled', { path: c.req.path, err: errText(e) });
     return apiError(c, 500, 'internal_error', 'internal error');
@@ -377,7 +378,8 @@ export function createApp(d: Deps) {
     const token = String(body?.token ?? '').trim();
     if (!token.startsWith('cashuB')) return apiError(c, 400, 'invalid_token', 'expected a cashuB token');
     const lockPubkey = parseOptionalLockPubkey(body?.pubkey);
-    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.quoteForeign(id, unit, token, lockPubkey));
+    const acceptUnlisted = body?.accept_unlisted === true;
+    const { result, key } = await withAccount(c, unit, body?.invite, (id) => funding.quoteForeign(id, unit, token, lockPubkey, { acceptUnlisted }));
     return fundingResponse(c, result, key);
   });
 

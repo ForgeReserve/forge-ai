@@ -75,11 +75,24 @@ export const EnvSchema = z.object({
   /**
    * Which other mints' eCash is accepted for funding. FORGE_FOREIGN_DENY always wins, and Forge's own
    * mints always answer 'use_topup'.
-   *  - discovered (default): FORGE_FOREIGN_ALLOW plus the mints found through NIP-87 discovery.
-   *  - allowlist: FORGE_FOREIGN_ALLOW only (empty: no other mint is accepted).
+   * Mints the operator adds on the admin page (the operator_mints table) count as FORGE_FOREIGN_ALLOW.
+   *  - discovered (default): FORGE_FOREIGN_ALLOW and admin-added mints plus the mints found through NIP-87 discovery.
+   *  - allowlist: FORGE_FOREIGN_ALLOW and admin-added mints only (empty: no other mint is accepted).
    *  - any: every mint, unless FORGE_FOREIGN_ALLOW is set, which then limits it (the behaviour before discovery).
+   *    Admin-added mints are also accepted then; they never limit it on their own.
    */
   FORGE_FOREIGN_POLICY: z.enum(['discovered', 'allowlist', 'any']).default('discovered'),
+  /**
+   * Under the discovered and allowlist policies, a customer may still fund with eCash from a mint that
+   * is not accepted (not denied and not one of Forge's own): the server answers 'mint_unlisted' first,
+   * and a request resent with accept_unlisted: true goes ahead after the same live probe discovery uses,
+   * capped at the amounts below. false: such a mint is refused with 'mint_not_allowed'.
+   */
+  FORGE_FOREIGN_UNLISTED: bool.default(true),
+  /** Largest token from an unlisted mint, in sat. FORGE_FOREIGN_MAX_SAT still applies when lower. */
+  FORGE_FOREIGN_UNLISTED_MAX_SAT: z.coerce.number().int().min(1).default(5_000),
+  /** Largest token from an unlisted mint, in cents (500 = $5). FORGE_FOREIGN_MAX_USD still applies when lower. */
+  FORGE_FOREIGN_UNLISTED_MAX_USD: z.coerce.number().int().min(1).default(500),
   /** Distinct verified NIP-87 reviewers a discovered mint needs. */
   FORGE_FOREIGN_MIN_REVIEWERS: z.coerce.number().int().min(1).max(100).default(2),
   /** Also require the mint's own NIP-87 announcement (the card provisioner's rule). Few mints publish one today. */

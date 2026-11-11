@@ -670,6 +670,11 @@ details.adv[open] > summary::after { transform: rotate(-135deg); }
 details.adv { border-top: 1px solid var(--hair); padding-top: 4px; }
 details.adv > .adv-body { display: grid; gap: 22px; padding: 6px 0 8px; animation: rise var(--dur-3) var(--ease-out); }
 .mint-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; overflow-wrap: anywhere; }
+/* Inline confirm for eCash from a mint that is not on the accepted list. */
+.unlisted-confirm:not([hidden]) { display: grid; gap: 8px; margin: 4px 0 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--warn) 8%, var(--bg-sunk)); font-size: 14px; line-height: 1.45; }
+.unlisted-confirm p { margin: 0; }
+.unlisted-confirm .unlisted-mint { font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.unlisted-confirm .btn { min-height: 44px; }
 .scanner { position: relative; border-radius: 16px; overflow: hidden; background: #000; aspect-ratio: 1; width: min(320px, 100%); margin: 0 auto; }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner .bar { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--ok); width: 100%; transform-origin: left; transform: scaleX(0); transition: transform var(--dur-2); }

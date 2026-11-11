@@ -117,7 +117,8 @@ export function createAdminRouter(d: Deps): Hono {
   const audit = (action: string, fields: Record<string, string | number | boolean | null | undefined> = {}) => log.info('admin_action', { action, ...fields });
 
   r.onError((e, c) => {
-    if (e instanceof ExportError || e instanceof PaymentError || e instanceof LedgerError) return fail(c, e.status, e.code, e.message);
+    if (e instanceof PaymentError) return fail(c, e.status, e.code, e.message, e.extra ?? {});
+    if (e instanceof ExportError || e instanceof LedgerError) return fail(c, e.status, e.code, e.message);
     log.error('admin_error', { path: c.req.path, err: errText(e) });
     return fail(c, 500, 'internal_error', 'internal error');
   });
@@ -561,6 +562,7 @@ export function createAdminRouter(d: Deps): Hono {
     next_check: f.next_check,
     foreign_mint: f.f_mint,
     foreign_amount: f.f_amount,
+    unlisted: !!f.f_unlisted,
     open: (OPEN_FUNDING_STATES as readonly string[]).includes(f.state),
     ...fundingStatus(f),
   });
@@ -639,7 +641,13 @@ export function createAdminRouter(d: Deps): Hono {
       enabled: env.FORGE_FOREIGN_ENABLED,
       allow: env.FORGE_FOREIGN_ALLOW,
       deny: env.FORGE_FOREIGN_DENY,
+      /** Mints added on this page (removable here); env FORGE_FOREIGN_ALLOW entries are not. */
+      operator_mints: funding.operatorMints(),
       accepted: accepted.mints,
+      unlisted: {
+        enabled: env.FORGE_FOREIGN_UNLISTED,
+        max: { sat: Math.min(env.FORGE_FOREIGN_UNLISTED_MAX_SAT, env.FORGE_FOREIGN_MAX_SAT), usd: Math.min(env.FORGE_FOREIGN_UNLISTED_MAX_USD, env.FORGE_FOREIGN_MAX_USD) },
+      },
       discovery: discovery.status(),
     };
   };
@@ -661,6 +669,26 @@ export function createAdminRouter(d: Deps): Hono {
     audit('mint_discovery_refresh', { ok: view.discovery.last_refresh?.ok ?? false, accepted: view.discovery.mints.length });
     return json(c, 200, view);
   });
+
+  // Operator-added mints: accepted like FORGE_FOREIGN_ALLOW. Adding one runs the URL safety check and the
+  // live probe discovery uses; force adds a mint that failed the probe (the response says so).
+  r.post('/admin/api/mints/allowed', async (c) => {
+    const b = await body(c);
+    if (typeof b.url !== 'string') return fail(c, 400, 'invalid_request', 'send {"url": "https://mint.example"}');
+    if (b.note != null && typeof b.note !== 'string') return fail(c, 400, 'invalid_request', 'note must be a string');
+    const out = await funding.addOperatorMint(b.url, b.note ?? null, b.force === true);
+    audit('mint_allow_add', { url: out.mint.url, probe_ok: out.probe.ok, forced: out.forced, added: out.added });
+    return json(c, 200, { ...out, view: discoveryView() });
+  });
+
+  const removeMint = (c: Context, url: unknown) => {
+    if (typeof url !== 'string' || !url.trim()) return fail(c, 400, 'invalid_request', 'send the mint url');
+    if (!funding.removeOperatorMint(url)) return fail(c, 404, 'not_found', 'that mint was not added on the admin page');
+    audit('mint_allow_remove', { url: url.trim() });
+    return json(c, 200, { ok: true, view: discoveryView() });
+  };
+  r.delete('/admin/api/mints/allowed', (c) => removeMint(c, c.req.query('url')));
+  r.post('/admin/api/mints/allowed/remove', async (c) => removeMint(c, (await body(c)).url));
 
   // -------------------------------------------------------------- settings (read-only)
   r.get('/admin/api/settings', async (c) => {
@@ -689,7 +717,15 @@ export function createAdminRouter(d: Deps): Hono {
         max_body_bytes: env.FORGE_MAX_BODY_BYTES,
       },
       enabled: { lightning: env.FORGE_LIGHTNING_ENABLED, onchain: env.FORGE_ONCHAIN_ENABLED, foreign: env.FORGE_FOREIGN_ENABLED },
-      foreign: { allow: env.FORGE_FOREIGN_ALLOW, deny: env.FORGE_FOREIGN_DENY, policy: env.FORGE_FOREIGN_POLICY, min_reviewers: env.FORGE_FOREIGN_MIN_REVIEWERS },
+      foreign: {
+        allow: env.FORGE_FOREIGN_ALLOW,
+        deny: env.FORGE_FOREIGN_DENY,
+        policy: env.FORGE_FOREIGN_POLICY,
+        min_reviewers: env.FORGE_FOREIGN_MIN_REVIEWERS,
+        unlisted: env.FORGE_FOREIGN_UNLISTED,
+        unlisted_max_sat: env.FORGE_FOREIGN_UNLISTED_MAX_SAT,
+        unlisted_max_usd: env.FORGE_FOREIGN_UNLISTED_MAX_USD,
+      },
       methods,
       rate_sources: env.FORGE_RATE_SOURCES,
       btc_usd: rate ?? null,

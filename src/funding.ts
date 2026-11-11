@@ -20,7 +20,7 @@ import { type Env, normalizeMintUrl, type Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
 import type { Ledger } from './ledger.ts';
 import { errText, log } from './log.ts';
-import { type MintDiscovery, normalizeDiscoveryUrl } from './mint-discovery.ts';
+import { type MintDiscovery, type MintProbe, normalizeDiscoveryUrl, probeMint, sanitizeMintName } from './mint-discovery.ts';
 import { MSUB_PER_UNIT } from './pricing.ts';
 import type { RateOracle } from './rates.ts';
 
@@ -54,6 +54,7 @@ export interface FundingRow {
   f_change_token: string | null;
   f_refund_token: string | null;
   f_lock_pubkey: string | null;
+  f_unlisted: number;
   error: string | null;
   created_at: number;
   updated_at: number;
@@ -90,8 +91,28 @@ export interface FundingMethods {
   ecash: { mints: string[]; units: Unit[] };
   lightning: { enabled: boolean; units: Unit[]; min: Partial<Record<Unit, number>>; max: Partial<Record<Unit, number>> };
   onchain: { enabled: boolean; unit: 'sat'; min_amount: number; confirmations: number };
-  foreign: { enabled: boolean; max: { sat: number; usd: number }; policy: ForeignPolicy; mints: string[]; mints_url: string };
+  foreign: {
+    enabled: boolean;
+    max: { sat: number; usd: number };
+    policy: ForeignPolicy;
+    mints: string[];
+    mints_url: string;
+    /** Mints that are not accepted may still be used after a warning, up to max (sat / cents). */
+    unlisted: { enabled: boolean; max: { sat: number; usd: number } };
+  };
 }
+
+/** A mint the operator added on the admin page. */
+export interface OperatorMint {
+  url: string;
+  name: string | null;
+  note: string | null;
+  added_at: number;
+}
+
+/** How long a live probe of an unlisted mint is reused (a failure: a minute). */
+export const PROBE_CACHE_MS = 10 * 60_000;
+const PROBE_FAIL_CACHE_MS = 60_000;
 
 export type ForeignPolicy = Env['FORGE_FOREIGN_POLICY'];
 
@@ -110,6 +131,12 @@ export interface AcceptedMints {
 }
 
 export const FOREIGN_MINTS_PATH = '/v1/wallet/fund/mints';
+
+/** The result of vetting a token's mint: its normalized URL, and whether the customer chose it off the list. */
+export interface VettedMint {
+  url: string;
+  unlisted: boolean;
+}
 
 /** The key two spellings of one mint URL share (host case, trailing slash). */
 export function mintKey(url: string, allowInsecure: boolean): string {
@@ -200,8 +227,21 @@ export class FundingService {
   faults: FundingFaults;
   private timer?: NodeJS.Timeout;
   private readonly discovery?: MintDiscovery;
+  private readonly probeFn: (url: string) => Promise<MintProbe>;
+  private readonly probes = new Map<string, { at: number; value: MintProbe }>();
 
-  constructor(d: { db: DB; ledger: Ledger; wallet: GatewayWallet; env: Env; rates: RateOracle; mint: string; faults?: FundingFaults; discovery?: MintDiscovery }) {
+  constructor(d: {
+    db: DB;
+    ledger: Ledger;
+    wallet: GatewayWallet;
+    env: Env;
+    rates: RateOracle;
+    mint: string;
+    faults?: FundingFaults;
+    discovery?: MintDiscovery;
+    /** Tests: a stand-in for the live mint probe (probeMint). */
+    probe?: (url: string) => Promise<MintProbe>;
+  }) {
     this.db = d.db;
     this.ledger = d.ledger;
     this.wallet = d.wallet;
@@ -210,6 +250,7 @@ export class FundingService {
     this.mint = normalizeMintUrl(d.mint);
     this.faults = d.faults ?? {};
     this.discovery = d.discovery;
+    this.probeFn = d.probe ?? ((url) => probeMint(url, this.env.FORGE_UNITS));
   }
 
   // ------------------------------------------------------------------ info
@@ -256,6 +297,7 @@ export class FundingService {
         policy: env.FORGE_FOREIGN_POLICY,
         mints: this.acceptedForeignMints().mints.map((m) => m.url),
         mints_url: FOREIGN_MINTS_PATH,
+        unlisted: { enabled: this.unlistedEnabled(), max: this.unlistedMax() },
       },
     };
   }
@@ -335,6 +377,7 @@ export class FundingService {
         r.method === 'foreign'
           ? {
               mint: r.f_mint,
+              unlisted: !!r.f_unlisted,
               unit: r.f_unit,
               token_amount: r.f_amount,
               credit: r.amount,
@@ -421,10 +464,33 @@ export class FundingService {
     return [...this.wallet.trustedMints, ...this.env.FORGE_FOREIGN_DENY];
   }
 
+  // ------------------------------------------------------------------ other mints
+
+  /** Mints the operator added on the admin page, oldest first. */
+  operatorMints(): OperatorMint[] {
+    return this.db.prepare('SELECT url, name, note, added_at FROM operator_mints ORDER BY added_at, url').all() as unknown as OperatorMint[];
+  }
+
+  /** Env FORGE_FOREIGN_ALLOW plus the admin-added mints, as keys. */
+  private operatorKeys(): Set<string> {
+    return this.keySet([...this.env.FORGE_FOREIGN_ALLOW, ...this.operatorMints().map((m) => m.url)]);
+  }
+
+  /** Unlisted mints can be chosen by the customer: on, and the policy is one that has a list. */
+  private unlistedEnabled(): boolean {
+    return this.env.FORGE_FOREIGN_ENABLED && this.env.FORGE_FOREIGN_UNLISTED && this.env.FORGE_FOREIGN_POLICY !== 'any';
+  }
+
+  /** The unlisted cap per token unit: the lower of the unlisted and the other-mint caps. */
+  private unlistedMax(): { sat: number; usd: number } {
+    const e = this.env;
+    return { sat: Math.min(e.FORGE_FOREIGN_UNLISTED_MAX_SAT, e.FORGE_FOREIGN_MAX_SAT), usd: Math.min(e.FORGE_FOREIGN_UNLISTED_MAX_USD, e.FORGE_FOREIGN_MAX_USD) };
+  }
+
   /**
-   * Other mints whose eCash is accepted under the policy: the operator list, then the discovered set
-   * (under 'discovered', and under 'any' with no operator list, where they are suggestions). Denied
-   * and Forge's own mints are never listed. Never waits on a relay.
+   * Other mints whose eCash is accepted under the policy: the operator's (env list and admin-added),
+   * then the discovered set (under 'discovered', and under 'any' with no env list, where they are
+   * suggestions). Denied and Forge's own mints are never listed. Never waits on a relay.
    */
   acceptedForeignMints(): AcceptedMints {
     const env = this.env;
@@ -438,6 +504,7 @@ export class FundingService {
       out.push(m);
     };
     for (const u of env.FORGE_FOREIGN_ALLOW) add({ url: mintKey(u, insecure), source: 'operator' });
+    for (const m of this.operatorMints()) add({ url: m.url, ...(m.name ? { name: m.name } : {}), source: 'operator' });
     const listDiscovered = env.FORGE_FOREIGN_POLICY === 'discovered' || (env.FORGE_FOREIGN_POLICY === 'any' && env.FORGE_FOREIGN_ALLOW.length === 0);
     if (listDiscovered && this.discovery) {
       for (const m of this.discovery.snapshot()) add({ url: m.url, ...(m.name ? { name: m.name } : {}), reviewers: m.reviewers, source: 'discovered' });
@@ -445,8 +512,28 @@ export class FundingService {
     return { policy: env.FORGE_FOREIGN_POLICY, mints: out, updated_at: listDiscovered ? (this.discovery?.updatedAt() ?? null) : null };
   }
 
-  /** Vets a foreign token's mint against the policy. Returns the normalized URL. */
-  async vetForeignMint(mint: string): Promise<string> {
+  /** A live probe of a mint (info, an active keyset in a Forge unit, NUT-05 bolt11 melt), reused for a while. */
+  async probeForeignMint(url: string, fresh = false): Promise<MintProbe> {
+    const key = mintKey(url, this.env.FORGE_FOREIGN_ALLOW_INSECURE);
+    const hit = this.probes.get(key);
+    if (!fresh && hit && Date.now() - hit.at < (hit.value.ok ? PROBE_CACHE_MS : PROBE_FAIL_CACHE_MS)) return hit.value;
+    let value: MintProbe;
+    try {
+      value = await this.probeFn(key);
+    } catch {
+      value = { url: key, ok: false, reason: 'probe threw' };
+    }
+    if (this.probes.size > 500) this.probes.clear();
+    this.probes.set(key, { at: Date.now(), value });
+    return value;
+  }
+
+  /**
+   * Vets a foreign token's mint against the policy. A mint that is not accepted answers 'mint_unlisted'
+   * (when FORGE_FOREIGN_UNLISTED is on and the policy has a list) unless the customer accepted it; it
+   * then must pass the live probe, and the caller applies the lower cap.
+   */
+  async vetForeignMint(mint: string, opts: { acceptUnlisted?: boolean } = {}): Promise<VettedMint> {
     const env = this.env;
     if (!env.FORGE_FOREIGN_ENABLED) throw new PaymentError('method_unavailable', 'eCash from other mints is not accepted here', 400);
     const m = normalizeMintUrl(mint);
@@ -454,18 +541,69 @@ export class FundingService {
     const insecure = env.FORGE_FOREIGN_ALLOW_INSECURE;
     const key = mintKey(m, insecure);
     if (this.keySet(env.FORGE_FOREIGN_DENY).has(key)) throw new PaymentError('mint_not_allowed', 'eCash from this mint is not accepted');
-    const allow = this.keySet(env.FORGE_FOREIGN_ALLOW);
+    const operator = this.operatorKeys();
     let ok: boolean;
-    if (env.FORGE_FOREIGN_POLICY === 'any') ok = allow.size === 0 || allow.has(key);
-    else if (env.FORGE_FOREIGN_POLICY === 'allowlist') ok = allow.has(key);
-    else ok = allow.has(key) || !!this.discovery?.snapshot().some((d) => mintKey(d.url, insecure) === key);
-    if (!ok) {
+    if (env.FORGE_FOREIGN_POLICY === 'any') ok = env.FORGE_FOREIGN_ALLOW.length === 0 || operator.has(key);
+    else if (env.FORGE_FOREIGN_POLICY === 'allowlist') ok = operator.has(key);
+    else ok = operator.has(key) || !!this.discovery?.snapshot().some((d) => mintKey(d.url, insecure) === key);
+    if (ok) return { url: await checkForeignMintUrl(m, insecure), unlisted: false };
+    if (!this.unlistedEnabled()) {
       throw new PaymentError(
         'mint_not_allowed',
         `eCash from this mint is not accepted yet. The mints Forge accepts are listed under Add funds and at ${FOREIGN_MINTS_PATH}.`,
       );
     }
-    return checkForeignMintUrl(m, insecure);
+    // The URL safety check runs before the customer is asked, so an unsafe mint is never offered.
+    const url = await checkForeignMintUrl(m, insecure);
+    const max = this.unlistedMax();
+    if (!opts.acceptUnlisted) {
+      throw new PaymentError(
+        'mint_unlisted',
+        `This mint is not on Forge's recommended list. You can continue at your own risk, up to ${max.sat} sat or $${(max.usd / 100).toFixed(2)}. Resend with accept_unlisted: true to continue.`,
+        409,
+        { unlisted: { mint: url, max } },
+      );
+    }
+    const probe = await this.probeForeignMint(url);
+    if (!probe.ok) throw new PaymentError('mint_check_failed', `this mint did not pass Forge's checks (${probe.reason ?? 'unknown'}), so its eCash cannot be used`, 400);
+    return { url, unlisted: true };
+  }
+
+  // ------------------------------------------------------------------ operator mints (admin)
+
+  /**
+   * Adds a mint to the operator list. Refuses Forge's own and denied mints and runs the URL safety
+   * check; the live probe must pass unless force is set. The mint's /v1/info name is kept.
+   */
+  async addOperatorMint(raw: string, note: string | null, force = false): Promise<{ mint: OperatorMint; probe: MintProbe; forced: boolean; added: boolean }> {
+    const env = this.env;
+    const insecure = env.FORGE_FOREIGN_ALLOW_INSECURE;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > 200) throw new PaymentError('invalid_request', 'send a mint URL of at most 200 characters');
+    const m = normalizeMintUrl(trimmed);
+    if (this.wallet.isTrusted(m) || this.keySet(this.wallet.trustedMints).has(mintKey(m, insecure)) || mintKey(m, insecure) === mintKey(this.mint, insecure)) {
+      throw new PaymentError('own_mint', "this is one of Forge's own mints; its eCash is already accepted", 409);
+    }
+    if (this.keySet(env.FORGE_FOREIGN_DENY).has(mintKey(m, insecure))) throw new PaymentError('mint_denied', 'this mint is in FORGE_FOREIGN_DENY; remove it there first', 409);
+    const url = mintKey(await checkForeignMintUrl(m, insecure), insecure);
+    const probe = await this.probeForeignMint(url, true);
+    if (!probe.ok && !force) {
+      throw new PaymentError('mint_check_failed', `the mint did not pass the check: ${probe.reason ?? 'unknown'}. Add it anyway with force.`, 400, { probe });
+    }
+    const existed = !!this.db.prepare('SELECT 1 FROM operator_mints WHERE url = ?').get(url);
+    const name = sanitizeMintName(probe.name) ?? null;
+    const cleanNote = note ? note.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200) || null : null;
+    this.db
+      .prepare('INSERT INTO operator_mints (url, name, note, added_at) VALUES (?, ?, ?, ?) ON CONFLICT(url) DO UPDATE SET name = excluded.name, note = excluded.note')
+      .run(url, name, cleanNote, now());
+    const mint = this.db.prepare('SELECT url, name, note, added_at FROM operator_mints WHERE url = ?').get(url) as unknown as OperatorMint;
+    return { mint, probe, forced: !probe.ok, added: !existed };
+  }
+
+  /** Removes an admin-added mint. Returns false when it was not on the list. */
+  removeOperatorMint(raw: string): boolean {
+    const key = mintKey(String(raw ?? ''), this.env.FORGE_FOREIGN_ALLOW_INSECURE);
+    return Number(this.db.prepare('DELETE FROM operator_mints WHERE url = ?').run(key).changes) > 0;
   }
 
   /**
@@ -473,7 +611,7 @@ export class FundingService {
    * the token's mint, shrinking the credit until the melt (amount + fee reserve + input fees) fits.
    * Nothing is spent; the token stays with the client until confirm.
    */
-  async quoteForeign(accountId: string, unit: Unit, token: string, lockPubkey: string | null = null): Promise<FundingRow> {
+  async quoteForeign(accountId: string, unit: Unit, token: string, lockPubkey: string | null = null, opts: { acceptUnlisted?: boolean } = {}): Promise<FundingRow> {
     const m = await this.methods();
     if (!m.foreign.enabled || !m.lightning.units.includes(unit)) throw new PaymentError('method_unavailable', `funding in ${unit} from other mints is not available`, 400);
     let meta: { mint: string };
@@ -482,11 +620,15 @@ export class FundingService {
     } catch {
       throw new PaymentError('invalid_token', 'could not decode token');
     }
-    await this.vetForeignMint(meta.mint);
+    const vetted = await this.vetForeignMint(meta.mint, opts);
     const t = await this.wallet.inspect(token, undefined, { foreign: true });
     const rawAmount = t.proofs.reduce((s, p) => s + num(p.amount), 0);
     const max = t.unit === 'sat' ? this.env.FORGE_FOREIGN_MAX_SAT : this.env.FORGE_FOREIGN_MAX_USD;
     if (rawAmount > max) throw new PaymentError('amount_too_large', `tokens from other mints are limited to ${max} ${t.unit}`);
+    if (vetted.unlisted) {
+      const cap = this.unlistedMax()[t.unit];
+      if (rawAmount > cap) throw new PaymentError('amount_too_large', `tokens from a mint that is not on Forge's list are limited to ${cap} ${t.unit}`);
+    }
     this.checkPendingLimit(accountId);
 
     const fw = await this.wallet.wallet(t.mint, t.unit);
@@ -541,8 +683,9 @@ export class FundingService {
       f_melt_quote: mq.quote,
       f_fee_max: feeMax,
       f_lock_pubkey: lockPubkey,
+      f_unlisted: vetted.unlisted ? 1 : 0,
     });
-    log.info('fund_created', { id: row.id, method: 'foreign', unit, amount: credit, foreign_unit: t.unit, foreign_amount: rawAmount });
+    log.info('fund_created', { id: row.id, method: 'foreign', unit, amount: credit, foreign_unit: t.unit, foreign_amount: rawAmount, unlisted: vetted.unlisted });
     return row;
   }
 

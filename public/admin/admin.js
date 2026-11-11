@@ -884,7 +884,7 @@ async function renderFundings() {
     <section class="card">${table(
       [
         { h: 'Age', v: (f) => when(f.created_at) },
-        { h: 'Method', v: (f) => esc(f.method) + (f.foreign_mint ? `<div class="muted small">${esc(f.foreign_mint)}</div>` : '') },
+        { h: 'Method', v: (f) => esc(f.method) + (f.unlisted ? ' ' + badge('unlisted mint', 'warn') : '') + (f.foreign_mint ? `<div class="muted small">${esc(f.foreign_mint)}</div>` : '') },
         { h: 'Amount', num: true, v: (f) => (f.amount != null ? units(f.amount, f.unit) : f.paid != null ? units(f.paid, f.unit) : 'any') },
         { h: 'Credited', num: true, v: (f) => units(f.credited, f.unit) },
         { h: 'Status', wrap: true, v: (f) => badge(f.status, f.attention ? 'err' : f.status === 'credited' ? 'ok' : stateKind(f.state)) + (f.detail ? `<div class="muted small">${esc(f.detail)}</div>` : '') },
@@ -954,8 +954,8 @@ async function renderRequests() {
 // ------------------------------------------------------------------ settings
 
 const POLICY_TEXT = {
-  discovered: 'Operator list plus mints found through NIP-87 reviews',
-  allowlist: 'Operator list only',
+  discovered: 'Operator list (env and added here) plus mints found through NIP-87 reviews',
+  allowlist: 'Operator list (env and added here) only',
   any: 'Any mint (operator list limits it when set)',
 };
 
@@ -976,7 +976,15 @@ function otherMintsCard(d) {
         last.rejected,
       )}</details>`
     : '';
-  return `<section class="card">
+  const added = new Set((d.operator_mints || []).map((m) => m.url));
+  const notes = new Map((d.operator_mints || []).map((m) => [m.url, m.note]));
+  const un = d.unlisted;
+  const unlistedText = un
+    ? un.enabled && d.policy !== 'any'
+      ? `${badge('allowed', 'warn')} <span class="muted small">customers can confirm a mint that is not listed, up to ${units(un.max.usd, 'usd')} · ${units(un.max.sat, 'sat')}</span>`
+      : badge('refused')
+    : '–';
+  return `<section class="card" id="mcard">
     <div class="card-head"><h3>Other mints</h3><button class="btn small" type="button" id="mrefresh" ${disc.enabled ? '' : 'disabled title="No discovery relays are set"'}>Refresh</button></div>
     <dl class="kv">
       <dt>Policy</dt><dd>${badge(d.policy, d.policy === 'any' ? 'warn' : 'brass')} <span class="muted small">${esc(POLICY_TEXT[d.policy] || '')}</span></dd>
@@ -984,12 +992,20 @@ function otherMintsCard(d) {
       <dt>Relays</dt><dd>${disc.enabled ? relays : badge('discovery off')}</dd>
       <dt>Last refresh</dt><dd>${lastText}</dd>
       <dt>List from</dt><dd>${when(disc.updated_at)}</dd>
+      <dt>Unlisted mints</dt><dd>${unlistedText}</dd>
     </dl>
+    <form id="madd" class="row" autocomplete="off">
+      <label class="field"><span>Add mint (checked live before it is added)</span><input name="url" type="url" maxlength="200" spellcheck="false" placeholder="https://mint.example.com" required></label>
+      <label class="field"><span>Note (optional)</span><input name="note" maxlength="200" placeholder="why it is accepted"></label>
+      <div class="field"><button class="btn primary" type="submit">Add</button></div>
+    </form>
+    <div id="maddout"></div>
     ${table(
       [
-        { h: 'Accepted mint', wrap: true, v: (r) => `${esc(r.url)}${r.name ? ` <span class="muted small">${esc(r.name)}</span>` : ''}` },
-        { h: 'Source', v: (r) => badge(r.source, r.source === 'operator' ? 'brass' : '') },
+        { h: 'Accepted mint', wrap: true, v: (r) => `${esc(r.url)}${r.name ? ` <span class="muted small">${esc(r.name)}</span>` : ''}${notes.get(r.url) ? `<div class="muted small">${esc(notes.get(r.url))}</div>` : ''}` },
+        { h: 'Source', v: (r) => badge(added.has(r.url) ? 'added here' : r.source, r.source === 'operator' ? 'brass' : '') },
         { h: 'Reviewers', num: true, v: (r) => (r.reviewers == null ? '–' : nf(r.reviewers)) },
+        { h: '', v: (r) => (added.has(r.url) ? `<button class="btn small danger" type="button" data-mremove="${esc(r.url)}">Remove</button>` : '') },
       ],
       d.accepted,
       d.policy === 'any' ? 'Any mint is accepted; none is listed.' : 'No other mint is accepted right now.',
@@ -1003,7 +1019,7 @@ async function renderSettings() {
   const yes = (b) => (b ? badge('on', 'ok') : badge('off'));
   const m = s.methods || {};
   view.innerHTML = `
-    ${head('Settings', 'Read-only. Change these in the gateway environment and model catalog, then restart.')}
+    ${head('Settings', 'Read-only, apart from the mints added under Other mints. Change the rest in the gateway environment and model catalog, then restart.')}
     <div class="stack">
       <div class="grid two">
         <section class="card"><h3>Access and pricing</h3><dl class="kv">
@@ -1051,6 +1067,44 @@ async function renderSettings() {
         s.models,
       )}</section>
     </div>`;
+  const addMint = async (bodyIn, btn) => {
+    const out = $('#maddout');
+    btn.disabled = true;
+    try {
+      const r = await api('/mints/allowed', { method: 'POST', body: bodyIn });
+      const name = r.mint.name ? ` (${r.mint.name})` : '';
+      toast(r.forced ? `Added ${r.mint.url}${name} without a passing check: ${r.probe.reason || 'failed'}` : `Added ${r.mint.url}${name}: check passed (${(r.probe.units || []).join(', ')})`);
+      route(true);
+    } catch (x) {
+      btn.disabled = false;
+      toast(x.message);
+      if (x.code === 'mint_check_failed') {
+        out.innerHTML = `<p class="note">${esc(bodyIn.url)} did not pass the check: ${esc(x.body?.probe?.reason || 'unknown')}. Customers cannot fund from it until it answers. <button class="btn small danger" type="button" id="mforce">Add anyway</button></p>`;
+        $('#mforce').addEventListener('click', (e) => addMint({ ...bodyIn, force: true }, e.currentTarget));
+      }
+    }
+  };
+  $('#madd')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    $('#maddout').innerHTML = '';
+    addMint({ url: String(f.get('url') || '').trim(), note: String(f.get('note') || '').trim() || undefined }, e.target.querySelector('button[type=submit]'));
+  });
+  $('#mcard')?.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-mremove]');
+    if (!b) return;
+    const url = b.dataset.mremove;
+    if (!confirm(`Remove ${url}? Customers then see it as unlisted.`)) return;
+    b.disabled = true;
+    try {
+      await api('/mints/allowed/remove', { method: 'POST', body: { url } });
+      toast(`Removed ${url}`);
+      route(true);
+    } catch (x) {
+      toast(x.message);
+      b.disabled = false;
+    }
+  });
   $('#mrefresh')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;

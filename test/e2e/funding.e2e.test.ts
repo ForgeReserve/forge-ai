@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -326,7 +327,7 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     const seed = openDb(dbPath);
     sqliteStore(seed).save({ v: 1, at: Date.now(), mints: [{ url: MINT_C, reviewers: 4, name: 'Test mint C', units: ['sat'], probed_at: Date.now() }] });
     seed.close();
-    const d = await startGateway({ dbPath, env: { FORGE_FOREIGN_POLICY: 'discovered', FORGE_FOREIGN_ALLOW_INSECURE: 'true' } });
+    const d = await startGateway({ dbPath, env: { FORGE_FOREIGN_POLICY: 'discovered', FORGE_FOREIGN_ALLOW_INSECURE: 'true', FORGE_FOREIGN_UNLISTED: 'false' } });
     try {
       const list = (await (await fetch(`${d.url}/v1/wallet/fund/mints`)).json()) as any;
       expect(list.policy).toBe('discovered');
@@ -342,6 +343,72 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
       expect(refused.status).toBe(400);
       expect(refused.body.error.code).toBe('mint_not_allowed');
       expect(refused.body.error.message).toMatch(/\/v1\/wallet\/fund\/mints/);
+    } finally {
+      await d.close();
+    }
+  });
+
+  it("under 'discovered' with no discovered mints: an unlisted mint needs accept_unlisted and the lower cap; an admin-added mint does not", async () => {
+    const adminToken = 'e2e-admin-token-0123456789';
+    const d = await startGateway({
+      env: {
+        FORGE_FOREIGN_POLICY: 'discovered',
+        FORGE_FOREIGN_ALLOW_INSECURE: 'true',
+        FORGE_FOREIGN_UNLISTED_MAX_SAT: '1000',
+        FORGE_ADMIN_TOKEN_HASH: createHash('sha256').update(adminToken).digest('hex'),
+      },
+    });
+    const admin = async (path: string, method = 'GET', body?: object) => {
+      const res = await fetch(`${d.url}/admin/api${path}`, {
+        method,
+        headers: { 'x-forge-admin-token': adminToken, ...(method === 'GET' ? {} : { origin: d.url, 'content-type': 'application/json' }) },
+        body: body ? j(body) : undefined,
+      });
+      return { status: res.status, body: (await res.json()) as any };
+    };
+    try {
+      expect(((await (await fetch(`${d.url}/v1/wallet/fund/mints`)).json()) as any).mints).toEqual([]);
+      const methods = (await (await fetch(`${d.url}/v1/wallet/fund/methods`)).json()) as any;
+      expect(methods.foreign.unlisted).toEqual({ enabled: true, max: { sat: 1000, usd: 500 } });
+
+      const token = await mintToken(MINT_B, 'sat', 300);
+      const invite = createInvite(d);
+      const asked = await post(d, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite });
+      expect(asked.status).toBe(409);
+      expect(asked.body.error.code).toBe('mint_unlisted');
+      expect(asked.body.error.message).toMatch(/not on Forge's recommended list/);
+      expect(asked.body.unlisted).toEqual({ mint: MINT_B, max: { sat: 1000, usd: 500 } });
+      // The refused quote left no balance behind, so the invite is still open.
+      expect(d.deps.invites.lookup(invite)!.status).toBe('open');
+
+      const q = await post(d, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite, accept_unlisted: true });
+      expect(q.status).toBe(200);
+      expect(q.body.foreign).toMatchObject({ mint: MINT_B, unlisted: true });
+      const key = q.body.key as string;
+      const c = await post(d, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token }, key);
+      expect(c.status).toBe(200);
+      const done = c.body.state === 'done' ? c.body : await waitFor(d, q.body.id, key);
+      expect(done.state).toBe('done');
+      expect(done.credited).toBe(q.body.foreign.credit);
+      expect(d.deps.funding.get(q.body.id)!.f_unlisted).toBe(1);
+      const fundings = await admin('/fundings?state=all');
+      expect(fundings.body.data.find((f: any) => f.id === q.body.id)).toMatchObject({ unlisted: true, foreign_mint: MINT_B });
+
+      const big = await post(d, '/v1/wallet/fund/foreign/quote', { token: await mintToken(MINT_B, 'sat', 1200), unit: 'sat', accept_unlisted: true }, key);
+      expect(big.status).toBe(400);
+      expect(big.body.error.code).toBe('amount_too_large');
+      expect(big.body.error.message).toMatch(/not on Forge's list are limited to 1000 sat/);
+
+      // The operator adds mint B (live probe against the local mint); it then funds without the flag.
+      const added = await admin('/mints/allowed', 'POST', { url: MINT_B, note: 'e2e' });
+      expect(added.status).toBe(200);
+      expect(added.body).toMatchObject({ forced: false, probe: { ok: true }, mint: { url: MINT_B } });
+      const list = (await (await fetch(`${d.url}/v1/wallet/fund/mints`)).json()) as any;
+      expect(list.mints.map((m: any) => [m.url, m.source])).toEqual([[MINT_B, 'operator']]);
+      const listed = await post(d, '/v1/wallet/fund/foreign/quote', { token: await mintToken(MINT_B, 'sat', 1200), unit: 'sat' }, key);
+      expect(listed.status).toBe(200);
+      expect(listed.body.foreign.unlisted).toBe(false);
+      expect(d.deps.funding.get(listed.body.id)!.f_unlisted).toBe(0);
     } finally {
       await d.close();
     }

@@ -246,3 +246,68 @@ describe('admin other-mint discovery', () => {
     expect((await app.request(`${ORIGIN}/admin/api/mints/discovery/refresh`, { method: 'POST', headers: { host: HOST, 'x-forge-admin-token': TOKEN, 'content-type': 'application/json' }, body: '{}' })).status).toBe(403);
   });
 });
+
+describe('admin operator mints', () => {
+  const MINT = 'https://added.example';
+  function withProbe(probe: (url: string) => Promise<{ url: string; ok: boolean; reason?: string; units?: string[]; name?: string }>, env: Record<string, string> = {}) {
+    const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_ADMIN_TOKEN_HASH: HASH, FORGE_ADMIN_RATE_LIMIT_RPM: '100000', FORGE_FOREIGN_DISCOVERY_RELAYS: '', FORGE_FOREIGN_ALLOW_INSECURE: 'true', ...env };
+    const config = loadConfig(e as NodeJS.ProcessEnv, catalog);
+    const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', 100_000)], env: e as NodeJS.ProcessEnv, discovery: { probe } });
+    const app = createApp(deps);
+    const call = (path: string, method = 'GET', body?: unknown, origin: string | null = ORIGIN) =>
+      app.request(`${ORIGIN}${path}`, {
+        method,
+        headers: { host: HOST, 'x-forge-admin-token': TOKEN, ...(method === 'GET' ? {} : { ...(origin ? { origin } : {}), 'content-type': 'application/json' }) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    return { call, deps };
+  }
+
+  it('adds a mint after the probe, lists it as operator in the public list, and removes it', async () => {
+    let probes = 0;
+    const { call } = withProbe(async (url) => {
+      probes++;
+      return { url, ok: true, units: ['sat'], name: 'Added Mint' };
+    });
+    const add = await call('/admin/api/mints/allowed', 'POST', { url: MINT + '/', note: 'ok by me' });
+    expect(add.status).toBe(200);
+    const a = await add.json();
+    expect(a).toMatchObject({ forced: false, added: true, probe: { ok: true }, mint: { url: MINT, name: 'Added Mint', note: 'ok by me' } });
+    expect(a.view.operator_mints).toHaveLength(1);
+    expect(probes).toBe(1);
+    const view = await (await call('/admin/api/mints/discovery')).json();
+    expect(view.operator_mints.map((m: { url: string }) => m.url)).toEqual([MINT]);
+    expect(view.accepted).toEqual([{ url: MINT, name: 'Added Mint', source: 'operator' }]);
+    expect(view.unlisted).toEqual({ enabled: true, max: { sat: 5000, usd: 500 } });
+    const pub = await (await call('/v1/wallet/fund/mints')).json();
+    expect(pub.mints).toEqual([{ url: MINT, name: 'Added Mint', source: 'operator' }]);
+    // CSRF gate applies.
+    expect((await call('/admin/api/mints/allowed', 'POST', { url: MINT }, null)).status).toBe(403);
+    const del = await call(`/admin/api/mints/allowed?url=${encodeURIComponent(MINT)}`, 'DELETE');
+    expect(del.status).toBe(200);
+    expect((await call(`/admin/api/mints/allowed?url=${encodeURIComponent(MINT)}`, 'DELETE')).status).toBe(404);
+    await call('/admin/api/mints/allowed', 'POST', { url: MINT });
+    expect((await call('/admin/api/mints/allowed/remove', 'POST', { url: MINT })).status).toBe(200);
+    expect((await (await call('/admin/api/mints/discovery')).json()).operator_mints).toEqual([]);
+  });
+
+  it('refuses a failed probe with the reason, and a forced add is flagged', async () => {
+    const { call } = withProbe(async (url) => ({ url, ok: false, reason: 'info: no NUT-05 melt' }));
+    const r = await call('/admin/api/mints/allowed', 'POST', { url: MINT });
+    expect(r.status).toBe(400);
+    const b = await r.json();
+    expect(b).toMatchObject({ error: { code: 'mint_check_failed' }, probe: { ok: false, reason: 'info: no NUT-05 melt' } });
+    expect(b.error.message).toMatch(/no NUT-05 melt/);
+    const f = await call('/admin/api/mints/allowed', 'POST', { url: MINT, force: true });
+    expect(f.status).toBe(200);
+    expect(await f.json()).toMatchObject({ forced: true, mint: { url: MINT } });
+  });
+
+  it("refuses Forge's own and denied mints and bad bodies", async () => {
+    const { call } = withProbe(async (url) => ({ url, ok: true, units: ['sat'] }), { FORGE_FOREIGN_DENY: MINT });
+    expect((await (await call('/admin/api/mints/allowed', 'POST', { url: 'http://127.0.0.1:1/' })).json()).error.code).toBe('own_mint');
+    expect((await (await call('/admin/api/mints/allowed', 'POST', { url: MINT })).json()).error.code).toBe('mint_denied');
+    expect((await call('/admin/api/mints/allowed', 'POST', { note: 'x' })).status).toBe(400);
+    expect((await call('/admin/api/mints/allowed', 'POST', { url: MINT + '2', note: 5 })).status).toBe(400);
+  });
+});

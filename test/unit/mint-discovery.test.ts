@@ -542,17 +542,20 @@ function fakeDiscovery(urls: string[]): MintDiscovery {
   return { enabled: true, snapshot: () => mints, refresh: async () => {}, start() {}, stop() {}, updatedAt: () => NOW, status: () => ({}) as never };
 }
 
-function service(env: Record<string, string>, discovered: string[] = [LISTED]) {
+type ProbeFn = (url: string) => Promise<MintProbe>;
+const probedOk: ProbeFn = async (url) => ({ url, ok: true, units: ['sat'], name: 'Probed Mint' });
+
+function service(env: Record<string, string>, discovered: string[] = [LISTED], probe: ProbeFn = probedOk) {
   const e = EnvSchema.parse({ FORGE_FOREIGN_DISCOVERY_RELAYS: '', FORGE_FOREIGN_ALLOW_INSECURE: 'true', ...env });
   const trusted = [FORGE];
   const wallet = { trustedMints: trusted, isTrusted: (m: string) => trusted.includes(m.replace(/\/+$/, '')) };
-  return new FundingService({ db: {} as never, ledger: {} as never, wallet: wallet as never, env: e, rates: {} as never, mint: FORGE, discovery: fakeDiscovery(discovered) });
+  return new FundingService({ db: openDb(':memory:'), ledger: {} as never, wallet: wallet as never, env: e, rates: {} as never, mint: FORGE, discovery: fakeDiscovery(discovered), probe });
 }
 
-async function verdict(s: FundingService, mint: string): Promise<string> {
+async function verdict(s: FundingService, mint: string, acceptUnlisted = false): Promise<string> {
   try {
-    await s.vetForeignMint(mint);
-    return 'ok';
+    const v = await s.vetForeignMint(mint, { acceptUnlisted });
+    return v.unlisted ? 'ok-unlisted' : 'ok';
   } catch (e) {
     return (e as { code: string }).code;
   }
@@ -560,35 +563,36 @@ async function verdict(s: FundingService, mint: string): Promise<string> {
 
 describe('other-mint policy', () => {
   it('discovered: operator list plus discovered mints; deny wins; Forge mints answer use_topup', async () => {
-    const s = service({ FORGE_FOREIGN_ALLOW: OPERATOR, FORGE_FOREIGN_DENY: 'https://LISTED.example/' });
+    const s = service({ FORGE_FOREIGN_ALLOW: OPERATOR, FORGE_FOREIGN_DENY: 'https://LISTED.example/', FORGE_FOREIGN_UNLISTED: 'false' });
     expect(await verdict(s, OPERATOR + '/')).toBe('ok');
     expect(await verdict(s, LISTED)).toBe('mint_not_allowed'); // denied, though discovered
     expect(await verdict(s, OTHER)).toBe('mint_not_allowed');
     expect(await verdict(s, FORGE)).toBe('use_topup');
-    const open = service({});
+    const open = service({ FORGE_FOREIGN_UNLISTED: 'false' });
     expect(await verdict(open, 'https://Listed.example/')).toBe('ok');
     await expect(open.vetForeignMint(OTHER)).rejects.toThrow(/\/v1\/wallet\/fund\/mints/);
   });
 
   it('allowlist: only the operator list', async () => {
-    const s = service({ FORGE_FOREIGN_POLICY: 'allowlist', FORGE_FOREIGN_ALLOW: OPERATOR });
+    const s = service({ FORGE_FOREIGN_POLICY: 'allowlist', FORGE_FOREIGN_ALLOW: OPERATOR, FORGE_FOREIGN_UNLISTED: 'false' });
     expect(await verdict(s, OPERATOR)).toBe('ok');
     expect(await verdict(s, LISTED)).toBe('mint_not_allowed');
-    expect(await verdict(service({ FORGE_FOREIGN_POLICY: 'allowlist' }), OPERATOR)).toBe('mint_not_allowed');
+    expect(await verdict(service({ FORGE_FOREIGN_POLICY: 'allowlist', FORGE_FOREIGN_UNLISTED: 'false' }), OPERATOR)).toBe('mint_not_allowed');
   });
 
-  it('any: every mint unless an operator list limits it; deny still wins', async () => {
+  it('any: every mint unless an operator list limits it; deny still wins; never asks about unlisted mints', async () => {
     const s = service({ FORGE_FOREIGN_POLICY: 'any', FORGE_FOREIGN_DENY: OTHER });
     expect(await verdict(s, 'https://whatever.example')).toBe('ok');
     expect(await verdict(s, OTHER)).toBe('mint_not_allowed');
     expect(await verdict(s, FORGE)).toBe('use_topup');
     const limited = service({ FORGE_FOREIGN_POLICY: 'any', FORGE_FOREIGN_ALLOW: OPERATOR });
     expect(await verdict(limited, LISTED)).toBe('mint_not_allowed');
+    expect(await verdict(limited, LISTED, true)).toBe('mint_not_allowed');
   });
 
   it('still runs the URL safety check on an accepted mint', async () => {
     const s = new FundingService({
-      db: {} as never,
+      db: openDb(':memory:'),
       ledger: {} as never,
       wallet: { trustedMints: [FORGE], isTrusted: () => false } as never,
       env: EnvSchema.parse({ FORGE_FOREIGN_DISCOVERY_RELAYS: '', FORGE_FOREIGN_POLICY: 'allowlist', FORGE_FOREIGN_ALLOW: 'https://127.0.0.1' }),
@@ -597,6 +601,9 @@ describe('other-mint policy', () => {
       discovery: fakeDiscovery([]),
     });
     expect(await verdict(s, 'https://127.0.0.1')).toBe('mint_not_allowed');
+    // An unlisted private address is refused before the customer is asked.
+    expect(await verdict(s, 'https://10.0.0.1')).toBe('mint_not_allowed');
+    expect(await verdict(s, 'https://10.0.0.1', true)).toBe('mint_not_allowed');
   });
 
   it('lists accepted mints without denied or Forge mints, operator entries first', () => {
@@ -608,6 +615,104 @@ describe('other-mint policy', () => {
       { url: LISTED, reviewers: 3, source: 'discovered' },
     ]);
     expect(service({ FORGE_FOREIGN_POLICY: 'allowlist' }).acceptedForeignMints().mints).toEqual([]);
+  });
+});
+
+describe('unlisted mints', () => {
+  it('discovered and allowlist: an unlisted mint answers mint_unlisted (409) with the mint and cap', async () => {
+    for (const policy of ['discovered', 'allowlist']) {
+      const s = service({ FORGE_FOREIGN_POLICY: policy });
+      const err = await s.vetForeignMint(OTHER).catch((e) => e);
+      expect(err).toMatchObject({ code: 'mint_unlisted', status: 409, extra: { unlisted: { mint: OTHER, max: { sat: 5000, usd: 500 } } } });
+      expect(err.message).toMatch(/not on Forge's recommended list/);
+      expect(await verdict(s, OTHER, true)).toBe('ok-unlisted');
+    }
+  });
+
+  it('deny wins over accept_unlisted; Forge mints still answer use_topup', async () => {
+    const s = service({ FORGE_FOREIGN_DENY: OTHER });
+    expect(await verdict(s, OTHER)).toBe('mint_not_allowed');
+    expect(await verdict(s, OTHER, true)).toBe('mint_not_allowed');
+    expect(await verdict(s, FORGE, true)).toBe('use_topup');
+  });
+
+  it('off: refused with mint_not_allowed even with the flag', async () => {
+    const s = service({ FORGE_FOREIGN_UNLISTED: 'false' });
+    expect(await verdict(s, OTHER, true)).toBe('mint_not_allowed');
+  });
+
+  it('a listed mint is never marked unlisted, even with the flag', async () => {
+    expect(await verdict(service({}), LISTED, true)).toBe('ok');
+  });
+
+  it('the mint must pass the live probe; results are cached', async () => {
+    let calls = 0;
+    const s = service({}, [], async (url) => {
+      calls++;
+      return { url, ok: false, reason: 'info: no NUT-05 melt' };
+    });
+    expect(await verdict(s, OTHER, true)).toBe('mint_check_failed');
+    expect(await verdict(s, OTHER, true)).toBe('mint_check_failed');
+    expect(calls).toBe(1);
+    let okCalls = 0;
+    const t = service({}, [], async (url) => {
+      okCalls++;
+      return { url, ok: true, units: ['sat'] };
+    });
+    for (let i = 0; i < 3; i++) expect(await verdict(t, OTHER, true)).toBe('ok-unlisted');
+    expect(okCalls).toBe(1);
+  });
+
+  it('the cap is the lower of the unlisted and the other-mint caps, and methods() shows it', async () => {
+    const s = service({ FORGE_FOREIGN_UNLISTED_MAX_SAT: '9000', FORGE_FOREIGN_MAX_SAT: '7000', FORGE_FOREIGN_UNLISTED_MAX_USD: '300' });
+    const err = await s.vetForeignMint(OTHER).catch((e) => e);
+    expect(err.extra.unlisted.max).toEqual({ sat: 7000, usd: 300 });
+    const off = service({ FORGE_FOREIGN_POLICY: 'any' });
+    const internal = off as unknown as { unlistedEnabled(): boolean };
+    expect(internal.unlistedEnabled()).toBe(false);
+  });
+});
+
+describe('operator mints (admin)', () => {
+  it('an added mint is accepted under discovered and allowlist, listed as operator with its name, and can be removed', async () => {
+    for (const policy of ['discovered', 'allowlist']) {
+      const s = service({ FORGE_FOREIGN_POLICY: policy, FORGE_FOREIGN_UNLISTED: 'false' }, []);
+      expect(await verdict(s, OTHER)).toBe('mint_not_allowed');
+      const r = await s.addOperatorMint('https://Other.example/', 'trusted friend');
+      expect(r).toMatchObject({ forced: false, added: true, mint: { url: OTHER, name: 'Probed Mint', note: 'trusted friend' } });
+      expect(await verdict(s, OTHER)).toBe('ok');
+      expect(s.acceptedForeignMints().mints).toEqual([{ url: OTHER, name: 'Probed Mint', source: 'operator' }]);
+      expect(s.removeOperatorMint(OTHER + '/')).toBe(true);
+      expect(s.removeOperatorMint(OTHER)).toBe(false);
+      expect(await verdict(s, OTHER)).toBe('mint_not_allowed');
+    }
+  });
+
+  it('under any, an added mint does not limit the policy', async () => {
+    const s = service({ FORGE_FOREIGN_POLICY: 'any' }, []);
+    await s.addOperatorMint(OPERATOR, null);
+    expect(await verdict(s, 'https://whatever.example')).toBe('ok');
+    expect(s.acceptedForeignMints().mints.map((m) => m.url)).toEqual([OPERATOR]);
+  });
+
+  it("refuses Forge's own, denied and unsafe mints", async () => {
+    const s = service({ FORGE_FOREIGN_DENY: OTHER, FORGE_FOREIGN_ALLOW_INSECURE: 'false' });
+    await expect(s.addOperatorMint(FORGE + '/', null)).rejects.toMatchObject({ code: 'own_mint', status: 409 });
+    await expect(s.addOperatorMint(OTHER, null)).rejects.toMatchObject({ code: 'mint_denied', status: 409 });
+    await expect(s.addOperatorMint('http://plain.example', null)).rejects.toMatchObject({ code: 'mint_not_allowed' });
+    await expect(s.addOperatorMint('https://192.168.1.4', null)).rejects.toMatchObject({ code: 'mint_not_allowed' });
+    await expect(s.addOperatorMint('', null)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(s.operatorMints()).toEqual([]);
+  });
+
+  it('a failed probe refuses the add unless forced, and the forced add is flagged', async () => {
+    const s = service({}, [], async (url) => ({ url, ok: false, reason: 'keysets: http 500' }));
+    const err = await s.addOperatorMint(OTHER, null).catch((e) => e);
+    expect(err).toMatchObject({ code: 'mint_check_failed', status: 400, extra: { probe: { ok: false, reason: 'keysets: http 500' } } });
+    expect(s.operatorMints()).toEqual([]);
+    const r = await s.addOperatorMint(OTHER, null, true);
+    expect(r).toMatchObject({ forced: true, added: true, mint: { url: OTHER, name: null } });
+    expect(s.acceptedForeignMints().mints).toEqual([{ url: OTHER, source: 'operator' }]);
   });
 });
 

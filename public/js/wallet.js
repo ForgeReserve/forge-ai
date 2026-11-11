@@ -716,27 +716,64 @@ function foreignStep() {
     ta.value = t;
     check.click();
   }, msg);
-  check.addEventListener('click', async () => {
-    const token = ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, '');
-    if (!/^cashu[AB]/.test(token)) return msg.set('An eCash token starts with cashuB.', 'err');
-    if (needInvite(msg)) return;
+  // Inline confirm for a mint that is not on the accepted list (no browser dialog).
+  const unlistedBox = el('div', { class: 'unlisted-confirm', hidden: '' });
+  const hideUnlisted = () => {
+    unlistedBox.hidden = true;
+    unlistedBox.replaceChildren();
+  };
+  const askUnlisted = (info, token) => {
+    const cap = info?.max ?? F.unlisted?.max ?? {};
+    const limit = [cap.sat ? fmtUnits(cap.sat, 'sat') : '', cap.usd ? fmtUnits(cap.usd, 'usd') : ''].filter(Boolean).join(' / ');
+    const cont = el('button', { class: 'btn primary', type: 'button', text: 'Continue' });
+    const cancel = el('button', { class: 'btn ghost', type: 'button', text: 'Cancel' });
+    cont.addEventListener('click', () => quote(token, true));
+    cancel.addEventListener('click', () => {
+      hideUnlisted();
+      msg.set('');
+      check.focus();
+    });
+    unlistedBox.replaceChildren(
+      el('p', { class: 'unlisted-mint mono', text: info?.mint ?? '' }),
+      el('p', { text: `This mint is not on Forge's recommended list. Only continue if you trust it.${limit ? ` Limit: ${limit}.` : ''}` }),
+      el('div', { class: 'row' }, cont, cancel),
+    );
+    unlistedBox.hidden = false;
+    msg.set('');
+    cont.focus();
+  };
+  const quote = async (token, acceptUnlisted = false) => {
     check.disabled = true;
+    for (const b of unlistedBox.querySelectorAll('button')) b.disabled = true;
     msg.set('Asking the mint for a quote');
     try {
-      const r = await api('/v1/wallet/fund/foreign/quote', { key: S.key, json: { token, unit, invite: inviteFor(), pubkey: lockKey() || undefined } });
+      const r = await api('/v1/wallet/fund/foreign/quote', { key: S.key, json: { token, unit, invite: inviteFor(), pubkey: lockKey() || undefined, ...(acceptUnlisted ? { accept_unlisted: true } : {}) } });
       if (r.body?.key) hooks.setKey(r.body.key);
       if (!r.res.ok) {
-        if (r.body?.error?.code === 'use_topup') return msg.set('This token is from an accepted mint. Go back and choose eCash instead.', 'err');
-        if (r.body?.error?.code === 'mint_not_allowed' && accepted && !accepted.open) accepted.open = true;
+        const code = r.body?.error?.code;
+        if (code === 'mint_unlisted') return askUnlisted(r.body?.unlisted, token);
+        hideUnlisted();
+        if (code === 'use_topup') return msg.set('This token is from an accepted mint. Go back and choose eCash instead.', 'err');
+        if (code === 'mint_not_allowed' && accepted && !accepted.open) accepted.open = true;
         return msg.set(errMsg(r), 'err');
       }
+      hideUnlisted();
       absorb(r.body);
       go(() => quoteStep(r.body, token), 1);
     } catch (e) {
       msg.set(e.message, 'err');
     } finally {
       check.disabled = false;
+      for (const b of unlistedBox.querySelectorAll('button')) b.disabled = false;
     }
+  };
+  ta.addEventListener('input', hideUnlisted);
+  check.addEventListener('click', () => {
+    const token = ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, '');
+    if (!/^cashu[AB]/.test(token)) return msg.set('An eCash token starts with cashuB.', 'err');
+    if (needInvite(msg)) return;
+    hideUnlisted();
+    quote(token);
   });
   const max = F.max ?? {};
   const accepted = acceptedMintsBlock(F);
@@ -755,6 +792,7 @@ function foreignStep() {
       el('div', { class: 'row' }, scan.btn),
       scan.box,
       msg,
+      unlistedBox,
       el('p', { class: 'hint small', text: [max.sat ? `Up to ${fmtUnits(max.sat, 'sat')}` : '', max.usd ? `${fmtUnits(max.usd, 'usd')} per token` : ''].filter(Boolean).join(' or ') }),
       accepted,
     ],
@@ -847,6 +885,7 @@ function quoteStep(f, token) {
       el('div', { class: 'amount-tag', text: fmtUnits(q.credit, f.unit) }),
       el('dl', { class: 'kv' }, el('dt', { text: 'Token' }), el('dd', { text: `${fmtUnits(q.token_amount, q.unit)} at ${host(q.mint)}` }), el('dt', { text: 'Fees, at most' }), el('dd', { text: fmtUnits(q.fee_max, q.unit) }), el('dt', { class: 'total', text: 'Credited to your balance' }), el('dd', { class: 'total', text: fmtUnits(q.credit, f.unit) })),
       el('p', { class: 'hint small', text: `Fees are the other mint's own charges and the Lightning routing reserve. Any reserve the payment does not use comes back to you as eCash from ${host(q.mint)}.` }),
+      q.unlisted ? el('p', { class: 'hint small', text: `${host(q.mint)} is not on Forge's recommended list. You chose to continue with it.` }) : null,
       q.locked_to ? el('p', { class: 'hint small', text: `Returned eCash will be locked to your wallet key ${shortKey(q.locked_to)}. Only that wallet can redeem it.` }) : null,
       el('div', { class: 'row center' }, expiry),
       st,
