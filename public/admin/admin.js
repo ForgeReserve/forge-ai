@@ -238,9 +238,20 @@ async function renderOverview() {
   const [o, costs] = await Promise.all([api('/overview'), api('/costs?days=30').catch(() => null)]);
   const w = o.windows[windowKey];
   const winLabel = { today: 'today (UTC)', d7: '7 days', d30: '30 days' }[windowKey];
-  const [first, ...rest] = o.units;
-  const alt = (f) => rest.map((u) => `<div class="tile-alt">${f(u)}</div>`).join('');
   const rate = o.rate;
+  // Money tiles lead with one dollar total across units (sat at the current rate), then list each unit.
+  // `scale` is 1 for whole cents/sat and 1000 for msub.
+  const toUsd = (n, unit, scale) => (unit === 'usd' ? n / scale / 100 : rate?.btc_usd ? (n / scale / 1e8) * rate.btc_usd : null);
+  const whole = (n, unit, scale) => units(scale === 1 ? n : unit === 'usd' ? n / scale : Math.round(n / scale), unit);
+  const combined = (f, scale) => {
+    const parts = o.units.map((u) => toUsd(f(u) ?? 0, u.unit, scale));
+    if (parts.some((v) => v == null)) return o.units.map((u) => whole(f(u) ?? 0, u.unit, scale)).join(' + ');
+    const total = parts.reduce((a, b) => a + b, 0);
+    return (o.units.some((u) => u.unit !== 'usd' && f(u)) ? '≈ ' : '') + '$' + nf(total, 2);
+  };
+  const perUnit = (f, scale) =>
+    o.units.length > 1 ? `<div class="tile-alt">${o.units.map((u) => whole(f(u) ?? 0, u.unit, scale)).join(' · ')}</div>` : '';
+  const reservedAny = o.units.filter((u) => u.reserved_msub);
   const h = o.health;
   const q = h.quote_checks;
 
@@ -251,15 +262,15 @@ async function renderOverview() {
   const kpis = [
     tile(
       'Sweepable revenue',
-      units(first.sweepable, first.unit),
+      combined((u) => u.sweepable, 1),
       exportedAny.length ? `${exportedAny.map((u) => units(u.exported, u.unit)).join(' · ')} exported so far` : 'Nothing exported yet',
-      alt((u) => units(u.sweepable, u.unit)),
+      perUnit((u) => u.sweepable, 1),
     ),
     tile(
       'Customer balances',
-      msub(first.customer_balances_msub, first.unit),
-      `${nf(accounts)} ${accounts === 1 ? 'balance' : 'balances'} · ${o.units.map((u) => msub(u.reserved_msub, u.unit)).join(' · ')} reserved`,
-      alt((u) => msub(u.customer_balances_msub, u.unit)),
+      combined((u) => u.customer_balances_msub, 1000),
+      `${nf(accounts)} ${accounts === 1 ? 'balance' : 'balances'} · ${reservedAny.length ? reservedAny.map((u) => msub(u.reserved_msub, u.unit)).join(' · ') + ' reserved' : 'nothing reserved'}`,
+      perUnit((u) => u.customer_balances_msub, 1000),
     ),
     tile(
       `Requests, ${winLabel}`,
