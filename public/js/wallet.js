@@ -677,6 +677,33 @@ function addressStep(f) {
 
 // ------------------------------------------------------------------ Other mint
 
+/** "Accepted mints" disclosure for the Other mint step; the list loads from the gateway when opened. */
+function acceptedMintsBlock(F) {
+  if (F.policy === 'any' && !F.mints?.length) return null;
+  const list = el('ul', { class: 'hint small mint-list' });
+  const box = el('details', { class: 'adv' }, el('summary', { text: `Accepted mints${F.mints ? ` (${F.mints.length})` : ''}` }), el('div', { class: 'adv-body' }, list));
+  let loaded = false;
+  box.addEventListener('toggle', async () => {
+    if (!box.open || loaded) return;
+    loaded = true;
+    list.replaceChildren(el('li', { text: 'Loading' }));
+    try {
+      const r = await api(F.mints_url || '/v1/wallet/fund/mints');
+      const mints = r.res.ok ? (r.body?.mints ?? []) : [];
+      if (!r.res.ok) loaded = false;
+      list.replaceChildren(
+        ...(mints.length
+          ? mints.map((m) => el('li', {}, el('span', { class: 'mono', text: m.url }), m.name ? ` ${m.name}` : '', m.reviewers ? ` (${m.reviewers} ${m.reviewers === 1 ? 'review' : 'reviews'})` : ''))
+          : [el('li', { text: r.res.ok ? 'No other mint is accepted right now.' : errMsg(r) })]),
+      );
+    } catch (e) {
+      loaded = false;
+      list.replaceChildren(el('li', { text: e.message }));
+    }
+  });
+  return box;
+}
+
 function foreignStep() {
   const F = methods?.foreign;
   if (!F?.enabled) return view('foreign', { title: 'Other mint', ico: 'swap', back: chooser, body: [el('p', { class: 'hint', text: 'Other-mint funding is not available right now.' })] });
@@ -700,6 +727,7 @@ function foreignStep() {
       if (r.body?.key) hooks.setKey(r.body.key);
       if (!r.res.ok) {
         if (r.body?.error?.code === 'use_topup') return msg.set('This token is from an accepted mint. Go back and choose eCash instead.', 'err');
+        if (r.body?.error?.code === 'mint_not_allowed' && accepted && !accepted.open) accepted.open = true;
         return msg.set(errMsg(r), 'err');
       }
       absorb(r.body);
@@ -711,19 +739,24 @@ function foreignStep() {
     }
   });
   const max = F.max ?? {};
+  const accepted = acceptedMintsBlock(F);
   return view('foreign', {
     title: 'Other mint',
     ico: 'swap',
     back: chooser,
     body: [
       inviteField(),
-      el('p', { class: 'hint', text: 'eCash from any other Cashu mint. The gateway pays a Forge Lightning invoice with it and credits what arrives. You see the exact amount before you confirm.' }),
+      el('p', {
+        class: 'hint',
+        text: `${F.policy && F.policy !== 'any' ? 'eCash from an accepted Cashu mint (see the list below).' : 'eCash from any other Cashu mint.'} The gateway pays a Forge Lightning invoice with it and credits what arrives. You see the exact amount before you confirm.`,
+      }),
       units.length > 1 ? el('div', { class: 'field' }, el('span', { class: 'label', text: 'Credit as' }), el('div', {}, seg(units, unit, (u) => (unit = u), 'Credit as'))) : null,
       el('div', { class: 'field' }, el('label', { for: 'foreignToken', text: 'eCash token from another mint' }), ta),
       el('div', { class: 'row' }, scan.btn),
       scan.box,
       msg,
       el('p', { class: 'hint small', text: [max.sat ? `Up to ${fmtUnits(max.sat, 'sat')}` : '', max.usd ? `${fmtUnits(max.usd, 'usd')} per token` : ''].filter(Boolean).join(' or ') }),
+      accepted,
     ],
     foot: [check],
   });

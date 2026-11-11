@@ -136,6 +136,9 @@ export async function startGateway(
     FORGE_MINT_QUOTE_CHECKS_PER_MIN: '100000',
     FORGE_UPSTREAM_RETRIES: '2',
     TEST_TINFOIL_KEY: 'test-enclave-key',
+    // Never reach the public Nostr relays from tests; the local mints are accepted under 'any'.
+    FORGE_FOREIGN_DISCOVERY_RELAYS: '',
+    FORGE_FOREIGN_POLICY: 'any',
     ...opts.env,
   };
   const config = loadConfig(env as NodeJS.ProcessEnv, testCatalog(opts.enclavePort));
@@ -164,7 +167,7 @@ export async function startGateway(
 /** Gateway with an arbitrary catalog (used by live tests). */
 export async function startGatewayWithCatalog(catalog: unknown, extraEnv: Record<string, string>): Promise<Gateway> {
   const dbPath = join(mkdtempSync(join(tmpdir(), 'forge-live-')), 'forge.db');
-  const env = { FORGE_DB_PATH: dbPath, FORGE_TRUSTED_MINTS: MINT_A, FORGE_RATE_LIMIT_RPM: '100000', FORGE_MINT_QUOTE_CHECKS_PER_MIN: '100000', ...extraEnv };
+  const env = { FORGE_DB_PATH: dbPath, FORGE_TRUSTED_MINTS: MINT_A, FORGE_RATE_LIMIT_RPM: '100000', FORGE_MINT_QUOTE_CHECKS_PER_MIN: '100000', FORGE_FOREIGN_DISCOVERY_RELAYS: '', ...extraEnv };
   const config = loadConfig(env as NodeJS.ProcessEnv, catalog);
   const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv });
   await startupRecovery(deps);

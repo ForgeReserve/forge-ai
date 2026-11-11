@@ -72,6 +72,24 @@ export const EnvSchema = z.object({
   FORGE_FOREIGN_MAX_USD: z.coerce.number().int().min(1).default(5_000),
   /** Tests only: allow http:// and private-address foreign mints. */
   FORGE_FOREIGN_ALLOW_INSECURE: bool.default(false),
+  /**
+   * Which other mints' eCash is accepted for funding. FORGE_FOREIGN_DENY always wins, and Forge's own
+   * mints always answer 'use_topup'.
+   *  - discovered (default): FORGE_FOREIGN_ALLOW plus the mints found through NIP-87 discovery.
+   *  - allowlist: FORGE_FOREIGN_ALLOW only (empty: no other mint is accepted).
+   *  - any: every mint, unless FORGE_FOREIGN_ALLOW is set, which then limits it (the behaviour before discovery).
+   */
+  FORGE_FOREIGN_POLICY: z.enum(['discovered', 'allowlist', 'any']).default('discovered'),
+  /** Distinct verified NIP-87 reviewers a discovered mint needs, next to its own verified announcement. */
+  FORGE_FOREIGN_MIN_REVIEWERS: z.coerce.number().int().min(1).max(100).default(1),
+  /** Nostr relays read for NIP-87 mint announcements and reviews. Empty: no discovery (tests). */
+  FORGE_FOREIGN_DISCOVERY_RELAYS: csv
+    .pipe(z.array(z.string().regex(/^wss?:\/\/[^\s]+$/, 'relays must be ws:// or wss:// URLs')).max(10))
+    .default(['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net']),
+  /** How long a successful discovery is served before the next background refresh. */
+  FORGE_FOREIGN_DISCOVERY_TTL_MINUTES: z.coerce.number().int().min(5).max(7 * 24 * 60).default(60),
+  /** Most discovered mints accepted at once (the best reviewed first). */
+  FORGE_FOREIGN_MAX_DISCOVERED: z.coerce.number().int().min(1).max(100).default(25),
   /** Unfinished fundings (quotes not yet paid) per balance. */
   FORGE_FUND_MAX_PENDING: z.coerce.number().int().min(1).default(5),
   FORGE_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

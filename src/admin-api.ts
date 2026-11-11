@@ -66,7 +66,7 @@ export function setSupplierKeyEnv(d: object, env: NodeJS.ProcessEnv) {
 const supplierKeyEnv = (d: object): NodeJS.ProcessEnv => keyEnvs.get(d) ?? process.env;
 
 export function createAdminRouter(d: Deps): Hono {
-  const { config, db, ledger, invites, wallet, rates, funding } = d;
+  const { config, db, ledger, invites, wallet, rates, funding, discovery } = d;
   const env = config.env;
   const tokenHash = env.FORGE_ADMIN_TOKEN_HASH?.toLowerCase();
   const limiter = new RateLimiter(env.FORGE_ADMIN_RATE_LIMIT_RPM, Math.max(20, Math.ceil(env.FORGE_ADMIN_RATE_LIMIT_RPM / 3)));
@@ -631,6 +631,37 @@ export function createAdminRouter(d: Deps): Hono {
     return json(c, 200, { data: rows.map((x) => ({ ...x, encrypted: !!x.encrypted, tier: tierOf(x.supplier) })) });
   });
 
+  // -------------------------------------------------------------- other-mint discovery (NIP-87)
+  const discoveryView = () => {
+    const accepted = funding.acceptedForeignMints();
+    return {
+      policy: env.FORGE_FOREIGN_POLICY,
+      enabled: env.FORGE_FOREIGN_ENABLED,
+      allow: env.FORGE_FOREIGN_ALLOW,
+      deny: env.FORGE_FOREIGN_DENY,
+      accepted: accepted.mints,
+      discovery: discovery.status(),
+    };
+  };
+  const REFRESH_EVERY_MS = 60_000;
+  let lastManualRefresh = 0;
+
+  r.get('/admin/api/mints/discovery', (c) => json(c, 200, discoveryView()));
+
+  r.post('/admin/api/mints/discovery/refresh', async (c) => {
+    if (!discovery.enabled) return fail(c, 409, 'discovery_off', 'no discovery relays are set (FORGE_FOREIGN_DISCOVERY_RELAYS)');
+    const wait = lastManualRefresh + REFRESH_EVERY_MS - Date.now();
+    if (wait > 0) {
+      c.header('Retry-After', String(Math.ceil(wait / 1000)));
+      return fail(c, 429, 'rate_limited', 'discovery was refreshed less than a minute ago');
+    }
+    lastManualRefresh = Date.now();
+    await discovery.refresh();
+    const view = discoveryView();
+    audit('mint_discovery_refresh', { ok: view.discovery.last_refresh?.ok ?? false, accepted: view.discovery.mints.length });
+    return json(c, 200, view);
+  });
+
   // -------------------------------------------------------------- settings (read-only)
   r.get('/admin/api/settings', async (c) => {
     const rate = rates.current();
@@ -658,7 +689,7 @@ export function createAdminRouter(d: Deps): Hono {
         max_body_bytes: env.FORGE_MAX_BODY_BYTES,
       },
       enabled: { lightning: env.FORGE_LIGHTNING_ENABLED, onchain: env.FORGE_ONCHAIN_ENABLED, foreign: env.FORGE_FOREIGN_ENABLED },
-      foreign: { allow: env.FORGE_FOREIGN_ALLOW, deny: env.FORGE_FOREIGN_DENY },
+      foreign: { allow: env.FORGE_FOREIGN_ALLOW, deny: env.FORGE_FOREIGN_DENY, policy: env.FORGE_FOREIGN_POLICY, min_reviewers: env.FORGE_FOREIGN_MIN_REVIEWERS },
       methods,
       rate_sources: env.FORGE_RATE_SOURCES,
       btc_usd: rate ?? null,

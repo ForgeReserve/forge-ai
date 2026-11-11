@@ -19,6 +19,8 @@ if (config.env.FORGE_UNITS.includes('sat')) {
 setInterval(() => deps.ledger.releaseStale(config.env.FORGE_STALE_RESERVATION_SECONDS * 1000), 60_000).unref();
 // Funding poller: watches unpaid quotes, finishes interrupted mints and melts (crash recovery included).
 deps.funding.start();
+// Other-mint discovery: serves the stored set at once, refreshes from the Nostr relays in the background.
+deps.discovery.start();
 
 const app = createApp(deps);
 const server = serve({ fetch: app.fetch, port: config.env.PORT, hostname: config.env.HOST }, (info) => {
@@ -29,6 +31,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     log.info('shutdown', { signal: sig });
     deps.funding.stop();
+    deps.discovery.stop();
     server.close(() => {
       deps.db.close();
       process.exit(0);

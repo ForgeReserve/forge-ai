@@ -24,7 +24,7 @@ const catalog = {
 };
 
 function gateway(env: Record<string, string> = {}) {
-  const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_ADMIN_TOKEN_HASH: HASH, FORGE_ADMIN_RATE_LIMIT_RPM: '100000', ...env };
+  const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_ADMIN_TOKEN_HASH: HASH, FORGE_ADMIN_RATE_LIMIT_RPM: '100000', FORGE_FOREIGN_DISCOVERY_RELAYS: '', ...env };
   const config = loadConfig(e as NodeJS.ProcessEnv, catalog);
   const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', 100_000)], env: e as NodeJS.ProcessEnv });
   const app = createApp(deps);
@@ -210,5 +210,39 @@ describe('ledger freeze', () => {
     ledger.setFrozen(a.id, false);
     expect(ledger.reserve(a.id, 100)).toMatch(/^res_/);
     expect(ledger.setFrozen('acct_missing', true)).toBe(false);
+  });
+});
+
+describe('admin other-mint discovery', () => {
+  it('shows the snapshot and policy, and refreshes on demand at most once a minute', async () => {
+    const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_ADMIN_TOKEN_HASH: HASH, FORGE_ADMIN_RATE_LIMIT_RPM: '100000', FORGE_FOREIGN_DISCOVERY_RELAYS: 'wss://relay.test' };
+    const config = loadConfig(e as NodeJS.ProcessEnv, catalog);
+    let queries = 0;
+    // An announcement with no reviewers: seen, never accepted.
+    const deps = buildDeps(config, {
+      rateSources: [fixedRateSource('fixed', 100_000)],
+      env: e as NodeJS.ProcessEnv,
+      discovery: {
+        query: async () => {
+          queries++;
+          return { answered: true, events: [] };
+        },
+        probe: async (url) => ({ url, ok: true, units: ['sat'] }),
+      },
+    });
+    const app = createApp(deps);
+    const call = (path: string, method = 'GET') =>
+      app.request(`${ORIGIN}${path}`, { method, headers: { host: HOST, 'x-forge-admin-token': TOKEN, ...(method === 'GET' ? {} : { origin: ORIGIN, 'content-type': 'application/json' }) }, body: method === 'GET' ? undefined : '{}' });
+    const view = await (await call('/admin/api/mints/discovery')).json();
+    expect(view).toMatchObject({ policy: 'discovered', accepted: [], discovery: { enabled: true, min_reviewers: 1, relays: ['wss://relay.test'] } });
+    const r1 = await call('/admin/api/mints/discovery/refresh', 'POST');
+    expect(r1.status).toBe(200);
+    expect((await r1.json()).discovery.last_refresh).toMatchObject({ ok: true, accepted: 0 });
+    const before = queries;
+    const r2 = await call('/admin/api/mints/discovery/refresh', 'POST');
+    expect(r2.status).toBe(429);
+    expect(r2.headers.get('retry-after')).toBeTruthy();
+    expect(queries).toBe(before);
+    expect((await app.request(`${ORIGIN}/admin/api/mints/discovery/refresh`, { method: 'POST', headers: { host: HOST, 'x-forge-admin-token': TOKEN, 'content-type': 'application/json' }, body: '{}' })).status).toBe(403);
   });
 });

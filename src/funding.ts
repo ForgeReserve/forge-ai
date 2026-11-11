@@ -20,6 +20,7 @@ import { type Env, normalizeMintUrl, type Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
 import type { Ledger } from './ledger.ts';
 import { errText, log } from './log.ts';
+import { type MintDiscovery, normalizeDiscoveryUrl } from './mint-discovery.ts';
 import { MSUB_PER_UNIT } from './pricing.ts';
 import type { RateOracle } from './rates.ts';
 
@@ -89,7 +90,30 @@ export interface FundingMethods {
   ecash: { mints: string[]; units: Unit[] };
   lightning: { enabled: boolean; units: Unit[]; min: Partial<Record<Unit, number>>; max: Partial<Record<Unit, number>> };
   onchain: { enabled: boolean; unit: 'sat'; min_amount: number; confirmations: number };
-  foreign: { enabled: boolean; max: { sat: number; usd: number } };
+  foreign: { enabled: boolean; max: { sat: number; usd: number }; policy: ForeignPolicy; mints: string[]; mints_url: string };
+}
+
+export type ForeignPolicy = Env['FORGE_FOREIGN_POLICY'];
+
+export interface AcceptedMint {
+  url: string;
+  name?: string;
+  reviewers?: number;
+  source: 'discovered' | 'operator';
+}
+
+export interface AcceptedMints {
+  policy: ForeignPolicy;
+  mints: AcceptedMint[];
+  /** When the discovered part was fetched (ms), or null. */
+  updated_at: number | null;
+}
+
+export const FOREIGN_MINTS_PATH = '/v1/wallet/fund/mints';
+
+/** The key two spellings of one mint URL share (host case, trailing slash). */
+export function mintKey(url: string, allowInsecure: boolean): string {
+  return normalizeDiscoveryUrl(normalizeMintUrl(url), allowInsecure) ?? normalizeMintUrl(url);
 }
 
 export interface FundingFaults {
@@ -175,8 +199,9 @@ export class FundingService {
   private info?: { at: number; value: any };
   faults: FundingFaults;
   private timer?: NodeJS.Timeout;
+  private readonly discovery?: MintDiscovery;
 
-  constructor(d: { db: DB; ledger: Ledger; wallet: GatewayWallet; env: Env; rates: RateOracle; mint: string; faults?: FundingFaults }) {
+  constructor(d: { db: DB; ledger: Ledger; wallet: GatewayWallet; env: Env; rates: RateOracle; mint: string; faults?: FundingFaults; discovery?: MintDiscovery }) {
     this.db = d.db;
     this.ledger = d.ledger;
     this.wallet = d.wallet;
@@ -184,6 +209,7 @@ export class FundingService {
     this.rates = d.rates;
     this.mint = normalizeMintUrl(d.mint);
     this.faults = d.faults ?? {};
+    this.discovery = d.discovery;
   }
 
   // ------------------------------------------------------------------ info
@@ -224,7 +250,13 @@ export class FundingService {
         min_amount: onchain ? num(onchain.min_amount) : 0,
         confirmations: env.FORGE_ONCHAIN_CONFIRMATIONS,
       },
-      foreign: { enabled: env.FORGE_FOREIGN_ENABLED && lightningUnits.length > 0, max: { sat: env.FORGE_FOREIGN_MAX_SAT, usd: env.FORGE_FOREIGN_MAX_USD } },
+      foreign: {
+        enabled: env.FORGE_FOREIGN_ENABLED && lightningUnits.length > 0,
+        max: { sat: env.FORGE_FOREIGN_MAX_SAT, usd: env.FORGE_FOREIGN_MAX_USD },
+        policy: env.FORGE_FOREIGN_POLICY,
+        mints: this.acceptedForeignMints().mints.map((m) => m.url),
+        mints_url: FOREIGN_MINTS_PATH,
+      },
     };
   }
 
@@ -380,17 +412,60 @@ export class FundingService {
     return row;
   }
 
+  private keySet(list: readonly string[]): Set<string> {
+    return new Set(list.map((u) => mintKey(u, this.env.FORGE_FOREIGN_ALLOW_INSECURE)));
+  }
+
+  /** URLs discovery never offers: Forge's own mints and the deny list. */
+  discoveryExcluded(): string[] {
+    return [...this.wallet.trustedMints, ...this.env.FORGE_FOREIGN_DENY];
+  }
+
+  /**
+   * Other mints whose eCash is accepted under the policy: the operator list, then the discovered set
+   * (under 'discovered', and under 'any' with no operator list, where they are suggestions). Denied
+   * and Forge's own mints are never listed. Never waits on a relay.
+   */
+  acceptedForeignMints(): AcceptedMints {
+    const env = this.env;
+    const insecure = env.FORGE_FOREIGN_ALLOW_INSECURE;
+    const skip = this.keySet([...this.wallet.trustedMints, ...env.FORGE_FOREIGN_DENY]);
+    const out: AcceptedMint[] = [];
+    const add = (m: AcceptedMint) => {
+      const k = mintKey(m.url, insecure);
+      if (skip.has(k)) return;
+      skip.add(k);
+      out.push(m);
+    };
+    for (const u of env.FORGE_FOREIGN_ALLOW) add({ url: mintKey(u, insecure), source: 'operator' });
+    const listDiscovered = env.FORGE_FOREIGN_POLICY === 'discovered' || (env.FORGE_FOREIGN_POLICY === 'any' && env.FORGE_FOREIGN_ALLOW.length === 0);
+    if (listDiscovered && this.discovery) {
+      for (const m of this.discovery.snapshot()) add({ url: m.url, ...(m.name ? { name: m.name } : {}), reviewers: m.reviewers, source: 'discovered' });
+    }
+    return { policy: env.FORGE_FOREIGN_POLICY, mints: out, updated_at: listDiscovered ? (this.discovery?.updatedAt() ?? null) : null };
+  }
+
   /** Vets a foreign token's mint against the policy. Returns the normalized URL. */
-  private async vetForeignMint(mint: string): Promise<string> {
+  async vetForeignMint(mint: string): Promise<string> {
     const env = this.env;
     if (!env.FORGE_FOREIGN_ENABLED) throw new PaymentError('method_unavailable', 'eCash from other mints is not accepted here', 400);
     const m = normalizeMintUrl(mint);
     if (this.wallet.isTrusted(m)) throw new PaymentError('use_topup', 'this token is from an accepted mint: add it as eCash instead');
-    const allow = env.FORGE_FOREIGN_ALLOW.map(normalizeMintUrl);
-    const deny = env.FORGE_FOREIGN_DENY.map(normalizeMintUrl);
-    if (deny.includes(m)) throw new PaymentError('mint_not_allowed', 'eCash from this mint is not accepted');
-    if (allow.length && !allow.includes(m)) throw new PaymentError('mint_not_allowed', 'eCash from this mint is not accepted');
-    return checkForeignMintUrl(m, env.FORGE_FOREIGN_ALLOW_INSECURE);
+    const insecure = env.FORGE_FOREIGN_ALLOW_INSECURE;
+    const key = mintKey(m, insecure);
+    if (this.keySet(env.FORGE_FOREIGN_DENY).has(key)) throw new PaymentError('mint_not_allowed', 'eCash from this mint is not accepted');
+    const allow = this.keySet(env.FORGE_FOREIGN_ALLOW);
+    let ok: boolean;
+    if (env.FORGE_FOREIGN_POLICY === 'any') ok = allow.size === 0 || allow.has(key);
+    else if (env.FORGE_FOREIGN_POLICY === 'allowlist') ok = allow.has(key);
+    else ok = allow.has(key) || !!this.discovery?.snapshot().some((d) => mintKey(d.url, insecure) === key);
+    if (!ok) {
+      throw new PaymentError(
+        'mint_not_allowed',
+        `eCash from this mint is not accepted yet. The mints Forge accepts are listed under Add funds and at ${FOREIGN_MINTS_PATH}.`,
+      );
+    }
+    return checkForeignMintUrl(m, insecure);
   }
 
   /**

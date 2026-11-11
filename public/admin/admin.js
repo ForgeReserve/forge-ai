@@ -953,8 +953,53 @@ async function renderRequests() {
 
 // ------------------------------------------------------------------ settings
 
+const POLICY_TEXT = {
+  discovered: 'Operator list plus mints found through NIP-87 reviews',
+  allowlist: 'Operator list only',
+  any: 'Any mint (operator list limits it when set)',
+};
+
+/** The "Other mints" card: policy, threshold, accepted list and the last discovery refresh. */
+function otherMintsCard(d) {
+  if (!d) return '<section class="card"><h3>Other mints</h3><p class="empty">Discovery status is unavailable.</p></section>';
+  const disc = d.discovery;
+  const last = disc.last_refresh;
+  const lastText = last ? `${when(last.at)} ${last.ok ? badge('ok', 'ok') : badge(last.error || 'failed', 'err')} <span class="muted small">${nf(last.seen)} mints seen, ${nf(last.candidates)} passed the review rule, ${nf(last.accepted)} accepted</span>` : '<span class="muted small">not since the gateway started</span>';
+  const relays = last && last.relays.length ? last.relays.map((r) => `${esc(r.relay.replace(/^wss?:\/\//, ''))} ${r.answered ? badge(nf(r.events) + ' events', 'ok') : badge('silent', 'warn')}`).join(' ') : esc(disc.relays.join(', ') || 'none');
+  const rejected = last?.rejected?.length
+    ? `<details class="small"><summary>Not accepted (${nf(last.rejected.length)})</summary>${table(
+        [
+          { h: 'Mint', wrap: true, v: (r) => esc(r.url) },
+          { h: 'Reviewers', num: true, v: (r) => nf(r.reviewers) },
+          { h: 'Why', wrap: true, v: (r) => esc(r.reason) },
+        ],
+        last.rejected,
+      )}</details>`
+    : '';
+  return `<section class="card">
+    <div class="card-head"><h3>Other mints</h3><button class="btn small" type="button" id="mrefresh" ${disc.enabled ? '' : 'disabled title="No discovery relays are set"'}>Refresh</button></div>
+    <dl class="kv">
+      <dt>Policy</dt><dd>${badge(d.policy, d.policy === 'any' ? 'warn' : 'brass')} <span class="muted small">${esc(POLICY_TEXT[d.policy] || '')}</span></dd>
+      <dt>Review rule</dt><dd>announced, and ${nf(disc.min_reviewers)}+ distinct reviewers <span class="muted small">at most ${nf(disc.max_discovered)} mints, refreshed every ${nf(disc.ttl_minutes)} min</span></dd>
+      <dt>Relays</dt><dd>${disc.enabled ? relays : badge('discovery off')}</dd>
+      <dt>Last refresh</dt><dd>${lastText}</dd>
+      <dt>List from</dt><dd>${when(disc.updated_at)}</dd>
+    </dl>
+    ${table(
+      [
+        { h: 'Accepted mint', wrap: true, v: (r) => `${esc(r.url)}${r.name ? ` <span class="muted small">${esc(r.name)}</span>` : ''}` },
+        { h: 'Source', v: (r) => badge(r.source, r.source === 'operator' ? 'brass' : '') },
+        { h: 'Reviewers', num: true, v: (r) => (r.reviewers == null ? '–' : nf(r.reviewers)) },
+      ],
+      d.accepted,
+      d.policy === 'any' ? 'Any mint is accepted; none is listed.' : 'No other mint is accepted right now.',
+    )}
+    ${rejected}
+  </section>`;
+}
+
 async function renderSettings() {
-  const s = await api('/settings');
+  const [s, mints] = await Promise.all([api('/settings'), api('/mints/discovery').catch(() => null)]);
   const yes = (b) => (b ? badge('on', 'ok') : badge('off'));
   const m = s.methods || {};
   view.innerHTML = `
@@ -980,6 +1025,7 @@ async function renderSettings() {
           <dt>Quote checks</dt><dd>${nf(s.caps.quote_checks_per_min)} per minute</dd>
         </dl></section>
       </div>
+      ${otherMintsCard(mints)}
       <section class="card"><h3>Suppliers</h3>${table(
         [
           { h: 'Supplier', v: (r) => esc(r.id) },
@@ -1005,6 +1051,18 @@ async function renderSettings() {
         s.models,
       )}</section>
     </div>`;
+  $('#mrefresh')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const d = await api('/mints/discovery/refresh', { method: 'POST', body: {} });
+      toast(d.discovery.last_refresh?.ok ? `Discovery refreshed: ${d.accepted.length} accepted` : 'No relay answered; the previous list stays');
+      route(true);
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false;
+    }
+  });
 }
 
 const RENDER = {

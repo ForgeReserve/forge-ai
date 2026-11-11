@@ -90,13 +90,22 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_ONCHAIN_WATCH_DAYS` | `30` | How long an on-chain address is watched for deposits |
 | `FORGE_ESPLORA_URL` | unset | Optional Esplora API used to show unconfirmed deposits. Unset: the gateway asks only the mint |
 | `FORGE_FOREIGN_ENABLED` | `true` | Accept eCash from other mints (melted into a Forge Lightning quote) |
-| `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Mint allowlist (empty = any https mint) and denylist |
+| `FORGE_FOREIGN_POLICY` | `discovered` | Which other mints are accepted. `discovered`: `FORGE_FOREIGN_ALLOW` plus mints found through NIP-87 reviews (below). `allowlist`: `FORGE_FOREIGN_ALLOW` only. `any`: every https mint, limited to `FORGE_FOREIGN_ALLOW` when that is set. `FORGE_FOREIGN_DENY` always wins |
+| `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Operator list of accepted mints, and mints never accepted |
+| `FORGE_FOREIGN_MIN_REVIEWERS` | `1` | Distinct verified NIP-87 reviewers a discovered mint needs, beside its own verified announcement |
+| `FORGE_FOREIGN_DISCOVERY_RELAYS` | `wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net` | Nostr relays read for mint announcements (kind 38172) and reviews (kind 38000). Empty: no discovery |
+| `FORGE_FOREIGN_DISCOVERY_TTL_MINUTES` | `60` | How long a discovered list is served before a background refresh (a failed refresh retries after a minute) |
+| `FORGE_FOREIGN_MAX_DISCOVERED` | `25` | Most discovered mints accepted at once, best reviewed first |
 | `FORGE_FOREIGN_MAX_SAT` / `FORGE_FOREIGN_MAX_USD` | `100000` / `5000` | Largest token from another mint, in sat / cents |
 | `FORGE_FUND_MAX_PENDING` | `5` | Unfinished fundings per balance |
 | `FORGE_ADMIN_TOKEN_HASH` | unset | SHA-256 (hex) of the admin token. Unset: `/admin` answers 404. See [docs/ADMIN.md](docs/ADMIN.md) |
 | `FORGE_ADMIN_ORIGIN` | request `Host` | Origin admin changes must come from |
 | `FORGE_ADMIN_RATE_LIMIT_RPM` | `120` | Admin API requests per minute per IP |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys |
+
+### Other mints (NIP-87 discovery)
+
+Under `FORGE_FOREIGN_POLICY=discovered` the gateway accepts eCash from the mints the operator lists plus the mints Cashu wallets recommend, found the way wallet.cashu.me finds them: kind 38172 mint announcements and kind 38000 reviews (`#k=38172`) from `FORGE_FOREIGN_DISCOVERY_RELAYS`. Event ids and BIP-340 signatures are checked, reviews older than 24 months are ignored, and a reviewer counts once per mint. A mint is accepted when it has a verified mainnet announcement, at least `FORGE_FOREIGN_MIN_REVIEWERS` distinct reviewers, and passes a probe: `GET /v1/info` and `GET /v1/keysets` answer, an active keyset exists in a Forge unit, and NUT-05 bolt11 melt is enabled in that unit (the gateway melts the eCash there). The list is kept in the database, served at once after a restart, and refreshed in the background; a request never waits on a relay. The URL safety check still runs on every accepted mint. The code is ported from cashucard/cashucard `ops/src/discovery.ts`.
 
 ### Model catalog
 
@@ -173,7 +182,8 @@ Each method opens a balance on first use (an invite is required while invite-onl
 | `GET /v1/wallet/fund/methods` | | What the Forge mint and config allow: Lightning units and limits, on-chain minimum and confirmations, other-mint limits |
 | `POST /v1/wallet/fund/lightning` | `{amount, unit, invite?}` | `request` is a bolt11 invoice from the Forge mint; `state` goes `pending` -> `minting` -> `done` (or `expired`) |
 | `POST /v1/wallet/fund/onchain` | `{invite?}` | `request` is a bitcoin address (sat only). Each deposit the mint counts as paid is minted and credited; the address is watched for `FORGE_ONCHAIN_WATCH_DAYS` |
-| `POST /v1/wallet/fund/foreign/quote` | `{token, unit, invite?, pubkey?}` | Prices a token from another mint: `foreign.credit` is what the balance gets, `foreign.fee_max` the most the token's mint can keep. Nothing is spent yet. A token from an accepted mint gets `use_topup` |
+| `GET /v1/wallet/fund/mints` | | Other mints accepted for funding: `{enabled, policy, mints: [{url, name?, reviewers?, source: "discovered"\|"operator"}], updated_at}`. Denied mints are never listed. `GET /v1/wallet/fund/methods` carries the same URLs as `foreign.mints` |
+| `POST /v1/wallet/fund/foreign/quote` | `{token, unit, invite?, pubkey?}` | Prices a token from another mint: `foreign.credit` is what the balance gets, `foreign.fee_max` the most the token's mint can keep. Nothing is spent yet. A token from an accepted mint gets `use_topup`; one from a mint the policy does not accept gets `mint_not_allowed` |
 | `POST /v1/wallet/fund/foreign/confirm` | `{id, token, pubkey?}` + bearer | Receives the token at its mint, melts it to pay the Forge invoice, mints and credits `credit`. Unused fee reserve comes back as `foreign.change_token`; if the melt cannot go through, the token's value comes back as `foreign.refund_token` (state `refunded`). With `pubkey` (here or at quote) both are locked to it; `payout_pending` is true until the locking swap at the token's mint is done, and polling the status finishes it |
 | `GET /v1/wallet/fund/{id}` | bearer | Status; polling also moves the funding forward |
 | `GET /v1/wallet/fund` | bearer | Recent fundings of this balance |

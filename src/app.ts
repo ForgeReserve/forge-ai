@@ -12,7 +12,8 @@ import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import type { Config, ModelConfig, Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
-import type { FundingService } from './funding.ts';
+import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
+import type { MintDiscovery } from './mint-discovery.ts';
 import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
@@ -32,6 +33,7 @@ export interface Deps {
   rates: RateOracle;
   suppliers: Map<string, Supplier>;
   funding: FundingService;
+  discovery: MintDiscovery;
   publicDir?: string;
 }
 
@@ -347,6 +349,12 @@ export function createApp(d: Deps) {
   };
 
   app.get('/v1/wallet/fund/methods', async (c) => c.json({ ...(await funding.methods()), invite_only: env.FORGE_INVITE_ONLY }));
+
+  // Other mints whose eCash is accepted for funding. Public; never waits on a relay.
+  app.get(FOREIGN_MINTS_PATH, (c) => {
+    const a = funding.acceptedForeignMints();
+    return c.json({ enabled: env.FORGE_FOREIGN_ENABLED, ...a });
+  });
 
   app.post('/v1/wallet/fund/lightning', async (c) => {
     const body = await readJson(c);

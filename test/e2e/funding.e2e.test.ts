@@ -1,5 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { chatBody, createInvite, type Gateway, MINT_A, MINT_C, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { openDb } from '../../src/db.ts';
+import { sqliteStore } from '../../src/mint-discovery.ts';
+import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
 import { type OnchainMock, startOnchainMock } from './onchain-mock.ts';
 
 const up = (await mintsUp()) && (await fetch(`${MINT_C}/v1/info`).then((r) => r.ok).catch(() => false));
@@ -311,6 +316,34 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     } finally {
       await strict.close();
       await plain.close();
+    }
+  });
+
+  it("under 'discovered', a discovered mint is accepted and an unlisted one is refused", async () => {
+    // Seed the stored discovery snapshot (relays stay off in tests), then start on that database.
+    const dir = mkdtempSync(join(tmpdir(), 'forge-e2e-disc-'));
+    const dbPath = join(dir, 'forge.db');
+    const seed = openDb(dbPath);
+    sqliteStore(seed).save({ v: 1, at: Date.now(), mints: [{ url: MINT_C, reviewers: 4, name: 'Test mint C', units: ['sat'], probed_at: Date.now() }] });
+    seed.close();
+    const d = await startGateway({ dbPath, env: { FORGE_FOREIGN_POLICY: 'discovered', FORGE_FOREIGN_ALLOW_INSECURE: 'true' } });
+    try {
+      const list = (await (await fetch(`${d.url}/v1/wallet/fund/mints`)).json()) as any;
+      expect(list.policy).toBe('discovered');
+      expect(list.mints).toEqual([{ url: MINT_C, name: 'Test mint C', reviewers: 4, source: 'discovered' }]);
+      expect(list.updated_at).toBeGreaterThan(0);
+      const methods = (await (await fetch(`${d.url}/v1/wallet/fund/methods`)).json()) as any;
+      expect(methods.foreign).toMatchObject({ policy: 'discovered', mints: [MINT_C], mints_url: '/v1/wallet/fund/mints' });
+
+      const ok = await post(d, '/v1/wallet/fund/foreign/quote', { token: await mintToken(MINT_C, 'sat', 300), unit: 'sat', invite: createInvite(d) });
+      expect(ok.status).toBe(200);
+      expect(ok.body.foreign.mint).toBe(MINT_C);
+      const refused = await post(d, '/v1/wallet/fund/foreign/quote', { token: await mintToken(MINT_B, 'sat', 300), unit: 'sat', invite: createInvite(d) });
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.code).toBe('mint_not_allowed');
+      expect(refused.body.error.message).toMatch(/\/v1\/wallet\/fund\/mints/);
+    } finally {
+      await d.close();
     }
   });
 

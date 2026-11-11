@@ -5,6 +5,8 @@ import { openDb } from './db.ts';
 import { Invites, Ledger } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
 import { type FundingFaults, FundingService } from './funding.ts';
+import { log } from './log.ts';
+import { createDiscovery, createRelayQuery, type MintProbe, type RelayQuery, sqliteStore } from './mint-discovery.ts';
 import { setSupplierKeyEnv } from './admin-api.ts';
 import { buildSuppliers } from './suppliers/index.ts';
 import type { Deps } from './app.ts';
@@ -16,6 +18,8 @@ export function buildDeps(
     env?: NodeJS.ProcessEnv;
     faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
     fundingFaults?: FundingFaults;
+    /** Tests: stand-ins for the Nostr relays and the mint probe used by other-mint discovery. */
+    discovery?: { query?: RelayQuery; probe?: (url: string) => Promise<MintProbe>; now?: () => number };
   } = {},
 ): Deps {
   const env = config.env;
@@ -40,7 +44,31 @@ export function buildDeps(
     ttlMs: env.FORGE_RATE_TTL_SECONDS * 1000,
     maxStaleMs: env.FORGE_RATE_MAX_STALE_SECONDS * 1000,
   });
-  const funding = new FundingService({ db, ledger, wallet, env, rates, mint: env.FORGE_FUND_MINT ?? config.trustedMints[0]!, faults: opts.fundingFaults });
+  const discovery = createDiscovery({
+    query: opts.discovery?.query ?? createRelayQuery(),
+    relays: env.FORGE_FOREIGN_DISCOVERY_RELAYS,
+    minReviewers: env.FORGE_FOREIGN_MIN_REVIEWERS,
+    maxDiscovered: env.FORGE_FOREIGN_MAX_DISCOVERED,
+    units: env.FORGE_UNITS,
+    // Forge's own mints and denied mints are never discovered (read once: both come from the env).
+    excluded: [...config.trustedMints, ...env.FORGE_FOREIGN_DENY],
+    probe: opts.discovery?.probe,
+    now: opts.discovery?.now,
+    store: sqliteStore(db),
+    ttlOkMs: env.FORGE_FOREIGN_DISCOVERY_TTL_MINUTES * 60_000,
+    allowInsecure: env.FORGE_FOREIGN_ALLOW_INSECURE,
+    log: (msg, fields) => (msg === 'mint_discovery_refreshed' ? log.info(msg, fields) : log.warn(msg, fields)),
+  });
+  const funding = new FundingService({
+    db,
+    ledger,
+    wallet,
+    env,
+    rates,
+    mint: env.FORGE_FUND_MINT ?? config.trustedMints[0]!,
+    faults: opts.fundingFaults,
+    discovery,
+  });
   const deps: Deps = {
     config,
     db,
@@ -49,6 +77,7 @@ export function buildDeps(
     wallet,
     rates,
     funding,
+    discovery,
     suppliers: buildSuppliers(config, opts.env ?? process.env),
     publicDir: resolve(import.meta.dirname, '..', 'public'),
   };
