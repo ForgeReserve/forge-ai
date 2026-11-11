@@ -4,9 +4,10 @@
  *   node scripts/announce-mint.ts            prints the event it would publish
  *   node scripts/announce-mint.ts --publish  asks for the nsec (hidden), signs and publishes
  *
- * forge.flashapp.me is listed first on purpose. cashu.me files reviews by exact URL and shows an
- * announcement under its first `u` tag, so the existing reviews stay attached only if the old
- * address leads. The `d` tag is the mint's pubkey, which reviews that name the mint by key match.
+ * Only forge.flashapp.me is announced. The mint also answers at mint.forge-reserve.com, but cashu.me and
+ * Minibits refuse a second address whose keysets match a mint they already hold, so tokens stamped with it
+ * cannot be received by existing Forge holders there. cashu.me also files reviews by exact URL.
+ * The `d` tag is the mint's pubkey, which reviews that name the mint by key match.
  * The nsec is read from the terminal, used in memory and never written or printed.
  */
 import { createInterface } from 'node:readline';
@@ -14,7 +15,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
-const URLS = ['https://forge.flashapp.me', 'https://mint.forge-reserve.com'];
+const URLS = ['https://forge.flashapp.me'];
 const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net', 'wss://relay.nostr.band', 'wss://relay.8333.space', 'wss://relay.cashumints.space'];
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
