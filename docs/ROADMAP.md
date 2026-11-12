@@ -1,15 +1,29 @@
 # Forge AI v2 build plan
 
-Status: proposed, waiting for the owner's go. Written 2026-11-12.
+Status: approved in yolo mode on 2026-11-12. Bellows is being built first.
 
 The design is settled (design canvas, deck, FREE-TIER.md, MODULES.md). This is the order to build it in, and what has to be real for the December talk.
 
-## How the work is organised
+## How the work is organised (yolo mode)
 
-- **v1 stays live.** v2 is built beside it as a new front end at `/v2/`, on the same gateway, behind the same invites. When v2 is ready it becomes the default and today's app becomes Classic mode.
-- **One slice at a time, each as a pull request** on `ForgeReserve/forge-ai`, with tests, reviewed before merge. Nothing is deployed without the owner's OK.
-- **Modules from the first slice.** Voice, filters, covers, guides, languages, looks and modes go behind the interfaces in MODULES.md as they are built, so nothing has to be pulled apart later.
-- Sizes are rough and assume one stream of work. Slices in different tracks can run side by side.
+Decided by the owner on 2026-11-12. The event is 2 to 4 December 2026.
+
+- **No pull request per slice and no review between slices.** Each effort is built slice by slice on one local branch, with tests, an adversarial review of every slice and of the whole diff, and every check run locally. The owner reviews **one pull request per effort** and approves it for deployment.
+- **Two efforts, in this order:**
+  1. **Bellows**, the operator-blind engine, in its own public repository. It is a prerequisite: the app talks to a Bellows. Its design and slices are in that repo's `docs/DESIGN.md`. Track B3 below now lives there.
+  2. **Forge AI v2**, the app, in this repo, on one branch: Track A, then B1 and B2, then Track C.
+- **v1 stays live** until the v2 pull request is approved. v2 is built at `/v2/` beside it.
+- **Tested locally as far as possible:** unit and end-to-end tests against local mints, the app driven in a phone-sized browser, then the real phones.
+- **What cannot be tested locally is listed, not hidden.** Each pull request carries a "not verified" list (real sealed hardware, real payments, real phones), so the one review knows exactly what was never run.
+- **Modules from the first slice** (MODULES.md).
+
+## Demo devices
+
+| Device | Role | Consequence |
+|---|---|---|
+| Pixel on GrapheneOS | The demo phone | No Google services, so no built-in speech recogniser: voice in must run in sealed hardware or from a model bundled in the app |
+| Samsung Galaxy A16 5G, stock Android | Second test phone | The low-end check: speed, memory and the share sheet on a mainstream phone |
+| iPhone (Max) | Backup, loaded by hand | Web app in Safari, or a development build; no public TestFlight by December |
 
 ## Track A: the app
 
@@ -34,7 +48,7 @@ The design is settled (design canvas, deck, FREE-TIER.md, MODULES.md). This is t
 |---|---|---|---|
 | B1 | Free tier | Credit mint, free balance in the gateway, daily faucet at `/free` (FREE-TIER.md) | 6 days |
 | B2 | Modules | Funding split into one module per method; plugin loader, signed manifests and sandbox (MODULES.md) | 5 days |
-| B3 | Operator-blind | Bellows inside sealed hardware with public proof, several operators with failover, onion address | About 2 weeks, least certain |
+| B3 | Operator-blind | Moved to the Bellows repository and built first | See that repo |
 
 ## Track C: Android app
 
@@ -45,15 +59,15 @@ The design is settled (design canvas, deck, FREE-TIER.md, MODULES.md). This is t
 
 ## The December cut
 
-The talk's live demo needs these to be real and tested on the demo phone: **A1, A2, A3, A4, A5, A6**. The closing slide's QR code should open the faucet, so **B1** too. That is about five weeks of single-stream work, so the tracks have to overlap.
+Twenty days from the plan to the event. In order:
 
-Recommended order: A1, A2, A3, A5, A4, A6, with B1 alongside from the second week.
+1. **Bellows** built locally and reviewed in one pull request. Running it on real sealed hardware depends on a hosting account; until then the talk says "in progress, here is the design".
+2. **The demo path**, which must be real on the Pixel: A1, A2, A3, A4, A5, A6, with B1 (the faucet behind the closing QR code).
+3. **C1**, the Android app, so the room can install it from the site. Without it the web app is the fallback and still works on every phone.
 
-Shown on slides but not demoed live, so they can be "in progress" on the day: A8 guides, A9 witness, A10 cover, B3 operator-blind. The script already says to state each one's real status.
+Shown on slides but not demoed live, so they can be "in progress" on the day: A8 guides, A9 witness, A10 cover. The script already says to state each one's real status.
 
-**B3 is the largest risk.** It depends on running the gateway, its database and its wallet keys inside Tinfoil's container product, which is untested. Do a two-day spike in the first week to learn whether it is feasible before December. If it is not, the slide says "in progress, here is the design".
-
-After the event: A7 languages checked by native speakers there, then A11, A12, B2, C1, C2.
+After the event: A7 languages checked by native speakers there, then A11, A12, B2, C2.
 
 ## Checks before the talk
 
@@ -65,6 +79,5 @@ After the event: A7 languages checked by native speakers there, then A11, A12, B
 
 ## Open decisions
 
-1. The event date, which sets how much of the cut is realistic.
-2. The demo phone: Android or iPhone.
-3. Whether slices are tracked as Linear tickets through the plan and build workflows, or built directly as pull requests from this plan.
+1. A hosting account for sealed hardware (Tinfoil Containers first), which the owner has to request.
+2. Who runs the relay that hides network addresses. It has to be someone other than the Bellows operator.
