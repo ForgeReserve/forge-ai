@@ -41,8 +41,8 @@ Decided by the owner on 2026-11-12. The event is 2 to 4 December 2026.
 | A10 | Cover | Install under a chosen name and icon, one puzzle game, hidden way in | 5 days |
 | A11 | Protection steps | Checklist per platform, merged with Forge's own status | 2 days |
 | A12 | Passphrase lock | Chats and balance encrypted on the phone | 3 to 4 days |
-| A13 | Cashu card | Tap a Cashu card in the Android app to add funds, as a `fund` module reusing the card code from flash-pos | To be sized after a code check |
-| A14 | Fedimint card | Tap a Fedimint card in the Android app to add funds, as a `fund` module reusing the fedimintcard POS core | To be sized after a code check |
+| A13 | Cashu card | Tap a Cashu card in the Android app, enter its PIN, and the eCash moves into the Forge balance. A `fund` module that reuses the card protocol code from flash-pos (it is already separate from the NFC layer) over a small NFC plugin, with a minimal charge path | About 1 week, after C1 |
+| A14 | Fedimint card | Tap a Fedimint card to add funds. The card's notes are redeemed by a till service, which then pays the engine's Lightning invoice. Needs a running till and new till work (a pay-invoice route; today that exists only as a command on an unmerged branch) | 1 to 2 weeks, after C1; the riskier of the two |
 
 ## Track B: Bellows (the engine)
 
