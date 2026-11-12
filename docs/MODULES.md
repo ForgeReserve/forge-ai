@@ -38,6 +38,7 @@ Each app module is a **plugin**: a folder with a manifest and code, loaded from 
 
 | Kind | What it does | Interface (input to output) | Default set |
 |---|---|---|---|
+| `fund` | A way to put money in | a tap, scan or paste to eCash or a paid invoice for the engine | Paper note (scan), Cashu card (tap), Fedimint card (tap), Lightning, on-chain |
 | `voice-in` | Speech to text | audio to text | On-device recogniser; enclave transcription as an option |
 | `voice-out` | Text to speech | text to audio | On-device Kokoro voices (from flash-speech) |
 | `filter` | Share unseen: removes identity from anything sent on | file to file plus a report of what changed | Faces covered, numbers covered, location and metadata stripped, voice changed |

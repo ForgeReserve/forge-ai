@@ -41,6 +41,8 @@ Decided by the owner on 2026-11-12. The event is 2 to 4 December 2026.
 | A10 | Cover | Install under a chosen name and icon, one puzzle game, hidden way in | 5 days |
 | A11 | Protection steps | Checklist per platform, merged with Forge's own status | 2 days |
 | A12 | Passphrase lock | Chats and balance encrypted on the phone | 3 to 4 days |
+| A13 | Cashu card | Tap a Cashu card in the Android app to add funds, as a `fund` module reusing the card code from flash-pos | To be sized after a code check |
+| A14 | Fedimint card | Tap a Fedimint card in the Android app to add funds, as a `fund` module reusing the fedimintcard POS core | To be sized after a code check |
 
 ## Track B: Bellows (the engine)
 
@@ -64,6 +66,8 @@ Twenty days from the plan to the event. In order:
 1. **Bellows** built locally and reviewed in one pull request. Running it on real sealed hardware depends on a hosting account; until then the talk says "in progress, here is the design".
 2. **The demo path**, which must be real on the Pixel: A1, A2, A3, A4, A5, A6, with B1 (the faucet behind the closing QR code).
 3. **C1**, the Android app, so the room can install it from the site. Without it the web app is the fallback and still works on every phone.
+
+**Cards in the room.** Paper notes lead the demo. Cashu cards and Fedimint cards are on the table for people to tap afterwards (A13, A14), which needs the Android app (C1) because a web page cannot talk to these cards. They are mentioned in the script, not demoed on stage.
 
 Shown on slides but not demoed live, so they can be "in progress" on the day: A8 guides, A9 witness, A10 cover. The script already says to state each one's real status.
 
