@@ -42,7 +42,7 @@ Decided by the owner on 2026-11-12. The event is 2 to 4 December 2026.
 | A11 | Protection steps | Checklist per platform, merged with Forge's own status | 2 days |
 | A12 | Passphrase lock | Chats and balance encrypted on the phone | 3 to 4 days |
 | A13 | Cashu card | Tap a Cashu card in the Android app, enter its PIN, and the eCash moves into the Forge balance. A `fund` module that reuses the card protocol code from flash-pos (it is already separate from the NFC layer) over a small NFC plugin, with a minimal charge path | About 1 week, after C1 |
-| A14 | Fedimint card | Tap a Fedimint card to add funds. The card's notes are redeemed by a till service, which then pays the engine's Lightning invoice. Needs a running till and new till work (a pay-invoice route; today that exists only as a command on an unmerged branch) | 1 to 2 weeks, after C1; the riskier of the two |
+| A14 | Fedimint card | Tap a Fedimint card to add funds. The app relays the tap to a till, which charges the card and pays the engine's Lightning invoice through its new pay route (built in the fedimintcard repo, first) | About 1 week, after C1 and the till route |
 
 ## Track B: Bellows (the engine)
 
@@ -66,6 +66,7 @@ Twenty days from the plan to the event. In order:
 1. **Bellows** built locally and reviewed in one pull request. Running it on real sealed hardware depends on a hosting account; until then the talk says "in progress, here is the design".
 2. **The demo path**, which must be real on the Pixel: A1, A2, A3, A4, A5, A6, with B1 (the faucet behind the closing QR code).
 3. **C1**, the Android app, so the room can install it from the site. Without it the web app is the fallback and still works on every phone.
+4. **Both cards working** (owner, 2026-11-12): A13 the Cashu card and A14 the Fedimint card, ahead of guides, witness and the cover game. The till's pay route is being built now in the fedimintcard repo as its own yolo run. A till has to be running and reachable at the event.
 
 **Cards in the room.** Paper notes lead the demo. Cashu cards and Fedimint cards are on the table for people to tap afterwards (A13, A14), which needs the Android app (C1) because a web page cannot talk to these cards. They are mentioned in the script, not demoed on stage.
 
