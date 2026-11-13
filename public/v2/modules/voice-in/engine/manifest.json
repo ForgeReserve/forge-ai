@@ -1,0 +1,12 @@
+{
+  "id": "forge.voice-in.engine",
+  "kind": "voice-in",
+  "version": "1.0.0",
+  "name": {
+    "en": "Private engine"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

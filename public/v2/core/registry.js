@@ -16,8 +16,8 @@ export const INPUTS = {
   mode: ['t', 'ui', 'state', 'nav', 'actions', 'format'],
   fund: ['t', 'ui', 'engine', 'wallet', 'vault', 'format', 'scan', 'qr'],
   filter: ['t'],
-  'voice-in': ['t'],
-  'voice-out': ['t'],
+  'voice-in': ['t', 'mic', 'recognizer', 'audio'],
+  'voice-out': ['t', 'speaker', 'synth', 'audio'],
   cover: ['t', 'ui'],
   guides: ['t', 'ui'],
   protect: ['t', 'ui'],
@@ -25,13 +25,17 @@ export const INPUTS = {
 
 /**
  * Inputs a kind gets only part of. A mode draws the screens: it gets the view (what the screens show,
- * never the balance key) and the answer actions, never the app's raw state or an action that moves money.
+ * never the balance key) and the answer and voice actions, never the app's raw state or an action that
+ * takes money out. A voice module gets the engine's audio calls for its direction only, which the app
+ * makes with the balance key the module never sees.
  */
 export const PROJECTIONS = {
   mode: {
     state: ['view', 'subscribe'],
-    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking'],
   },
+  'voice-in': { audio: ['model', 'price', 'transcribe'] },
+  'voice-out': { audio: ['model', 'price', 'speak'] },
 };
 
 /** Permissions a manifest may ask for in this release. None: a module that asks for one is refused. */
@@ -142,4 +146,8 @@ export const BUNDLED = [
   { kind: 'fund', folder: 'lightning' },
   { kind: 'fund', folder: 'onchain' },
   { kind: 'fund', folder: 'othermint' },
+  { kind: 'voice-in', folder: 'engine' },
+  { kind: 'voice-in', folder: 'device' },
+  { kind: 'voice-out', folder: 'device' },
+  { kind: 'voice-out', folder: 'engine' },
 ];

@@ -26,7 +26,38 @@ export function pickModel(models, settings) {
 /** How many models Private only hides. */
 export const hiddenCount = (models, settings) => visibleModels(models, { privateOnly: false }).length - visibleModels(models, settings).length;
 
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '' });
+/**
+ * voiceIn: 'engine' (default; the engine's speech to text) or 'device' (the browser's recogniser, never
+ * with Private only on). voiceOut: 'auto' (the phone's own voice when it has one, else the engine's),
+ * 'engine', 'device' or 'off'. Voice questions are read aloud unless voiceOut is 'off'.
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto' });
+
+/**
+ * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's
+ * recogniser is never used with Private only on, since the browser may send the sound to its maker.
+ * mods: {engine, device}, each a module instance or undefined.
+ */
+export function pickVoiceIn(mods, settings) {
+  const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
+  if (settings.voiceIn === 'device' && ok(mods.device)) return mods.device;
+  return ok(mods.engine) ? mods.engine : null;
+}
+
+/** The voice-out module to use, or null when answers are not read aloud. */
+export function pickVoiceOut(mods, settings) {
+  const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
+  switch (settings.voiceOut) {
+    case 'off':
+      return null;
+    case 'engine':
+      return ok(mods.engine) ? mods.engine : null;
+    case 'device':
+      return ok(mods.device) ? mods.device : null;
+    default:
+      return ok(mods.device) ? mods.device : ok(mods.engine) ? mods.engine : null;
+  }
+}
 
 export function createStore(initial) {
   const S = { ...initial };

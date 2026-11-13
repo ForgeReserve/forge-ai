@@ -29,6 +29,15 @@ export function errorFrom(status, body) {
 
 const trimBase = (b) => String(b ?? '').replace(/\/+$/, '');
 
+/** What a paid answer cost and the balance after it, from the engine's X-Forge headers (null when absent). */
+function charges(res) {
+  const n = (h) => {
+    const v = res.headers.get(h);
+    return v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
+  };
+  return { chargedMsub: n('x-forge-charged-msub'), balanceMsub: n('x-forge-balance-msub') };
+}
+
 /**
  * base: '' for the page's own origin, or an engine origin such as https://ai.forge-reserve.com.
  * fetch: the fetch to use. solve: the proof-of-work solver (tests pass a fast one).
@@ -108,6 +117,50 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
     foreignConfirm: (key, body) => call('/v1/wallet/fund/foreign/confirm', { key, json: body }),
     foreignMints: (path = '/v1/wallet/fund/mints') => must(path),
     funding: (key, id) => call(`/v1/wallet/fund/${encodeURIComponent(id)}`, { key }),
+
+    /**
+     * Speech to text: sends a WAV recording to the engine's audio model. Returns {text, chargedMsub,
+     * balanceMsub}. Throws EngineError for a refused or failed request (the engine does not charge those).
+     */
+    async transcribe(key, { model, audio, seconds, language, signal }) {
+      const form = new FormData();
+      form.append('file', new Blob([audio], { type: 'audio/wav' }), 'audio.wav');
+      form.append('model', model);
+      form.append('response_format', 'json');
+      if (seconds != null) form.append('duration', String(seconds));
+      if (language) form.append('language', language);
+      const res = await send(plain, '/v1/audio/transcriptions', { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal, cache: 'no-store' });
+      let body = null;
+      try {
+        body = await res.json();
+      } catch {
+        /* not JSON */
+      }
+      if (!res.ok) throw errorFrom(res.status, body);
+      if (typeof body?.text !== 'string') throw new EngineError('bad_answer', 'The engine sent no text.');
+      return { text: body.text, ...charges(res) };
+    },
+
+    /** Text to speech: returns {blob (WAV), chargedMsub, balanceMsub}. Throws EngineError on failure. */
+    async speech(key, { model, input, voice, signal }) {
+      const res = await send(plain, '/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, input, voice, response_format: 'wav' }),
+        signal,
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        let b = null;
+        try {
+          b = await res.json();
+        } catch {
+          /* not JSON */
+        }
+        throw errorFrom(res.status, b);
+      }
+      return { blob: await res.blob(), ...charges(res) };
+    },
 
     /**
      * Streams a chat completion. body is the OpenAI request (stream is forced on). Handlers receive the
