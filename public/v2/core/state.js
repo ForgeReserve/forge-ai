@@ -31,7 +31,11 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * with Private only on). voiceOut: 'auto' (the phone's own voice when it has one, else the engine's),
  * 'engine', 'device' or 'off'. Voice questions are read aloud unless voiceOut is 'off'.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto' });
+/**
+ * autoDelete: when conversations are removed from this phone ('off', 'close', 'hour', 'day', 'week';
+ * core/history.js). One day by default, as the canvas shows it (DProtect, DErase).
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', autoDelete: 'day' });
 
 /**
  * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's

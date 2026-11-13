@@ -26,13 +26,14 @@ export const INPUTS = {
 /**
  * Inputs a kind gets only part of. A mode draws the screens: it gets the view (what the screens show,
  * never the balance key) and the answer and voice actions, never the app's raw state or an action that
- * takes money out. A voice module gets the engine's audio calls for its direction only, which the app
- * makes with the balance key the module never sees.
+ * takes money out. Burn (remove this conversation from the phone) is one of the answer actions.
+ * A voice module gets the engine's audio calls for its direction only, which the app makes with the
+ * balance key the module never sees.
  */
 export const PROJECTIONS = {
   mode: {
     state: ['view', 'subscribe'],
-    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'] },
   'voice-out': { audio: ['model', 'price', 'speak'] },

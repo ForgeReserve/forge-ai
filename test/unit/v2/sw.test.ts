@@ -29,4 +29,10 @@ describe('service workers', () => {
     expect(v2).toMatch(/req\.headers\.has\('authorization'\) \|\| req\.headers\.has\('x-cashu'\)/);
     expect(v2).toMatch(/if \(req\.method !== 'GET'\) return;/);
   });
+
+  it('v2 never re-creates its cache once Erase everything removed it: only install opens it unguarded', () => {
+    expect(v2.match(/caches\.open\(CACHE\)/g)).toHaveLength(2);
+    expect(v2).toMatch(/\(await caches\.has\(CACHE\)\)\) await \(await caches\.open\(CACHE\)\)\.put\(/);
+    expect(v2).not.toMatch(/cache\.match\(/);
+  });
 });

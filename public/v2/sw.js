@@ -40,14 +40,16 @@ self.addEventListener('fetch', (event) => {
   if (MINE.test(url.pathname)) event.respondWith(networkFirst(req));
 });
 
+// Only install creates the cache. Once it is gone (Erase everything deleted it), nothing is put back, even
+// by a worker that still runs for the page that erased it.
 async function networkFirst(req, fallback) {
-  const cache = await caches.open(CACHE);
   try {
     const res = await fetch(req);
-    if (res.ok && res.type === 'basic') await cache.put(fallback ?? req, res.clone());
+    if (res.ok && res.type === 'basic' && (await caches.has(CACHE))) await (await caches.open(CACHE)).put(fallback ?? req, res.clone());
     return res;
   } catch (e) {
-    const hit = (await cache.match(fallback ?? req, { ignoreSearch: true })) ?? (fallback ? await cache.match(fallback) : undefined);
+    const opts = { cacheName: CACHE };
+    const hit = (await caches.match(fallback ?? req, { ...opts, ignoreSearch: true })) ?? (fallback ? await caches.match(fallback, opts) : undefined);
     if (hit) return hit;
     throw e;
   }

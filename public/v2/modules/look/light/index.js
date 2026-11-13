@@ -28,6 +28,7 @@ export const tokens = Object.freeze({
   "gold-tint": "#F6E9C8",
   "danger": "#B3402F",
   "danger-tint": "#FBDAD5",
+  "danger-ink": "#FFFFFF",
   "low": "#C2600A",
   "low-tint": "#FCE9D6",
   "low-line": "#E7B98A",

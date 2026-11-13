@@ -1,7 +1,8 @@
 // Voice out through the engine: each piece of the answer is sent to the engine's text to speech model
 // (paid per request) and played as it arrives, the next piece fetched while one plays. Each piece is
 // kept in this page's memory as soon as it arrives, for the last few answers, so Listen never pays twice
-// for a piece already paid for: not after a stop part way, and not when playing it failed.
+// for a piece already paid for: not after a stop part way, and not when playing it failed. Burning a
+// conversation drops its sound from memory too (forget).
 // Handed only t, the speaker adapter and the audio calls for text to speech (core/registry.js).
 const KEEP = 4;
 
@@ -35,6 +36,11 @@ export function create({ speaker, audio }) {
       if (!e) return false;
       for (let i = 0; i < e.count; i++) if (!e.pieces[i]) return false;
       return true;
+    },
+    /** Drops the kept sound of one answer (by key), or of every answer, when a conversation is burned. */
+    forget(key) {
+      if (key == null) cache.clear();
+      else cache.delete(key);
     },
     /** msub to read these pieces aloud: only the pieces not here yet, 0 when they all are. */
     price: (pieces, key) => {
