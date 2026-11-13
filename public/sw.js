@@ -8,6 +8,7 @@
 // - Vendor files are cache first in their own cache, versioned by the vendor hash.
 // - API calls, the admin and beta pages, POST requests and anything carrying Authorization or X-Cashu
 //   are never cached or intercepted: they go straight to the network.
+// - The v2 app under /v2/ has its own worker and scope; this one leaves it alone.
 const VERSION = '__FORGE_SW_VERSION__';
 const VENDOR_VERSION = '__FORGE_VENDOR_VERSION__';
 const SHELL = __FORGE_SW_SHELL__;
@@ -16,7 +17,7 @@ const SHELL_CACHE = `forge-shell-${VERSION}`;
 const VENDOR_CACHE = `forge-vendor-${VENDOR_VERSION}`;
 const OFFLINE = '/offline.html';
 const SHELL_SET = new Set(SHELL);
-const BYPASS = /^\/(v1\/|v1$|admin|beta|attestation|\.well-known\/|healthz|__dev|sw\.js$)/;
+const BYPASS = /^\/(v1\/|v1$|v2\/|v2$|admin|beta|attestation|\.well-known\/|healthz|__dev|sw\.js$)/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

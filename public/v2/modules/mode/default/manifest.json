@@ -1,0 +1,12 @@
+{
+  "id": "forge.mode.default",
+  "kind": "mode",
+  "version": "1.0.0",
+  "name": {
+    "en": "Default"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

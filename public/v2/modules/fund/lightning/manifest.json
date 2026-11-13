@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.lightning",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Lightning"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

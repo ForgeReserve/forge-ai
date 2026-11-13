@@ -898,6 +898,8 @@ export function createApp(d: Deps) {
       const { body, version } = sw();
       return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version });
     });
+    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js).
+    app.get('/v2', (c) => c.redirect('/v2/', 301));
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
 

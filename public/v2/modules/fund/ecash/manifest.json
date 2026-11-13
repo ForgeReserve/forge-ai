@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.ecash",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "eCash"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

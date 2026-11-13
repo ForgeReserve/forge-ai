@@ -1,0 +1,12 @@
+{
+  "id": "forge.look.midnight",
+  "kind": "look",
+  "version": "1.0.0",
+  "name": {
+    "en": "Midnight"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -1,0 +1,112 @@
+// Mode and look (XThemes) and Choose a model (DPrivateOnly), both reached from More.
+import { isPrivate, visibleModels } from '../core/state.js';
+import { backHeader, el, icon } from '../core/ui.js';
+
+export function lookScreen({ t, state, back, actions, registry }) {
+  const S = state.S;
+  const looks = registry.list('look');
+  // Colours from a look module go into SVG markup, so only plain hex colours are used.
+  const hex = (v) => (/^#[0-9a-f]{3,8}$/i.test(String(v)) ? v : '#888888');
+  const thumb = (tokens) => {
+    const c = (k) => hex(tokens[k]);
+    const ns = 'http://www.w3.org/2000/svg';
+    const s = document.createElementNS(ns, 'svg');
+    s.setAttribute('viewBox', '0 0 60 84');
+    s.setAttribute('width', '60');
+    s.setAttribute('height', '84');
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = `<rect width="60" height="84" rx="10" fill="${c('bg')}" stroke="${c('line')}"/><circle cx="30" cy="38" r="17" fill="none" stroke="${c('gold-track')}" stroke-width="5"/><circle cx="30" cy="38" r="17" fill="none" stroke="${c('gold')}" stroke-width="5" stroke-dasharray="80 107" stroke-linecap="round" transform="rotate(-90 30 38)"/><circle cx="30" cy="38" r="11" fill="none" stroke="${c('memory-track')}" stroke-width="5"/><circle cx="30" cy="38" r="11" fill="none" stroke="${c('memory')}" stroke-width="5" stroke-dasharray="48 69" stroke-linecap="round" transform="rotate(-90 30 38)"/><circle cx="30" cy="38" r="6" fill="${c('talk')}"/><rect x="10" y="66" width="40" height="8" rx="4" fill="${c('surface')}" stroke="${c('line')}"/>`;
+    return s;
+  };
+  const group = el('div', { class: 'look-list', role: 'radiogroup', 'aria-label': t('look.look') });
+  const follow = el('button', { type: 'button', class: 'setting-row', id: 'followSystem', role: 'switch' });
+  const draw = () => {
+    group.replaceChildren(
+      ...looks.map(({ instance }) => {
+        const on = S.settings.look === instance.id;
+        return el(
+          'button',
+          { type: 'button', class: `look-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), id: `look-${instance.id}`, onclick: () => actions.setLook(instance.id) },
+          thumb(instance.tokens),
+          el('span', { class: 'look-text' }, el('b', { text: t(`look.${instance.id}.name`) }), el('small', { text: t(`look.${instance.id}.sub`) })),
+          el('span', { class: 'radio', 'aria-hidden': 'true' }),
+        );
+      }),
+    );
+    follow.setAttribute('aria-checked', String(!!S.settings.followSystem));
+    follow.replaceChildren(el('span', { text: t('look.follow') }), el('span', { class: 'value', text: S.settings.followSystem ? t('look.on') : t('look.off') }));
+  };
+  follow.addEventListener('click', () => actions.setFollowSystem(!S.settings.followSystem));
+  draw();
+  const main = el(
+    'main',
+    { class: 'screen sub look', 'data-screen': 'look' },
+    backHeader(t('look.title'), back, t('common.back')),
+    el(
+      'div',
+      { class: 'scroll' },
+      el('h2', { class: 'caps', text: t('look.mode') }),
+      el('div', { class: 'mode-on', 'aria-current': 'true' }, icon('grid', 30), el('span', {}, el('b', { text: t('look.default') }), el('small', { text: t('look.defaultSub') })), el('span', { class: 'on-dot', 'aria-hidden': 'true' })),
+      // Classic is the v1 chat page; Playful comes with a later slice and is not listed.
+      el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
+      el('h2', { class: 'caps', text: t('look.look') }),
+      group,
+      follow,
+    ),
+    el('div', { class: 'foot' }, el('button', { type: 'button', class: 'btn primary block', id: 'lookDone', onclick: back, text: t('look.done') })),
+  );
+  return { node: main, update: draw, focus: main.querySelector('h1') };
+}
+
+export function modelScreen({ t, state, back, actions, format }) {
+  const S = state.S;
+  const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id: 'privateOnly', 'aria-label': t('model.privateOnly') }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
+  sw.addEventListener('click', () => actions.setPrivateOnly(!S.settings.privateOnly));
+  const list = el('div', { class: 'model-list', role: 'radiogroup', 'aria-label': t('model.title') });
+  const hidden = el('div', { class: 'dashed-box', id: 'hiddenNote' }, el('b', { text: t('model.hidden') }), el('p', { text: t('model.hiddenSub') }));
+  const tag = (ico, text, cls = '') => el('span', { class: `tag ${cls}`.trim() }, icon(ico, 14), el('span', { text }));
+  const draw = () => {
+    sw.setAttribute('aria-checked', String(!!S.settings.privateOnly));
+    const v = state.view();
+    const models = visibleModels(S.models, S.settings);
+    list.replaceChildren(
+      ...(models.length
+        ? models.map((m) => {
+            const on = v.model?.id === m.id;
+            const priv = isPrivate(m);
+            const p = format.modelPrice(m);
+            return el(
+              'button',
+              { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, onclick: () => actions.chooseModel(m.id) },
+              el('b', { text: m.name ?? m.id }),
+              el(
+                'span',
+                { class: 'tags' },
+                priv ? tag('lock', t('model.private'), 'teal') : tag('unlock', t('model.standard'), 'warn'),
+                m.speed === 'fast' ? tag('gauge', t('model.fast')) : null,
+                m.capabilities?.vision ? tag('image', t('model.images')) : null,
+                m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
+              ),
+              p ? el('small', { text: t('model.price', p) }) : null,
+              priv ? null : el('small', { class: 'warn-text', text: t('model.standardWarn') }),
+            );
+          })
+        : [el('p', { class: 'hint', text: t('model.none') })]),
+    );
+    hidden.hidden = !(S.settings.privateOnly && v.hiddenCount > 0);
+  };
+  draw();
+  const main = el(
+    'main',
+    { class: 'screen sub model', 'data-screen': 'model' },
+    backHeader(t('model.title'), back, t('common.back')),
+    el(
+      'div',
+      { class: 'scroll' },
+      el('div', { class: 'teal-panel' }, el('span', {}, el('b', { text: t('model.privateOnly') }), el('small', { text: t('model.privateOnlySub') })), sw),
+      list,
+      hidden,
+    ),
+  );
+  return { node: main, update: draw, focus: main.querySelector('h1') };
+}
