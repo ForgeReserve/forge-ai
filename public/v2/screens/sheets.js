@@ -24,11 +24,14 @@ export function addSheet({ t, actions }) {
   );
 }
 
-export function moreSheet({ t, state, nav }) {
+export function moreSheet({ t, state, nav, registry }) {
+  // Voice is listed only when some way of talking or listening works here.
+  const voice = ['voice-in', 'voice-out'].some((k) => registry.list(k).some((x) => x.instance.available()));
   return el(
     'section',
     { class: 'float-card', 'aria-label': t('more.title'), id: 'moreSheet' },
     listRow({ ico: 'lock', tint: 'teal', title: t('more.model'), sub: state.S.settings.privateOnly ? t('more.modelSub') : t('more.modelSubOff'), id: 'moreModel', onclick: () => nav('model') }),
+    voice ? listRow({ ico: 'mic', tint: 'violet', title: t('more.voice'), sub: t('more.voiceSub'), id: 'moreVoice', onclick: () => nav('voice') }) : null,
     listRow({ ico: 'sun', tint: 'blue', title: t('more.look'), sub: t('more.lookSub'), id: 'moreLook', onclick: () => nav('look') }),
   );
 }

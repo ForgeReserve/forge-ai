@@ -13,6 +13,7 @@ export const ROUTES = {
   takeOut: 'funds/out',
   look: 'more/look',
   model: 'more/model',
+  voice: 'more/voice',
 };
 
 /** '#/funds/add/ecash' -> {name: 'fund', params: {id: 'ecash'}}. Unknown routes go home. */
@@ -50,5 +51,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', look: 'more', model: 'more' }[name] ?? 'home';
+  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', look: 'more', model: 'more', voice: 'more' }[name] ?? 'home';
 }

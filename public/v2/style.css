@@ -233,6 +233,27 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); max-width: min(440px, calc(100% - 32px)); padding: 12px 18px; border-radius: 16px; background: var(--primary); color: var(--primary-ink); font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 200ms, transform 200ms var(--ease); z-index: 10; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* Hold to talk (XListenLight). The press must not scroll, select or open the long-press menu. */
+.talk { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.talk.recording { transform: scale(1.04); box-shadow: var(--shadow-talk), 0 0 0 10px var(--teal-tint); }
+.talk.recording.leaving { background: var(--danger); box-shadow: var(--shadow-talk), 0 0 0 10px var(--danger-tint); transform: scale(.96); }
+.talk.sending { opacity: .8; }
+.talk-label { pointer-events: none; }
+.level-bars { display: flex; align-items: center; gap: 5px; height: 40%; pointer-events: none; }
+.level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; transition: height 90ms linear; }
+.talk.small .level-bars { gap: 3px; }
+.talk.small .level-bars .bar { width: 5px; }
+.listen-info { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: center; }
+.listen-info p { margin: 0; }
+.listen-text { font-size: 20px; font-weight: 600; text-align: left; padding: 14px 16px; background: var(--surface); border-radius: 22px; }
+.listen-time { font-size: 15px; font-weight: 600; color: var(--text-body); }
+.listen-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 600; text-align: left; }
+.listen-route { color: var(--teal); }
+.listen-route[data-route="engine-standard"], .listen-route[data-route="device"] { color: var(--low-ink); }
+.listen-price { color: var(--gold-ink); white-space: nowrap; }
+.speak-state { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--teal); }
+.tile-sub { font-size: 11px; font-weight: 600; color: var(--gold-ink); }
+
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes pulse { 50% { opacity: .4; } }
 

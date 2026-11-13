@@ -13,16 +13,19 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { estimate, perQuestion } from './core/price.js';
+import { SPEAK_MAX_CHARS } from './core/speech.js';
+import { createTalk } from './core/talkctl.js';
+import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsFraction, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
-import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel } from './core/state.js';
+import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
-import { lookScreen, modelScreen } from './screens/settings.js';
+import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
 import { typeScreen } from './screens/type.js';
 
@@ -50,6 +53,7 @@ const store = createStore({
   availableMsub: null,
   peakMsub: null,
   models: [],
+  audioModels: [],
   inviteOnly: false,
   units: [],
   mints: [],
@@ -102,6 +106,80 @@ function view() {
     lastExchange: lastExchange(S.conv.messages),
     streaming: S.streaming,
     hiddenCount: hiddenCount(S.models, S.settings),
+    talk: talkView(model, unit),
+    speak: speakView(),
+  };
+}
+
+// ------------------------------------------------------------------ voice
+
+/** The voice modules by id, for one direction. */
+const voiceMods = (kind) => Object.fromEntries((registry?.list(kind) ?? []).map((x) => [x.instance.id, x.instance]));
+const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
+const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
+
+/**
+ * The engine's audio calls as a voice module sees them: the model of each kind that Private only allows,
+ * its price, and the paid calls, made with the balance key the module never sees.
+ */
+const audio = {
+  model: (kind) => audioModels(S.audioModels, S.settings)[kind] ?? null,
+  price: (kind, usage) => audioMsub(audio.model(kind), S.unit ?? 'usd', usage),
+  async transcribe(wav, { seconds, signal } = {}) {
+    const m = audio.model('transcription');
+    if (!m) throw new EngineError('model_not_found', 'No speech to text model.');
+    return engine.transcribe(S.key, { model: m.id, audio: wav, seconds, signal });
+  },
+  async speak(input, { signal } = {}) {
+    const m = audio.model('speech');
+    if (!m) throw new EngineError('model_not_found', 'No voice model.');
+    return engine.speech(S.key, { model: m.id, input, voice: m.voices?.[0], signal });
+  },
+};
+
+/**
+ * The most a voice question can cost, for a recording of `seconds`: turning it into text, the question
+ * it becomes (about CHARS_PER_SECOND characters a second) and, when the engine reads it aloud, the
+ * longest part of the answer that is read. null when a part has no price.
+ */
+function talkPrice(seconds, inMod) {
+  const toText = inMod.price(seconds);
+  const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND))).costMsub;
+  const out = voiceOut();
+  let reading = 0;
+  if (out?.id === 'engine') reading = audio.price('speech', { requests: Math.ceil(SPEAK_MAX_CHARS / out.pieceSize()), chars: SPEAK_MAX_CHARS });
+  if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
+  return (toText ?? 0) + question + reading;
+}
+
+function talkView(model, unit) {
+  const inMod = voiceIn();
+  const tk = S.talk ?? { phase: 'idle' };
+  return {
+    available: !!inMod && !!model,
+    phase: tk.phase,
+    seconds: tk.seconds ?? 0,
+    level: tk.level ?? 0,
+    inside: tk.inside !== false,
+    text: tk.text ?? '',
+    error: tk.error ?? null,
+    unit,
+    maxSeconds: inMod?.maxSeconds() ?? 60,
+    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod) : null,
+    // Where the sound goes, for the line under the button: engine-private, engine-standard or device.
+    route: !inMod ? null : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
+  };
+}
+
+function speakView() {
+  const out = voiceOut();
+  const ex = lastExchange(S.conv.messages);
+  const answerMsg = S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
+  return {
+    available: !!out && !!ex?.answer?.content,
+    state: S.speaking?.state ?? 'idle',
+    current: !!answerMsg && S.speaking?.key === answerMsg.id,
+    priceMsub: out && answerMsg && !S.streaming ? talk.speakPrice(answerMsg) : null,
   };
 }
 // subscribe() tells a listener that something changed, never what: the raw state (and the balance key in
@@ -203,7 +281,7 @@ async function loadModels() {
 
 function applyModels(body) {
   if (!body) return;
-  Object.assign(S, { models: body.data ?? [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [] });
+  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [] });
 }
 
 const wallet = {
@@ -259,11 +337,14 @@ function estimateFor(text) {
   };
 }
 
-async function ask(text) {
+async function ask(text, meta = null) {
   if (gen) return;
   const model = pickModel(S.models, S.settings);
   if (!model) return nav('model');
+  talk.clearError();
+  talk.stopSpeaking();
   const msg = { id: newId('m'), ...pendingMessage(text, S.pending, { vision: !!model.capabilities?.vision }) };
+  if (meta?.voice) msg.meta = { voice: true };
   if (!msg.content && !msg.images && !msg.files) return;
   if (!S.conv.id) S.conv = { id: newId('c'), messages: [], createdAt: Date.now() };
   S.conv.messages.push(msg);
@@ -325,6 +406,9 @@ async function generate() {
   ui.toast(reply.meta.error ? errorText(reply.meta.error, reply.meta.unit) : reply.meta.stopped ? t('answer.stopped') : t('answer.done'), 1800);
   await saveConv();
   await refreshBalance();
+  // A question asked by voice is answered by voice, unless reading aloud is off.
+  const asked = history.at(-1);
+  if (asked?.meta?.voice && reply.content && !reply.meta.error && !reply.meta.stopped && S.conv === conv) talk.speak(reply);
 }
 
 /** The plain words for a failed answer, with what it cost when the engine charged for it. */
@@ -474,8 +558,50 @@ async function settleOtherMint() {
   }
 }
 
+/** Why a question cannot be asked right now, with where to go about it, or null. */
+function blocker() {
+  if (!S.online) return { key: 'type.offline' };
+  if (S.streaming) return { key: 'talk.busy' };
+  if (!S.key || S.balanceMsub === 0) return { key: 'type.noFunds', go: () => nav('addFunds') };
+  if (!pickModel(S.models, S.settings)) return { key: 'type.noModel', go: () => nav('model') };
+  return null;
+}
+
+const talk = createTalk({
+  store,
+  t,
+  ui,
+  nav: (name) => nav(name),
+  haptics: adapters.haptics,
+  voiceIn: () => voiceIn(),
+  voiceOut: () => voiceOut(),
+  blocker,
+  ask,
+  refresh: () => refreshBalance(),
+  errorText: (err) => errorText(err, S.unit),
+});
+
+const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
+
 const actions = {
   ask,
+  talkDown: () => talk.down(),
+  talkUp: () => talk.up(),
+  talkMove: (inside) => talk.move(inside),
+  talkCancel: () => talk.cancel(),
+  speak: () => talk.speak(lastAnswer()),
+  stopSpeaking: () => talk.stopSpeaking(),
+  setVoiceIn: (id) => {
+    S.settings.voiceIn = id;
+    saveSettings();
+    store.set({});
+  },
+  setVoiceOut: (id) => {
+    S.settings.voiceOut = id;
+    if (id === 'off') talk.stopSpeaking();
+    saveSettings();
+    store.set({});
+  },
   stop: () => gen?.controller.abort(),
   again,
   startFresh,
@@ -590,6 +716,8 @@ function screenFor(name, params) {
       return lookScreen(ctx);
     case 'model':
       return modelScreen(ctx);
+    case 'voice':
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), audio } });
     default:
       return mode.home();
   }
@@ -632,7 +760,10 @@ async function start() {
   S.draft = (await kv.get('draft').catch(() => null)) ?? '';
 
   const loader = bundledLoader();
-  registry = createRegistry({ ...loader, inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR } });
+  registry = createRegistry({
+    ...loader,
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
+  });
   await registry.loadAll(BUNDLED);
   if (registry.refused.length) console.warn('modules refused', registry.refused);
   if (!registry.list('mode').length) throw new Error('no mode module');

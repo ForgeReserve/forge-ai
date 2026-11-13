@@ -110,3 +110,48 @@ export function modelScreen({ t, state, back, actions, format }) {
   );
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
+
+/**
+ * Voice (from More): how talking becomes words, and how answers are read aloud. Only ways that work here
+ * are listed; the browser's recogniser is shown but cannot be chosen while Private only is on.
+ */
+export function voiceScreen({ t, state, back, actions, voice }) {
+  const S = state.S;
+  const option = (group, id, title, sub, { on, disabled = false } = {}) =>
+    el(
+      'button',
+      { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'aria-disabled': String(disabled), disabled, id: `${group}-${id}`, onclick: () => (group === 'voiceIn' ? actions.setVoiceIn(id) : actions.setVoiceOut(id)) },
+      el('b', { text: title }),
+      el('small', { text: sub }),
+    );
+  const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
+  const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
+  const draw = () => {
+    const v = state.view();
+    const ins = voice.inMods();
+    const outs = voice.outMods();
+    const inUsed = v.talk.route;
+    const engineSub = (kind) => (voice.audio.model(kind)?.tier === 'enclave' ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
+    const inRows = [];
+    if (ins.engine?.available()) inRows.push(option('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine') }));
+    if (ins.device?.available()) {
+      const blocked = !!S.settings.privateOnly;
+      inRows.push(option('voiceIn', 'device', t('voice.in.device'), blocked ? t('voice.in.deviceOff') : t('voice.in.deviceSub'), { on: inUsed === 'device', disabled: blocked }));
+    }
+    inList.replaceChildren(...(inRows.length ? inRows : [el('p', { class: 'hint', id: 'voiceInNone', text: t('voice.in.none') })]));
+    const choice = S.settings.voiceOut ?? 'auto';
+    const outRows = [option('voiceOut', 'auto', t('voice.out.auto'), t('voice.out.autoSub'), { on: choice === 'auto' })];
+    if (outs.engine?.available()) outRows.push(option('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: choice === 'engine' }));
+    if (outs.device?.available()) outRows.push(option('voiceOut', 'device', t('voice.out.device'), t('voice.out.deviceSub'), { on: choice === 'device' }));
+    outRows.push(option('voiceOut', 'off', t('voice.out.off'), t('voice.out.offSub'), { on: choice === 'off' }));
+    outList.replaceChildren(...outRows);
+  };
+  draw();
+  const main = el(
+    'main',
+    { class: 'screen sub voice', 'data-screen': 'voice' },
+    backHeader(t('voice.title'), back, t('common.back')),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList),
+  );
+  return { node: main, update: draw, focus: main.querySelector('h1') };
+}
