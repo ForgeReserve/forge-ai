@@ -1,5 +1,6 @@
 // The answer (XAnswerLight): the question, the streamed answer with Markdown, Stop while it streams,
-// then Copy and Ask again, and Listen (or Stop) to hear it read aloud, with its price when it costs.
+// then Copy, Ask again and Burn, and Listen (or Stop) to hear it read aloud, with its price when it
+// costs.
 // Smaller rings below with the reply button (hold to talk), and the bottom row. Errors show in plain
 // words with one next step. A voice question shows here as text once it has been heard.
 import { renderMarkdown, enhance } from '../../js/markdown.js';
@@ -31,6 +32,13 @@ export function answer({ t, state, nav, actions, format }) {
   let shownText = null;
   let shownState = null;
   const tile = (id, ico, label, fn, sub = null) => el('button', { type: 'button', class: 'action-tile', id, onclick: fn }, icon(ico, 22), el('span', { text: label }), sub ? el('small', { class: 'tile-sub', text: sub }) : null);
+  /** Burn: removes this conversation from the phone at once (the app then goes home). */
+  const burnTile = () => {
+    const b = tile('burnBtn', 'flame', t('answer.burn'), () => actions.burn());
+    b.classList.add('danger');
+    b.setAttribute('aria-label', t('answer.burnLabel'));
+    return b;
+  };
   /** Listen (with its price when it costs) or Stop while the answer is being read aloud. */
   const speakTile = (v) => {
     const sp = v.speak;
@@ -112,6 +120,7 @@ export function answer({ t, state, nav, actions, format }) {
       ...speakTile(v),
       ...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []),
       tile('againBtn', 'again', t('answer.again'), () => actions.again()),
+      burnTile(),
     );
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);

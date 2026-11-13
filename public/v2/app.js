@@ -7,7 +7,9 @@ import { lockKey } from '../js/lockkey.js';
 import * as QR from '../js/qr.js';
 import { adapters } from './core/adapters.js';
 import { lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
-import { chats, kv } from './core/db.js';
+import { chats, kv, shutdown } from './core/db.js';
+import { eraseEverything } from './core/erase.js';
+import { createSweeper, lastUsed } from './core/history.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
@@ -24,7 +26,9 @@ import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickMod
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
+import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { historyScreen } from './screens/history.js';
 import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
 import { typeScreen } from './screens/type.js';
@@ -35,9 +39,16 @@ const LOOK_CACHE = 'forge2.look';
 
 // ------------------------------------------------------------------ storage that survives a reload
 
+// Set by Erase everything: from then on nothing is written anywhere, so a late write cannot bring back
+// what was erased, and no screen is drawn but the Erased one.
+let erased = false;
+/** ui.store, unless everything was erased. */
+const keep = (k, v) => !erased && ui.store(k, v);
+
 const storage = {
   getItem: (k) => ui.load(k),
   setItem: (k, v) => {
+    if (erased) throw new Error('erased');
     // The vault must know when a write fails, so this one does not swallow errors.
     localStorage.setItem(k, v);
   },
@@ -108,6 +119,8 @@ function view() {
     hiddenCount: hiddenCount(S.models, S.settings),
     talk: talkView(model, unit),
     speak: speakView(),
+    // Goes up whenever conversations are burned, so an open History screen reads the list again.
+    historyVersion,
   };
 }
 
@@ -208,7 +221,7 @@ function applyLook() {
   const look = looks.find((l) => l.instance.id === id) ?? looks[0];
   if (!look) return;
   setTokens(look.instance.tokens, look.instance.scheme);
-  ui.store(LOOK_CACHE, JSON.stringify({ tokens: look.instance.tokens, scheme: look.instance.scheme }));
+  keep(LOOK_CACHE, JSON.stringify({ tokens: look.instance.tokens, scheme: look.instance.scheme }));
 }
 
 function setTokens(tokens, scheme) {
@@ -232,7 +245,7 @@ darkQuery?.addEventListener?.('change', () => S.settings.followSystem && applyLo
 
 function setKey(k) {
   S.key = k || null;
-  ui.store(keyStore(), S.key);
+  keep(keyStore(), S.key);
   if (!S.key) Object.assign(S, { unit: null, balanceMsub: null, availableMsub: null, peakMsub: null });
   store.set({});
 }
@@ -253,7 +266,7 @@ async function refreshBalance() {
   } catch (e) {
     if (e instanceof EngineError && e.status === 401) {
       // The engine no longer knows this key. Keep a copy aside, as v1 does, then start over.
-      ui.store('forge.unrecognizedKey', S.key);
+      keep('forge.unrecognizedKey', S.key);
       setKey(null);
       ui.toast(t('error.key'));
     }
@@ -264,7 +277,7 @@ async function refreshBalance() {
 async function loadModels() {
   try {
     const body = await engine.models();
-    ui.store(MODELS_CACHE, JSON.stringify(body));
+    keep(MODELS_CACHE, JSON.stringify(body));
     applyModels(body);
   } catch {
     try {
@@ -306,17 +319,27 @@ const wallet = {
 
 // ------------------------------------------------------------------ conversation
 
+let historyVersion = 0;
+// Conversations burned in this page: never written again, even by an answer still on its way.
+const burned = new Set();
 const newId = (p) => p + '_' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replaceAll('-', '').slice(0, 20);
 let gen = null; // {controller}
 
-async function saveConv() {
-  if (!S.conv.id) return;
-  S.conv.updatedAt = Date.now();
-  await chats.put(S.conv.id, S.conv).catch(() => {});
-  await kv.put('current', S.conv.id).catch(() => {});
+/** Saves a conversation (the open one by default). A burned one is never written back. */
+async function saveConv(conv = S.conv) {
+  if (!conv.id || burned.has(conv.id)) return;
+  conv.updatedAt = Date.now();
+  await chats.put(conv.id, conv).catch(() => {});
+  if (conv === S.conv) await kv.put('current', conv.id).catch(() => {});
+}
+/** What waits for the next question (attachments, the typed draft) is timed by auto-delete too. */
+const SCRATCH = 'next-question';
+async function scratchChanged() {
+  await kv.put('scratchAt', Date.now()).catch(() => {});
 }
 async function savePending() {
   await kv.put('pending', S.pending).catch(() => {});
+  await scratchChanged();
 }
 
 function estimateFor(text) {
@@ -405,8 +428,10 @@ async function generate() {
   // A stopped stream is settled by the engine just after the disconnect.
   if (reply.meta.stopped && !forge) await new Promise((r) => setTimeout(r, 900));
   store.set({ streaming: false });
+  // Burned while it streamed: nothing more to say or save, but the balance did change.
+  if (burned.has(conv.id)) return refreshBalance();
   ui.toast(reply.meta.error ? errorText(reply.meta.error, reply.meta.unit) : reply.meta.stopped ? t('answer.stopped') : t('answer.done'), 1800);
-  await saveConv();
+  await saveConv(conv);
   await refreshBalance();
   // A question asked by voice is answered by voice, unless reading aloud is off.
   const asked = history.at(-1);
@@ -427,16 +452,87 @@ function again() {
   generate();
 }
 
+/** Clears the memory: the next question starts a new conversation. The old one stays in History. */
 async function startFresh() {
   gen?.controller.abort();
-  const old = S.conv.id;
   S.conv = { id: null, messages: [] };
   S.pending = [];
   await savePending();
   await kv.del('current').catch(() => {});
-  // There is no history screen yet (slice A4), so the old conversation is removed from this phone's storage.
-  if (old) await chats.del(old).catch(() => {});
   store.set({});
+}
+
+// ------------------------------------------------------------------ history, burn and auto-delete
+
+/** Every stored conversation. */
+const allConversations = async () => (await chats.all().catch(() => [])) ?? [];
+
+/**
+ * Removes conversations from this phone: from IndexedDB, from this page's memory and, for the open one,
+ * its answer read aloud and the sound kept for it. SCRATCH stands for what waits for the next question.
+ */
+async function burnIds(ids) {
+  const set = new Set(ids);
+  if (!set.size) return;
+  const voiceOuts = registry?.list('voice-out') ?? [];
+  if (S.conv.id && set.has(S.conv.id)) {
+    const conv = S.conv;
+    burned.add(conv.id);
+    gen?.controller.abort();
+    talk.stopSpeaking();
+    for (const m of conv.messages) for (const x of voiceOuts) x.instance.forget?.(m.id);
+    if (S.talk?.phase === 'idle') S.talk = { ...S.talk, text: '', error: null };
+    S.conv = { id: null, messages: [] };
+    memo = { k: '', v: null };
+    await kv.del('current').catch(() => {});
+  }
+  for (const id of set) {
+    if (id === SCRATCH) continue;
+    burned.add(id);
+    const c = await chats.get(id).catch(() => null);
+    for (const m of c?.messages ?? []) for (const x of voiceOuts) x.instance.forget?.(m.id);
+    await chats.del(id).catch(() => {});
+  }
+  if (set.has(SCRATCH)) {
+    S.pending = [];
+    S.draft = '';
+    await kv.del('pending').catch(() => {});
+    await kv.del('draft').catch(() => {});
+    await kv.del('scratchAt').catch(() => {});
+  }
+  historyVersion++;
+  store.set({});
+}
+
+/** Burns every conversation and what waits for the next question. */
+async function burnEverything() {
+  const ids = (await allConversations()).map((c) => c.id);
+  if (S.conv.id) ids.push(S.conv.id);
+  await burnIds([...ids, SCRATCH]);
+  await chats.clear().catch(() => {});
+  for (const x of registry?.list('voice-out') ?? []) x.instance.forget?.();
+}
+
+/** What auto-delete looks at: each conversation and, when there is one, the next question's things. */
+async function timedItems() {
+  const items = (await allConversations()).map((c) => ({ id: c.id, at: lastUsed(c) }));
+  if (S.pending.length || S.draft) items.push({ id: SCRATCH, at: (await kv.get('scratchAt').catch(() => null)) ?? 0 });
+  return items;
+}
+
+const sweeper = createSweeper({ setting: () => S.settings.autoDelete, list: timedItems, burn: burnIds });
+
+async function openConversation(id) {
+  if (S.conv.id === id) return nav('answer');
+  const c = await chats.get(id).catch(() => null);
+  if (!c) return;
+  // An answer still streaming finishes in its own conversation, which saves itself.
+  gen?.controller.abort();
+  talk.stopSpeaking();
+  S.conv = c;
+  await kv.put('current', id).catch(() => {});
+  store.set({});
+  nav('answer');
 }
 
 async function forgetConversation() {
@@ -614,7 +710,31 @@ const actions = {
   saveDraft: (v) => {
     S.draft = v;
     kv.put('draft', v).catch(() => {});
+    scratchChanged();
   },
+  /** Burns the open conversation (the answer screen's Burn), then goes home. */
+  burn: async () => {
+    if (S.conv.id) await burnIds([S.conv.id]);
+    ui.toast(t('history.burned'), 3000);
+    nav('home', {}, { replace: true });
+  },
+  burnConversation: async (id) => {
+    await burnIds([id]);
+    ui.toast(t('history.burned'), 3000);
+  },
+  burnAll: async () => {
+    await burnEverything();
+    ui.toast(t('history.burnedAll'), 3000);
+  },
+  listConversations: allConversations,
+  openConversation,
+  setAutoDelete: (id) => {
+    S.settings.autoDelete = id;
+    saveSettings();
+    store.set({});
+    sweeper.sweep();
+  },
+  eraseEverything: eraseAll,
   copyAnswer: async () => ui.toast((await ui.copy(lastExchange(S.conv.messages)?.answer.content ?? '')) ? t('answer.copied') : t('answer.copyFailed')),
   takeOut,
   setLook: (id) => {
@@ -720,12 +840,17 @@ function screenFor(name, params) {
       return modelScreen(ctx);
     case 'voice':
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), audio } });
+    case 'history':
+      return historyScreen(ctx);
+    case 'erase':
+      return eraseScreen(ctx);
     default:
       return mode.home();
   }
 }
 
 function render() {
+  if (erased) return;
   const { name, params } = parse(location.hash);
   unsub?.();
   current?.destroy?.();
@@ -745,6 +870,35 @@ function render() {
   }
 }
 
+// ------------------------------------------------------------------ erase everything
+
+/**
+ * Erase everything (core/erase.js): stops all work, wipes what this page holds in memory, removes
+ * every trace of Forge from this browser's storage, then shows the Erased screen. Nothing is drawn or
+ * written after this until the page is opened again.
+ */
+async function eraseAll() {
+  erased = true;
+  sweeper.stop();
+  gen?.controller.abort();
+  talk.cancel();
+  talk.stopSpeaking();
+  for (const x of registry?.list('voice-out') ?? []) x.instance.forget?.();
+  unsub?.();
+  current?.destroy?.();
+  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '' });
+  await workerSettled();
+  const r = await eraseEverything({ localStorage, sessionStorage, indexedDB: globalThis.indexedDB, caches: globalThis.caches, serviceWorker: navigator.serviceWorker }, { closeOwn: shutdown });
+  if (!r.ok) console.warn('erase left', r.left, r.blocked);
+  current = erasedScreen({ t, ok: r.ok });
+  currentName = 'erased';
+  root.replaceChildren(current.node);
+  root.dataset.route = 'erased';
+  // The address no longer points at a screen of the app that was.
+  history.replaceState(null, '', '#/');
+  current.focus?.focus?.({ preventScroll: true });
+}
+
 // ------------------------------------------------------------------ start
 
 async function start() {
@@ -754,12 +908,14 @@ async function start() {
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   S.key = ui.load(keyStore());
   S.peakMsub = (await kv.get(`peak:${engine.base}`).catch(() => null)) ?? null;
+  S.pending = ((await kv.get('pending').catch(() => null)) ?? []).filter((a) => a.status === 'ready');
+  S.draft = (await kv.get('draft').catch(() => null)) ?? '';
+  // Auto-delete on open: what is past its time (or everything, with "on close") goes before anything is shown.
+  await sweeper.sweep({ opening: true }).catch(() => {});
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
   // An answer that was streaming when the tab was killed is kept as stopped.
   for (const m of S.conv.messages) if (m.role === 'assistant' && !m.content && !m.meta?.error && !m.meta?.stopped) m.meta = { ...m.meta, stopped: true };
-  S.pending = ((await kv.get('pending').catch(() => null)) ?? []).filter((a) => a.status === 'ready');
-  S.draft = (await kv.get('draft').catch(() => null)) ?? '';
 
   const loader = bundledLoader();
   registry = createRegistry({
@@ -778,6 +934,11 @@ async function start() {
     settleOtherMint();
   });
   addEventListener('offline', () => store.set({ online: false }));
+  // Auto-delete while open: the sweeper's timer, and a check whenever the app comes back to the front
+  // (timers sleep while a phone screen is off). "On close" starts removing everything as the page goes.
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !erased && sweeper.sweep());
+  addEventListener('pagehide', () => S.settings.autoDelete === 'close' && !erased && burnEverything());
+  addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
   document.documentElement.dataset.ready = '1';
 
@@ -792,9 +953,21 @@ async function start() {
 /** The engine as fund modules see it: always the current engine object. */
 const engineProxy = new Proxy({}, { get: (_, k) => engine[k] });
 
+let workerReg = null;
 function registerWorker() {
-  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
-  navigator.serviceWorker.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => {});
+  if (erased || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  workerReg = navigator.serviceWorker.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
+}
+
+/** Waits (a few seconds at most) for a worker that is still installing, so it cannot fill a cache after Erase. */
+async function workerSettled() {
+  const reg = await workerReg;
+  const w = reg?.installing;
+  if (!w) return;
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, 3000);
+    w.addEventListener('statechange', () => w.state !== 'installing' && (clearTimeout(timer), resolve()));
+  });
 }
 
 start().catch((e) => {

@@ -19,6 +19,7 @@ const PATHS = {
   book: '<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 5"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  flame: '<path d="M12 3c.9 3.3 5 5.4 5 10.2a5 5 0 0 1-10 0c0-2.3 1-3.9 2.1-4.8.3 1.7 1.2 2.7 2.3 3C10.7 9 11 6 12 3z"/>',
   trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   sun: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
