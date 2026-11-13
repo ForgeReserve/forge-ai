@@ -187,6 +187,8 @@ export default {
   'erase.moneySub': 'There is no account to recover it. Take it out first as eCash, then save the eCash in a Cashu wallet.',
   'erase.moneyUnknown': 'Any balance on this phone is lost',
   'erase.moneyUnknownSub': 'There is no account to recover it. Take your funds out first as eCash.',
+  'erase.moneyIncoming': 'Money on its way to this balance is lost',
+  'erase.moneyIncomingSub': 'A payment that has not arrived yet goes to this balance. Wait until it arrives, then take it out.',
   'erase.takeOut': 'Take out {amount} first',
   'erase.takeOutAny': 'Take funds out first',
   'erase.unsaved': 'eCash not saved yet',

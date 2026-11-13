@@ -7,8 +7,8 @@ import { lockKey } from '../js/lockkey.js';
 import * as QR from '../js/qr.js';
 import { adapters } from './core/adapters.js';
 import { lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
-import { chats, kv, shutdown } from './core/db.js';
-import { eraseEverything } from './core/erase.js';
+import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
+import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { chargedFor, errorView } from './core/errors.js';
@@ -520,7 +520,14 @@ async function timedItems() {
   return items;
 }
 
-const sweeper = createSweeper({ setting: () => S.settings.autoDelete, list: timedItems, burn: burnIds });
+// True once the first screen is drawn: a timed removal after that is said in a toast. The removal on
+// open happens before anything is shown, so it has nothing to point at.
+let live = false;
+async function sweepBurn(ids) {
+  await burnIds(ids);
+  if (live && !erased && ids.some((id) => id !== SCRATCH)) ui.toast(t('history.autoBurned'), 3000);
+}
+const sweeper = createSweeper({ setting: () => S.settings.autoDelete, list: timedItems, burn: sweepBurn });
 
 async function openConversation(id) {
   if (S.conv.id === id) return nav('answer');
@@ -886,6 +893,19 @@ function render() {
  * written after this until the page is opened again.
  */
 async function eraseAll() {
+  if (erased) return;
+  halt();
+  await workerSettled();
+  const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
+  if (!r.ok) console.warn('erase left', r.left, r.blocked);
+  showErased(r.ok);
+}
+
+/** The browser's storage for this site, as core/erase.js takes it. */
+const browserStorage = () => ({ localStorage, sessionStorage, indexedDB: globalThis.indexedDB, caches: globalThis.caches, serviceWorker: navigator.serviceWorker });
+
+/** Stops all work and wipes what this page holds in memory. From here on nothing is written or drawn. */
+function halt() {
   erased = true;
   sweeper.stop();
   gen?.controller.abort();
@@ -895,10 +915,30 @@ async function eraseAll() {
   unsub?.();
   current?.destroy?.();
   Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '' });
-  await workerSettled();
-  const r = await eraseEverything({ localStorage, sessionStorage, indexedDB: globalThis.indexedDB, caches: globalThis.caches, serviceWorker: navigator.serviceWorker }, { closeOwn: shutdown });
-  if (!r.ok) console.warn('erase left', r.left, r.blocked);
-  current = erasedScreen({ t, ok: r.ok });
+}
+
+/**
+ * Erase everything was done in another tab of this site: localStorage was cleared there, or the
+ * database is being deleted. This tab stops too, so it cannot write anything back (a look, a cached
+ * model list, a conversation), then waits a few seconds for the other tab to finish and shows the
+ * Erased screen. It says everything is gone only when its own check finds nothing left.
+ */
+async function erasedElsewhere() {
+  if (erased) return;
+  halt();
+  await shutdown();
+  const env = browserStorage();
+  let left = await leftovers(env);
+  for (let i = 0; i < 24 && !isEmpty(left); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    left = await leftovers(env);
+  }
+  showErased(isEmpty(left));
+}
+
+/** Draws the Erased screen in place of the app. */
+function showErased(ok) {
+  current = erasedScreen({ t, ok });
   currentName = 'erased';
   root.replaceChildren(current.node);
   root.dataset.route = 'erased';
@@ -911,6 +951,9 @@ async function eraseAll() {
 
 async function start() {
   document.title = t('app.name');
+  // Erase everything in another tab clears localStorage there (key null) and deletes the database.
+  onErasedElsewhere(erasedElsewhere);
+  addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
   const saved = await kv.get('settings').catch(() => null);
   S.settings = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
@@ -948,6 +991,7 @@ async function start() {
   addEventListener('pagehide', () => S.settings.autoDelete === 'close' && !erased && burnEverything());
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
+  live = true;
   document.documentElement.dataset.ready = '1';
 
   await loadModels();

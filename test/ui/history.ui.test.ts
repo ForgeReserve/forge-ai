@@ -39,8 +39,8 @@ async function fundedKey(): Promise<string> {
   return b.key;
 }
 
-/** Opens v2 with a funded balance and the mock model that answers with a fixed sentence. */
-async function ready(page: Page) {
+/** Opens v2 with a funded balance and a mock model (by default the one that answers with a fixed sentence). */
+async function ready(page: Page, model = 'mock-echo') {
   const key = await fundedKey();
   await page.goto(`${g.url}/v2/`);
   await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
@@ -50,7 +50,7 @@ async function ready(page: Page) {
   await page.click('#moreModel');
   await page.waitForSelector('[data-screen=model]');
   if ((await page.getAttribute('#privateOnly', 'aria-checked')) === 'true') await page.click('#privateOnly');
-  await page.click('[data-model="mock-echo"]');
+  await page.click(`[data-model="${model}"]`);
   await page.goto(`${g.url}/v2/#/`);
   await page.waitForSelector('[data-screen=home]');
   await expect.poll(() => page.textContent('#balanceText')).toBe('$2.00');
@@ -113,6 +113,36 @@ function dump(page: Page): Promise<string> {
     }
     return out.join('\n');
   });
+}
+
+/** The keys in forge2/chats, read from a page of the site that does not run the app. null: no such store. */
+const chatKeys = (page: Page) =>
+  page.evaluate(async () => {
+    if (!(await indexedDB.databases()).some((d) => d.name === 'forge2')) return null;
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      const r = indexedDB.open('forge2');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    try {
+      if (!db.objectStoreNames.contains('chats')) return null;
+      return await new Promise<unknown[]>((res, rej) => {
+        const r = db.transaction('chats').objectStore('chats').getAllKeys();
+        r.onsuccess = () => res(r.result as unknown[]);
+        r.onerror = () => rej(r.error);
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+/** Holds Erase everything down with the keyboard for longer than two seconds. */
+async function holdErase(page: Page) {
+  await page.focus('#eraseHold');
+  await page.keyboard.down(' ');
+  await page.waitForTimeout(2_300);
+  await page.keyboard.up(' ');
+  await page.waitForSelector('[data-screen=erased]');
 }
 
 /** What the site still keeps: counts and names only (opening a cache or database would create it). */
@@ -224,6 +254,61 @@ describe('History and burn', () => {
   }, 120_000);
 });
 
+describe('Burn while the answer streams', () => {
+  it('stops the answer and never writes it back, and the balance is still read again', async () => {
+    const { ctx, page, errors } = await phone();
+    await ready(page, 'mock-slow');
+    await page.goto(`${g.url}/v2/#/type`);
+    await page.waitForSelector('[data-screen=type]');
+    await page.fill('#question', 'Streaming question marker-mike-96');
+    // Whether the answer's request ran to its end or was cut off.
+    const chat = { finished: false, failed: false };
+    const isChat = (r: { url: () => string }) => new URL(r.url()).pathname === '/v1/chat/completions';
+    page.on('requestfinished', (r) => isChat(r) && (chat.finished = true));
+    page.on('requestfailed', (r) => isChat(r) && (chat.failed = true));
+    await page.click('#sendBtn');
+    await page.waitForSelector('[data-screen=answer]');
+    // mock-slow: 200 pieces, 20 ms apart, so about 4 s of streaming.
+    await expect.poll(() => page.textContent('#answerText')).toContain('Forge word');
+    expect(await page.isVisible('#burnBtn')).toBe(false); // still streaming
+
+    await page.goto(`${g.url}/v2/#/more/history`);
+    await page.waitForSelector('[data-screen=history]');
+    await expect.poll(() => historyWords(page)).toEqual(['Streaming question marker-mike-96']);
+    expect(await page.textContent('.hist-card .tag')).toBe('Open now');
+    expect(chat.finished, 'the answer must still be streaming when it is burned').toBe(false);
+    // The list holds still while the answer streams, so a finger on the flame is not lost: the same
+    // button stays in place.
+    const flame = await page.$('[data-burn]');
+    await page.waitForTimeout(300);
+    expect(await flame!.evaluate((b) => b.isConnected)).toBe(true);
+    // Every toast shown from here on.
+    await page.evaluate(() => {
+      const box = document.getElementById('toast')!;
+      const seen: string[] = ((window as any).toasts = []);
+      new MutationObserver(() => seen.push(box.textContent ?? '')).observe(box, { childList: true, characterData: true, subtree: true });
+    });
+    const balanceRead = page.waitForResponse((r) => new URL(r.url()).pathname === '/v1/wallet' && r.request().method() === 'GET', { timeout: 10_000 });
+    await page.click('[data-burn]');
+    await page.waitForSelector('#historyEmpty');
+    // The balance is read again once the stopped answer is settled, and the stopped answer says nothing.
+    expect((await balanceRead).status()).toBe(200);
+    // Past the end the stream would have had: nothing of the question or the answer came back.
+    await page.waitForTimeout(5_000);
+    // The burned answer says nothing more (no "Stopped."): only the burn is reported.
+    expect(await page.evaluate(() => (window as any).toasts)).toEqual(['Burned. It is gone from this phone.']);
+    // It was cut off, not run to its end.
+    expect(chat).toEqual({ finished: false, failed: true });
+    const all = await dump(page);
+    expect(all).not.toContain('marker-mike-96');
+    expect(all).not.toContain('Forge word');
+    expect(all).not.toContain('"role":"assistant"');
+    expect(await page.isVisible('#historyEmpty')).toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+});
+
 describe('Balance key', () => {
   it('picks up a balance key stored after the app opened, as the Classic app in another tab would', async () => {
     const { ctx, page } = await phone();
@@ -292,6 +377,7 @@ describe('Auto-delete', () => {
     expect(await page.locator('.burn-timer.soon').count()).toBe(1);
     // While open: the next one goes when its hour is up, and the open History screen follows.
     await expect.poll(() => historyWords(page), { timeout: 15_000 }).toEqual(['New marker-juliet-93']);
+    await expect.poll(() => page.textContent('#toast')).toBe('Conversations past their time were removed.');
     all = await dump(page);
     expect(all).not.toContain('marker-india-92');
     expect(all).toContain('marker-juliet-93');
@@ -317,6 +403,25 @@ describe('Auto-delete', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  it('On close removes everything as the page closes, without waiting for the next open', async () => {
+    const { ctx, page } = await phone();
+    await page.goto(`${g.url}/v2/`);
+    await page.waitForSelector('[data-screen=home]');
+    await seed(page, [{ id: 'c_close', q: 'Closing marker-november-97', ago: 60_000 }], 'day');
+    await openHistory(page);
+    await expect.poll(() => historyWords(page)).toEqual(['Closing marker-november-97']);
+    await page.click('#auto-close');
+    await page.waitForTimeout(300);
+    // Choosing On close removes nothing yet.
+    expect(await chatKeys(page)).toEqual(['c_close']);
+    await page.close({ runBeforeUnload: true });
+    // A page of the same site that does not start the app, so no removal on open can be what clears it.
+    const other = await ctx.newPage();
+    await other.goto(`${g.url}/js/qr.js`);
+    await expect.poll(() => chatKeys(other), { timeout: 10_000 }).toEqual([]);
+    await ctx.close();
+  }, 60_000);
 });
 
 describe('Erase everything', () => {
@@ -399,6 +504,111 @@ describe('Erase everything', () => {
     expect(await leftovers(page)).toEqual({ localStorage: 0, sessionStorage: 0, databases: [], caches: [], workers: 0 });
     await ctx.close();
   }, 60_000);
+
+  it('warns about money on its way when the balance reads zero, and offers Take funds out', async () => {
+    const { ctx, page, errors } = await phone();
+    // A balance funded, then taken down to zero: a payment still on its way would land here.
+    const key = await fundedKey();
+    const r = await fetch(`${g.url}/v1/wallet/refund`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ amount: 200 }) });
+    expect(r.status).toBe(200);
+    const w: any = await (await fetch(`${g.url}/v1/wallet`, { headers: { authorization: `Bearer ${key}` } })).json();
+    expect(w.balance_msub).toBe(0);
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=erase]');
+    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Money on its way to this balance is lost');
+    expect(await page.isVisible('#eraseMoney')).toBe(true);
+    expect(await page.textContent('#eraseMoney p')).toBe('A payment that has not arrived yet goes to this balance. Wait until it arrives, then take it out.');
+    expect(await page.textContent('#eraseTakeOut')).toBe('Take funds out first');
+    await page.click('#eraseTakeOut');
+    await page.waitForSelector('[data-screen=takeOut]');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('warns about any balance when it cannot be read', async () => {
+    const { ctx, page } = await phone();
+    await page.route('**/v1/wallet**', (r) => r.abort());
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate(() => localStorage.setItem('forge.balanceKey', 'sk-forge-unreadable-test-key'));
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=erase]');
+    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Any balance on this phone is lost');
+    expect(await page.textContent('#eraseMoney p')).toBe('There is no account to recover it. Take your funds out first as eCash.');
+    expect(await page.textContent('#eraseTakeOut')).toBe('Take funds out first');
+    // The key is kept: a balance that cannot be read is not a balance that is gone.
+    expect(await page.evaluate(() => localStorage.getItem('forge.balanceKey'))).toBe('sk-forge-unreadable-test-key');
+    await ctx.close();
+  }, 60_000);
+
+  it('warns about eCash on the phone that is not saved yet, and goes where it can be saved', async () => {
+    const { ctx, page } = await phone();
+    // Nothing is sent: the token waiting to be added stays waiting.
+    await page.route('**/v1/wallet/topup', (r) => r.abort());
+    const vault = (v: object) => page.evaluate((x) => localStorage.setItem('forge2.vault', x), JSON.stringify(v));
+    const out = { id: 'out_test1', token: 'cashuBtest-out-not-saved', amount: 100, unit: 'usd', at: Date.now() };
+    const inc = { id: 'in_test1', token: 'cashuBtest-in-waiting', via: 'topup', at: Date.now(), state: 'pending' };
+    // Taken out but not saved, and one waiting to be added: Save it first goes to Take funds out.
+    await page.goto(`${g.url}/js/qr.js`);
+    await vault({ in: [inc], out: [out] });
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await page.waitForSelector('[data-screen=erase]');
+    expect(await page.isVisible('#eraseUnsaved')).toBe(true);
+    expect(await page.textContent('#eraseUnsaved b')).toBe('eCash not saved yet');
+    expect(await page.textContent('#eraseUnsaved p')).toBe('There is eCash on this phone that is not in a wallet yet. Save it first, or it is lost.');
+    expect(await page.isVisible('#eraseMoney')).toBe(false); // no balance key here
+    await page.click('#eraseSaveFirst');
+    await page.waitForSelector('[data-screen=takeOut]');
+
+    // Only one waiting to be added: Save it first goes to Funds, where it is sent again.
+    await vault({ in: [inc], out: [] });
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=erase]');
+    expect(await page.textContent('#eraseUnsaved b')).toBe('eCash not saved yet');
+    await page.click('#eraseSaveFirst');
+    await page.waitForSelector('[data-screen=funds]');
+    await ctx.close();
+  }, 60_000);
+
+  it('an erase in another tab stops this one too, so nothing is written back', async () => {
+    const { ctx, page: a, errors } = await phone();
+    await ready(a);
+    await ask(a, 'Something to erase in two tabs marker-oscar-98');
+    const b = await ctx.newPage();
+    b.on('pageerror', (e) => errors.push(e.message));
+    await b.goto(`${g.url}/v2/`);
+    await b.waitForSelector('[data-screen=home]');
+    await expect.poll(() => b.textContent('#balanceText')).toMatch(/^\$\d\.\d+$/);
+    await b.goto(`${g.url}/v2/#/more/look`);
+    await b.waitForSelector('[data-screen=look]');
+
+    await a.goto(`${g.url}/v2/#/more/erase`);
+    await a.waitForSelector('[data-screen=erase]');
+    await holdErase(a);
+    expect(await a.getAttribute('[data-screen=erased]', 'data-ok')).toBe('true');
+
+    // The other tab shows that everything was erased, and draws nothing of the app again.
+    await b.waitForSelector('[data-screen=erased]', { timeout: 10_000 });
+    expect(await b.getAttribute('[data-screen=erased]', 'data-ok')).toBe('true');
+    // Acting in it brings nothing back: routes, coming back to the front, a reload of the look.
+    await b.evaluate(() => {
+      location.hash = '#/more/look';
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await b.waitForTimeout(300);
+    await b.evaluate(() => (location.hash = '#/more/history'));
+    await b.waitForTimeout(1_500);
+    expect(await b.isVisible('[data-screen=erased]')).toBe(true);
+    const empty = { localStorage: 0, sessionStorage: 0, databases: [], caches: [], workers: 0 };
+    expect(await leftovers(b)).toEqual(empty);
+    expect(await leftovers(a)).toEqual(empty);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
   it('fits 360 px with no sideways scrolling and 44 px touch targets', async () => {
     const { ctx, page } = await phone({ viewport: { width: 360, height: 740 } });

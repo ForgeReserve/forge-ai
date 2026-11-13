@@ -16,13 +16,17 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault }) {
 
   const draw = () => {
     const v = state.view();
-    // Money first: the balance this phone holds the key to, and how to take it out.
-    if (v.hasKey && v.balanceMsub !== 0) {
+    // Money first: the balance this phone holds the key to, and how to take it out. Shown whenever there
+    // is a key, even at zero: a deposit still on its way (on-chain, say) is added to this balance later,
+    // and once the key is gone nobody can spend it.
+    if (v.hasKey) {
       const known = v.balanceText != null;
+      const zero = v.balanceMsub === 0;
       const out = v.refundable > 0 ? format.units(v.refundable, S.unit) : null;
+      const [head, sub] = zero ? [t('erase.moneyIncoming'), t('erase.moneyIncomingSub')] : known ? [t('erase.money', { amount: v.balanceText }), t('erase.moneySub')] : [t('erase.moneyUnknown'), t('erase.moneyUnknownSub')];
       money.replaceChildren(
-        el('b', { id: 'eraseMoneyHead', text: known ? t('erase.money', { amount: v.balanceText }) : t('erase.moneyUnknown') }),
-        el('p', { text: known ? t('erase.moneySub') : t('erase.moneyUnknownSub') }),
+        el('b', { id: 'eraseMoneyHead', text: head }),
+        el('p', { text: sub }),
         el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav('takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })),
       );
       money.hidden = false;

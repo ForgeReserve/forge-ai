@@ -9,6 +9,15 @@ const STORES = ['kv', 'chats'];
 
 let dbp = null;
 let down = false;
+let erasedElsewhere = () => {};
+
+/**
+ * fn runs when another tab deletes the database (Erase everything there). The app treats that as an
+ * erase here too, so this tab does not open the database again and write its data back.
+ */
+export function onErasedElsewhere(fn) {
+  erasedElsewhere = fn;
+}
 const memory = { kv: new Map(), chats: new Map() };
 
 function open() {
@@ -25,10 +34,13 @@ function open() {
       for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
     };
     req.onsuccess = () => {
-      // Another tab is deleting the database (Erase everything there): let go, so it is not blocked.
-      req.result.onversionchange = () => {
+      // Another tab is deleting the database (Erase everything there): let go, so it is not blocked,
+      // and tell the app, which stops writing (a write would open the database again and re-create it).
+      // A delete has no new version; an upgrade by a newer copy of the app is not an erase.
+      req.result.onversionchange = (e) => {
         req.result.close();
         dbp = null;
+        if (e?.newVersion == null) erasedElsewhere();
       };
       resolve(req.result);
     };

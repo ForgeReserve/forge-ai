@@ -52,7 +52,11 @@ export function historyScreen({ t, state, back, actions }) {
     );
   };
 
+  // What the cards show beyond the stored conversations: the auto-delete choice and which one is open.
+  const shown = () => `${S.settings.autoDelete}|${S.conv.id}`;
+  let drawnFor = '';
   const draw = () => {
+    drawnFor = shown();
     const setting = S.settings.autoDelete;
     intro.textContent = t(setting === 'off' ? 'history.introOff' : setting === 'close' ? 'history.introClose' : 'history.intro');
     seg.replaceChildren(
@@ -106,12 +110,15 @@ export function historyScreen({ t, state, back, actions }) {
   // The times on the cards move on; auto-delete may remove a card while the screen is open.
   const tick = setInterval(reload, 30_000);
   let seen = state.view().historyVersion;
+  // The app's state changes many times a second while an answer streams. Redrawing each time would
+  // replace the buttons under a finger and lose the tap (a flame pressed to burn that very answer), so
+  // the list is drawn again only when something it shows has changed.
   const update = () => {
     const v = state.view().historyVersion;
     if (v !== seen) {
       seen = v;
       reload();
-    } else draw();
+    } else if (shown() !== drawnFor) draw();
   };
   draw();
   reload();
