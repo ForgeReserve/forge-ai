@@ -15,3 +15,9 @@ ai.forge-reserve.com {
 	}
 	# Request bodies are never logged. Access logs are off by default in Caddy; keep them off.
 }
+
+# Certificate only: Caddy obtains and renews the Let's Encrypt certificate that the Bellows keyserver
+# (port 8443, /opt/bellows-keyserver) serves. Nothing is proxied here.
+keys.forge-reserve.com {
+	respond "Not found" 404
+}
