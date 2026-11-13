@@ -20,7 +20,8 @@
     "mint:down": "docker compose -f docker-compose.test.yml down",
     "admin": "node src/admin.ts",
     "demo:agent": "tsx examples/agent-pays.ts",
-    "test-token": "tsx scripts/test-token.ts"
+    "test-token": "tsx scripts/test-token.ts",
+    "print-notes": "node scripts/print-notes.ts"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^4.13.0",

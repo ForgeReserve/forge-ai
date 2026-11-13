@@ -302,6 +302,14 @@ export default {
   'out.qr': 'QR code of the eCash token',
   'out.parts': 'Moving code in {count} parts. Hold your wallet on it until it is done.',
 
+  // Printed paper notes (scripts/print-notes.ts)
+  'note.print.title': 'Forge AI paper notes',
+  'note.print.help': '{count} notes. Print this page, cut along the dashed lines, then delete this file. Anyone who has this file can spend the notes.',
+  'note.print.qr': 'eCash note for {amount}',
+  'note.print.howTo': 'Scan this code in Forge AI to add {amount}.',
+  'note.print.keep': 'Whoever holds this note can spend it. Keep it like cash.',
+  'note.print.serial': 'No. {serial}',
+
   // Shared
   'common.back': 'Back',
 };
