@@ -35,6 +35,28 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - In the v2 app the engine way is labelled Engine, not private, and its words say the engine could hear the recording, or read the answer it reads aloud, on the way. With Private only on, the engine still sees the recording, the transcript that comes back and, when it reads answers aloud, the answer text.
 - In the v2 app, Private only sends voice only to an enclave audio model, and never uses the browser's own recogniser, which may send the voice to the browser's maker. The phone's own voices are used only when they run on the phone (`localService`).
 
+## The v2 app: what it keeps and how it removes it
+
+The v2 app at `/v2/` keeps, on the phone only:
+
+- **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
+- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved) in `localStorage`, plus the last model list and look.
+- **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
+
+Ways to remove things, each tested in Chrome against every IndexedDB store, every Cache Storage entry, `localStorage` and `sessionStorage` (`test/ui/history.ui.test.ts`):
+
+- **Burn** (on the answer screen, or the flame on a History card) removes that conversation from IndexedDB and from the page's memory at once, together with any spoken answer kept in memory for it. An answer still streaming into it is stopped and never written back.
+- **Burn all now** (History) removes every conversation, what waits for the next question, and every spoken answer kept in memory. It does not touch the balance key or eCash.
+- **Auto-delete** (History, and the row on Erase): Never, On close, 1 hour, 1 day (the default) or 1 week. A conversation is timed from when it was last used (a question asked or answered), not from when it was last opened. Timed choices are applied when the app opens and by a timer while it is open, which also runs again when the app comes back to the front, since a phone pauses timers while its screen is off. On close starts removing everything as the page closes or reloads; the browser may stop the page before that finishes, so everything is also removed the next time the app opens. What waits for the next question is timed the same way.
+- **Erase everything** (More) removes every trace of the site this browser keeps, for v2 and the Classic app alike, since they share the site's storage and the balance key: all of `localStorage` and `sessionStorage`, every IndexedDB database (`forge2`, `forge-chat` and any other), every Cache Storage cache and every service worker. It first shows the balance that will be lost and offers Take funds out, warns about eCash on the phone that was not saved, and needs the button held for two seconds. It then checks again and says so when something stayed (a database held open by another tab). Nothing is written afterwards: the page stops all work, and the v2 worker never re-creates its cache once it is gone.
+
+What these do not do:
+
+- They remove data from the browser's storage on this phone. The browser and the phone's flash memory may keep the old bytes until they are overwritten; the app cannot reach below the browser.
+- They cannot reach a copy made elsewhere: a screenshot, a copied answer, a shared file.
+- The engine keeps no copy of conversations: content is never logged or stored by the gateway, and questions to private models are encrypted to the enclave. A standard model's provider may keep what it was sent.
+- Erase everything does not close the balance on the engine. Without the key nobody can spend it, and it cannot be recovered, which is why the app offers Take funds out first.
+
 ## Encrypted pass-through (Tinfoil EHBP)
 
 Tinfoil's Encrypted HTTP Body Protocol encrypts request and response bodies with HPKE to a key held inside an attested enclave, and leaves headers readable. Forge AI follows Tinfoil's proxy guide (docs.tinfoil.sh/guides/proxy-server):

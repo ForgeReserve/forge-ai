@@ -94,6 +94,8 @@ Built in slice A3: `voice-in` and `voice-out`, each with two modules.
 - A voice-in module has `available()`, `private()`, `price(seconds)`, `maxSeconds()` and `start({onLevel, onText})`, which gives a session with `finish({signal})` (resolves to the text and what it cost) and `cancel()`. A voice-out module has `available()`, `private()`, `pieceSize()`, `cached(key)`, `price(pieces, key)` and `speak(pieces, {key, onState})`, which gives `{done, stop()}`.
 - The mode gets the talk actions (`talkDown`, `talkMove`, `talkUp`, `talkCancel`) and `speak`, `stopSpeaking`, and draws the button from `view().talk` and `view().speak`.
 
+Built in slice A4: the mode's answer actions gain `burn` (remove the open conversation from the phone). Burn all, auto-delete and Erase everything stay with the app and are never handed to a module. A `voice-out` module may have `forget(key)`, which drops the sound it keeps in memory for one answer (or for all, with no key); the app calls it when a conversation is burned.
+
 Not built yet, and not claimed: the `publisher` and `sig` fields are not checked, there is no sandbox, and no permission can be granted (a manifest that asks for one is refused). Only the modules bundled with the release load, and they run as ordinary code in the page. Signatures, the sandbox and adding a plugin come with slice B2.
 
 ## What changes in the code
