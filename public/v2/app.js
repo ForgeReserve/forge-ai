@@ -53,6 +53,7 @@ const store = createStore({
   inviteOnly: false,
   units: [],
   mints: [],
+  mintAliases: [],
   methods: null,
   invite: '',
   settings: { ...DEFAULT_SETTINGS },
@@ -202,7 +203,7 @@ async function loadModels() {
 
 function applyModels(body) {
   if (!body) return;
-  Object.assign(S, { models: body.data ?? [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [] });
+  Object.assign(S, { models: body.data ?? [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [] });
 }
 
 const wallet = {
@@ -215,6 +216,8 @@ const wallet = {
   refresh: refreshBalance,
   methods: () => S.methods,
   mints: () => S.mints,
+  /** Other addresses of the mints the engine takes: a note made under one of them is taken too. */
+  mintAliases: () => S.mintAliases,
   units: () => S.units,
   lockKey: () => lockKey(),
   /** Adds eCash through the vault: stored on the phone first, removed only once credited. */

@@ -8,13 +8,16 @@ import { cameraArgs, cameraFile } from './camera.ts';
 // note's QR code, so the app's own camera adapter and v1's scanner read it as they would on a phone.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 
+/** A second address of the local mint, as mint.forge-reserve.com is of the Forge mint. */
+const ALIAS_A = MINT_A.replace('127.0.0.1', 'localhost');
+
 let g: Gateway;
 let plain: Browser;
 const open: Browser[] = [];
 
 beforeAll(async () => {
   if (!(await mintsUp())) throw new Error('The local test mints are not running. Start them with pnpm mint:up.');
-  g = await startGateway({ env: { FORGE_INVITE_ONLY: 'false', FORGE_FOREIGN_ALLOW_INSECURE: 'true' } });
+  g = await startGateway({ env: { FORGE_INVITE_ONLY: 'false', FORGE_FOREIGN_ALLOW_INSECURE: 'true', FORGE_MINT_ALIASES: `${ALIAS_A}=${MINT_A}` } });
   plain = await chromium.launch({ channel: 'chrome', headless: true });
 }, 60_000);
 
@@ -39,6 +42,8 @@ async function phoneWithCamera(codes: string[], viewport = PHONE.viewport) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   return { b, page, errors };
 }
+
+const foot = (page: Page) => page.textContent('.note-view .foot');
 
 const vault = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('forge2.vault') ?? '{"in":[],"out":[]}'));
 const ringFill = (page: Page) => page.locator('.home-rings .rings-svg').getAttribute('data-funds').then(Number);
@@ -144,6 +149,8 @@ describe('paper notes in a phone-sized browser', () => {
     await page.waitForSelector('#noteResult');
     expect(await page.textContent('#noteResult')).toBe('This note has already been used. It cannot be added.');
     expect(await page.isVisible('#noteScanAgain')).toBe(true);
+    expect(await foot(page)).toBe('Scan another'); // one button, and no stray text beside it
+    expect(await foot(page)).not.toContain('null');
     expect((await vault(page)).in).toMatchObject([{ token, state: 'refused', code: 'token_spent' }]);
     // The only console error is the browser logging the refused request.
     expect(errors.filter((e) => !/status of 4\d\d/.test(e))).toEqual([]);
@@ -185,6 +192,7 @@ describe('paper notes in a phone-sized browser', () => {
     await page.click('#noteRead');
     await page.waitForSelector('#noteResult');
     expect(await page.textContent('#noteResult')).toBe('This code is not an eCash note.');
+    expect(await foot(page)).not.toContain('null');
     await page.click('#noteScanAgain');
     await page.click('#notePaste');
     await page.fill('#noteText', await note(MINT_A, 50));
@@ -192,6 +200,51 @@ describe('paper notes in a phone-sized browser', () => {
     await page.waitForSelector('#noteAdd');
     expect(await page.textContent('#noteAmount')).toBe('$0.50');
     expect(errors).toEqual([]);
+  }, 90_000);
+
+  it('without a camera: paste only, no stray text; a note in msat shows no amount; a note under an alias of the engine mint is added', async () => {
+    const ctx = await plain.newContext(PHONE);
+    // A phone or laptop with no camera at all.
+    await ctx.addInitScript(() => Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true }));
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    try {
+      await page.goto(`${g.url}/v2/#/funds/add/note`);
+      await page.waitForSelector('#noteNoCamera');
+      await page.waitForSelector('#noteText');
+      expect(await foot(page)).toBe('Read the code');
+      expect(await page.locator('#noteScanAgain').count()).toBe(0);
+      // The engine lists the other address of its mint, and the phone keeps it.
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('forge2.models') ?? '{}').mint_aliases)).toEqual([ALIAS_A]);
+
+      // 1000 msat is 1 sat: the phone shows no amount it cannot state exactly, and says the unit is not held.
+      const msat = getEncodedToken({ mint: MINT_A, unit: 'msat', proofs: [{ id: '009a1f293253e41e', amount: 1000, secret: 'msat-note', C: '02' + 'ab'.repeat(32) }] as any });
+      await page.fill('#noteText', msat);
+      await page.click('#noteRead');
+      await page.waitForSelector('#noteResult');
+      expect(await page.textContent('#noteResult')).toBe('This note is in another unit. These funds cannot hold it. Keep the note.');
+      expect(await page.locator('#noteAmount, #noteAdd').count()).toBe(0);
+      expect(await page.textContent('#noteMint')).toBe('From 127.0.0.1:3338');
+      expect(await foot(page)).toBe('Paste another');
+
+      // A note made under the alias is from the engine's own mint: it is added, not sent to Other mint.
+      await page.click('#noteScanAgain');
+      await page.waitForSelector('#noteText');
+      const token = getEncodedToken({ mint: ALIAS_A, unit: 'usd', proofs: await mintProofs(MINT_A, 'usd', 150) }, { removeDleq: true });
+      await page.fill('#noteText', token);
+      await page.click('#noteRead');
+      await page.waitForSelector('#noteAdd');
+      expect(await page.textContent('#noteMint')).toBe(`From ${new URL(ALIAS_A).host}`);
+      expect(await page.textContent('#noteAdd')).toBe('Add $1.50');
+      expect(await foot(page)).not.toContain('null');
+      await page.click('#noteAdd');
+      await page.waitForSelector('[data-screen=funds]');
+      await expect.poll(() => page.textContent('#fundsAmount')).toBe('$1.50');
+      expect(errors).toEqual([]);
+    } finally {
+      await ctx.close();
+    }
   }, 90_000);
 
   it('the scanner works at 360 px wide, with large touch targets', async () => {

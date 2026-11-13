@@ -157,17 +157,24 @@ export function readNote(text) {
  * What the phone can say about a note before adding it.
  *   mints: the mints the engine takes (from /v1/models). An empty list means not known yet: the engine
  *     decides when the note is added.
+ *   aliases: other addresses of those mints (/v1/models mint_aliases). The engine takes a note made
+ *     under one of them as a note from its main address.
  *   units: the units the engine takes. balanceUnit: the unit of the balance on this phone, if any.
  *   otherMint: whether the engine offers the other-mint path.
  * Returns 'add', 'other_mint' (from a mint the engine does not take, other-mint path offered),
  * 'wrong_mint' (same, no path offered), 'wrong_unit' (the engine or this balance cannot hold its unit).
+ * A unit other than usd and sat is always 'wrong_unit' once the mint is known: no engine holds one.
  */
-export function noteVerdict(note, { mints = [], units = [], balanceUnit = null, otherMint = false } = {}) {
-  const accepted = !mints.length || mints.some((m) => normalizeMint(m) === note.mint);
-  if (!accepted) return otherMint && (note.unit === 'sat' || note.unit === 'usd') ? 'other_mint' : 'wrong_mint';
-  if ((units.length && !units.includes(note.unit)) || (balanceUnit && balanceUnit !== note.unit)) return 'wrong_unit';
+export function noteVerdict(note, { mints = [], aliases = [], units = [], balanceUnit = null, otherMint = false } = {}) {
+  const accepted = !mints.length || [...mints, ...aliases].some((m) => normalizeMint(m) === note.mint);
+  if (!accepted) return otherMint && isNoteUnit(note.unit) ? 'other_mint' : 'wrong_mint';
+  if (!isNoteUnit(note.unit) || (units.length && !units.includes(note.unit)) || (balanceUnit && balanceUnit !== note.unit)) return 'wrong_unit';
   return 'add';
 }
+
+/** The units an engine can hold, and so the only ones the phone shows an amount for. */
+export const NOTE_UNITS = Object.freeze(['usd', 'sat']);
+export const isNoteUnit = (unit) => NOTE_UNITS.includes(unit);
 
 /**
  * What an engine refusal of a note means, in the words the note screen uses.

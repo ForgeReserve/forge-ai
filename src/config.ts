@@ -216,6 +216,15 @@ export function setMintAliases(pairs: string[]): void {
   );
 }
 
+/**
+ * The alias addresses whose main address is one of these mints (all of them when no list is given).
+ * /v1/models lists them so a phone can tell that a note made under an alias is one the engine takes.
+ */
+export function mintAliasList(mainMints?: string[]): string[] {
+  const mains = mainMints && new Set(mainMints.map((m) => m.trim().replace(/\/+$/, '')));
+  return [...mintAliases].filter(([, main]) => !mains || mains.has(main)).map(([alias]) => alias);
+}
+
 export function normalizeMintUrl(url: string): string {
   const u = url.trim().replace(/\/+$/, '');
   return mintAliases.get(u) ?? u;

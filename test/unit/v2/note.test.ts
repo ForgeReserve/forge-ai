@@ -89,6 +89,22 @@ describe('what the phone says about a note', () => {
     expect(N.noteVerdict(note('http://x', 'eur'), { ...o, otherMint: true })).toBe('wrong_mint');
   });
 
+  it('a note made under another address of an accepted mint is added, as the engine takes it', () => {
+    const o = { mints: ['https://forge.flashapp.me'], aliases: ['https://mint.forge-reserve.com'], units: ['usd', 'sat'] };
+    expect(N.noteVerdict(note('https://mint.forge-reserve.com'), { ...o, otherMint: true })).toBe('add');
+    expect(N.noteVerdict(note('https://mint.forge-reserve.com'), { ...o, aliases: [], otherMint: true })).toBe('other_mint');
+    // An alias never stands in for the mint list itself: an unknown mint is still refused.
+    expect(N.noteVerdict(note('https://other.example'), { ...o, otherMint: false })).toBe('wrong_mint');
+  });
+
+  it('a note in a unit no engine holds (msat, eur) is refused, even before the engine units are known', () => {
+    expect(N.noteVerdict(note('http://127.0.0.1:3338', 'msat'), {})).toBe('wrong_unit');
+    expect(N.noteVerdict(note('http://127.0.0.1:3338', 'msat'), { mints: ['http://127.0.0.1:3338'], units: ['usd', 'sat'] })).toBe('wrong_unit');
+    expect(N.noteVerdict(note('http://127.0.0.1:3338', 'eur'), { mints: ['http://127.0.0.1:3338'] })).toBe('wrong_unit');
+    expect(N.NOTE_UNITS).toEqual(['usd', 'sat']);
+    expect([N.isNoteUnit('usd'), N.isNoteUnit('sat'), N.isNoteUnit('msat'), N.isNoteUnit('eur')]).toEqual([true, true, false, false]);
+  });
+
   it('a note in a unit this balance or engine cannot hold', () => {
     expect(N.noteVerdict(note(), { mints: ['http://127.0.0.1:3338'], units: ['usd', 'sat'], balanceUnit: 'sat' })).toBe('wrong_unit');
     expect(N.noteVerdict(note(), { mints: ['http://127.0.0.1:3338'], units: ['sat'] })).toBe('wrong_unit');

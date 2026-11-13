@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -59,6 +61,7 @@ describe('print-notes', () => {
     expect(r.out).toMatch(/\nlnbc\w+\n/);
     expect(r.out).toContain('█');
     expect(r.out).toContain(`Wrote 3 notes of $0.25 to ${out}.`);
+    expect(r.out).toContain('Only your user account on this computer can open it.'); // no wider privacy claim
     // Tokens never reach the terminal.
     noSecrets(r);
 
@@ -127,6 +130,97 @@ describe('print-notes', () => {
     writeFileSync(file, JSON.stringify(p), { mode: 0o600 });
     return { out, file, seed: seed.toString('hex') };
   }
+
+  /**
+   * The local mint behind a stand-in that changes its answers about the quote: `quote` gets the mint's
+   * real answer and returns the one to give, or null for a failed check (the network is down).
+   */
+  async function mintProxy(quote: (real: any) => any | null): Promise<{ url: string; server: Server }> {
+    const server = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const r = await fetch(MINT_A + req.url, { method: req.method, headers: { 'content-type': 'application/json' }, body: chunks.length ? Buffer.concat(chunks) : undefined });
+      let text = await r.text();
+      if (req.method === 'GET' && /^\/v1\/mint\/quote\/bolt11\//.test(req.url ?? '')) {
+        const answer = quote(JSON.parse(text));
+        if (!answer) {
+          res.writeHead(503, { 'content-type': 'application/json' }).end(JSON.stringify({ detail: 'down', code: 0 }));
+          return;
+        }
+        text = JSON.stringify(answer);
+      }
+      res.writeHead(r.status, { 'content-type': 'application/json' }).end(text);
+    });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, server };
+  }
+
+  /** A batch at the stand-in mint whose invoice expired at `expiry` (seconds). The mint has it paid. */
+  async function expiredBatch(name: string, mint: string, expiry: number) {
+    const b = await pendingBatch(name);
+    const p = JSON.parse(readFileSync(b.file, 'utf8'));
+    writeFileSync(b.file, JSON.stringify({ ...p, mint, expiry }), { mode: 0o600 });
+    return b;
+  }
+
+  it('an expired invoice the mint still calls unpaid: the batch is removed', async () => {
+    const m = await mintProxy((q) => ({ ...q, state: 'UNPAID' }));
+    try {
+      const b = await expiredBatch('expired', m.url, Math.floor(Date.now() / 1000) - 120);
+      const r = await run(['--resume', b.file]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain('The invoice expired before it was paid. Nothing was minted.');
+      noSecrets(r, [b.seed]);
+      expect(existsSync(b.file)).toBe(false);
+    } finally {
+      m.server.close();
+    }
+  }, 60_000);
+
+  it('an expired invoice the mint cannot be asked about: the batch is kept for --resume', async () => {
+    // The first check says unpaid; then the mint cannot be reached (a laptop waking before its network).
+    let checks = 0;
+    const m = await mintProxy((q) => (checks++ === 0 ? { ...q, state: 'UNPAID' } : null));
+    try {
+      const b = await expiredBatch('unconfirmed', m.url, Math.floor(Date.now() / 1000) - 120);
+      const r = await run(['--resume', b.file]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain(`Could not confirm the invoice. Run again with --resume ${b.file}.`);
+      expect(r.err).not.toContain('Nothing was minted');
+      noSecrets(r, [b.seed]);
+      expect(existsSync(b.file)).toBe(true); // the only copy of the quote and the seed
+      expect(existsSync(b.out)).toBe(false);
+    } finally {
+      m.server.close();
+    }
+  }, 60_000);
+
+  it('failed checks past the expiry never remove the batch: once the mint answers paid, the notes are made', async () => {
+    // Unpaid until just before the 30 s grace runs out, then the mint cannot be reached until well past
+    // it, then its real answer (paid: the owner paid near the expiry).
+    const expiry = Math.floor(Date.now() / 1000) - 25;
+    const graceEnds = (expiry + 30) * 1000;
+    let failed = 0;
+    const m = await mintProxy((q) => {
+      const now = Date.now();
+      if (now < graceEnds - 1000) return { ...q, state: 'UNPAID' };
+      if (now < graceEnds + 1500) return (failed++, null);
+      return q;
+    });
+    try {
+      const b = await expiredBatch('late', m.url, expiry);
+      const r = await run(['--resume', b.file]);
+      expect(r.err).toBe('');
+      expect(r.code).toBe(0);
+      expect(failed).toBeGreaterThan(3); // checks failed on both sides of the end of the grace period
+      noSecrets(r, [b.seed]);
+      const notes = notesOn(b.out);
+      expect(notes.map((n) => Number(getTokenMetadata(n.token).amount))).toEqual([50, 50]);
+      expect(existsSync(b.file)).toBe(false);
+    } finally {
+      m.server.close();
+    }
+  }, 60_000);
 
   it('--resume finishes a paid batch that was stopped before minting', async () => {
     const b = await pendingBatch('resumed');

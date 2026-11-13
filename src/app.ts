@@ -10,7 +10,7 @@ import { createAdminRouter } from './admin-api.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
-import type { Config, ModelConfig, Unit } from './config.ts';
+import { type Config, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
@@ -171,7 +171,7 @@ export function createApp(d: Deps) {
         upstream_model: s.type === 'tinfoil' ? m.upstream : undefined,
       };
     });
-    return c.json({ object: 'list', data, units: env.FORGE_UNITS, mints: wallet.trustedMints, invite_only: env.FORGE_INVITE_ONLY, btc_usd: rate ?? null });
+    return c.json({ object: 'list', data, units: env.FORGE_UNITS, mints: wallet.trustedMints, mint_aliases: mintAliasList(wallet.trustedMints), invite_only: env.FORGE_INVITE_ONLY, btc_usd: rate ?? null });
   });
 
   // ------------------------------------------------------------------ wallet

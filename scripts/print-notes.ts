@@ -161,16 +161,27 @@ async function main() {
       say();
       say(`Waiting for the payment. If you stop this, run: pnpm print-notes --resume ${pendingPath}`);
     }
+    // Whether `state` came from the mint's last answer. After a failed check it is stale (a laptop waking
+    // up before its network does), and a stale UNPAID must never remove the batch: it may have been paid.
+    let fresh = true;
     while (state === 'UNPAID') {
-      if (pending.expiry && Date.now() / 1000 > pending.expiry + 30) {
-        rmSync(pendingPath, { force: true });
-        fail('The invoice expired before it was paid. Nothing was minted. Run the command again for a new invoice.');
+      if (fresh && pending.expiry && Date.now() / 1000 > pending.expiry + 30) {
+        // Ask once more right before giving up, and remove the batch only on a clear UNPAID.
+        const now = (await w.checkMintQuoteBolt11(pending.quote).catch(() => null))?.state;
+        if (now === 'UNPAID') {
+          rmSync(pendingPath, { force: true });
+          fail('The invoice expired before it was paid. Nothing was minted. Run the command again for a new invoice.');
+        }
+        if (!now) fail(`Could not confirm the invoice. Run again with --resume ${pendingPath}.`);
+        state = now!;
+        break;
       }
       await sleep(args.poll);
       try {
         state = (await w.checkMintQuoteBolt11(pending.quote)).state;
+        fresh = true;
       } catch {
-        /* the mint did not answer: ask again */
+        fresh = false; // the mint did not answer: ask again, and keep the batch
       }
     }
     say('Paid. Making the notes.');
@@ -187,7 +198,7 @@ async function main() {
     fail(`Could not write ${pending.out}: ${(e as Error)?.message ?? e}. The notes are kept in ${pendingPath}. Run again with --resume ${pendingPath} --out <another file>.`);
   }
   rmSync(pendingPath, { force: true });
-  say(`Wrote ${pending.count} notes of ${units(pending.amount, pending.unit)} to ${pending.out}. Only you can read the file.`);
+  say(`Wrote ${pending.count} notes of ${units(pending.amount, pending.unit)} to ${pending.out}. Only your user account on this computer can open it.`);
   say('Print it, cut the notes apart, then delete the file. Anyone who has the file can spend the notes.');
 }
 

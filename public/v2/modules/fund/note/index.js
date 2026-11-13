@@ -6,7 +6,7 @@
 // A note from a mint the engine does not take says so and offers the other-mint path when the engine
 // has one. Whether a note was already used is known only to its mint, so the phone learns it when the
 // engine refuses the note (token_spent), and says so.
-import { mintLabel, noteVerdict, readNote, refusalOf } from '../../../core/note.js';
+import { isNoteUnit, mintLabel, noteVerdict, readNote, refusalOf } from '../../../core/note.js';
 import { inviteField } from '../kit.js';
 
 const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
@@ -75,7 +75,7 @@ export function create(inputs) {
         const read = btn({ class: 'btn primary block', id: 'noteRead', onclick: () => show(ta.value) }, null, t('fund.note.read'));
         const keep = msg.textContent ? [msg] : [];
         body.replaceChildren(...[...body.children].filter((n) => n.id === 'noteNoCamera'), ...keep, ui.el('div', { class: 'field' }, ui.el('label', { for: 'noteText', class: 'label', text: t('fund.note.pasteLabel') }), ta));
-        foot.replaceChildren(read, scan?.available() ? btn({ class: 'btn block', id: 'noteScanAgain', onclick: scanning }, 'qr', t('fund.note.again')) : null);
+        foot.replaceChildren(...[read, scan?.available() ? btn({ class: 'btn block', id: 'noteScanAgain', onclick: scanning }, 'qr', t('fund.note.again')) : null].filter(Boolean));
         ta.focus();
       };
 
@@ -90,16 +90,21 @@ export function create(inputs) {
           foot.replaceChildren(again);
           return;
         }
-        const amount = format.units(note.amount, note.unit);
-        const head = [ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }), ui.el('p', { class: 'note note-mint', id: 'noteMint', text: t('fund.note.from', { mint: mintLabel(note.mint) }) })];
+        // An amount is shown only in a unit the phone formats exactly (usd, sat); any other unit is refused
+        // before its amount could be shown wrong.
+        const known = isNoteUnit(note.unit);
+        const amount = known ? format.units(note.amount, note.unit) : '';
+        const mintLine = ui.el('p', { class: 'note note-mint', id: 'noteMint', text: t('fund.note.from', { mint: mintLabel(note.mint) }) });
+        const head = known ? [ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }), mintLine] : [mintLine];
         const methods = wallet.methods();
-        const verdict = noteVerdict(note, { mints: wallet.mints(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled });
         const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('othermint', { token: note.token }) }, 'swap', t('fund.note.useOtherMint'));
         const refused = (kind) => {
           const words = { spent: t('fund.note.spent'), other_mint: t('fund.note.otherMint'), wrong_mint: t('fund.note.wrongMint'), wrong_unit: t('fund.note.wrongUnit', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }) }[kind];
           body.replaceChildren(...head, ui.el('p', { class: 'msg err', id: 'noteResult', role: 'status', text: words }));
-          foot.replaceChildren(kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again);
+          foot.replaceChildren(...[kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again].filter(Boolean));
         };
+        if (!known) return refused('wrong_unit');
+        const verdict = noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled });
         if (verdict !== 'add') return refused(verdict);
 
         const invite = inviteField(inputs);
