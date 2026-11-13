@@ -1,6 +1,6 @@
 # Forge AI
 
-Forge AI is an OpenAI-compatible AI gateway that charges per request in Cashu eCash. Point any OpenAI client at it, pay with eCash from the Forge mint, and it forwards the request to a pluggable upstream supplier. Licensed Apache-2.0.
+Forge AI is an OpenAI-compatible AI gateway that charges per request in Cashu eCash. Point any OpenAI client at it, pay with eCash from the Forge mint, and it forwards the request to a pluggable upstream supplier. Licensed MIT.
 
 Two ways to pay:
 
@@ -15,7 +15,7 @@ A balance can also be funded without holding Forge eCash first: pay a Lightning 
 
 | | Forge AI | Routstr (routstr-core, checked 2026-11-09) |
 | - | - | - |
-| License | Apache-2.0 | GPL-3.0 |
+| License | MIT | GPL-3.0 |
 | Units | USD eCash (`usd`, cents) and bitcoin eCash (`sat`). USD balances stay in USD, metered in milli-cents | Balances and 402 amounts in msat |
 | Prices | Set in USD per million tokens; sat prices derive from a median BTC/USD rate | USD upstream prices converted to sats with an exchange buffer |
 | Per-request payment | NUT-24: 402 with a NUT-18 `creqA` request, `X-Cashu` token, change returned | `X-Cashu` token header; its 402 body is a custom JSON error format |
@@ -267,4 +267,4 @@ The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

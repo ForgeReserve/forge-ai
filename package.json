@@ -2,7 +2,7 @@
   "name": "forge-ai",
   "version": "0.1.0",
   "description": "Pay-per-request OpenAI-compatible AI gateway paid with Cashu eCash",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {
