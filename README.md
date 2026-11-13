@@ -244,6 +244,18 @@ pnpm admin prices:show [--unit sat]
 
 First-load JavaScript is about 59 KB gzipped (page code and the Markdown libraries). The attachment helpers load when the page is idle; the highlighter, QR, scanner, document extraction, pdf.js and Tinfoil SDK load on first use. Rebuild the vendored libraries with `scripts/vendor.sh`. Privacy details: [docs/PRIVACY.md](docs/PRIVACY.md#chat-page).
 
+## The v2 app (in progress)
+
+`/v2/` serves the next app beside the chat page, for the December cut (plan: [docs/V2-BUILD.md](docs/V2-BUILD.md), screens: [docs/design/SCREENS.md](docs/design/SCREENS.md)). It is built the same way: plain ES modules in `public/v2/`, no build step, nothing from other origins. It reuses v1's helpers by import (`/js/files.js`, `/js/extract.js`, `/js/markdown.js`, `/js/qr.js`, `/js/scan.js`, `/js/lockkey.js`).
+
+- **Home:** two rings. Gold is funds (full means the balance right after money last came in), green is memory (how much of the model's context is still free). Tapping either opens Funds and memory. Hold to talk opens Type until voice arrives. Type, Add (photo and file) and More sit below.
+- **Engine client** (`public/v2/core/engine.js`): the OpenAI-compatible API above, streamed. It answers a `428 pow_required` challenge once per request, the way a Bellows asks (`X-Bellows-Pow-Challenge`, solved into `X-Bellows-Pow`). This gateway does not send 428; the client is tested against a stub. Private models (enclave and encrypted in the browser) go through the vendored Tinfoil SDK, as in v1.
+- **Money first:** eCash is written to the phone (`forge2.vault` in localStorage) before it is sent and removed only when the engine confirms the credit. Taken-out eCash stays there until the person taps I saved it. v2 uses v1's balance key (`forge.balanceKey`), so a v1 balance carries over.
+- **Modules:** every swappable part has a manifest under `public/v2/modules/<kind>/<id>/` and loads through `public/v2/core/registry.js`, which refuses a bad manifest and hands a module only its kind's inputs. Bundled in this release: looks (Light, Dark, Midnight), Default mode, and fund modules for eCash, Lightning, on-chain and other mints. The registry does not yet check the `publisher` and `sig` fields and runs no sandbox: only the bundled modules load, as ordinary page code (see [docs/MODULES.md](docs/MODULES.md)).
+- **Storage:** IndexedDB `forge2` for settings, the conversation and attachments, on this phone only. Start fresh removes the conversation from it.
+- **Service worker:** `public/v2/sw.js`, scope `/v2/`, network first with a cached copy for offline. v1's worker passes `/v2/` by.
+- **Strings:** every word is in `public/v2/strings/en.js`.
+
 ## Logs and privacy
 
 Logs are JSON lines with request id, model, supplier, token counts, cost, status and latency. Prompt and completion content is never logged or stored. See [docs/PRIVACY.md](docs/PRIVACY.md).
@@ -254,12 +266,15 @@ Logs are JSON lines with request id, model, supplier, token counts, cost, status
 pnpm typecheck
 pnpm test                 # unit tests
 pnpm mint:up && pnpm test:e2e && pnpm mint:down    # end to end against real local Nutshell mints
+pnpm test:ui              # the v2 app in a 412 x 915 browser (installed Chrome, no download); needs pnpm mint:up
 pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env if present)
 ```
 
 `test/unit/files.test.ts` covers the attachment helpers (file types, text decoding and binary refusal, `.docx` unzip and text, `<file>` blocks, the 200,000-character budget, estimates). `test/unit/sw.test.ts` and `test/e2e/pwa.e2e.test.ts` cover the service worker version and shell list, `/sw.js`, manifest, icons and offline page headers; `test/e2e/files-privacy.e2e.test.ts` checks that file text reaches the supplier (or the enclave, encrypted) and never the logs or the database.
 
-`docker-compose.test.yml` runs three FakeWallet mints: `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
+`test/unit/v2/` covers the v2 logic: the module registry (manifest checks, kind isolation), the engine client (stream parsing, 402, 428 proof of work, private models only through the encrypting fetch), the vault (a token is stored before it is sent and kept until credited, refused or pending), ring maths, prices, routes, the string table's copy rules and the looks' text contrast. `test/ui/v2.ui.test.ts` drives `/v2/` with Playwright (`playwright-core`, `channel: 'chrome'`) against a local gateway with the mock supplier and the local mints: fund with a test token and an invite, ask a typed question, read the streamed answer, see the gold ring move, plus Lightning funding, taking funds out, errors, files, a v1 balance carried over, and 360 px layout.
+
+`docker-compose.test.yml` runs three FakeWallet mints (one compose project, `forge-ai`, from any checkout or worktree): `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
 
 The admin tests (`test/unit/admin.test.ts`, `test/e2e/admin.e2e.test.ts`) cover access control (404 when off, 401 on a missing or wrong token, failed-login limit, Origin and JSON checks, no CORS), invites and revoke, the waitlist invite and delete, freeze (spending blocked, refunds allowed), revenue export (never above sweepable, locked export redeemable only with the key, history with token hash and no token, crash after the swap finished once by recovery) and overview numbers against the ledger.
 

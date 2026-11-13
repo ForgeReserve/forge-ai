@@ -77,6 +77,15 @@ Plugins are also a way to attack the people this app serves. So:
 - "Reviewed only" is on by default and turns off only in settings, with a plain warning.
 - A plugin can never read the wallet, the passphrase or other plugins' data.
 
+## Status in the v2 app
+
+Built in slice A1 (`public/v2/`):
+
+- The registry, `public/v2/core/registry.js`. It checks each manifest (id, kind, version, `name.en`, an entry file inside the module folder, `permissions`, and that `publisher` and `sig` are present), refuses a bad one, and hands each kind only its inputs: a `look` gets nothing, a `fund` module gets the engine, the wallet and the vault but never the conversation, a `mode` gets the screens' state and actions but never the engine or the wallet.
+- Bundled modules: `look` (Light, Dark, Midnight), `mode` (Default) and `fund` (eCash, Lightning, on-chain, other mint).
+
+Not built yet, and not claimed: the `publisher` and `sig` fields are not checked, there is no sandbox, and no permission can be granted (a manifest that asks for one is refused). Only the modules bundled with the release load, and they run as ordinary code in the page. Signatures, the sandbox and adding a plugin come with slice B2.
+
 ## What changes in the code
 
 1. Split `src/funding.ts` into one module per funding method behind a shared interface.
