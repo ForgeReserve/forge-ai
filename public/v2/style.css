@@ -251,7 +251,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .listen-route { color: var(--teal); }
 .listen-route[data-route="engine-standard"], .listen-route[data-route="device"] { color: var(--low-ink); }
 .listen-price { color: var(--gold-ink); white-space: nowrap; }
-.speak-state { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--teal); }
+.speak-state { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--teal); }
+.speak-via { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--low-ink); }
 .tile-sub { font-size: 11px; font-weight: 600; color: var(--gold-ink); }
 
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

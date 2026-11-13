@@ -84,7 +84,7 @@ export function testAudio() {
     usd_per_second: AUDIO_PRICES.perSecond,
     price_verified: true,
     max_seconds: 30,
-    formats: ['wav', 'mp3'],
+    formats: ['wav'],
     languages: ['en'],
   });
   const s = (id: string, upstream: string) => ({
@@ -162,6 +162,8 @@ export async function startGateway(
     recover?: boolean;
     /** Adds the audio models (testAudio) and their private mock supplier. */
     audio?: boolean;
+    /** Changes the test catalog before the gateway loads it. */
+    editCatalog?: (catalog: any) => void;
   } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
@@ -178,7 +180,9 @@ export async function startGateway(
     FORGE_FOREIGN_POLICY: 'any',
     ...opts.env,
   };
-  const config = loadConfig(env as NodeJS.ProcessEnv, testCatalog(opts.enclavePort, { audio: opts.audio }));
+  const catalog = testCatalog(opts.enclavePort, { audio: opts.audio });
+  opts.editCatalog?.(catalog);
+  const config = loadConfig(env as NodeJS.ProcessEnv, catalog);
   const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv, faults: opts.faults, fundingFaults: opts.fundingFaults });
   if (opts.recover !== false) await startupRecovery(deps);
   const app = createApp(deps);

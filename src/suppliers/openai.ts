@@ -95,8 +95,7 @@ export class OpenAISupplier implements Supplier {
   async transcribe(call: TranscribeCall): Promise<Response> {
     if (!this.apiKey) throw new UpstreamError(`supplier ${this.id} has no API key configured`, 503);
     const form = new FormData();
-    const type = call.format === 'mp3' ? 'audio/mpeg' : 'audio/wav';
-    form.append('file', new Blob([call.audio as Uint8Array<ArrayBuffer>], { type }), `audio.${call.format}`);
+    form.append('file', new Blob([call.audio as Uint8Array<ArrayBuffer>], { type: 'audio/wav' }), `audio.${call.format}`);
     form.append('model', call.model.upstream);
     form.append('response_format', 'json');
     if (call.language) form.append('language', call.language);

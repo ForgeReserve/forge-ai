@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { billedSeconds, charCount, MP3_MAX_BYTES_PER_SECOND, silentWav, sniffFormat, wavInfo } from '../../src/audio.ts';
+import { billedSeconds, charCount, silentWav, sniffFormat, wavInfo } from '../../src/audio.ts';
 import { type AudioModelConfig, CatalogSchema, loadConfig } from '../../src/config.ts';
 import { audioCostNanoUsd } from '../../src/pricing.ts';
 import { OpenAISupplier } from '../../src/suppliers/openai.ts';
@@ -40,13 +40,16 @@ describe('recording length', () => {
     expect(sniffFormat(new Uint8Array([1, 2, 3]))).toBeUndefined();
   });
 
-  it('bills a WAV by its header and an MP3 by the longer of declared and least possible', () => {
-    expect(billedSeconds(silentWav(3, 16000), 'wav', 0.5)).toBeCloseTo(3, 5);
-    const mp3 = new Uint8Array(MP3_MAX_BYTES_PER_SECOND * 4);
-    expect(billedSeconds(mp3, 'mp3', 1)).toBe(4);
-    expect(billedSeconds(mp3, 'mp3', 9)).toBe(9);
-    expect(billedSeconds(mp3, 'mp3', Number.NaN)).toBe(4);
-    expect(billedSeconds(mp3, 'mp3', -5)).toBe(4);
+  it('bills a WAV by its header, and takes no other container', () => {
+    expect(billedSeconds(silentWav(3, 16000))).toBeCloseTo(3, 5);
+    expect(billedSeconds(silentWav(0.5, 8000))).toBeCloseTo(0.5, 5);
+    // An MP3's length cannot be read from its size, so a catalog cannot list it as a format.
+    const stt = (formats: string[]) => ({ id: 'stt', kind: 'transcription', supplier: 's', upstream: 'x', formats });
+    const base = { suppliers: { s: { type: 'mock', tier: 'enclave' } }, models: [{ id: 'chat', supplier: 's', upstream: 'c', input_usd_per_mtok: 1, output_usd_per_mtok: 1 }] };
+    expect(CatalogSchema.safeParse({ ...base, audio: [stt(['wav', 'mp3'])] }).success).toBe(false);
+    expect(CatalogSchema.safeParse({ ...base, audio: [stt(['mp3'])] }).success).toBe(false);
+    expect(CatalogSchema.parse({ ...base, audio: [stt(['wav'])] }).audio[0]!.formats).toEqual(['wav']);
+    expect(CatalogSchema.parse({ ...base, audio: [{ id: 'stt', kind: 'transcription', supplier: 's', upstream: 'x' }] }).audio[0]!.formats).toEqual(['wav']);
   });
 
   it('counts characters as a person does', () => {

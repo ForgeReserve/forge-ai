@@ -101,7 +101,7 @@ describe('hold to talk', () => {
     await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
     expect(await page.textContent('#talkBtn')).toContain('Let go to send');
     await expect.poll(() => page.textContent('#talkTime'), { timeout: 4000 }).toMatch(/^0:01\. Slide your finger off the button to cancel\.$/);
-    expect(await page.textContent('.listen-route')).toBe('Sent through the engine to a private model. Not saved.');
+    expect(await page.textContent('.listen-route')).toBe('Goes through the engine to sealed hardware. The engine could hear it on the way. Not saved.');
     expect(await page.textContent('#talkPrice')).toMatch(/^(Under|Up to) \$\d+\.\d\d$/);
     // The level bars move with the (fake) microphone.
     await expect.poll(() => page.locator('#talkBtn .bar').first().evaluate((b) => Number((b as HTMLElement).style.getPropertyValue('--h')))).toBeGreaterThan(0.12);
@@ -131,6 +131,8 @@ describe('hold to talk', () => {
     await page.click('#speakBtn');
     await page.waitForSelector('#speakStopBtn');
     expect(await page.textContent('#speakState')).toMatch(/Speaking|Getting the voice/);
+    // The engine's voice sees the answer on its way: the line says so.
+    expect(await page.textContent('#speakVia')).toBe('Read by the engine. It sees the answer on the way.');
     await page.click('#speakStopBtn');
     await page.waitForSelector('#speakBtn');
     expect(calls.speech.length).toBe(n);

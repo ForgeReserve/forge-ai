@@ -196,6 +196,9 @@ describe('errors in plain words', () => {
     ['request_too_large', 'error.tooLarge', 'startFresh'],
     ['encryption_unavailable', 'error.encryption', 'retry'],
     ['account_frozen', 'error.frozen', 'takeOut'],
+    ['audio_too_short', 'talk.empty', 'retry'],
+    ['audio_too_long', 'talk.tooLong', 'retry'],
+    ['unsupported_audio', 'talk.cannotUse', 'retry'],
     ['something_new', 'error.other', 'retry'],
   ])('%s has one next step', (code, key, next) => {
     expect(ERR.errorView(code, 'm')).toMatchObject({ key, next });

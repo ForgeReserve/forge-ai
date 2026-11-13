@@ -24,11 +24,6 @@ export const SPEECH_PATH = '/v1/audio/speech';
 
 /** The fewest seconds a recording may have: shorter is a tap, not a question. */
 export const MIN_SECONDS = 0.3;
-/**
- * The highest byte rate an MP3 can have (320 kbit/s). A recording of N bytes lasts at least N divided by
- * this, so a client cannot declare a long MP3 short to pay less.
- */
-export const MP3_MAX_BYTES_PER_SECOND = 40_000;
 /** The most audio bytes accepted back from a speech supplier. */
 export const MAX_SPEECH_BYTES = 50_000_000;
 
@@ -66,7 +61,10 @@ export function wavInfo(b: Uint8Array): WavInfo | undefined {
   return undefined;
 }
 
-/** wav, mp3 or undefined, from the first bytes. */
+/**
+ * wav, mp3 or undefined, from the first bytes. Only WAV is taken: it states its own length, so the
+ * length billed and checked against max_seconds is the real one. MP3 is told apart only to refuse it.
+ */
 export function sniffFormat(b: Uint8Array): 'wav' | 'mp3' | undefined {
   if (wavInfo(b)) return 'wav';
   if (b.length >= 3 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return 'mp3'; // ID3 tag
@@ -74,15 +72,9 @@ export function sniffFormat(b: Uint8Array): 'wav' | 'mp3' | undefined {
   return undefined;
 }
 
-/**
- * The seconds a recording is billed for. A WAV file says its own length. Otherwise the longer of what
- * the client declares and the least its size allows, so declaring less never pays less.
- */
-export function billedSeconds(b: Uint8Array, format: 'wav' | 'mp3', declared?: number): number {
-  if (format === 'wav') return wavInfo(b)?.seconds ?? 0;
-  const least = b.length / MP3_MAX_BYTES_PER_SECOND;
-  const d = Number.isFinite(declared) && declared! > 0 ? declared! : 0;
-  return Math.max(least, d);
+/** The seconds a WAV recording is billed for: the length its header gives, whatever the client declares. */
+export function billedSeconds(b: Uint8Array): number {
+  return wavInfo(b)?.seconds ?? 0;
 }
 
 /** A WAV file of silence (16-bit mono PCM), for the mock supplier. */
@@ -240,8 +232,8 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
     if (language && !LANGUAGE.test(language)) return apiError(c, 400, 'invalid_request', 'language must be an ISO 639-1 code such as en');
     const audio = new Uint8Array(await file.arrayBuffer());
     const format = sniffFormat(audio);
-    if (!format || !model.formats.includes(format)) return apiError(c, 415, 'unsupported_audio', `audio must be ${model.formats.join(' or ')}`);
-    const seconds = billedSeconds(audio, format, Number(form.duration));
+    if (format !== 'wav' || !model.formats.includes(format)) return apiError(c, 415, 'unsupported_audio', `audio must be ${model.formats.join(' or ')}`);
+    const seconds = billedSeconds(audio);
     if (seconds > model.max_seconds) return apiError(c, 413, 'audio_too_long', `audio is longer than ${model.max_seconds} seconds`);
     if (seconds < MIN_SECONDS) return apiError(c, 400, 'audio_too_short', 'audio is too short');
 

@@ -41,8 +41,8 @@ export interface EncryptedResponse {
 export interface TranscribeCall {
   model: AudioModelConfig;
   audio: Uint8Array;
-  /** wav or mp3. */
-  format: 'wav' | 'mp3';
+  /** Always wav: the only container the gateway takes. */
+  format: 'wav';
   /** Optional ISO 639-1 language hint. */
   language?: string;
   signal: AbortSignal;

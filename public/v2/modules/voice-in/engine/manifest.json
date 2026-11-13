@@ -3,7 +3,7 @@
   "kind": "voice-in",
   "version": "1.0.0",
   "name": {
-    "en": "Private engine"
+    "en": "Engine"
   },
   "permissions": [],
   "entry": "index.js",

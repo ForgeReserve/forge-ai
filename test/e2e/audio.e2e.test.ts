@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { silentWav } from '../../src/audio.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
-import { AUDIO_PRICES, BTC_USD, chatBody, type Gateway, startGateway } from './helpers.ts';
+import { AUDIO_PRICES, BTC_USD, chatBody, type Gateway, startGateway, testAudio } from './helpers.ts';
 
 // The audio routes: priced per request from the catalog, paid from a balance, never charged on failure,
 // with size and length limits, and no audio or text in the log or the database.
@@ -43,7 +43,7 @@ describe('GET /v1/models lists audio apart from chat', () => {
     const body: any = await (await fetch(`${g.url}/v1/models`)).json();
     expect(body.data.map((m: any) => m.id)).not.toContain('mock-transcribe');
     const t = body.audio.find((m: any) => m.id === 'mock-transcribe');
-    expect(t).toMatchObject({ kind: 'transcription', tier: 'enclave', max_seconds: 30, formats: ['wav', 'mp3'], encrypted_passthrough: false });
+    expect(t).toMatchObject({ kind: 'transcription', tier: 'enclave', max_seconds: 30, formats: ['wav'], encrypted_passthrough: false });
     expect(t.pricing.usd).toEqual({ request: AUDIO_PRICES.transcribeRequest, second: AUDIO_PRICES.perSecond, kchar: 0 });
     expect(t.pricing.sat.request).toBeCloseTo((AUDIO_PRICES.transcribeRequest / BTC_USD) * 1e8, 6);
     const s = body.audio.find((m: any) => m.id === 'mock-speech');
@@ -130,17 +130,22 @@ describe('POST /v1/audio/transcriptions', () => {
     expect(big).toEqual({ status: 413, code: 'request_too_large' });
   });
 
-  it('bills an MP3 by the longer of its declared length and the least its size allows', async () => {
+  it('refuses an MP3, whose real length its size does not give, without charging', async () => {
+    // 200 kB is about 200 s at 8 kbit/s, far over max_seconds, though a declared 1 s and its size at
+    // the highest MP3 byte rate (5 s) would both pass. Only WAV, which states its length, is taken.
     const key = balance(100_000);
-    const mp3 = new Uint8Array(200_000); // 5 s at the highest MP3 byte rate
-    mp3.set([0x49, 0x44, 0x33]);
-    const form = new FormData();
-    form.append('file', new Blob([mp3], { type: 'audio/mpeg' }), 'a.mp3');
-    form.append('model', 'mock-transcribe');
-    form.append('duration', '1');
-    const r = await fetch(`${g.url}/v1/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form });
-    expect(r.status).toBe(200);
-    expect(Number(r.headers.get('x-forge-charged-msub'))).toBe(usdMsub(AUDIO_PRICES.transcribeRequest + 5 * AUDIO_PRICES.perSecond));
+    for (const head of [[0x49, 0x44, 0x33], [0xff, 0xfb, 0x90]]) {
+      const mp3 = new Uint8Array(200_000);
+      mp3.set(head);
+      const form = new FormData();
+      form.append('file', new Blob([mp3], { type: 'audio/mpeg' }), 'a.mp3');
+      form.append('model', 'mock-transcribe');
+      form.append('duration', '1');
+      const r = await fetch(`${g.url}/v1/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form });
+      expect(r.status).toBe(415);
+      expect(((await r.json()) as any).error.code).toBe('unsupported_audio');
+    }
+    expect(balanceOf(key)).toBe(100_000);
   });
 
   it('needs a balance key and enough funds, and a transcription model', async () => {
@@ -213,6 +218,67 @@ describe('POST /v1/audio/speech', () => {
     expect(((await r.json()) as any).error.message).toContain('You were not charged.');
     expect(balanceOf(key)).toBe(100_000);
   });
+});
+
+describe('audio guards', () => {
+  /** A gateway of its own with a changed catalog, and a funded key on it. */
+  async function own(editCatalog: (cat: any) => void) {
+    const gw = await startGateway({ audio: true, editCatalog });
+    const key = 'sk-forge-' + crypto.randomUUID().replaceAll('-', '');
+    const a = gw.deps.ledger.createAccountRaw(key, 'usd', null);
+    gw.deps.ledger.creditRaw(a.id, 100_000, 'test', null);
+    const form = (model: string) => {
+      const f = new FormData();
+      f.append('file', new Blob([silentWav(2, 16000) as Uint8Array<ArrayBuffer>], { type: 'audio/wav' }), 'a.wav');
+      f.append('model', model);
+      return f;
+    };
+    const rows = () => gw.deps.db.prepare('SELECT status, charged_msub FROM requests WHERE account_id = ?').all(a.id);
+    return { gw, key, accountId: a.id, form, rows, balance: () => gw.deps.ledger.findByKey(key)!.balance_msub };
+  }
+
+  it('keeps audio from a Tinfoil supplier set to take only encrypted requests, without charging', async () => {
+    // The audio routes pass sound and text through the gateway in plain form.
+    const o = await own((cat) => {
+      cat.suppliers.tinfoil.allowPlaintext = false;
+      cat.audio.push(
+        { id: 'tinfoil-transcribe', kind: 'transcription', supplier: 'tinfoil', upstream: 'whisper', request_usd: 0.01, price_verified: true, max_seconds: 30 },
+        { id: 'tinfoil-speech', kind: 'speech', supplier: 'tinfoil', upstream: 'tts', request_usd: 0.002, price_verified: true, max_chars: 200, voices: ['v'] },
+      );
+    });
+    try {
+      const auth = { authorization: `Bearer ${o.key}` };
+      let r = await fetch(`${o.gw.url}/v1/audio/transcriptions`, { method: 'POST', headers: auth, body: o.form('tinfoil-transcribe') });
+      expect(r.status).toBe(400);
+      expect(((await r.json()) as any).error.code).toBe('encryption_required');
+      r = await fetch(`${o.gw.url}/v1/audio/speech`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ model: 'tinfoil-speech', input: 'Hello.' }) });
+      expect(r.status).toBe(400);
+      expect(((await r.json()) as any).error.code).toBe('encryption_required');
+      expect(o.balance()).toBe(100_000);
+      expect(o.gw.deps.ledger.reservedMsub(o.accountId)).toBe(0);
+      expect(o.rows()).toEqual([]);
+    } finally {
+      await o.gw.close();
+    }
+  });
+
+  it('releases the held price when the client goes away mid-request', async () => {
+    const o = await own((cat) => cat.audio.push({ ...testAudio()[0], id: 'mock-transcribe-slow', upstream: 'mock-slow' }));
+    try {
+      const ctrl = new AbortController();
+      const sent = fetch(`${o.gw.url}/v1/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${o.key}` }, body: o.form('mock-transcribe-slow'), signal: ctrl.signal }).catch((e) => e);
+      // The price is held while the slow model works (5 s).
+      await expect.poll(() => o.gw.deps.ledger.reservedMsub(o.accountId), { timeout: 3000 }).toBeGreaterThan(0);
+      ctrl.abort();
+      expect(((await sent) as Error).name).toBe('AbortError');
+      // Released well before the model would have answered: the abort reached the supplier call.
+      await expect.poll(() => o.rows(), { timeout: 3000 }).toEqual([{ status: 'failed', charged_msub: 0 }]);
+      expect(o.gw.deps.ledger.reservedMsub(o.accountId)).toBe(0);
+      expect(o.balance()).toBe(100_000);
+    } finally {
+      await o.gw.close();
+    }
+  }, 15_000);
 });
 
 describe('audio privacy', () => {

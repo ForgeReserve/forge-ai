@@ -179,6 +179,8 @@ function speakView() {
     available: !!out && !!ex?.answer?.content,
     state: S.speaking?.state ?? 'idle',
     current: !!answerMsg && S.speaking?.key === answerMsg.id,
+    // The engine's voice reads the answer in plain form on its way to the model: the line says so.
+    viaEngine: out?.id === 'engine',
     priceMsub: out && answerMsg && !S.streaming ? talk.speakPrice(answerMsg) : null,
   };
 }

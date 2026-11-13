@@ -42,6 +42,13 @@ export function errorView(code, message, charged = 0) {
     case 'encryption_unavailable':
     case 'encryption_required':
       return { key: 'error.encryption', next: 'retry' };
+    // A voice question the engine refused before any charge: hold the button again.
+    case 'audio_too_short':
+      return { key: 'talk.empty', next: 'retry' };
+    case 'audio_too_long':
+      return { key: 'talk.tooLong', next: 'retry' };
+    case 'unsupported_audio':
+      return { key: 'talk.cannotUse', next: 'retry' };
     case 'account_frozen':
       return { key: 'error.frozen', next: 'takeOut' };
     default:

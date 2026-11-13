@@ -32,6 +32,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 
 - `POST /v1/audio/transcriptions` and `POST /v1/audio/speech` are not encrypted end to end. The gateway receives the recording or the text in plain form, holds it in memory while it relays it to the supplier, and drops it when the request ends. It is never logged or stored: the log line and the `requests` row carry the model, seconds or characters, price and status.
 - With an enclave supplier (Tinfoil) the sound and text are read by the model inside an attested enclave, so the supplier's staff cannot read them; the gateway operator could, while they pass. A Tinfoil supplier set to `allowPlaintext: false` refuses audio.
+- In the v2 app the engine way is labelled Engine, not private, and its words say the engine could hear the recording, or read the answer it reads aloud, on the way. With Private only on, the engine still sees the recording, the transcript that comes back and, when it reads answers aloud, the answer text.
 - In the v2 app, Private only sends voice only to an enclave audio model, and never uses the browser's own recogniser, which may send the voice to the browser's maker. The phone's own voices are used only when they run on the phone (`localService`).
 
 ## Encrypted pass-through (Tinfoil EHBP)

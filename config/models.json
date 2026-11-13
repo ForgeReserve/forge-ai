@@ -320,8 +320,7 @@
       "price_verified": true,
       "max_seconds": 60,
       "formats": [
-        "wav",
-        "mp3"
+        "wav"
       ],
       "languages": []
     },

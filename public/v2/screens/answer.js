@@ -14,7 +14,9 @@ export function answer({ t, state, nav, actions, format }) {
   const asked = el('p', { class: 'asked' });
   const body = el('div', { class: 'answer-body md', id: 'answerText', 'aria-live': 'off' });
   const note = el('p', { class: 'answer-note', id: 'answerNote', role: 'status' });
-  const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), el('span'));
+  const speakWhat = el('span');
+  const speakVia = el('small', { class: 'speak-via', id: 'speakVia', hidden: true });
+  const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), speakWhat, speakVia);
   const errBox = el('div', { class: 'error-box', id: 'answerError', role: 'alert', hidden: true });
   const tiles = el('div', { class: 'action-tiles' });
   const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, asked, body, errBox, note, tiles);
@@ -40,7 +42,10 @@ export function answer({ t, state, nav, actions, format }) {
   const showSpeaking = (v) => {
     const on = v.speak.current && v.speak.state !== 'idle';
     speaking.hidden = !on;
-    speaking.lastChild.textContent = on ? t(v.speak.state === 'loading' ? 'speak.loading' : 'speak.speaking') : '';
+    speakWhat.textContent = on ? t(v.speak.state === 'loading' ? 'speak.loading' : 'speak.speaking') : '';
+    // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
+    speakVia.hidden = !(on && v.speak.viaEngine);
+    speakVia.textContent = speakVia.hidden ? '' : t('speak.viaEngine');
   };
   const update = () => {
     const v = state.view();

@@ -347,6 +347,24 @@ describe('voice in through the engine', () => {
     expect(VIN.create({ mic, audio: audioFor(sttModel({ tier: 'standard' })) }).private()).toBe(false);
   });
 
+  it('sends nothing and pays nothing for a recording under half a second, or none at all', async () => {
+    // A hold on first use lasts while the person taps Allow, so the microphone may start just before
+    // the finger lifts: 0.2 s, or no sound at all, must not reach the engine (which refuses under 0.3 s).
+    expect(VIN.MIN_SEND_SECONDS).toBeGreaterThan(0.3);
+    for (const secs of [0.2, 0]) {
+      const mic = fakeMic(secs);
+      const audio = audioFor(sttModel());
+      const session = await VIN.create({ mic, audio }).start({});
+      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+      expect(audio.sent).toHaveLength(0);
+      expect(mic.stopped).toBe(1);
+    }
+    // A little over half a second is sent.
+    const audio = audioFor(sttModel());
+    await (await VIN.create({ mic: fakeMic(0.6), audio }).start({})).finish({});
+    expect(audio.sent).toHaveLength(1);
+  });
+
   it('the browser recogniser is free and never private', async () => {
     const recognizer = { available: () => true, start: async ({ onText }: any) => (onText('Hello'), { stop: async () => 'Hello there', cancel: vi.fn() }) };
     const m = VIN_DEVICE.create({ recognizer });
@@ -360,9 +378,14 @@ describe('voice in through the engine', () => {
 });
 
 describe('voice out through the engine', () => {
-  const setup = (fail = false) => {
+  /**
+   * fail: every fetch fails. playFails: how many plays are refused first (autoplay refused, say).
+   * onPlayed(n): called as the nth piece starts to sound.
+   */
+  const setup = (fail = false, { playFails = 0, onPlayed = (_n: number) => {} } = {}) => {
     const fetched: string[] = [];
     const played: string[] = [];
+    let refused = 0;
     const audio = {
       model: (k: string) => (k === 'speech' ? ttsModel() : null),
       price: (_k: string, u: any) => VOICE.audioMsub(ttsModel(), 'usd', u),
@@ -375,8 +398,13 @@ describe('voice out through the engine', () => {
     const speaker = {
       play: (blob: Blob) => {
         let stop = () => {};
+        if (refused < playFails) {
+          refused++;
+          return { done: Promise.reject(Object.assign(new Error('play() was refused'), { name: 'NotAllowedError' })), stop };
+        }
         const done = blob.text().then((x) => {
           played.push(x);
+          onPlayed(played.length);
           return new Promise<void>((r) => {
             stop = r;
             setTimeout(r, 5);
@@ -412,6 +440,45 @@ describe('voice out through the engine', () => {
     await ctl.done.catch(() => {});
     expect(fetched.length).toBeLessThanOrEqual(2);
     expect(m.cached('b')).toBe(false);
+  });
+
+  it('keeps each piece once paid: after a stop part way, Listen pays only for the pieces not fetched', async () => {
+    let ctl: any;
+    // Stop while the first piece sounds. The second was fetched (and paid) while the first played.
+    const { fetched, played, m } = setup(false, { onPlayed: (n) => n === 1 && ctl.stop() });
+    const pieces = ['One.', 'Two.', 'Three.'];
+    ctl = m.speak(pieces, { key: 'd' });
+    expect((await ctl.done).chargedMsub).toBe(520);
+    expect(fetched).toEqual(['One.', 'Two.']);
+    expect(m.cached('d')).toBe(false);
+    // Only the third piece is priced and fetched again; the first two play from memory.
+    expect(m.price(pieces, 'd')).toBe(VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 6 }));
+    expect((await m.speak(pieces, { key: 'd' }).done).chargedMsub).toBe(260);
+    expect(fetched).toEqual(['One.', 'Two.', 'Three.']);
+    expect(played).toEqual(['One.', 'One.', 'Two.', 'Three.']);
+    expect(m.cached('d')).toBe(true);
+    expect(m.price(pieces, 'd')).toBe(0);
+  });
+
+  it('keeps a paid piece when playing it was refused, so Listen does not pay for it again', async () => {
+    const { fetched, played, m } = setup(false, { playFails: 1 });
+    const pieces = ['One.', 'Two.'];
+    await expect(m.speak(pieces, { key: 'e' }).done).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(played).toEqual([]);
+    const paid = fetched.length;
+    expect(paid).toBeGreaterThanOrEqual(1);
+    expect(m.price(pieces, 'e')).toBe(paid === 2 ? 0 : VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 4 }));
+    expect((await m.speak(pieces, { key: 'e' }).done).chargedMsub).toBe((2 - paid) * 260);
+    expect(fetched).toEqual(pieces);
+    expect(played).toEqual(pieces);
+  });
+
+  it('does not take a kept piece for a different text under the same key', async () => {
+    const { fetched, m } = setup();
+    await m.speak(['One.'], { key: 'f' }).done;
+    expect(m.price(['Uno.'], 'f')).toBe(VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 4 }));
+    await m.speak(['Uno.'], { key: 'f' }).done;
+    expect(fetched).toEqual(['One.', 'Uno.']);
   });
 
   it('reports a failed piece', async () => {

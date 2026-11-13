@@ -202,8 +202,11 @@ const AudioModelSchema = z.object({
   max_seconds: z.number().int().positive().max(3600).default(60),
   /** speech: the most characters in one request. */
   max_chars: z.number().int().positive().max(20_000).default(1000),
-  /** transcription: audio containers the upstream accepts. */
-  formats: z.array(z.enum(['wav', 'mp3'])).default(['wav']),
+  /**
+   * transcription: audio containers taken. WAV only: it states its own length, so max_seconds and the
+   * per-second price apply to the real length. An MP3's length cannot be read from its size.
+   */
+  formats: z.array(z.enum(['wav'])).default(['wav']),
   /** speech: the voices the upstream offers; the first is the default. */
   voices: z.array(z.string().min(1)).default([]),
   /** Language codes the model handles well (shown to the app; not enforced). */

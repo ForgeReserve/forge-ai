@@ -48,7 +48,9 @@ export default {
   'talk.empty': 'Nothing was heard. Hold the button and speak.',
   'talk.holdAgain': 'Hold the button to say it again.',
   'talk.busy': 'Wait until the answer is done.',
-  'talk.routePrivate': 'Sent through the engine to a private model. Not saved.',
+  'talk.tooLong': 'That was too long to send. Ask in shorter parts.',
+  'talk.cannotUse': 'The engine could not use this recording. Hold the button and try again.',
+  'talk.routePrivate': 'Goes through the engine to sealed hardware. The engine could hear it on the way. Not saved.',
   'talk.routeStandard': 'Sent to a standard model. The engine and the model provider can hear it.',
   'talk.routeDevice': 'Your browser turns it into words. It may send your voice to its maker.',
 
@@ -57,6 +59,7 @@ export default {
   'speak.stop': 'Stop',
   'speak.speaking': 'Speaking',
   'speak.loading': 'Getting the voice',
+  'speak.viaEngine': 'Read by the engine. It sees the answer on the way.',
   'speak.failed': 'The answer could not be read aloud.',
 
   // Type
@@ -139,8 +142,8 @@ export default {
   // Voice
   'voice.title': 'Voice',
   'voice.in': 'When you talk',
-  'voice.in.engine': 'Private engine',
-  'voice.in.engineSub': 'Sent through the engine to a model in sealed hardware. Paid per question. Not saved.',
+  'voice.in.engine': 'Engine',
+  'voice.in.engineSub': 'Goes through the engine to a model in sealed hardware. The engine could hear it on the way. It is not saved. Paid per question.',
   'voice.in.engineStdSub': 'Sent to a standard model. The engine and the model provider can hear it. Paid per question.',
   'voice.in.device': 'This browser',
   'voice.in.deviceSub': 'Free. Your browser may send your voice to its maker.',
@@ -150,7 +153,7 @@ export default {
   'voice.out.auto': 'Automatic',
   'voice.out.autoSub': 'The phone reads it when it has a voice. Otherwise the engine does.',
   'voice.out.engine': 'Engine voice',
-  'voice.out.engineSub': 'The answer goes through the engine to a model in sealed hardware. Paid per answer.',
+  'voice.out.engineSub': 'The answer goes through the engine to a model in sealed hardware. The engine could read it on the way. Paid per answer.',
   'voice.out.engineStdSub': 'The answer goes to a standard model. The engine and the model provider can read it. Paid per answer.',
   'voice.out.device': 'Phone voice',
   'voice.out.deviceSub': 'Free. Read on this phone.',
