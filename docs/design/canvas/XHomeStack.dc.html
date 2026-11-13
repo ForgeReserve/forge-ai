@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>1. Home: tiles stacked</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F6F5F1; color: #14161A; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding: 16px; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #9AD3C8; background: #E3F4F0; border-radius: 22px; color: #0E7C6B; font-size: 14px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E7C6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span>Private</span></div>
+<button style="min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #FFFFFF; border: 1px solid #C9A24A; border-radius: 22px; color: #14161A; font-family: Inter, sans-serif; font-size: 15px; font-weight: 600"><span style="width: 10px; height: 10px; border-radius: 5px; background: #D4A544"></span><span>$9.99</span></button>
+</div>
+<div style="position:relative;height:178px">
+<div style="position:absolute;left:18px;right:18px;top:8px;height:132px;border-radius:26px;background:#E9F5C9;box-shadow:inset 0 -5px 0 rgba(20,22,26,0.09);transform:rotate(-6deg)" aria-hidden="true"></div><div style="position:absolute;left:18px;right:18px;top:10px;height:132px;border-radius:26px;background:#E8E0FF;box-shadow:inset 0 -5px 0 rgba(20,22,26,0.09);transform:rotate(5deg)" aria-hidden="true"></div><div style="position:absolute;left:18px;right:18px;top:14px;height:132px;border-radius:26px;background:#FBDAD5;box-shadow:inset 0 -5px 0 rgba(20,22,26,0.09);transform:rotate(-3deg)" aria-hidden="true"></div><div style="position:absolute;left:18px;right:18px;top:18px;height:132px;border-radius:26px;background:#DCE9FF;box-shadow:inset 0 -5px 0 rgba(20,22,26,0.09);transform:rotate(3deg)" aria-hidden="true"></div><div style="position:absolute;left:18px;right:18px;top:22px;height:132px;border-radius:26px;background:#D5F2EA;box-shadow:inset 0 -5px 0 rgba(20,22,26,0.09);transform:rotate(-1.5deg)" aria-hidden="true"></div>
+<button aria-label="Show the six tasks" style="position:absolute;left:10px;right:10px;top:28px;height:140px;border-radius:26px;background:#FFFFFF;border:0;box-shadow: inset 0 -5px 0 rgba(20,22,26,0.09), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08);color:#14161A;font-family:Inter, sans-serif;display:flex;flex-direction:column;justify-content:space-between;padding:18px 18px 22px;text-align:left">
+<span style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:22px;font-weight:700;letter-spacing:-0.01em">What do you need?</span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 4l9 5-9 5-9-5z"></path><path d="M3 14l9 5 9-5"></path></svg></span>
+<span style="display:flex;gap:8px"><span style="width:38px;height:38px;border-radius:12px;background:#F6E9C8;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></span><span style="width:38px;height:38px;border-radius:12px;background:#D5F2EA;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E7C6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c3 3 3 15 0 18c-3-3-3-15 0-18z"></path></svg></span><span style="width:38px;height:38px;border-radius:12px;background:#DCE9FF;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2459B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M9 18h6"></path><path d="M10 21h4"></path><path d="M12 3a6 6 0 0 0-4 10.500c.700.700 1 1.500 1 2.500h6c0-1 .300-1.800 1-2.500A6 6 0 0 0 12 3z"></path></svg></span><span style="width:38px;height:38px;border-radius:12px;background:#FBDAD5;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B3402F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span style="width:38px;height:38px;border-radius:12px;background:#E8E0FF;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B3FC4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 5h16v11H9l-5 4z"></path><path d="M8 9h8M8 12h5"></path></svg></span><span style="width:38px;height:38px;border-radius:12px;background:#E9F5C9;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4C7A12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 6h16M4 11h12M4 16h7"></path></svg></span></span>
+</button>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+<div style="position:relative;width:292px;height:292px;display:flex;align-items:center;justify-content:center">
+<svg width="292" height="292" viewBox="0 0 292 292" role="img" aria-label="Balance ring, mostly full" style="position:absolute;left:0;top:0"><circle cx="146" cy="146" r="140" fill="none" stroke="#DAD8D0" stroke-width="6"></circle><circle cx="146" cy="146" r="140" fill="none" stroke="#C28A12" stroke-width="6" stroke-linecap="round" stroke-dasharray="750 880" transform="rotate(-90 146 146)"></circle></svg>
+<button aria-label="Hold to talk" style="width:244px;height:244px;border-radius:122px;background:#14161A;border:0;box-shadow:inset 0 -10px 0 rgba(0,0,0,0.45), inset 0 3px 0 rgba(255,255,255,0.14);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#FFFFFF;font-family:Inter, sans-serif;font-size:17px;font-weight:700"><svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Hold to talk</span></button>
+</div>
+<div style="font-size:13px;color:#5B6068;text-align:center">Or tap the cards to pick a task.</div>
+</div>
+<div style="display:flex;gap:10px"><button aria-label="Type instead" style="flex:1;min-height:60px;background:#FFFFFF;border:0;border-radius:20px;box-shadow: inset 0 -5px 0 rgba(20,22,26,0.09), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08);color:#14161A;font-family:Inter, sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 0 4px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"></path></svg><span>Type</span></button><button aria-label="More: guides, history, protection" style="flex:1;min-height:60px;background:#FFFFFF;border:0;border-radius:20px;box-shadow: inset 0 -5px 0 rgba(20,22,26,0.09), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08);color:#14161A;font-family:Inter, sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 0 4px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="5" cy="12" r="1.500"></circle><circle cx="12" cy="12" r="1.500"></circle><circle cx="19" cy="12" r="1.500"></circle></svg><span>More</span></button></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

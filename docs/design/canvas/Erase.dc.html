@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Erase</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0D10; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding-top: 24px">
+<div style="flex: 1; background: #171A22; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; padding: 10px 16px 20px; gap: 14px">
+<div style="align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #3A404C"></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px">
+<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Erase</div>
+<div style="font-size: 14px; line-height: 1.45; color: #9A9DA3">This cannot be undone. Nothing is kept on Forge servers, so nothing can be restored.</div>
+</div>
+<button style="text-align: left; padding: 12px 14px; background: #111317; border: 1px solid #2A2F3A; border-radius: 18px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px">
+<span style="flex: none; width: 52px; height: 52px; border-radius: 14px; background: #0B0D10; border: 1px solid #2A2F3A; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F1EFE9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 5h16v11H9l-5 4z"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Chats only</span><span style="font-size: 14px; line-height: 1.4; color: #9A9DA3">Removes every chat and attached text. Your $10.00 balance stays.</span></span>
+</button>
+<button style="text-align: left; padding: 12px 14px; background: #111317; border: 1px solid #F0685A; border-radius: 18px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px">
+<span style="flex: none; width: 52px; height: 52px; border-radius: 14px; background: #0B0D10; border: 1px solid #2A2F3A; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F0685A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M6 7l1 13h10l1-13"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600; color: #F0685A">Everything</span><span style="font-size: 14px; line-height: 1.4; color: #9A9DA3">Removes chats, settings and the wallet. Your $10.00 balance is destroyed unless you take it out first.</span></span>
+</button>
+<div style="border: 1px solid #6B5527; border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 14px; line-height: 1.45; color: #F1EFE9">Have a minute? Save the balance as an eCash code you can scan back in later.</div>
+<button style="height: 48px; background: transparent; color: #D4A544; border: 1px solid #D4A544; border-radius: 14px; font-family: Inter, sans-serif; font-size: 15px; font-weight: 600">Take out $10.00 first</button>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #2A2F3A; border-radius: 18px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2A2F3A">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 15px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A9DA3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Delete chats automatically after</span></div>
+<div style="font-size: 14px; color: #3FCFB4">1 day</div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 15px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A9DA3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="8" cy="14" r="4"></circle><path d="M11 11l9-8"></path><path d="M16 6l3 3"></path></svg><span>Second passphrase opens an empty app</span></div>
+<div style="font-size: 14px; color: #9A9DA3">Off</div>
+</div>
+</div>
+<div style="flex: 1"></div>
+<button style="height: 56px; background: #F0685A; color: #0B0D10; border: 0; border-radius: 16px; font-family: Inter, sans-serif; font-size: 16px; font-weight: 700">Hold to erase everything</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

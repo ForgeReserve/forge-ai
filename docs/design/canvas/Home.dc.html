@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home on the real layout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0D10; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding: 16px; gap: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<button aria-label="Private model, gpt-oss-120b. Change model" style="min-height: 44px; display: flex; align-items: center; gap: 8px; background: transparent; border: 0; color: #F1EFE9; font-family: Inter, sans-serif; font-size: 16px; font-weight: 600; padding: 0">
+<span style="width: 32px; height: 32px; border-radius: 16px; border: 1px solid #2C5A55; background: #16292A; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3FCFB4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span>
+<span>gpt-oss-120b</span>
+</button>
+<button style="min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #111317; border: 1px solid #6B5527; border-radius: 22px; color: #F1EFE9; font-family: Inter, sans-serif; font-size: 15px; font-weight: 600">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #D4A544"></span>
+<span>$10.00</span>
+</button>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border: 1px solid #2C5A55; background: #16292A; border-radius: 14px">
+<div style="font-size: 13px; line-height: 1.4; color: #3FCFB4">Private only is on. Address hidden. Chats locked on this phone.</div>
+<button style="min-height: 44px; padding: 0 10px; background: transparent; border: 0; color: #F1EFE9; font-family: Inter, sans-serif; font-size: 13px; font-weight: 600">Details</button>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px">
+<div style="font-size: 28px; font-weight: 700">What can I help with?</div>
+<div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
+<button style="text-align: left; padding: 14px 16px; background: #111317; border: 1px solid #2A2F3A; border-radius: 16px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 15px; font-weight: 600">Read a document for me</span>
+<span style="font-size: 13px; color: #9A9DA3">Photograph it. Names and faces are covered first.</span>
+</button>
+<button style="text-align: left; padding: 14px 16px; background: #111317; border: 1px solid #2A2F3A; border-radius: 16px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 15px; font-weight: 600">Ask by voice</span>
+<span style="font-size: 13px; color: #9A9DA3">Turned into text on this phone. Audio is not sent.</span>
+</button>
+</div>
+</div>
+<div style="background: #171A22; border: 1px solid #2A2F3A; border-radius: 24px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+<label for="home-msg" style="position: absolute; width: 1px; height: 1px; overflow: hidden">Message Forge AI</label>
+<input id="home-msg" type="text" placeholder="Message Forge AI" style="height: 40px; background: transparent; border: 0; color: #F1EFE9; font-family: Inter, sans-serif; font-size: 16px; padding: 0 6px">
+<div style="display: flex; align-items: center; gap: 6px">
+<button aria-label="More ways to add" style="width: 46px; height: 52px; flex-direction: column; gap: 2px; background: transparent; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F1EFE9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg><span style="font-size: 10px; font-weight: 600; color: #9A9DA3">More</span></button>
+<button aria-label="Attach a file" style="width: 46px; height: 52px; flex-direction: column; gap: 2px; background: transparent; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A9DA3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7"></path></svg><span style="font-size: 10px; font-weight: 600; color: #9A9DA3">File</span></button>
+<button aria-label="Take a photo" style="width: 46px; height: 52px; flex-direction: column; gap: 2px; background: transparent; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F1EFE9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg><span style="font-size: 10px; font-weight: 600; color: #9A9DA3">Photo</span></button>
+<button aria-label="Speak" style="width: 46px; height: 52px; flex-direction: column; gap: 2px; background: transparent; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F1EFE9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span style="font-size: 10px; font-weight: 600; color: #9A9DA3">Speak</span></button>
+<div style="flex: 1"></div>
+<div style="font-size: 12px; white-space: nowrap; color: #9A9DA3">under $0.01</div>
+<button aria-label="Send" style="width: 44px; height: 44px; border-radius: 22px; background: #F1EFE9; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg></button>
+</div>
+</div>
+<div style="text-align: center; font-size: 13px; color: #3FCFB4">Private: encrypted to a verified enclave.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

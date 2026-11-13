@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Photo check</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #D9D6CD; color: #14161A; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding-top: 24px">
+<div style="flex: 1; background: #F6F5F1; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; padding: 10px 16px 20px; gap: 14px">
+<div style="align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #C9C6BE"></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px">
+<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Check this photo</div>
+<div style="font-size: 14px; line-height: 1.45; color: #5B6068">Tap anything else you want covered. The original stays on this phone.</div>
+</div>
+<div style="height: 300px; border: 1px solid #E3E0D8; border-radius: 18px; background: #FFFFFF; position: relative; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<div style="font-size: 13px; color: #5B6068">Photo</div>
+<div style="position: absolute; left: 40px; top: 44px; width: 70px; height: 70px; border: 2px solid #8A6410; border-radius: 10px; background: #E3E0D8; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #14161A">Face</div>
+<div style="position: absolute; right: 52px; top: 70px; width: 62px; height: 62px; border: 2px solid #8A6410; border-radius: 10px; background: #E3E0D8; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #14161A">Face</div>
+<div style="position: absolute; left: 96px; bottom: 40px; width: 170px; height: 26px; border: 2px solid #8A6410; border-radius: 8px; background: #E3E0D8; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #14161A">Phone number</div>
+</div>
+<div style="display: flex; gap: 8px">
+<button style="flex: 1; min-height: 64px; background: #14161A; color: #FFFFFF; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14); border: 0; border-radius: 14px; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12s3.500-6 9-6 9 6 9 6-3.500 6-9 6-9-6-9-6z"></path><path d="M4 4l16 16"></path></svg><span>Cover</span></button>
+<button style="flex: 1; min-height: 64px; background: transparent; color: #14161A; border: 1px solid #E3E0D8; border-radius: 14px; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14h14"></path><path d="M3 7h14v14"></path></svg><span>Crop</span></button>
+<button style="flex: 1; min-height: 64px; background: transparent; color: #14161A; border: 1px solid #E3E0D8; border-radius: 14px; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14161A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14"></path><path d="M12 6v13"></path></svg><span>Text only</span></button>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #E3E0D8; border-radius: 18px">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #E3E0D8; font-size: 15px">
+<div>Location and device details</div>
+<div style="color: #0E7C6B">Removed</div>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; font-size: 15px">
+<div>2 faces, 1 phone number</div>
+<div style="color: #8A6410">Covered</div>
+</div>
+</div>
+<div style="font-size: 13px; line-height: 1.45; color: #5B6068; padding: 0 4px">Automatic detection can miss things. Look before you send.</div>
+<div style="flex: 1"></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px; padding: 0 4px">
+<div style="color: #0E7C6B">Gemma 4 31B, private</div>
+<div style="color: #8A6410">under $0.01</div>
+</div>
+<button style="height: 56px; background: #14161A; color: #FFFFFF; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14); border: 0; border-radius: 16px; font-family: Inter, sans-serif; font-size: 16px; font-weight: 600">Add to message</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

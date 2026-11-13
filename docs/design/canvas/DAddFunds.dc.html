@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add funds with cash options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #D9D6CD; color: #14161A; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding-top: 24px">
+<div style="flex: 1; background: #F6F5F1; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; padding: 10px 16px 20px; gap: 10px">
+<div style="align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #C9C6BE"></div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Add funds</div>
+<button aria-label="Close" style="width: 44px; height: 44px; background: transparent; border: 0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<div style="font-size: 12px; font-weight: 600; color: #0E7C6B; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 4px 0">Cannot be linked to you</div>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #9AD3C8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M3 10h18"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Card</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">Tap a Forge eCash card bought with cash.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #9AD3C8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6"></rect><rect x="14" y="4" width="6" height="6"></rect><rect x="4" y="14" width="6" height="6"></rect><path d="M14 14h2v2M20 14v6h-6"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Voucher</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">Scan the code on a paper voucher.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #9AD3C8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"></ellipse><path d="M5 7v5c0 1.700 3.100 3 7 3s7-1.300 7-3V7"></path><path d="M5 12v5c0 1.700 3.100 3 7 3s7-1.300 7-3v-5"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">eCash</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">Paste or scan a Cashu token, from your wallet or a friend.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<div style="font-size: 12px; font-weight: 600; color: #8A6410; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 4px 0">Depends on where the money comes from</div>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E3E0D8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Lightning</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">Private from your own wallet. An exchange that knows your name will see this payment.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E3E0D8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1"></path><path d="M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">On-chain</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">Bitcoin payments are public and permanent.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button style="text-align: left; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E3E0D8; border-radius: 18px; color: #14161A; font-family: Inter, sans-serif; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<span style="flex: none; width: 44px; height: 44px; border-radius: 12px; background: #F6F5F1; border: 1px solid #E3E0D8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6410" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Other mint</span><span style="font-size: 13px; line-height: 1.4; color: #5B6068">eCash from another Cashu mint, converted.</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6068" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
