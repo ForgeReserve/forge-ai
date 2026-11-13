@@ -1,4 +1,7 @@
 # Local Cashu mints for the e2e suite. FakeWallet backends: quotes are paid automatically.
+# One project name for every checkout and worktree, so `pnpm mint:up` finds mints that are already
+# running instead of starting a second set on the same ports.
+name: forge-ai
 x-mint: &mint
   image: cashubtc/nutshell:0.22.1
   command: ["poetry", "run", "mint"]
