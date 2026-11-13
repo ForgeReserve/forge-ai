@@ -137,6 +137,7 @@ export const BUNDLED = [
   { kind: 'look', folder: 'dark' },
   { kind: 'look', folder: 'midnight' },
   { kind: 'mode', folder: 'default' },
+  { kind: 'fund', folder: 'note' },
   { kind: 'fund', folder: 'ecash' },
   { kind: 'fund', folder: 'lightning' },
   { kind: 'fund', folder: 'onchain' },

@@ -15,10 +15,13 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
   const items = el('ul', { class: 'held', id: 'heldItems' });
   const outBtn = el('button', { type: 'button', class: 'btn soft', id: 'takeOutBtn', onclick: () => nav('takeOut') }, icon('takeout', 20), el('span', { text: t('funds.takeOut') }));
   const vaultBox = el('div', { class: 'vault-box', id: 'vaultBox' });
+  // No funds yet: scanning a paper note is the first thing offered.
+  const scanBtn = el('button', { type: 'button', class: 'btn primary block', id: 'fundsScanNote', hidden: true, onclick: () => nav('fund', { id: 'note' }) }, icon('qr', 20), el('span', { text: t('funds.scanNote') }));
   const fundsCard = el(
     'section',
     { class: 'card big-card', 'aria-labelledby': 'fundsCap' },
     el('div', { class: 'card-top' }, fr.node, el('div', {}, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), amount, fundsNote, refundable)),
+    scanBtn,
     el('div', { class: 'card-btns' }, el('button', { type: 'button', class: 'btn primary', id: 'addFundsBtn', onclick: () => nav('addFunds') }, icon('plus', 20), el('span', { text: t('funds.add') })), outBtn),
   );
   const memCard = el(
@@ -97,6 +100,7 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
   const update = () => {
     const v = state.view();
     fr.set(v.fundsFraction);
+    scanBtn.hidden = !v.scanNote;
     amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
     fundsNote.textContent = !v.hasKey ? t('funds.empty') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
     refundable.textContent = v.refundable > 0 ? t('funds.refundable', { amount: format.units(v.refundable, S.unit) }) : '';
@@ -143,14 +147,27 @@ export function addFundsScreen({ t, state, nav, back, registry }) {
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
 
-/** Hosts one fund module's view. The module builds its own body from the inputs it was given. */
-export function fundScreen({ t, state, back, backTo, registry }, { id }) {
+// A token handed from one fund module to another (a note from another mint goes to Other mint). Kept
+// in memory only, for the one screen change; it is not stored, since the note it came from still has it.
+let handoff = null;
+
+/**
+ * Hosts one fund module's view. The module builds its own body from the inputs it was given.
+ * open(id, {token}) switches to another fund module and hands it the token.
+ */
+export function fundScreen({ t, state, nav, back, backTo, registry }, { id }) {
+  const given = handoff?.id === id ? handoff : null;
+  handoff = null;
   const entry = registry.list('fund').find((x) => x.instance.id === id);
   if (!entry || !entry.instance.available(state.S.methods)) {
     const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('addFunds.title'), back, t('common.back')), el('p', { class: 'hint pad', text: t('addFunds.unavailable') }));
     return { node: main, focus: main.querySelector('h1') };
   }
-  const view = entry.instance.view({ done: () => backTo('funds') });
+  const open = (to, { token } = {}) => {
+    handoff = { id: to, token };
+    nav('fund', { id: to }, { replace: true });
+  };
+  const view = entry.instance.view({ done: () => backTo('funds'), open, token: given?.token });
   const main = el('main', { class: 'screen sub fund', 'data-screen': 'fund', 'data-fund': id }, backHeader(t(`fund.${id}.name`), back, t('common.back')), view.node);
   return { node: main, update: view.update, destroy: view.destroy, focus: main.querySelector('h1') };
 }

@@ -4,7 +4,8 @@
 // confirm until the engine reports the outcome; if the person leaves this screen first, the app looks
 // the outcome up on start and on Funds (kit.js, settlePendingForeign). eCash the engine sends back
 // (unused fees, or the token's value when the payment fails) is kept on the phone until the person
-// saves it. Its amount is not known here, so it is shown without one.
+// saves it. Its amount is not known here, so it is shown without one. A token handed over by another
+// fund module (a scanned paper note) fills the box and is checked at once.
 import { confirmOutcome, inviteField, poll, settleForeign, tokenBox } from '../kit.js';
 
 export function create(inputs) {
@@ -14,7 +15,7 @@ export function create(inputs) {
     group: 'depends',
     icon: 'swap',
     available: (methods) => !!methods?.foreign?.enabled,
-    view({ done }) {
+    view({ done, token: given }) {
       const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (wallet.methods()?.lightning?.units ?? ['usd', 'sat']);
       const unit = wallet.unit() ?? units[0];
       const msg = ui.msgLine();
@@ -127,6 +128,12 @@ export function create(inputs) {
         if (invite.missing(msg)) return;
         quote(token);
       });
+      // A token handed over by another fund module (a scanned note from another mint): ask for the price
+      // at once, so the person sees the amount and the fees before confirming.
+      if (given) {
+        box.input.value = given;
+        queueMicrotask(() => check.click());
+      }
       return {
         node: ui.el('div', { class: 'fund-view' }, body, foot),
         destroy: () => {

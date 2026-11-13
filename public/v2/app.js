@@ -91,6 +91,8 @@ function view() {
     balanceMsub: hasKey ? S.balanceMsub : null,
     balanceText: hasKey && S.balanceMsub != null ? fmtBalance(S.balanceMsub, S.unit) : null,
     fundsFraction: hasKey ? fundsFraction(S.balanceMsub, S.peakMsub) : 0,
+    // No funds at all (no balance yet, or a balance at zero): the gold ring invites a paper note scan.
+    scanNote: (!hasKey || S.balanceMsub === 0) && !!registry?.list('fund').some((x) => x.instance.id === 'note'),
     refundable: hasKey ? Math.floor((S.availableMsub ?? S.balanceMsub ?? 0) / 1000) : 0,
     questionsLeft: hasKey ? questionsLeft(S.balanceMsub, perQuestion(model, unit)) : 0,
     memory: mem,
@@ -213,6 +215,7 @@ const wallet = {
   refresh: refreshBalance,
   methods: () => S.methods,
   mints: () => S.mints,
+  units: () => S.units,
   lockKey: () => lockKey(),
   /** Adds eCash through the vault: stored on the phone first, removed only once credited. */
   topup: (token, invite) => topupWithVault({ engine, vault, token, key: S.key, invite, setKey }),

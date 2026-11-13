@@ -56,6 +56,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14); }
 .chip-low { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--low-tint); border: 1px solid var(--low-line); color: var(--low-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
 .held-line { margin: 0; color: var(--text-2); font-size: 14px; font-weight: 600; }
+/* No funds: the gold ring invites a paper note scan. Its track breathes, unless reduced motion is on. */
+.chip-scan { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--gold-tint); border: 1px solid var(--gold-callout); color: var(--gold-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
+.home-rings.invite .rings-svg circle:first-child { animation: pulse 2.4s var(--ease) infinite; }
 
 /* Bottom row */
 .bottom-row { display: flex; gap: 8px; }
@@ -182,6 +185,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .seg button { flex: 1; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
 .seg button[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); }
 .scanner video { width: 100%; border-radius: 16px; background: #000; }
+.note-view .scanner video { aspect-ratio: 1; object-fit: cover; }
+.note-hint { margin: 0; text-align: center; font-weight: 600; }
+.note-mint { align-self: center; margin: 0; overflow-wrap: anywhere; text-align: center; }
 .token-out { display: flex; flex-direction: column; gap: 14px; }
 .token-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--gold-callout); }
 .form { display: flex; flex-direction: column; gap: 10px; }
