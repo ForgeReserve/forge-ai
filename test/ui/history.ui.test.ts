@@ -224,6 +224,20 @@ describe('History and burn', () => {
   }, 120_000);
 });
 
+describe('Balance key', () => {
+  it('picks up a balance key stored after the app opened, as the Classic app in another tab would', async () => {
+    const { ctx, page } = await phone();
+    await page.goto(`${g.url}/v2/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    const key = await fundedKey();
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.goto(`${g.url}/v2/#/funds`);
+    await expect.poll(() => page.textContent('#fundsAmount')).toBe('$2.00');
+    await ctx.close();
+  }, 60_000);
+});
+
 describe('Auto-delete', () => {
   /** Writes conversations straight into the app's database, as if they were asked earlier. */
   const seed = (page: Page, convs: Array<{ id: string; q: string; ago: number }>, autoDelete: string) =>

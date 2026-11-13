@@ -851,6 +851,14 @@ function screenFor(name, params) {
 
 function render() {
   if (erased) return;
+  // A balance key stored after this page read it (the Classic app in another tab, say) is picked up here.
+  if (!S.key && registry) {
+    const k = ui.load(keyStore());
+    if (k) {
+      S.key = k;
+      refreshBalance();
+    }
+  }
   const { name, params } = parse(location.hash);
   unsub?.();
   current?.destroy?.();
