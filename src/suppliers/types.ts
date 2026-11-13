@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import type { Readable } from 'node:stream';
-import type { ModelConfig, SupplierConfig } from '../config.ts';
+import type { AudioModelConfig, ModelConfig, SupplierConfig } from '../config.ts';
 
 export interface ChatCall {
   model: ModelConfig;
@@ -37,6 +37,25 @@ export interface EncryptedResponse {
   usage: Promise<ReportedUsage | undefined>;
 }
 
+/** Speech to text. The audio is held in memory only: never logged, never written anywhere. */
+export interface TranscribeCall {
+  model: AudioModelConfig;
+  audio: Uint8Array;
+  /** wav or mp3. */
+  format: 'wav' | 'mp3';
+  /** Optional ISO 639-1 language hint. */
+  language?: string;
+  signal: AbortSignal;
+}
+
+/** Text to speech. Returns audio (WAV from Tinfoil). The text is never logged. */
+export interface SpeechCall {
+  model: AudioModelConfig;
+  input: string;
+  voice: string;
+  signal: AbortSignal;
+}
+
 export interface Supplier {
   readonly id: string;
   readonly config: SupplierConfig;
@@ -44,6 +63,10 @@ export interface Supplier {
   chat(call: ChatCall): Promise<Response>;
   /** Encrypted pass-through (EHBP). Only suppliers that support it implement this. */
   forwardEncrypted?(call: EncryptedCall): Promise<EncryptedResponse>;
+  /** OpenAI-compatible POST /audio/transcriptions. Returns the upstream Response (any status). */
+  transcribe?(call: TranscribeCall): Promise<Response>;
+  /** OpenAI-compatible POST /audio/speech. Returns the upstream Response (any status). */
+  speech?(call: SpeechCall): Promise<Response>;
   /** Proxy for the supplier's attestation bundle, if any. */
   attestation?(): Promise<Response>;
   /** Proxy for the enclave's HPKE key config (/.well-known/hpke-keys), if any. */

@@ -7,6 +7,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
+import { audioModelList, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
@@ -114,10 +115,10 @@ export function createApp(d: Deps) {
   app.use('/v1/*', cors({ origin: '*', allowHeaders: ALLOW, exposeHeaders: EXPOSE, allowMethods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
   app.use('/attestation', cors({ origin: '*', allowMethods: ['GET'] }));
   app.use('/.well-known/*', cors({ origin: '*', allowMethods: ['GET'] }));
-  app.use(
-    '/v1/*',
-    bodyLimit({ maxSize: env.FORGE_MAX_BODY_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `request body over ${env.FORGE_MAX_BODY_BYTES} bytes`) }),
-  );
+  const defaultLimit = bodyLimit({ maxSize: env.FORGE_MAX_BODY_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `request body over ${env.FORGE_MAX_BODY_BYTES} bytes`) });
+  // A recording is larger than any chat body, so speech to text has its own limit.
+  const audioLimit = bodyLimit({ maxSize: env.FORGE_AUDIO_MAX_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `audio over ${env.FORGE_AUDIO_MAX_BYTES} bytes`) });
+  app.use('/v1/*', (c, next) => (c.req.path === TRANSCRIPTIONS_PATH ? audioLimit(c, next) : defaultLimit(c, next)));
   app.use('/v1/*', async (c, next) => {
     if (c.req.method === 'OPTIONS' || c.req.method === 'GET') return next();
     const key = bearer(c);
@@ -171,7 +172,17 @@ export function createApp(d: Deps) {
         upstream_model: s.type === 'tinfoil' ? m.upstream : undefined,
       };
     });
-    return c.json({ object: 'list', data, units: env.FORGE_UNITS, mints: wallet.trustedMints, mint_aliases: mintAliasList(wallet.trustedMints), invite_only: env.FORGE_INVITE_ONLY, btc_usd: rate ?? null });
+    return c.json({
+      object: 'list',
+      data,
+      // Speech to text and text to speech, listed apart so a chat client never offers them as chat models.
+      audio: audioModelList(config, rate),
+      units: env.FORGE_UNITS,
+      mints: wallet.trustedMints,
+      mint_aliases: mintAliasList(wallet.trustedMints),
+      invite_only: env.FORGE_INVITE_ONLY,
+      btc_usd: rate ?? null,
+    });
   });
 
   // ------------------------------------------------------------------ wallet
@@ -861,6 +872,10 @@ export function createApp(d: Deps) {
       },
     });
   });
+
+  // ------------------------------------------------------------------ audio (speech to text, text to speech)
+
+  registerAudioRoutes(app, d, apiError, bearer);
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.

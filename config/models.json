@@ -1,5 +1,5 @@
 {
-  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory prices are PLACEHOLDERS (price_verified=false): set them from your Token Factory rate card before launch (their /v1/model/info returned no cost fields on 2026-11-09; context lengths below are from that endpoint's max_input_tokens). Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09.",
+  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory prices are PLACEHOLDERS (price_verified=false): set them from your Token Factory rate card before launch (their /v1/model/info returned no cost fields on 2026-11-09; context lengths below are from that endpoint's max_input_tokens). Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09. Audio models (the audio list) were read from https://api.tinfoil.sh/api/config/models on 2026-11-13: whisper-large-v3-turbo requestPrice 0.01 USD and voxtral-tts requestPrice 0.002 USD per request, no token price; voices from docs.tinfoil.sh/guides/processing-audio.",
   "suppliers": {
     "tokenfactory": {
       "type": "openai",
@@ -306,6 +306,68 @@
       "uncensored": true,
       "context_length": 917504,
       "name": "Kimi K3 Abliterated"
+    }
+  ],
+  "audio": [
+    {
+      "id": "tinfoil/whisper-large-v3-turbo",
+      "kind": "transcription",
+      "supplier": "tinfoil",
+      "upstream": "whisper-large-v3-turbo",
+      "name": "Whisper Large V3 Turbo",
+      "request_usd": 0.01,
+      "usd_per_second": 0,
+      "price_verified": true,
+      "max_seconds": 60,
+      "formats": [
+        "wav",
+        "mp3"
+      ],
+      "languages": []
+    },
+    {
+      "id": "tinfoil/voxtral-tts",
+      "kind": "speech",
+      "supplier": "tinfoil",
+      "upstream": "voxtral-tts",
+      "name": "Voxtral TTS",
+      "request_usd": 0.002,
+      "usd_per_kchar": 0,
+      "price_verified": true,
+      "max_chars": 500,
+      "voices": [
+        "neutral_female",
+        "neutral_male",
+        "casual_female",
+        "casual_male",
+        "cheerful_female",
+        "ar_male",
+        "de_female",
+        "de_male",
+        "es_female",
+        "es_male",
+        "fr_female",
+        "fr_male",
+        "hi_female",
+        "hi_male",
+        "it_female",
+        "it_male",
+        "nl_female",
+        "nl_male",
+        "pt_female",
+        "pt_male"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "es",
+        "de",
+        "it",
+        "pt",
+        "nl",
+        "ar",
+        "hi"
+      ]
     }
   ]
 }

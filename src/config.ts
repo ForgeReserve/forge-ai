@@ -124,6 +124,8 @@ export const EnvSchema = z.object({
   /** Origin admin POSTs must come from (e.g. https://ai.forge-reserve.com). Unset: the request's own Host. */
   FORGE_ADMIN_ORIGIN: z.string().url().optional(),
   FORGE_ADMIN_RATE_LIMIT_RPM: z.coerce.number().int().min(1).default(120),
+  /** Largest audio upload for POST /v1/audio/transcriptions, in bytes. Other routes keep FORGE_MAX_BODY_BYTES. */
+  FORGE_AUDIO_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(4_000_000),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
@@ -178,10 +180,42 @@ const ModelSchema = z.object({
 });
 export type ModelConfig = z.infer<typeof ModelSchema>;
 
+/**
+ * An audio model: speech to text (POST /v1/audio/transcriptions) or text to speech (POST /v1/audio/speech).
+ * Priced per request: the supplier's cost per request, plus per second of audio in or per character out,
+ * all in USD before FORGE_MARKUP.
+ */
+const AudioModelSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['transcription', 'speech']),
+  supplier: z.string(),
+  upstream: z.string(),
+  name: z.string().optional(),
+  request_usd: z.number().nonnegative().default(0),
+  /** transcription: per second of audio sent. */
+  usd_per_second: z.number().nonnegative().default(0),
+  /** speech: per 1,000 characters of text sent. */
+  usd_per_kchar: z.number().nonnegative().default(0),
+  /** true once the cost above has been checked against the supplier's price list. */
+  price_verified: z.boolean().default(false),
+  /** transcription: the longest recording taken, in seconds. */
+  max_seconds: z.number().int().positive().max(3600).default(60),
+  /** speech: the most characters in one request. */
+  max_chars: z.number().int().positive().max(20_000).default(1000),
+  /** transcription: audio containers the upstream accepts. */
+  formats: z.array(z.enum(['wav', 'mp3'])).default(['wav']),
+  /** speech: the voices the upstream offers; the first is the default. */
+  voices: z.array(z.string().min(1)).default([]),
+  /** Language codes the model handles well (shown to the app; not enforced). */
+  languages: z.array(z.string()).default([]),
+});
+export type AudioModelConfig = z.infer<typeof AudioModelSchema>;
+
 export const CatalogSchema = z
   .object({
     suppliers: z.record(z.string(), SupplierSchema),
     models: z.array(ModelSchema).min(1),
+    audio: z.array(AudioModelSchema).default([]),
   })
   .superRefine((c, ctx) => {
     const ids = new Set<string>();
@@ -189,6 +223,12 @@ export const CatalogSchema = z
       if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });
       ids.add(m.id);
       if (!c.suppliers[m.supplier]) ctx.addIssue({ code: 'custom', message: `model ${m.id}: unknown supplier ${m.supplier}` });
+    }
+    for (const m of c.audio) {
+      if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });
+      ids.add(m.id);
+      if (!c.suppliers[m.supplier]) ctx.addIssue({ code: 'custom', message: `audio model ${m.id}: unknown supplier ${m.supplier}` });
+      if (m.kind === 'speech' && m.voices.length === 0) ctx.addIssue({ code: 'custom', message: `audio model ${m.id}: speech needs at least one voice` });
     }
     for (const [id, s] of Object.entries(c.suppliers)) {
       if (s.pricing === 'flat' && !s.flat) ctx.addIssue({ code: 'custom', message: `supplier ${id}: flat pricing needs a flat schedule` });
@@ -251,5 +291,6 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverr
   );
   const models = cat.data.models.filter((m) => !keyless.has(m.supplier));
   if (models.length === 0) throw new Error('no models left: set the API key of at least one supplier');
-  return { env, catalog: { ...cat.data, models }, trustedMints: env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl) };
+  const audio = cat.data.audio.filter((m) => !keyless.has(m.supplier));
+  return { env, catalog: { ...cat.data, models, audio }, trustedMints: env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl) };
 }

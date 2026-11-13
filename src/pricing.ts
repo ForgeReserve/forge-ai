@@ -67,3 +67,22 @@ export function displayPrice(usdPerMtok: number, markup: number, unit: Unit, btc
 export function estimateTokensFromBytes(bytes: number, bytesPerToken: number): number {
   return Math.ceil(bytes / bytesPerToken);
 }
+
+/** What one audio request is measured by: seconds of audio in (transcription) or characters of text (speech). */
+export interface AudioUsage {
+  seconds?: number;
+  chars?: number;
+}
+
+/**
+ * Price of one audio request in nano-USD: the per-request cost, plus per second of audio or per 1,000
+ * characters, times the markup. Rounded up so we never undercharge. Markup 1 gives our own cost.
+ */
+export function audioCostNanoUsd(
+  model: { request_usd: number; usd_per_second: number; usd_per_kchar: number },
+  usage: AudioUsage,
+  markup: number,
+): number {
+  const usd = model.request_usd + (usage.seconds ?? 0) * model.usd_per_second + ((usage.chars ?? 0) / 1000) * model.usd_per_kchar;
+  return Math.ceil(usd * markup * 1e9 - 1e-6);
+}
