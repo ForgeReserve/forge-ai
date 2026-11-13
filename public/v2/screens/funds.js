@@ -39,16 +39,28 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
     const rows = [];
     for (const e of vault.incoming()) {
       const refused = e.state === 'refused';
+      // Other-mint tokens settle when the engine answers (the app looks them up on start and on Funds).
+      // Once the token was taken, copying it is no use, so those rows have no Copy button.
+      const taken = !refused && e.via === 'othermint' && (e.code === 'change_pending' || e.code === 'refund_pending');
+      const [title, sub] = refused
+        ? [t('funds.notAdded'), t('funds.notAddedSub', { message: e.message ?? '' })]
+        : e.via === 'othermint'
+          ? e.code === 'change_pending'
+            ? [t('funds.changeWaiting'), t('funds.changeWaitingSub')]
+            : e.code === 'refund_pending'
+              ? [t('funds.notAdded'), t('funds.refundWaitingSub')]
+              : [t('funds.waiting'), t('funds.waitingOther')]
+          : [t('funds.waiting'), t('funds.waitingSub')];
       rows.push(
         el(
           'div',
-          { class: `vault-row ${refused ? 'refused' : 'waiting'}` },
-          el('b', { text: refused ? t('funds.notAdded') : t('funds.waiting') }),
-          el('p', { text: refused ? t('funds.notAddedSub', { message: e.message ?? '' }) : t('funds.waitingSub') }),
+          { class: `vault-row ${refused ? 'refused' : 'waiting'}`, 'data-vault-in': e.id },
+          el('b', { text: title }),
+          el('p', { text: sub }),
           el(
             'div',
             { class: 'row-btns' },
-            el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.token)) ? t('answer.copied') : t('answer.copyFailed')), text: t('funds.copyToken') }),
+            taken ? null : el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.token)) ? t('answer.copied') : t('answer.copyFailed')), text: t('funds.copyToken') }),
             refused
               ? el('button', {
                   type: 'button',
@@ -70,9 +82,10 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
       rows.push(
         el(
           'div',
-          { class: 'vault-row waiting' },
-          el('b', { text: t('funds.unsaved') }),
-          el('p', { text: t('funds.unsavedSub', { amount: format.units(o.amount, o.unit) }) }),
+          { class: 'vault-row waiting', 'data-vault-out': o.id },
+          // eCash that came back from another mint has no amount the phone knows.
+          el('b', { text: o.amount == null ? t('funds.returned') : t('funds.unsaved') }),
+          el('p', { text: o.amount == null ? t('funds.unsavedSubReturned') : t('funds.unsavedSub', { amount: format.units(o.amount, o.unit) }) }),
           el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn small', onclick: () => nav('takeOut'), text: t('out.title') })),
         ),
       );
@@ -172,7 +185,7 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     return el(
       'div',
       { class: 'token-card', 'data-token-id': o.id },
-      el('b', { text: t('out.ready', { amount: format.units(o.amount, o.unit) }) }),
+      el('b', { text: o.amount == null ? t('out.readyReturned') : t('out.ready', { amount: format.units(o.amount, o.unit) }) }),
       box,
       parts,
       el('p', { class: 'note', text: t('out.keep') }),

@@ -65,16 +65,30 @@ export function applyEvent(ev, h) {
   if (typeof d.content === 'string' && d.content) h.onText?.(d.content);
 }
 
-/** Reads a fetch Response body to the end, calling the handlers as events arrive. */
+/**
+ * Reads a fetch Response body to the end, calling the handlers as events arrive. An error inside the
+ * stream does not stop the reading: the gateway sends its `forge` event (what it charged) right after
+ * the error, and the app needs it to say what the failure cost. The first error is thrown at the end.
+ */
 export async function readStream(body, h) {
   const reader = body.getReader();
   const dec = new TextDecoder();
   const parser = createSseParser();
+  let failed = null;
+  const apply = (ev) => {
+    try {
+      applyEvent(ev, failed ? { onForge: h.onForge } : h);
+    } catch (e) {
+      if (!(e instanceof StreamError)) throw e;
+      failed ??= e;
+    }
+  };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    for (const ev of parser.push(dec.decode(value, { stream: true }))) applyEvent(ev, h);
+    for (const ev of parser.push(dec.decode(value, { stream: true }))) apply(ev);
   }
-  for (const ev of parser.push(dec.decode())) applyEvent(ev, h);
-  for (const ev of parser.flush()) applyEvent(ev, h);
+  for (const ev of parser.push(dec.decode())) apply(ev);
+  for (const ev of parser.flush()) apply(ev);
+  if (failed) throw failed;
 }

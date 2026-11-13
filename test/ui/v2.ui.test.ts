@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
-import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { createInvite, type Gateway, MINT_A, MINT_C, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { startOnchainMock } from '../e2e/onchain-mock.ts';
 
 // The v2 app driven in a phone-sized browser: the installed Chrome (channel 'chrome', no browser
 // download), a local gateway with the mock supplier, and the local test mints (pnpm mint:up).
@@ -254,6 +255,194 @@ describe('v2 in a phone-sized browser', () => {
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(246, 245, 241)');
     await ctx.close();
   }, 60_000);
+});
+
+describe('v2 money paths in a phone-sized browser', () => {
+  /** An SSE body as the gateway sends it. */
+  const sseBody = (...events: string[]) => events.join('');
+  const errorEvent = `data: ${JSON.stringify({ error: { message: 'upstream stream failed: reset', type: 'upstream_error' } })}\n\n`;
+  const forgeEvent = (charged: number) => `event: forge\ndata: ${JSON.stringify({ request_id: 'r', unit: 'usd', charged_msub: charged, balance_msub: 200_000 - charged, partial: true })}\n\n`;
+
+  it('says what a broken answer cost, and claims "not charged" only when the engine said so', async () => {
+    const { ctx, page, errors } = await phone();
+    const key = await fundedKey();
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await chooseModel(page, 'mock-echo');
+    // The answer stream is replaced by what the gateway sends when the model fails midway.
+    let reply = sseBody(errorEvent, forgeEvent(1234));
+    await page.route('**/v1/chat/completions', (route) => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: reply }));
+    const ask = async (q: string) => {
+      await page.goto(`${g.url}/v2/#/type`);
+      await page.waitForSelector('[data-screen=type]');
+      await page.fill('#question', q);
+      await page.click('#sendBtn');
+      await page.waitForSelector('#answerError:not([hidden])');
+      return (await page.textContent('#answerError')) ?? '';
+    };
+    // Charged: the engine's final event came after the error.
+    let words = await ask('First?');
+    expect(words).toMatch(/^The model stopped early\. That cost 1\.23 cents\./);
+    expect(words).not.toContain('not charged');
+    // Not charged: the engine said 0.
+    reply = sseBody(errorEvent, forgeEvent(0));
+    words = await ask('Second?');
+    expect(words).toContain('The model did not answer. You were not charged.');
+    // No final event at all: no claim either way.
+    reply = sseBody(errorEvent);
+    words = await ask('Third?');
+    expect(words).toContain('The model did not answer. Check your funds.');
+    expect(words).not.toContain('not charged');
+    // An empty answer the engine charged for (a reasoning model that spent it all on reasoning).
+    reply = sseBody(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { reasoning_content: 'thinking' } }] })}\n\n`, 'data: [DONE]\n\n', forgeEvent(500).replace(',"partial":true', ''));
+    words = await ask('Fourth?');
+    expect(words).toMatch(/^The model stopped early\. That cost 0\.500 cents\./);
+
+    // The answer screen's button reads Hold to talk, with the same hint as the home button.
+    expect(await page.textContent('#replyBtn')).toContain('Hold to talk');
+    const hint = await page.getAttribute('#replyBtn', 'aria-describedby');
+    expect(await page.textContent(`#${hint}`)).toBe('Voice comes soon. Type your question for now.');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  it('collects a refund the engine issued later (202), even when the first refunds list failed', async () => {
+    const { ctx, page } = await phone();
+    const key = await fundedKey();
+    let refunds: 'fail' | 'owed' | 'done' = 'fail';
+    await page.route('**/v1/wallet/refunds', (route) =>
+      refunds === 'fail'
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'internal', message: 'boom' } }) })
+        : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ id: 'out_later', status: refunds, token: refunds === 'done' ? 'cashuBlaterrefund' : null, amount: 100, unit: 'usd' }] }) }),
+    );
+    await page.route('**/v1/wallet/refund', (route) => route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ id: 'out_later', token: null, amount: 100, unit: 'usd', status: 'owed' }) }));
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.goto(`${g.url}/v2/#/funds/out`);
+    await page.waitForSelector('[data-screen=takeOut]');
+    await expect.poll(() => page.inputValue('#outAmount')).toBe('2.00');
+    await page.fill('#outAmount', '1.00');
+    await page.click('#outBtn');
+    await expect.poll(() => page.textContent('[role=status].msg')).toContain('Open this screen again in a minute');
+    // Still owed: nothing to show yet.
+    refunds = 'owed';
+    await page.goto(`${g.url}/v2/#/funds`);
+    await page.goto(`${g.url}/v2/#/funds/out`);
+    await page.waitForSelector('[data-screen=takeOut]');
+    await page.waitForTimeout(500);
+    expect(await page.locator('.token-card').count()).toBe(0);
+    // Issued: offered on the next visit.
+    refunds = 'done';
+    await page.goto(`${g.url}/v2/#/funds`);
+    await page.goto(`${g.url}/v2/#/funds/out`);
+    await page.waitForSelector('.token-card[data-token-id=out_later]');
+    expect(await page.textContent('.token-card b')).toBe('Here is $1.00 as eCash.');
+    await ctx.close();
+  }, 60_000);
+
+  it('adds eCash from another mint; the outcome lands even after leaving the screen mid-way', async () => {
+    const up = await fetch(`${MINT_C}/v1/info`).then((r) => r.ok).catch(() => false);
+    if (!up) throw new Error('The local test mint C is not running. Start the mints with pnpm mint:up.');
+    const gf = await startGateway({ env: { FORGE_FOREIGN_ALLOW_INSECURE: 'true', FORGE_INVITE_ONLY: 'false' } });
+    const { ctx, page, errors } = await phone();
+    try {
+      await page.goto(`${gf.url}/v2/#/funds/add`);
+      await page.waitForSelector('#fund-othermint');
+      await page.click('#fund-othermint');
+      await page.waitForSelector('[data-fund=othermint]');
+      await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 1000));
+      await page.click('#foreignCheck');
+      await page.waitForSelector('#foreignConfirm');
+      // The engine takes the token, but the phone hears "in_flight" (being processed): the token must
+      // stay pending, not be marked as not taken.
+      await page.route('**/v1/wallet/fund/foreign/confirm', async (route) => {
+        await route.fetch();
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'in_flight', message: 'this funding is being processed' } }) });
+      });
+      await page.click('#foreignConfirm');
+      await expect
+        .poll(async () => JSON.parse((await page.evaluate(() => localStorage.getItem('forge2.vault')))!).in, { timeout: 20_000 })
+        .toMatchObject([{ via: 'othermint', state: 'pending', code: 'in_flight', fundingId: expect.stringMatching(/.+/) }]);
+      // Leave at once: the fund screen's poller stops. Funds looks the funding up and settles it.
+      await page.goto(`${gf.url}/v2/#/funds`);
+      await page.waitForSelector('[data-screen=funds]');
+      await expect
+        .poll(
+          async () => {
+            const v = JSON.parse((await page.evaluate(() => localStorage.getItem('forge2.vault')))!);
+            if (v.in.length) await page.reload(); // not settled yet: open Funds again
+            return v;
+          },
+          { timeout: 30_000, interval: 1000 },
+        )
+        .toMatchObject({ in: [], out: [{ amount: null, token: expect.stringMatching(/^cashuB/) }] });
+      // The change is only the unused fee: shown with no amount, never as the token's 1,000 sat.
+      await page.reload();
+      await page.waitForSelector('[data-screen=funds]');
+      await expect.poll(() => page.textContent('#vaultBox')).toContain('eCash that came back');
+      expect(await page.textContent('#vaultBox')).not.toMatch(/1,?000/);
+      // The balance was credited.
+      const key = await page.evaluate(() => localStorage.getItem('forge.balanceKey'));
+      const w: any = await (await fetch(`${gf.url}/v1/wallet`, { headers: { authorization: `Bearer ${key}` } })).json();
+      expect(w.balance_msub).toBeGreaterThan(0);
+      await page.goto(`${gf.url}/v2/#/funds/out`);
+      await page.waitForSelector('.token-card');
+      expect(await page.textContent('.token-card b')).toBe('Here is the eCash that came back.');
+      // The only console error is the browser logging the stubbed 409.
+      expect(errors.filter((e) => !e.includes('status of 409'))).toEqual([]);
+    } finally {
+      await ctx.close();
+      await gf.close();
+    }
+  }, 90_000);
+
+  it('adds funds on-chain: address, confirmed deposit, balance; a usd balance is told to use another way', async () => {
+    const mock = await startOnchainMock(MINT_A);
+    const go = await startGateway({ env: { FORGE_TRUSTED_MINTS: mock.url, FORGE_ONCHAIN_ENABLED: 'true', FORGE_INVITE_ONLY: 'false' } });
+    try {
+      const { ctx, page, errors } = await phone();
+      await page.goto(`${go.url}/v2/#/funds/add`);
+      await page.waitForSelector('#fund-onchain');
+      await page.click('#fund-onchain');
+      await page.waitForSelector('#onchainGet');
+      const created = page.waitForResponse((r) => r.url().endsWith('/v1/wallet/fund/onchain') && r.request().method() === 'POST');
+      await page.click('#onchainGet');
+      const f: any = await (await created).json();
+      await page.waitForSelector('.qr svg');
+      expect(await page.textContent('.keyline')).toBe(f.request.match(/.{1,4}/g).join(' '));
+      expect(await page.textContent('[data-fund=onchain] .status-line')).toBe('Watching the address');
+      // The deposit confirms at the mint; the engine mints and credits it.
+      const quote = go.deps.funding.get(f.id)!.quote!;
+      await go.deps.funding.advance(f.id);
+      mock.pay(quote, 20_000);
+      await go.deps.funding.advance(f.id);
+      // The screen polls every 15 seconds.
+      await expect.poll(() => page.textContent('[data-fund=onchain] .status-line'), { timeout: 30_000 }).toBe('Added 20,000 sat. More sent to this address is added too.');
+      await page.goto(`${go.url}/v2/#/funds`);
+      await expect.poll(() => page.textContent('#fundsAmount')).toBe('20,000 sat');
+      expect(errors).toEqual([]);
+      await ctx.close();
+
+      // A balance in US dollars cannot take an on-chain deposit.
+      const usd = await phone();
+      await usd.page.route('**/v1/wallet', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ unit: 'usd', balance_msub: 100_000, available_msub: 100_000 }) }));
+      await usd.page.goto(`${go.url}/v2/`);
+      await usd.page.evaluate(() => localStorage.setItem('forge.balanceKey', 'sk-forge-usd-test'));
+      await usd.page.goto(`${go.url}/v2/#/`);
+      await expect.poll(() => usd.page.textContent('#balanceText')).toBe('$1.00');
+      await usd.page.goto(`${go.url}/v2/#/funds/add`);
+      await usd.page.click('#fund-onchain');
+      await usd.page.waitForSelector('[data-fund=onchain]');
+      expect(await usd.page.textContent('[data-fund=onchain] .fund-body')).toBe('On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.');
+      expect(await usd.page.locator('#onchainGet').count()).toBe(0);
+      await usd.ctx.close();
+    } finally {
+      await go.close();
+      await mock.close();
+    }
+  }, 90_000);
 });
 
 /** A balance key funded with $2.00 through the API, as v1 would have. */

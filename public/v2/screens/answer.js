@@ -15,9 +15,11 @@ export function answer({ t, state, nav, actions, format }) {
   const tiles = el('div', { class: 'action-tiles' });
   const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), asked, body, errBox, note, tiles);
   const r = rings('answer');
-  const reply = el('button', { type: 'button', class: 'talk small', id: 'replyBtn', onclick: () => nav('type') }, icon('mic', 34, 1.6), el('span', { text: t('home.reply') }));
+  // Hold to talk arrives with slice A3. Until then the button opens Type, and says so to a screen reader.
+  const reply = el('button', { type: 'button', class: 'talk small', id: 'replyBtn', 'aria-describedby': 'replyHint', onclick: () => nav('type') }, icon('mic', 34, 1.6), el('span', { text: t('home.talk') }));
+  const hint = el('p', { class: 'sr-only', id: 'replyHint', text: t('home.talkHint') });
   const ringBtn = el('button', { type: 'button', class: 'ring-hit', onclick: () => nav('funds'), 'aria-label': t('funds.title') });
-  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), bottomRow({ t, nav }));
+  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), hint, bottomRow({ t, nav }));
 
   let shownText = null;
   let shownState = null;
@@ -61,14 +63,16 @@ export function answer({ t, state, nav, actions, format }) {
       tile('againBtn', 'again', t('answer.again'), () => actions.again()),
     );
     if (a.meta?.error) {
-      const ev = errorView(a.meta.error.code, a.meta.error.message);
+      const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut') }[ev.next];
-      errBox.replaceChildren(el('p', { text: t(ev.key, { message: ev.message ?? '' }) }), el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }));
+      errBox.replaceChildren(el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }) }), el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }));
       errBox.hidden = false;
       // Ask again is the next step already when the next step is a retry.
       if (ev.next === 'retry') tiles.querySelector('#againBtn')?.remove();
     } else errBox.hidden = true;
-    note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? t('answer.partial') : a.meta?.cost != null ? t('answer.cost', { amount: format.cost(a.meta.cost, a.meta.unit) }) : '';
+    const cost = a.meta?.cost != null ? format.cost(a.meta.cost, a.meta.unit) : null;
+    // A failed answer says its cost in the error box, so the note stays empty then.
+    note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? (cost ? t('answer.partialCost', { amount: cost }) : t('answer.partial')) : a.meta?.error ? '' : cost ? t('answer.cost', { amount: cost }) : '';
   };
   update();
   return { node: main, update, focus: card };

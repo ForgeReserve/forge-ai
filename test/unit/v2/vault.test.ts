@@ -95,6 +95,15 @@ describe('vault', () => {
     expect(vault.incoming()).toMatchObject([{ token: 'cashuBforeign', via: 'othermint' }]);
   });
 
+  it('holding a kept token again makes it pending once more, with the new funding id', () => {
+    const vault = V.createVault(memStorage());
+    const a = vault.hold('cashuBagain', 'othermint', { fundingId: 'f1' });
+    vault.refused(a.id, 'quote_expired', 'expired');
+    const b = vault.hold('cashuBagain', 'othermint', { fundingId: 'f2' });
+    expect(b.id).toBe(a.id);
+    expect(vault.incoming()).toMatchObject([{ id: a.id, state: 'pending', fundingId: 'f2', via: 'othermint' }]);
+  });
+
   it('keeps a refund token until the person says they saved it', () => {
     const vault = V.createVault(memStorage());
     vault.keepRefund({ id: 'r1', token: 'cashuBout', amount: 50, unit: 'usd' });

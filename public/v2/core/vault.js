@@ -29,12 +29,24 @@ export function createVault(storage) {
   return {
     incoming: () => read().in,
     outgoing: () => read().out,
-    /** Stores a token before it is sent. Returns the entry (an existing one for the same token). */
-    hold(token, via = 'topup') {
+    /**
+     * Stores a token before it is sent. Returns the entry (an existing one for the same token).
+     * extra: fields kept with it, such as fundingId for other-mint funding, so the outcome can be
+     * looked up later. An existing entry is being sent again: it takes the new flow and fields and is
+     * pending once more.
+     */
+    hold(token, via = 'topup', extra = {}) {
       const v = read();
       const have = v.in.find((x) => x.token === token);
-      if (have) return have;
-      const e = { id: 'in_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), token, via, at: Date.now(), state: 'pending' };
+      if (have) {
+        const next = { via, ...extra, state: 'pending' };
+        if (Object.entries(next).some(([k, x]) => have[k] !== x)) {
+          Object.assign(have, next);
+          write(v);
+        }
+        return have;
+      }
+      const e = { id: 'in_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), token, via, ...extra, at: Date.now(), state: 'pending' };
       v.in.push(e);
       write(v);
       return e;

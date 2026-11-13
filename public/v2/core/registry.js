@@ -23,6 +23,17 @@ export const INPUTS = {
   protect: ['t', 'ui'],
 };
 
+/**
+ * Inputs a kind gets only part of. A mode draws the screens: it gets the view (what the screens show,
+ * never the balance key) and the answer actions, never the app's raw state or an action that moves money.
+ */
+export const PROJECTIONS = {
+  mode: {
+    state: ['view', 'subscribe'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh'],
+  },
+};
+
 /** Permissions a manifest may ask for in this release. None: a module that asks for one is refused. */
 export const PERMISSIONS = [];
 
@@ -49,7 +60,16 @@ export function checkManifest(m, kind) {
 /** The inputs for one kind, taken from everything the app offers. Frozen, so a module cannot add to them. */
 export function inputsFor(kind, all) {
   const out = {};
-  for (const k of INPUTS[kind] ?? []) if (k in all) out[k] = all[k];
+  for (const k of INPUTS[kind] ?? []) {
+    if (!(k in all)) continue;
+    const only = PROJECTIONS[kind]?.[k];
+    if (!only) out[k] = all[k];
+    else {
+      const part = {};
+      for (const p of only) if (all[k] != null && typeof all[k][p] === 'function') part[p] = all[k][p];
+      out[k] = Object.freeze(part);
+    }
+  }
   return Object.freeze(out);
 }
 

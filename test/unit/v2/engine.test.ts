@@ -72,6 +72,24 @@ describe('stream parsing', () => {
     await expect(SSE.readStream(body, { onText: (d: string) => (text += d) })).rejects.toMatchObject({ code: 'upstream_error' });
     expect(text).toBe('Half');
   });
+
+  it('still hands over the forge event the gateway sends after an in-stream error, then throws', async () => {
+    // The gateway settles a broken stream as partial (src/app.ts) and says what it charged after the error.
+    const body = streamOf([chunk('Half'), `data: ${JSON.stringify({ error: { message: 'upstream stream failed', type: 'upstream_error' } })}\n\n`, chunk(' ignored'), `event: forge\ndata: ${JSON.stringify({ charged_msub: 1234, balance_msub: 8766, partial: true })}\n\n`]);
+    let text = '';
+    let forge: any = null;
+    await expect(SSE.readStream(body, { onText: (d: string) => (text += d), onForge: (f: any) => (forge = f) })).rejects.toMatchObject({ code: 'upstream_error' });
+    expect(forge).toEqual({ charged_msub: 1234, balance_msub: 8766, partial: true });
+    // Text after the error is not shown as part of the answer.
+    expect(text).toBe('Half');
+  });
+
+  it('passes the forge event through chat() on an in-stream error', async () => {
+    const e = E.createEngine({ fetch: async () => sse([`data: ${JSON.stringify({ error: { message: 'boom', type: 'upstream_error' } })}\n\n`, `event: forge\ndata: {"charged_msub":0,"balance_msub":100}\n\n`]) });
+    let forge: any = null;
+    await expect(e.chat({ key: 'k', body: { model: 'm', messages: [] }, onForge: (f: any) => (forge = f) })).rejects.toMatchObject({ code: 'upstream_error' });
+    expect(forge).toEqual({ charged_msub: 0, balance_msub: 100 });
+  });
 });
 
 describe('engine client', () => {

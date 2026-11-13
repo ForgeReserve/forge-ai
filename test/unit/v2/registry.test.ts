@@ -48,6 +48,44 @@ describe('kind isolation', () => {
     expect(Object.isFrozen(fund)).toBe(true);
   });
 
+  it('gives a mode the view and the answer actions, never the raw state, the balance key or takeOut', () => {
+    const KEY = 'sk-forge-secret-balance-key';
+    const S = { key: KEY, balanceMsub: 100 };
+    const full = {
+      ...all,
+      state: { S, view: () => ({ balanceText: '$1.00', hasKey: true }), subscribe: (f: () => void) => (f(), () => {}) },
+      actions: { ask: () => {}, stop: () => {}, again: () => {}, copyAnswer: () => {}, startFresh: () => {}, takeOut: () => {}, attach: () => {}, setLook: () => {}, chooseModel: () => {} },
+    };
+    const mode = R.inputsFor('mode', full);
+    expect(Object.keys(mode.state).sort()).toEqual(['subscribe', 'view']);
+    expect(mode.state).not.toHaveProperty('S');
+    expect(Object.keys(mode.actions).sort()).toEqual(['again', 'ask', 'copyAnswer', 'startFresh', 'stop']);
+    expect(mode.actions).not.toHaveProperty('takeOut');
+    expect(Object.isFrozen(mode.state)).toBe(true);
+    expect(Object.isFrozen(mode.actions)).toBe(true);
+    // Nothing reachable from the mode's inputs holds the key.
+    const seen = new Set<unknown>();
+    const reach = (v: unknown): boolean => {
+      if (v === KEY) return true;
+      if (!v || (typeof v !== 'object' && typeof v !== 'function') || seen.has(v)) return false;
+      seen.add(v);
+      return Object.values(v as object).some(reach);
+    };
+    expect(reach(mode)).toBe(false);
+    expect(JSON.stringify(mode.state.view())).not.toContain(KEY);
+    // A fund module still gets no state and no actions at all.
+    const fund = R.inputsFor('fund', full);
+    expect(fund).not.toHaveProperty('state');
+    expect(fund).not.toHaveProperty('actions');
+  });
+
+  it("the app's state hands subscribers no raw state", () => {
+    // public/v2/app.js wraps the store's subscribe, whose listeners would otherwise receive S.
+    const src = readFileSync(resolve(MODULES, '../app.js'), 'utf8');
+    expect(src).toMatch(/const state = \{ S, subscribe: \(f\) => store\.subscribe\(\(\) => f\(\)\), view \};/);
+    expect(src).toMatch(/inputs: \{ t, ui, state, nav, actions,/);
+  });
+
   it('loads good modules, refuses bad ones, and passes only kind inputs to create()', async () => {
     const seen: Record<string, string[]> = {};
     const manifests: Record<string, unknown> = {

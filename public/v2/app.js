@@ -9,16 +9,18 @@ import { adapters } from './core/adapters.js';
 import { lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
 import { chats, kv } from './core/db.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
-import { errorView } from './core/errors.js';
+import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { estimate, perQuestion } from './core/price.js';
+import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsFraction, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
+import { settlePendingForeign } from './modules/fund/kit.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
 import { lookScreen, modelScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
@@ -99,7 +101,9 @@ function view() {
     hiddenCount: hiddenCount(S.models, S.settings),
   };
 }
-const state = { S, subscribe: store.subscribe, view };
+// subscribe() tells a listener that something changed, never what: the raw state (and the balance key in
+// it) stays here. A mode module gets only view and subscribe (core/registry.js, PROJECTIONS).
+const state = { S, subscribe: (f) => store.subscribe(() => f()), view };
 
 let frame = 0;
 /** Repaints at most once a frame (the answer streams in many small pieces). */
@@ -277,6 +281,7 @@ async function generate() {
   store.set({ streaming: true });
   const maxTokens = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   let forge = null;
+  let failure = null;
   try {
     await engine.chat({
       key: S.key,
@@ -291,26 +296,36 @@ async function generate() {
     });
   } catch (e) {
     if (e?.name === 'AbortError' || controller.signal.aborted) reply.meta.stopped = true;
-    else reply.meta.error = { code: e?.code ?? 'other', message: e?.message ?? String(e) };
+    else {
+      failure = e;
+      reply.meta.error = { code: e?.code ?? 'other', message: e?.message ?? String(e) };
+    }
   } finally {
     gen = null;
   }
   if (!reply.content && !reply.meta.error && !reply.meta.stopped) reply.meta.error = { code: 'stream_failed', message: t('answer.empty') };
+  // What a failure cost comes from the engine's final event, kept on the error path too, so the words
+  // never say "not charged" when the engine charged for the question.
+  if (reply.meta.error) reply.meta.error.charged = chargedFor(forge, failure);
   if (reply.meta.error && reply.content) {
     reply.meta.partial = true;
     delete reply.meta.error;
   }
   if (forge?.balance_msub != null) S.balanceMsub = forge.balance_msub;
-  if (forge?.charged_msub != null && !reply.meta.error) reply.meta.cost = forge.charged_msub;
+  if (forge?.charged_msub != null && (!reply.meta.error || forge.charged_msub > 0)) reply.meta.cost = forge.charged_msub;
   // A stopped stream is settled by the engine just after the disconnect.
   if (reply.meta.stopped && !forge) await new Promise((r) => setTimeout(r, 900));
   store.set({ streaming: false });
-  ui.toast(reply.meta.error ? t(errorKey(reply.meta.error.code), { message: reply.meta.error.message }) : reply.meta.stopped ? t('answer.stopped') : t('answer.done'), 1800);
+  ui.toast(reply.meta.error ? errorText(reply.meta.error, reply.meta.unit) : reply.meta.stopped ? t('answer.stopped') : t('answer.done'), 1800);
   await saveConv();
   await refreshBalance();
 }
 
-const errorKey = (code) => errorView(code).key;
+/** The plain words for a failed answer, with what it cost when the engine charged for it. */
+const errorText = (err, unit) => {
+  const ev = errorView(err.code, err.message, err.charged);
+  return t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, unit) : '' });
+};
 
 function again() {
   if (gen) return;
@@ -398,6 +413,12 @@ async function takeOut(amount) {
   const r = await engine.refund(S.key, { amount, pubkey: lockKey() || undefined });
   if (!r.ok && r.status !== 202) throw new EngineError(r.body?.error?.code ?? `http_${r.status}`, r.body?.error?.message ?? `HTTP ${r.status}`, { status: r.status });
   if (r.body?.token) vault.keepRefund({ id: r.body.id, token: r.body.token, amount: r.body.amount, unit: r.body.unit });
+  // Issued later: remember the id, so collectRefunds offers it whatever this phone saw before.
+  else if (r.body?.id) {
+    const name = refundNames().awaited;
+    const list = (await kv.get(name).catch(() => null)) ?? [];
+    if (!list.includes(r.body.id)) await kv.put(name, [...list, r.body.id]).catch(() => {});
+  }
   await refreshBalance();
   // Taking money out lowers the full mark of the gold ring to what is left.
   S.peakMsub = S.balanceMsub;
@@ -406,30 +427,44 @@ async function takeOut(amount) {
   return { later: !r.body?.token };
 }
 
+/** Where this balance's shown and awaited refund ids are stored (core/refunds.js). */
+const refundNames = () => ({ shown: `refundsShown:${S.key.slice(-12)}`, awaited: `refundsAwaited:${S.key.slice(-12)}` });
+
 /**
  * Refunds the engine issued but this phone has not shown yet (a 202 earlier, or a closed tab). The first
- * time a balance is seen here, refunds already issued (in v1, say) are taken as shown, not offered again.
+ * time a balance is seen here, refunds already issued (in v1, say) are taken as shown, not offered again;
+ * a refund this phone was told to collect later is always offered (core/refunds.js).
  */
 async function collectRefunds() {
   if (!S.key) return;
-  const name = `refundsShown:${S.key.slice(-12)}`;
+  const names = refundNames();
   try {
-    const before = await kv.get(name);
-    const shown = new Set(before ?? []);
+    const before = await kv.get(names.shown);
+    const awaited = (await kv.get(names.awaited)) ?? [];
     const list = await engine.refunds(S.key);
-    let changed = false;
-    for (const r of list.data ?? []) {
-      if (r.status !== 'done' || !r.token || shown.has(r.id)) continue;
-      shown.add(r.id);
-      if (before === undefined && !vault.outgoing().some((o) => o.id === r.id)) continue;
-      vault.keepRefund({ id: r.id, token: r.token, amount: r.amount, unit: r.unit });
-      changed = true;
-    }
-    for (const o of vault.outgoing()) shown.add(o.id);
-    await kv.put(name, [...shown]);
-    if (changed) store.set({});
+    const r = refundsToOffer({ list: list.data, shownBefore: before, awaited, outgoing: vault.outgoing().map((o) => o.id) });
+    for (const x of r.keep) vault.keepRefund({ id: x.id, token: x.token, amount: x.amount, unit: x.unit });
+    await kv.put(names.shown, r.shown);
+    await kv.put(names.awaited, r.awaited);
+    if (r.keep.length) store.set({});
   } catch {
     /* offline */
+  }
+}
+
+/**
+ * Other-mint tokens still pending on this phone (the person left the fund screen before the outcome):
+ * looks each funding up and settles it, so a token is never left waiting for a screen that is gone.
+ */
+async function settleOtherMint() {
+  try {
+    const n = await settlePendingForeign({ engine, vault, key: S.key });
+    if (n) {
+      store.set({});
+      await refreshBalance();
+    }
+  } catch {
+    /* offline: next time */
   }
 }
 
@@ -568,7 +603,10 @@ function render() {
   // Move focus to the new screen on navigation (not on the first paint, and not on the home).
   if (rendered && name !== 'home') current.focus?.focus?.({ preventScroll: true });
   rendered = true;
-  if (name === 'takeOut' || name === 'funds') collectRefunds();
+  if (name === 'takeOut' || name === 'funds') {
+    collectRefunds();
+    settleOtherMint();
+  }
 }
 
 // ------------------------------------------------------------------ start
@@ -598,6 +636,7 @@ async function start() {
   addEventListener('online', () => {
     store.set({ online: true });
     retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey }).then((n) => n && refreshBalance());
+    settleOtherMint();
   });
   addEventListener('offline', () => store.set({ online: false }));
   render();
@@ -607,6 +646,7 @@ async function start() {
   await refreshBalance();
   const n = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey });
   if (n) await refreshBalance();
+  await settleOtherMint();
   registerWorker();
 }
 

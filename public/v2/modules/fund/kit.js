@@ -19,6 +19,89 @@ export function inviteField({ t, ui, wallet }) {
   };
 }
 
+/**
+ * What a failed other-mint confirm means for the token held on the phone. 'refused' only when the
+ * engine said for certain it did not take this token (wrong token, expired price, unknown funding, or
+ * another refusal it makes before touching the token). 'wait' when the outcome is open: a server error,
+ * a busy engine, or `in_flight` (the funding is being processed with this token right now).
+ */
+export function confirmOutcome(status, body) {
+  const code = body?.error?.code;
+  if (status >= 500 || status === 429 || status === 0 || code === 'in_flight' || code === 'token_in_flight' || code === 'mint_unavailable') return 'wait';
+  return status >= 400 ? 'refused' : 'wait';
+}
+
+/**
+ * Applies an other-mint funding's state (GET /v1/wallet/fund/:id) to the vault entry that holds its
+ * token. Pure apart from the vault it is given; used by the fund screen while it polls and by the app
+ * on start and on Funds, so the outcome lands even when the person left the screen.
+ *   done: the token was credited; unused fees come back as eCash, kept until saved.
+ *   refunded: the payment failed; the eCash that came back is kept until saved. A locked refund the
+ *     mint has not issued yet keeps the entry pending until it arrives.
+ *   failed, expired: the engine did not take the token; it is kept, marked, so it can be copied.
+ * The amount of returned eCash is not known on the phone (no token decoder here), so it is stored as null.
+ * Returns {final, state}: final when nothing more is coming for this funding.
+ */
+export function settleForeign(vault, entry, x) {
+  const f = x?.foreign ?? {};
+  const unit = f.unit ?? x?.unit ?? null;
+  const keep = (token, kind) => vault.keepRefund({ id: `${x.id}_${kind}`, token, amount: null, unit });
+  switch (x?.state) {
+    case 'done':
+      if (f.change_token) keep(f.change_token, 'change');
+      if (entry) {
+        // Credited. A locked change the mint has not issued yet is still to come.
+        if (f.payout_pending && !f.change_token) vault.pending(entry.id, 'change_pending');
+        else vault.credited(entry.id);
+      }
+      return { final: !f.payout_pending, state: 'done' };
+    case 'refunded':
+      if (f.refund_token) {
+        keep(f.refund_token, 'refund');
+        if (entry) vault.credited(entry.id);
+        return { final: true, state: 'refunded' };
+      }
+      if (f.payout_pending) {
+        if (entry) vault.pending(entry.id, 'refund_pending');
+        return { final: false, state: 'refunded' };
+      }
+      if (entry) vault.refused(entry.id, 'refunded', x.error ?? 'refunded');
+      return { final: true, state: 'refunded' };
+    case 'failed':
+    case 'expired':
+      if (entry) vault.refused(entry.id, x.state, x.error ?? x.state);
+      return { final: true, state: x.state };
+    default:
+      return { final: false, state: x?.state ?? 'unknown' };
+  }
+}
+
+/**
+ * Looks up every other-mint token still pending on the phone and settles it (see settleForeign).
+ * Returns how many entries changed. An unknown funding (404) means the engine never took the token.
+ */
+export async function settlePendingForeign({ engine, vault, key }) {
+  if (!key) return 0;
+  let n = 0;
+  for (const e of vault.incoming().filter((x) => x.via === 'othermint' && x.state === 'pending' && x.fundingId)) {
+    let r;
+    try {
+      r = await engine.funding(key, e.fundingId);
+    } catch {
+      break; // offline: try again next time
+    }
+    if (r.ok) {
+      const before = JSON.stringify(vault.incoming()) + JSON.stringify(vault.outgoing());
+      settleForeign(vault, e, r.body);
+      if (JSON.stringify(vault.incoming()) + JSON.stringify(vault.outgoing()) !== before) n++;
+    } else if (r.status === 404) {
+      vault.refused(e.id, 'not_found', r.body?.error?.message ?? 'not_found');
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Calls fn every `ms` until it returns true or stop() is called. Skips a tick while the page is hidden. */
 export function poll(fn, ms) {
   let stopped = false;

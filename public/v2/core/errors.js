@@ -1,7 +1,24 @@
 // Engine error codes in plain words, each with one next step. Pure, tested in Node.
 
-/** Plain words and one next step for an engine error code. */
-export function errorView(code, message) {
+/**
+ * What a failed or empty answer cost, in msub, for errorView. The engine's final `forge` event says it
+ * exactly. Without one: a question refused with an HTTP error before any answer is not charged (0);
+ * a stream that broke without the final event is not known (null).
+ */
+export function chargedFor(forge, err) {
+  if (typeof forge?.charged_msub === 'number') return forge.charged_msub;
+  if (err && Number(err.status) > 0) return 0;
+  return null;
+}
+
+/**
+ * Plain words and one next step for an engine error code.
+ * charged: what the engine says the failed question cost, in msub. 0 (the default) when the engine
+ * refused the question before any answer, as it does for an upstream failure, which it does not charge.
+ * null when nobody knows: the stream ended without the engine's final event. The words never claim
+ * "not charged" unless the engine said so.
+ */
+export function errorView(code, message, charged = 0) {
   switch (code) {
     case 'insufficient_balance':
     case 'payment_required':
@@ -15,6 +32,8 @@ export function errorView(code, message) {
       return { key: 'error.busy', next: 'retry' };
     case 'upstream_error':
     case 'stream_failed':
+      if (charged == null) return { key: 'error.modelUnknown', next: 'retry' };
+      if (charged > 0) return { key: 'error.modelCharged', next: 'retry', charged };
       return { key: 'error.model', next: 'retry' };
     case 'model_not_found':
       return { key: 'error.gone', next: 'chooseModel' };

@@ -200,4 +200,28 @@ describe('errors in plain words', () => {
   ])('%s has one next step', (code, key, next) => {
     expect(ERR.errorView(code, 'm')).toMatchObject({ key, next });
   });
+
+  it('says "not charged" only when the engine charged nothing', async () => {
+    const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
+    const words = (code: string, forge: unknown, err: unknown) => {
+      const ev = ERR.errorView(code, 'm', ERR.chargedFor(forge, err));
+      return { key: ev.key, text: en[ev.key]!.replace('{amount}', ev.charged > 0 ? `${ev.charged} msub` : '') };
+    };
+    const streamErr = { code: 'upstream_error' }; // a StreamError: no HTTP status
+    const httpErr = { code: 'upstream_error', status: 502 }; // refused before any answer
+    // An error in the stream, then the engine's final event with a partial charge.
+    expect(words('upstream_error', { charged_msub: 1234 }, streamErr)).toEqual({ key: 'error.modelCharged', text: 'The model stopped early. That cost 1234 msub.' });
+    // An empty answer the engine charged for (a reasoning model spent its output on reasoning).
+    expect(words('stream_failed', { charged_msub: 50 }, null).key).toBe('error.modelCharged');
+    // The engine said it charged nothing.
+    expect(words('upstream_error', { charged_msub: 0 }, streamErr)).toEqual({ key: 'error.model', text: 'The model did not answer. You were not charged.' });
+    // An HTTP upstream error before any stream: the engine charges nothing for that.
+    expect(words('upstream_error', null, httpErr).key).toBe('error.model');
+    // No final event (the encrypted path, or a cut connection): no claim either way.
+    const unknown = words('upstream_error', null, streamErr);
+    expect(unknown.key).toBe('error.modelUnknown');
+    expect(unknown.text).not.toMatch(/not charged/);
+    expect(words('stream_failed', null, null).key).toBe('error.modelUnknown');
+    for (const k of ['error.modelCharged', 'error.modelUnknown']) expect(en[k]).not.toMatch(/not charged/);
+  });
 });
