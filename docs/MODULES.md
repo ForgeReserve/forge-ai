@@ -86,6 +86,14 @@ Built in slice A1 (`public/v2/`):
 
 Built in slice A2: the `fund` module Scan a note (`public/v2/modules/fund/note/`), first in Add funds. It reaches the camera only through the `scan` input (the camera adapter), reads the note on the phone (`public/v2/core/note.js`) and adds it through the wallet, so the vault keeps the note's eCash until the engine confirms the credit. To hand a note from another mint to the Other mint module, the screen that hosts fund modules gives each view an `open(id, {token})`: it switches to that fund module and passes the token in memory, never through storage or the address bar.
 
+Built in slice A3: `voice-in` and `voice-out`, each with two modules.
+
+- `voice-in/engine` (the default): records through the `mic` adapter, makes a 16 kHz WAV in memory and sends it to the engine's speech to text model. `voice-in/device`: the browser's own recogniser (`recognizer` adapter); it is never private, so it is not used while Private only is on.
+- `voice-out/device`: the phone's own voices that run on the phone (`synth` adapter), free. `voice-out/engine`: the engine's text to speech model, one request per piece of the answer, with the sound kept in memory for the last few answers. Automatic reading uses the phone's voice when there is one, else the engine's.
+- A voice module gets `t`, its hardware adapters and an `audio` input with only its own direction's calls (`model`, `price`, and `transcribe` or `speak`). The app makes those calls with the balance key; the module never sees it, the engine object or the wallet.
+- A voice-in module has `available()`, `private()`, `price(seconds)`, `maxSeconds()` and `start({onLevel, onText})`, which gives a session with `finish({signal})` (resolves to the text and what it cost) and `cancel()`. A voice-out module has `available()`, `private()`, `pieceSize()`, `cached(key)`, `price(pieces, key)` and `speak(pieces, {key, onState})`, which gives `{done, stop()}`.
+- The mode gets the talk actions (`talkDown`, `talkMove`, `talkUp`, `talkCancel`) and `speak`, `stopSpeaking`, and draws the button from `view().talk` and `view().speak`.
+
 Not built yet, and not claimed: the `publisher` and `sig` fields are not checked, there is no sandbox, and no permission can be granted (a manifest that asks for one is refused). Only the modules bundled with the release load, and they run as ordinary code in the page. Signatures, the sandbox and adding a plugin come with slice B2.
 
 ## What changes in the code
@@ -93,7 +101,7 @@ Not built yet, and not claimed: the `publisher` and `sig` fields are not checked
 1. Split `src/funding.ts` into one module per funding method behind a shared interface.
 2. Add the plugin loader, manifest checks and sandbox to the web app, then the native shell.
 3. Move filters, covers, guides and protection lists into plugins from the start, since none are built yet.
-4. Move voice in and out behind `voice-in` and `voice-out` when flash-speech comes over from flash-mobile.
+4. Add an on-device `voice-in` and `voice-out` module when flash-speech comes over from flash-mobile (C2). The module kinds exist since slice A3.
 5. Publish the Bellows operator announcement and the guide package format as short written specs, so others can implement them without reading Forge's code.
 
 ## Open questions
