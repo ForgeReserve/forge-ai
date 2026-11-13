@@ -82,6 +82,21 @@ cp "$PJ"/wasm/openjpeg.wasm "$PJ"/wasm/openjpeg_nowasm_fallback.js "$PJ"/wasm/jb
   echo
   echo 'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.'; } > "$OUT/licenses/pdfjs-dist-assets.txt"
 
+# Face finding for Share unseen (the v2 cover-faces filter): face-api with TensorFlow.js bundled in, and
+# only the tiny face detector model (about 190 KB). Loaded when a photo is checked, from our origin.
+FA=node_modules/@vladmandic/face-api
+rm -rf "$OUT/face-api"; mkdir -p "$OUT/face-api/model"
+{ echo '/* @vladmandic/face-api 1.7.15 (MIT) with TensorFlow.js 4.22.0 (Apache-2.0) bundled, https://github.com/vladmandic/face-api (dist/face-api.esm.js, unmodified). See licenses/face-api.txt */'; cat "$FA/dist/face-api.esm.js"; } > "$OUT/face-api/face-api.js"
+cp "$FA/model/tiny_face_detector_model.bin" "$FA/model/tiny_face_detector_model-weights_manifest.json" "$OUT/face-api/model/"
+{ echo "==== @vladmandic/face-api 1.7.15 (MIT): public/vendor/face-api/face-api.js and the tiny face detector model in public/vendor/face-api/model"; echo; cat "$FA/LICENSE"; echo
+  echo "==== face-api.js 0.22.2 (MIT), the project @vladmandic/face-api continues. The tiny face detector model weights come from it."; echo
+  echo "MIT License"; echo; echo "Copyright (c) 2018 Vincent Mühler"; echo
+  echo 'Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:'
+  echo; echo 'The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.'; echo
+  echo 'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.'; echo
+  echo "==== TensorFlow.js 4.22.0 (tfjs-core, tfjs-converter, tfjs-backend-cpu, tfjs-backend-webgl, tfjs-backend-wasm), bundled into face-api.js. Copyright 2018 Google LLC. Apache License 2.0:"; echo
+  cat node_modules/jsqr/LICENSE; } > "$OUT/licenses/face-api.txt"
+
 # Licenses: one file per library, plus every package inside the Tinfoil bundle.
 node - "$OUT/licenses" <<'EOF'
 const fs = require('fs'), path = require('path');
