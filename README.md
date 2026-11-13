@@ -252,9 +252,24 @@ First-load JavaScript is about 59 KB gzipped (page code and the Markdown librari
 - **Engine client** (`public/v2/core/engine.js`): the OpenAI-compatible API above, streamed. It answers a `428 pow_required` challenge once per request, the way a Bellows asks (`X-Bellows-Pow-Challenge`, solved into `X-Bellows-Pow`). This gateway does not send 428; the client is tested against a stub. Private models (enclave and encrypted in the browser) go through the vendored Tinfoil SDK, as in v1.
 - **Money first:** eCash is written to the phone (`forge2.vault` in localStorage) before it is sent and removed only when the engine confirms the credit. Taken-out eCash stays there until the person taps I saved it. v2 uses v1's balance key (`forge.balanceKey`), so a v1 balance carries over.
 - **Modules:** every swappable part has a manifest under `public/v2/modules/<kind>/<id>/` and loads through `public/v2/core/registry.js`, which refuses a bad manifest and hands a module only its kind's inputs. Bundled in this release: looks (Light, Dark, Midnight), Default mode, and fund modules for eCash, Lightning, on-chain and other mints. The registry does not yet check the `publisher` and `sig` fields and runs no sandbox: only the bundled modules load, as ordinary page code (see [docs/MODULES.md](docs/MODULES.md)).
+- **Paper notes:** Scan a note is the first way to add funds. The camera (through the camera adapter and v1's scanner, so single and animated codes both work) reads the eCash on a paper note; the phone shows the amount and the mint before anything is sent, and adds it on one tap through the vault. A note from a mint this engine does not take says so and offers Other mint, with the note handed over. A note that was already used says so (the engine learns that from the mint when the note is added). With no funds, a chip right under the gold ring opens the scanner, and Funds and memory shows Scan a note first. If the camera cannot be used, the code can be pasted.
 - **Storage:** IndexedDB `forge2` for settings, the conversation and attachments, on this phone only. Start fresh removes the conversation from it.
 - **Service worker:** `public/v2/sw.js`, scope `/v2/`, network first with a cached copy for offline. v1's worker passes `/v2/` by.
-- **Strings:** every word is in `public/v2/strings/en.js`.
+- **Strings:** every word is in `public/v2/strings/en.js`, the printed notes' words too.
+
+### Printing paper notes
+
+`scripts/print-notes.ts` makes a batch of notes to hand out:
+
+```bash
+pnpm print-notes --count 20 --amount 1.00              # 20 notes of $1.00 at the Forge mint
+pnpm print-notes --count 10 --amount 1000 --unit sat --out event.html
+pnpm print-notes --resume event.html.pending.json      # carry on with a batch that was stopped
+```
+
+It asks the mint for one Lightning invoice for the whole batch, shows it (as text and as a code in the terminal) and waits until it is paid. Then it mints the eCash, one token per note, and writes one printable HTML sheet with file mode 0600: each note is a QR code with its amount, a short how-to line and a random serial that means nothing. The sheet loads nothing from anywhere. Tokens never go to the terminal or a log; only the sheet holds them. Print it, cut the notes apart, then delete the file.
+
+Before the invoice is shown, the batch (the quote and a fresh seed the eCash is made from) is written to `<out>.pending.json`, mode 0600, and removed once the sheet is written. If the script stops after the payment, `--resume` finishes it; if the mint signed but its answer was lost, the eCash is restored from the seed (NUT-09) and checked unspent. `--mint` points it at another mint (the tests use the local one). The default is the mint the engine trusts by default.
 
 ## Logs and privacy
 
@@ -272,7 +287,7 @@ pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env
 
 `test/unit/files.test.ts` covers the attachment helpers (file types, text decoding and binary refusal, `.docx` unzip and text, `<file>` blocks, the 200,000-character budget, estimates). `test/unit/sw.test.ts` and `test/e2e/pwa.e2e.test.ts` cover the service worker version and shell list, `/sw.js`, manifest, icons and offline page headers; `test/e2e/files-privacy.e2e.test.ts` checks that file text reaches the supplier (or the enclave, encrypted) and never the logs or the database.
 
-`test/unit/v2/` covers the v2 logic: the module registry (manifest checks, kind isolation), the engine client (stream parsing, 402, 428 proof of work, private models only through the encrypting fetch), the vault (a token is stored before it is sent and kept until credited, refused or pending), ring maths, prices, routes, the string table's copy rules and the looks' text contrast. `test/ui/v2.ui.test.ts` drives `/v2/` with Playwright (`playwright-core`, `channel: 'chrome'`) against a local gateway with the mock supplier and the local mints: fund with a test token and an invite, ask a typed question, read the streamed answer, see the gold ring move, plus Lightning funding, taking funds out, errors, files, a v1 balance carried over, and 360 px layout.
+`test/unit/v2/` covers the v2 logic: the module registry (manifest checks, kind isolation), the engine client (stream parsing, 402, 428 proof of work, private models only through the encrypting fetch), the vault (a token is stored before it is sent and kept until credited, refused or pending), ring maths, prices, routes, the string table's copy rules and the looks' text contrast. `test/ui/v2.ui.test.ts` drives `/v2/` with Playwright (`playwright-core`, `channel: 'chrome'`) against a local gateway with the mock supplier and the local mints: fund with a test token and an invite, ask a typed question, read the streamed answer, see the gold ring move, plus Lightning funding, taking funds out, errors, files, a v1 balance carried over, and 360 px layout. `test/ui/note.ui.test.ts` scans paper notes through Chrome's fake camera (a Y4M video of the QR code, made by `test/ui/camera.ts`), so the app's own camera adapter and v1's scanner read it: a still and an animated code, the balance rising, a used note, a note from another mint handed to Other mint, and paste. `test/unit/v2/note.test.ts` covers reading a note (checked against cashu-ts) and what the phone says about it; `test/unit/print-notes.test.ts` and `test/e2e/print-notes.e2e.test.ts` cover the print script, the second against the local mint (invoice, 0600 sheet, working notes, no token on the terminal, resume and restore).
 
 `docker-compose.test.yml` runs three FakeWallet mints (one compose project, `forge-ai`, from any checkout or worktree): `mint-a` (the Forge mint in tests), `mint-b` (an untrusted mint) and `mint-c` (a "foreign" mint with input fees, for other-mint funding). On-chain funding is tested against `test/e2e/onchain-mock.ts`, a NUT-30 proxy over `mint-a` that follows the Forge Nutshell branch's request and response shapes.
 

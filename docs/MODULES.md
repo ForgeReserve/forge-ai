@@ -84,6 +84,8 @@ Built in slice A1 (`public/v2/`):
 - The registry, `public/v2/core/registry.js`. It checks each manifest (id, kind, version, `name.en`, an entry file inside the module folder, `permissions`, and that `publisher` and `sig` are present), refuses a bad one, and hands each kind only its inputs: a `look` gets nothing, a `fund` module gets the engine, the wallet and the vault but never the conversation, a `mode` gets what the screens show (a view with no balance key in it) and the answer actions (ask, stop, ask again, copy, start fresh), but never the raw state, the balance key, the engine, the wallet or an action that moves money such as taking funds out.
 - Bundled modules: `look` (Light, Dark, Midnight), `mode` (Default) and `fund` (eCash, Lightning, on-chain, other mint).
 
+Built in slice A2: the `fund` module Scan a note (`public/v2/modules/fund/note/`), first in Add funds. It reaches the camera only through the `scan` input (the camera adapter), reads the note on the phone (`public/v2/core/note.js`) and adds it through the wallet, so the vault keeps the note's eCash until the engine confirms the credit. To hand a note from another mint to the Other mint module, the screen that hosts fund modules gives each view an `open(id, {token})`: it switches to that fund module and passes the token in memory, never through storage or the address bar.
+
 Not built yet, and not claimed: the `publisher` and `sig` fields are not checked, there is no sandbox, and no permission can be granted (a manifest that asks for one is refused). Only the modules bundled with the release load, and they run as ordinary code in the page. Signatures, the sandbox and adding a plugin come with slice B2.
 
 ## What changes in the code
