@@ -146,7 +146,8 @@ Payment headers:
 - `Authorization: Bearer sk-forge-...` spends from a balance.
 - `X-Cashu: cashuB...` pays this request (NUT-24). Add `X-Forge-Invite` while invite-only.
 - `X-Cashu-Pubkey: 02...` (optional) locks this request's change to your wallet key (NUT-11 P2PK). See [Locking tokens to your wallet key](#locking-tokens-to-your-wallet-key).
-- Neither: `402 Payment Required` with `X-Cashu: creqA...` (NUT-18: amount, unit, accepted mints). The amount is the request's maximum cost. `X-Forge-Unit: sat` asks for a sat quote.
+- Neither: `402 Payment Required` with `X-Cashu: creqA...` (NUT-18: amount, unit, accepted mints, and the request id). The amount is the request's maximum cost. `X-Forge-Unit: sat` asks for a sat quote.
+- `X-Forge-Request-Id: req_...` (optional, with `X-Cashu`) pays under the id from the 402, so the request and its change at `GET /v1/change/{request_id}` use the id you already hold, even if the paid response never reaches you. Each id carries one payment: reusing one is `409 request_id_used` and the token is left untouched. Without the header the paid request gets a new id.
 
 Response headers: `X-Forge-Request-Id`, `X-Forge-Unit`, `X-Forge-Charged-Msub`, `X-Forge-Balance-Msub` (balance payments), `X-Forge-Privacy` (`standard`, `enclave-plaintext`, `enclave-encrypted`), and for NUT-24 `X-Cashu-Change` plus `X-Forge-Change-Url`.
 
@@ -171,7 +172,7 @@ OpenAI model list plus `tier` (`enclave` or `standard`), `uncensored`, `max_outp
 | `GET /v1/wallet` | bearer key | `{unit, balance_msub, available_msub, refundable}` |
 | `POST /v1/wallet/refund` | bearer key; optional `{"amount": N, "pubkey": "02..."}`, amount in whole units | `{token, amount, unit, status, locked_to}`. Sub-unit remainders stay on the balance. With `pubkey` the token is P2PK-locked to it |
 | `GET /v1/wallet/refunds` | bearer key | Every withdrawal with its token and `locked_to`, for re-delivery |
-| `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request |
+| `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request, under the id from the 402 when the paid request echoed it |
 
 A balance has one unit, set by its first topup. Topping up with another unit is rejected.
 

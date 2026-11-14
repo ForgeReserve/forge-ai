@@ -56,6 +56,7 @@ const ALLOW = [
   'X-Cashu',
   'X-Cashu-Pubkey',
   'X-Forge-Invite',
+  'X-Forge-Request-Id',
   'X-Forge-Unit',
   'Ehbp-Encapsulated-Key',
   'X-Tinfoil-Enclave-Url',
@@ -68,6 +69,9 @@ function apiError(c: Context, status: number, code: string, message: string, hea
   for (const [k, v] of Object.entries(headers)) c.header(k, v);
   return c.json({ error: { message, type: code, code }, ...extra }, status as any);
 }
+
+/** The shape of a request id this gateway issues; a paid retry may echo one back (see the chat route). */
+const REQUEST_ID = /^req_[0-9a-f]{32}$/;
 
 function bearer(c: Context): string | undefined {
   const h = c.req.header('authorization');
@@ -462,7 +466,13 @@ export function createApp(d: Deps) {
   });
   const chatCompletion = async (c: Context, own: ChatOwnership) => {
     const t0 = Date.now();
-    const requestId = 'req_' + randomUUID().replaceAll('-', '');
+    // A NUT-24 payment may echo the id from its 402 in X-Forge-Request-Id, so the request, its change
+    // and any recovery run under the id the payer already holds. Every other request gets a fresh one.
+    const echoedId = !bearer(c) && c.req.header('x-cashu') ? c.req.header('x-forge-request-id') : undefined;
+    if (echoedId !== undefined && !REQUEST_ID.test(echoedId)) {
+      return apiError(c, 400, 'invalid_request', 'X-Forge-Request-Id must be the request id from the 402 (req_ and 32 hex digits)');
+    }
+    const requestId = echoedId ?? 'req_' + randomUUID().replaceAll('-', '');
     c.header('X-Forge-Request-Id', requestId);
     const raw = Buffer.from(await c.req.arrayBuffer());
     const encrypted = !!c.req.header('ehbp-encapsulated-key');
@@ -562,7 +572,8 @@ export function createApp(d: Deps) {
     } else if (!cashu) {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code, or use a balance key');
       const quoted = unit === 'sat' ? Math.ceil(requiredUnits * env.FORGE_SAT_PRICE_BUFFER) : requiredUnits;
-      const pr = new PaymentRequest(undefined, requestId.slice(4, 20), quoted, unit, wallet.trustedMints, `Forge AI: ${model.id}`, true);
+      // The NUT-18 id is the full request id, the same value as X-Forge-Request-Id.
+      const pr = new PaymentRequest(undefined, requestId, quoted, unit, wallet.trustedMints, `Forge AI: ${model.id}`, true);
       const creq = pr.toEncodedRequest();
       return apiError(c, 402, 'payment_required', `pay ${quoted} ${unit} in eCash: retry with X-Cashu: cashuB... Unused value is returned as change.`, { 'X-Cashu': creq }, {
         payment_request: creq,
@@ -572,9 +583,20 @@ export function createApp(d: Deps) {
       });
     } else {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code');
-      db.prepare(
-        "INSERT INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, lock_pubkey, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?, ?)",
-      ).run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, lockPubkey, now());
+      // One id, one payment: an echoed id that already has a request is refused before the token is touched.
+      const created = db
+        .prepare(
+          "INSERT OR IGNORE INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, lock_pubkey, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?, ?)",
+        )
+        .run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, lockPubkey, now());
+      if (Number(created.changes) === 0) {
+        return apiError(
+          c,
+          409,
+          'request_id_used',
+          `request ${requestId} already has a payment; any change it is owed is at /v1/change/${requestId}. Your token was not used: send it without X-Forge-Request-Id, or ask for a new 402.`,
+        );
+      }
       try {
         const r = await wallet.receive(cashu, {
           purpose: 'nut24',
