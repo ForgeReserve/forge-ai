@@ -39,7 +39,7 @@ Only a SHA-256 of each key is stored.
 
 - Plaintext requests: the gateway asks the supplier for usage (`stream_options.include_usage` on streams) and settles on it. If the client did not ask for usage, the usage-only chunk is removed from the stream it sees.
 - No usage reported: input is estimated as `body bytes / 4` and output from the stream (at least one token per content chunk, or characters / 4 if larger). Non-streaming responses without usage are charged at `max_tokens`.
-- A non-streaming response whose body fails to arrive after `200` headers is an upstream failure, settled before the error is returned: `502`, nothing charged, the reservation released and, for NUT-24, the full change in `X-Cashu-Change` and at `GET /v1/change/{request_id}` at once.
+- A non-streaming response, plaintext or encrypted, whose body fails to arrive after `200` headers is an upstream failure, settled before the error is returned: `502`, nothing charged, the reservation released and, for NUT-24, the full change in `X-Cashu-Change` and at `GET /v1/change/{request_id}` at once.
 - Client disconnects mid-stream: the gateway aborts the upstream call and settles on what was produced so far, using upstream usage if it arrived, else the estimate above.
 - Encrypted pass-through: see PRIVACY.md. Usage comes from Tinfoil's `X-Tinfoil-Usage-Metrics` header or trailer; without it the supplier's flat schedule (if configured) or the reservation is charged.
 - `pricing: "flat"` suppliers always charge the flat schedule: a request-size bucket plus declared max output tokens.
