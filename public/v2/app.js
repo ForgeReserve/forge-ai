@@ -6,7 +6,7 @@ import { kindOf, MAX_FILES, BODY_LIMIT } from '../js/files.js';
 import { lockKey } from '../js/lockkey.js';
 import * as QR from '../js/qr.js';
 import { adapters } from './core/adapters.js';
-import { lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
+import { againHistory, lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
 import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
@@ -97,12 +97,16 @@ function memoryNow(model) {
   return memo.v;
 }
 
-let againMemo = { k: '', v: null };
+let againMemo = { k: '', models: null, audioModels: null, v: null };
 /** What Ask again would cost now, or null while an answer streams or with nothing to ask again. */
 function againNow(model) {
   if (S.streaming || !model) return null;
-  const k = `${S.conv.id}|${S.conv.messages.length}|${model.id}|${S.unit}|${S.conv.messages.at(-1)?.meta?.error ? 'e' : ''}`;
-  if (againMemo.k !== k) againMemo = { k, v: estimateAgain(model) };
+  const msgs = S.conv.messages;
+  const voice = msgs.findLast?.((m) => m.role === 'user')?.meta?.voice ? 'v' : '';
+  const k = `${S.conv.id}|${msgs.length}|${model.id}|${S.unit}|${msgs.at(-1)?.meta?.error ? 'e' : ''}|${voice}|${voiceOut()?.id ?? ''}`;
+  // The price lists are part of the key by identity: the cached list is replaced by the live one (new
+  // prices under the same model id) when the engine answers.
+  if (againMemo.k !== k || againMemo.models !== S.models || againMemo.audioModels !== S.audioModels) againMemo = { k, models: S.models, audioModels: S.audioModels, v: estimateAgain(model) };
   return againMemo.v;
 }
 
@@ -197,9 +201,7 @@ const audio = {
 function talkPrice(seconds, inMod) {
   const toText = inMod.price(seconds);
   const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND))).costMsub;
-  const out = voiceOut();
-  let reading = 0;
-  if (out?.id === 'engine') reading = audio.price('speech', { requests: Math.ceil(SPEAK_MAX_CHARS / out.pieceSize()), chars: SPEAK_MAX_CHARS });
+  const reading = readingPrice();
   if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
   return (toText ?? 0) + question + reading;
 }
@@ -402,20 +404,32 @@ function estimateFor(text) {
 }
 
 /**
+ * The most the engine can charge to read up to SPEAK_MAX_CHARS of an answer aloud: 0 when the phone
+ * reads it (or nothing does), null when the engine's voice has no price.
+ */
+function readingPrice() {
+  const out = voiceOut();
+  if (out?.id !== 'engine') return 0;
+  return audio.price('speech', { requests: Math.ceil(SPEAK_MAX_CHARS / out.pieceSize()), chars: SPEAK_MAX_CHARS });
+}
+
+/**
  * The most Ask again can cost: again() drops the answers after the last question and asks the model
- * again with the conversation up to it. null when there is no question to ask again, or no price.
+ * again with the conversation up to it (againHistory). A question asked by voice is answered by voice,
+ * so when the engine reads it aloud that is in the price too, as on the talk line. null when there is
+ * no question to ask again, or a part has no price.
  */
 function estimateAgain(model) {
   const unit = S.unit ?? 'usd';
-  const msgs = S.conv.messages;
-  let end = msgs.length;
-  while (end && msgs[end - 1].role === 'assistant') end--;
-  const history = msgs.slice(0, end).filter((m) => !m.meta?.error);
+  const history = againHistory(S.conv.messages);
   if (!history.length) return null;
   const vision = !!model.capabilities?.vision;
   const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  return estimate(model, unit, tokens, maxOut)?.max ?? null;
+  const chat = estimate(model, unit, tokens, maxOut)?.max ?? null;
+  const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
+  if (chat == null || reading == null) return null;
+  return chat + reading;
 }
 
 async function ask(text, meta = null) {

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-// The first run's rules (core/firstrun.js), the routes of its steps, and the price line's Free wording.
+// The first run's rules (core/firstrun.js), the routes of its steps, the price line's Free wording, and
+// what Ask again and Try again are priced on (core/conversation.js).
 const FR: any = await import('../../../public/v2/core/firstrun.js' as string);
 const ROUTER: any = await import('../../../public/v2/core/router.js' as string);
 const PRICE: any = await import('../../../public/v2/core/price.js' as string);
 const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
 const I18N: any = await import('../../../public/v2/core/i18n.js' as string);
+const CONV: any = await import('../../../public/v2/core/conversation.js' as string);
 
 describe('first run steps', () => {
   it('runs Welcome, How you pay, the limits, then Private only', () => {
@@ -90,6 +92,36 @@ describe('price line', () => {
     const p = PRICE.priceLine(12_345, 'usd', null);
     expect(I18N.t(p.key, p)).toBe('Up to $0.13');
     expect(PRICE.priceLine(null, 'sat').key).toBe('price.unknown');
+  });
+});
+
+describe('Ask again and Try again', () => {
+  const u = (content: string, meta?: object) => ({ role: 'user', content, ...(meta ? { meta } : {}) });
+  const a = (content: string, meta?: object) => ({ role: 'assistant', content, ...(meta ? { meta } : {}) });
+
+  it('prices the conversation up to the last question, without the answers after it', () => {
+    const q1 = u('one');
+    const a1 = a('first answer');
+    const q2 = u('two', { voice: true });
+    expect(CONV.againHistory([q1, a1, q2, a('second answer')])).toEqual([q1, a1, q2]);
+    // Several answers after the question (an answer, then a failed one) all go.
+    expect(CONV.againHistory([q1, a('x'), a('', { error: { code: 'upstream_error' } })])).toEqual([q1]);
+    // The last message is the question asked again, so its voice flag decides whether reading is priced.
+    expect(CONV.againHistory([q1, a1, q2, a('y')]).at(-1).meta.voice).toBe(true);
+  });
+
+  it('leaves out failed replies earlier in the conversation, as the engine request does', () => {
+    const q1 = u('one');
+    const q2 = u('two');
+    const failed = a('', { error: { code: 'stream_failed' } });
+    expect(CONV.againHistory([q1, failed, q2, a('z')])).toEqual([q1, q2]);
+    // Try again after a failure prices the same as the question did before it was sent.
+    expect(CONV.againHistory([q1, failed])).toEqual([q1]);
+  });
+
+  it('is empty with no question to ask again', () => {
+    expect(CONV.againHistory([])).toEqual([]);
+    expect(CONV.againHistory([a('only an answer')])).toEqual([]);
   });
 });
 

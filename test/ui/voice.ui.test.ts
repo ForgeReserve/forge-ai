@@ -145,6 +145,58 @@ describe('hold to talk', () => {
     await ctx.close();
   }, 90_000);
 
+  it('prices Ask again with the reading aloud when the question was spoken, and charges no more than that', async () => {
+    const { ctx, page, errors, calls } = await phone();
+    const readBy = async (id: string) => {
+      await page.goto(`${g.url}/v2/#/more/voice`);
+      await page.waitForSelector('[data-screen=voice]');
+      await page.click(`#voiceOut-${id}`);
+      expect(await page.getAttribute(`#voiceOut-${id}`, 'aria-checked')).toBe('true');
+    };
+    const againCents = async () => {
+      await page.goto(`${g.url}/v2/#/answer`);
+      await page.waitForSelector('#againBtn', { timeout: 20_000 });
+      const text = await page.textContent('#againBtn');
+      expect(text).toMatch(/^Ask againUp to \$\d+\.\d\d$/);
+      return cents(text);
+    };
+    await readBy('engine');
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('[data-screen=answer]');
+    await expect.poll(() => calls.speech.length, { timeout: 20_000 }).toBeGreaterThan(0);
+    await page.waitForSelector('#againBtn', { timeout: 20_000 });
+    // Let the first reading finish, so every request after this point is the one Ask again makes.
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    await page.waitForTimeout(500);
+
+    // The engine reads the answer to a spoken question aloud, so Ask again costs more than the chat alone.
+    const withReading = await againCents();
+    await readBy('off');
+    const chatOnly = await againCents();
+    expect(withReading).toBeGreaterThan(chatOnly);
+    await readBy('engine');
+    expect(await againCents()).toBe(withReading);
+
+    // Tap it: the chat and the reading are both charged, and together they stay within the price shown.
+    const seen = new Set((g.deps.db.prepare('SELECT id FROM requests').all() as any[]).map((r) => r.id));
+    const spoken = calls.speech.length;
+    await page.click('#againBtn');
+    await expect.poll(() => calls.speech.length, { timeout: 20_000 }).toBeGreaterThan(spoken);
+    const fresh = () => (g.deps.db.prepare('SELECT id, model, status, charged_msub FROM requests').all() as any[]).filter((r) => !seen.has(r.id));
+    await expect.poll(() => fresh().some((r) => r.model === 'mock-speech') && fresh().every((r) => r.status !== 'running'), { timeout: 20_000 }).toBe(true);
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    await expect.poll(() => fresh().every((r) => r.status !== 'running')).toBe(true);
+    const rows = fresh();
+    expect(rows.some((r) => r.model === 'mock-echo')).toBe(true);
+    const charged = rows.reduce((n, r) => n + (r.charged_msub ?? 0), 0);
+    expect(charged).toBeGreaterThan(0);
+    expect(charged).toBeLessThanOrEqual(withReading * 1000);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
   it('a tap explains the button, sliding off cancels, and neither sends anything', async () => {
     const { ctx, page, errors, calls } = await phone();
     await hold(page, '#talkBtn', 80);

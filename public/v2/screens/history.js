@@ -6,7 +6,7 @@ import { backHeader, el, icon } from '../core/ui.js';
 
 const KIND_ICON = { image: ['camera', 'gold'], file: ['file', 'blue'], voice: ['mic', 'violet'], text: ['bulb', 'teal'] };
 
-export function historyScreen({ t, state, nav, back, actions }) {
+export function historyScreen({ t, state, back, backTo, actions }) {
   const S = state.S;
   const intro = el('p', { class: 'note', id: 'historyIntro' });
   const seg = el('div', { class: 'seg wrap', role: 'radiogroup', 'aria-labelledby': 'autoHead', id: 'autoDelete' });
@@ -60,7 +60,7 @@ export function historyScreen({ t, state, nav, back, actions }) {
       el('span', { class: 'tile-ico big tint-gold', 'aria-hidden': 'true' }, icon('clock', 28)),
       el('b', { text: t('history.emptyTitle') }),
       el('p', { class: 'note', text: t('history.empty') }),
-      el('button', { type: 'button', class: 'btn', id: 'historyAsk', onclick: () => nav('home') }, icon('mic', 18), el('span', { text: t('history.emptyAsk') })),
+      el('button', { type: 'button', class: 'btn', id: 'historyAsk', onclick: () => backTo('home') }, icon('mic', 18), el('span', { text: t('history.emptyAsk') })),
     );
 
   // What the cards show beyond the stored conversations: the auto-delete choice and which one is open.

@@ -309,6 +309,12 @@ describe('first run in a phone-sized browser', () => {
   }, 60_000);
 });
 
+/** The amount on a price line or tile, without its label: "Up to $0.27". */
+function amount(text: string | null, label: string): string {
+  expect(text?.startsWith(label), `${text} starts with ${label}`).toBe(true);
+  return String(text).slice(label.length);
+}
+
 describe('empty states and the price before sending', () => {
   it('home, Funds and History say what to do when there is nothing yet', async () => {
     const { ctx, page, errors } = await phone({ seen: true });
@@ -341,6 +347,15 @@ describe('empty states and the price before sending', () => {
     await page.click('#historyAsk');
     await page.waitForSelector('[data-screen=home]');
 
+    // Reached from home, More, History: Ask a question goes back to that home, so the phone's Back
+    // does not return to the empty History.
+    await page.click('#btn-more');
+    await page.click('#moreHistory');
+    await page.waitForSelector('#historyEmpty');
+    await page.click('#historyAsk');
+    await page.waitForSelector('[data-screen=home]');
+    expect(await page.evaluate(() => (history.state as any)?.forge2 ?? 0)).toBe(0);
+
     // With funds, the empty states are gone.
     const key = await fundedKey();
     await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
@@ -371,9 +386,12 @@ describe('empty states and the price before sending', () => {
     await page.waitForSelector('[data-screen=type]');
     await page.fill('#question', 'What should I bring on Saturday?');
     expect(await page.textContent('#priceLine')).toMatch(/^Price(Under|Up to) \$\d+\.\d\d$/);
+    // Ask again sends the same conversation the question did, so it shows the same price.
+    const asked = amount(await page.textContent('#priceLine'), 'Price');
     await page.click('#sendBtn');
     await page.waitForSelector('#againBtn', { timeout: 20_000 });
     expect(await page.textContent('#againBtn')).toMatch(/^Ask again(Under|Up to) \$\d+\.\d\d$/);
+    expect(amount(await page.textContent('#againBtn'), 'Ask again')).toBe(asked);
 
     // A failed answer: Try again is a paid question too, priced before the tap.
     await page.goto(`${g.url}/v2/#/more/model`);
@@ -382,10 +400,13 @@ describe('empty states and the price before sending', () => {
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('[data-screen=type]');
     await page.fill('#question', 'Will this work?');
+    // Try again sends the conversation up to this question, without the failed reply: the same price.
+    const failing = amount(await page.textContent('#priceLine'), 'Price');
     await page.click('#sendBtn');
     await page.waitForSelector('#answerError:not([hidden])', { timeout: 20_000 });
     expect(await page.textContent('#nextStep')).toBe('Try again');
     expect(await page.textContent('#retryPrice')).toMatch(/^Price(Under|Up to) \$\d+\.\d\d$/);
+    expect(amount(await page.textContent('#retryPrice'), 'Price')).toBe(failing);
     await ctx.close();
   }, 60_000);
 });

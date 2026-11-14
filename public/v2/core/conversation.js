@@ -39,6 +39,17 @@ export function memoryView(messages, pending, { systemPrompt = '', vision = fals
   return { ...m, tokens: total, held };
 }
 
+/**
+ * What Ask again and Try again send: the conversation up to its last question, without the answers
+ * after it and without failed replies. Empty when there is no question to ask again. Its last message
+ * is the question asked again.
+ */
+export function againHistory(messages) {
+  let end = messages.length;
+  while (end && messages[end - 1].role === 'assistant') end--;
+  return messages.slice(0, end).filter((m) => !m.meta?.error);
+}
+
 /** The last question and its answer, for the answer screen. Null before the first question. */
 export function lastExchange(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
