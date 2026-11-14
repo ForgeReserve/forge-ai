@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  Object.assign(till, { next: [], requirePin: true, marginMsat: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false });
+  Object.assign(till, { next: [], requirePin: true, marginMsat: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false, loseNextPay: false, invoiceExpired: false });
   till.log = [];
 });
 
@@ -315,6 +315,49 @@ describe('Tap a Fedimint card', () => {
     expect(await page.isDisabled('#fedChangeTill')).toBe(true);
     expect(await page.isDisabled('#fedForgetTill')).toBe(true);
     expect((await tillPays(page))[0]).toMatchObject({ state: 'sent', till: till.url });
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('in the app: an unanswered payment whose invoice ran out is let go once the till cannot still be on it', async () => {
+    till.loseNextPay = true;
+    const card = new FakeFedimintCard({ balanceMsat: 50_000_000 });
+    const { ctx, page, errors } = await appWithCard(card);
+    await pairAndPrice(page);
+    // The card stays on the phone after the first tap, so a later Pay goes on with it.
+    const payWithCard = async (first = false) => {
+      await page.fill('#fedPin', '1234');
+      await page.click('#fedPay');
+      if (!first) return;
+      await page.waitForSelector('#fedHold');
+      await tap(page);
+    };
+    // The request is lost on the way: kept as sent, and the till is held.
+    await payWithCard(true);
+    await page.waitForSelector('#fedTillBusy', { timeout: 20_000 });
+    const [rec] = await tillPays(page);
+    expect(rec.state).toBe('sent');
+    // The invoice runs out. Straight after, the till could still be on the first request: kept.
+    till.invoiceExpired = true;
+    await page.click(`[data-finish="${rec.id}"]`);
+    await payWithCard();
+    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('The till may still be working on the last try. Wait two minutes, then hold the card to the phone again.');
+    expect((await tillPays(page))[0]).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
+    expect(await page.isDisabled('#fedChangeTill')).toBe(true);
+    // Two minutes on (the first request was sent that long ago): the refusal now proves the till holds
+    // no charge, so the payment goes, and with it the hold on the till.
+    await page.evaluate(() => {
+      const v = JSON.parse(localStorage.getItem('forge2.tillpays')!);
+      v.pays[0].openSince -= 200_000;
+      localStorage.setItem('forge2.tillpays', JSON.stringify(v));
+    });
+    await page.click(`[data-finish="${rec.id}"]`);
+    await payWithCard();
+    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('The price ran out of time. See the price again.');
+    expect(await tillPays(page)).toEqual([]);
+    expect(await page.$('#fedTillBusy')).toBeNull();
+    expect(await page.isDisabled('#fedChangeTill')).toBe(false);
+    expect(card.balanceMsat).toBe(50_000_000);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

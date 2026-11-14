@@ -140,7 +140,7 @@ describe('paying through a till', () => {
   let pays: any;
   let card: FakeFedimintCard;
   beforeEach(async () => {
-    Object.assign(till, { next: [], requirePin: true, marginMsat: 0, marginBps: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false, onPaid: null, payEnabled: true, maxFeeCapMsat: 1_000_000 });
+    Object.assign(till, { next: [], requirePin: true, marginMsat: 0, marginBps: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false, loseNextPay: false, invoiceExpired: false, onPaid: null, payEnabled: true, maxFeeCapMsat: 1_000_000 });
     till.log = [];
     storage = memStorage();
     transport = nodeTill();
@@ -313,6 +313,81 @@ describe('paying through a till', () => {
     expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
     expect(new Set(till.log.filter((l) => l.path === '/v1/pay').map((l) => l.body.client_ref))).toEqual(new Set([rec.clientRef]));
     expect(till.pays.filter((p) => p.client_ref === rec.clientRef)).toHaveLength(1);
+  });
+
+  it('an unanswered pay the till never took: invoice_expired with no pay_id lets it go, once the first request cannot still run', async () => {
+    let clock = Date.now();
+    // The first POST is lost on the way: the till never acts on it.
+    till.loseNextPay = true;
+    const p = T.createTillPays({ storage, transport, settings, now: () => clock });
+    const rec = p.start({ engine: '', fundingId: 'fund_1', bolt11: invoice(5000), expiresAt: clock + 600_000, amount: 5000, unit: 'sat' });
+    const first = await p.pay(rec.id, { card, pin: '1234' });
+    expect(first).toMatchObject({ kind: 'unknown', rec: { state: 'sent' } });
+    expect(till.pays.filter((x) => x.client_ref === rec.clientRef)).toEqual([]);
+    // The invoice runs out before the next tap. The till looks the client_ref up, finds nothing, and
+    // refuses the invoice with no pay_id.
+    till.invoiceExpired = true;
+    clock += 30_000;
+    const soon = await p.pay(rec.id, { card, pin: '1234' });
+    // Too soon: the first request could still be charging the card at the till. Kept as it was.
+    expect(soon).toMatchObject({ kind: 'before', code: 'invoice_expired', held: true });
+    expect(soon.rec).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
+    expect(() => p.drop(rec.id)).toThrow(/kept/);
+    clock += T.IN_FLIGHT_MS;
+    const later = await p.pay(rec.id, { card, pin: '1234' });
+    expect(later).toMatchObject({ kind: 'before', code: 'invoice_expired' });
+    expect(later.held).toBeUndefined();
+    expect(later.rec.state).toBe('ready');
+    expect(later.rec.clientRef).not.toBe(rec.clientRef);
+    expect(p.waiting()).toEqual([]);
+    expect((await p.check(rec.id)).code).toBe('no_pay_id');
+    p.drop(rec.id);
+    expect(p.all()).toEqual([]);
+    expect(card.balanceMsat).toBe(20_000_000);
+    expect(till.pays.filter((x) => x.client_ref === rec.clientRef)).toEqual([]);
+    // Every request carried the one client_ref the till never charged.
+    expect(new Set(till.log.filter((l) => l.path === '/v1/pay').map((l) => l.body.client_ref))).toEqual(new Set([rec.clientRef]));
+  });
+
+  it('an unanswered pay the till did take is answered from its record, whatever the invoice time left', async () => {
+    till.dropNextAnswer = true;
+    const rec = start();
+    expect((await pays.pay(rec.id, { card, pin: '1234' })).kind).toBe('unknown');
+    till.invoiceExpired = true;
+    const again = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(again.kind).toBe('paid');
+    expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
+  });
+
+  it('every till refusal after the client_ref lookup lets an old unanswered pay go, and none before it does', async () => {
+    const t0 = Date.now();
+    for (const [code, release] of [
+      ['wrong_network', true],
+      ['over_limit', true],
+      ['daily_cap', true],
+      ['fee_reserve_too_low', true],
+      ['pin_required', true],
+      ['invoice_in_use', false],
+      ['conflict', false],
+      ['lightning_unavailable', false],
+      ['bad_invoice', false],
+      ['pay_disabled', false],
+      ['card_link_gone', false],
+    ] as const) {
+      let n = 0;
+      const tx = {
+        ...transport,
+        request: async (r: any) => (r.path !== '/v1/pay' ? transport.request(r) : ++n === 1 ? null : { status: code === 'conflict' || code === 'invoice_in_use' ? 409 : 400, body: { ok: false, error: code } }),
+      };
+      let clock = t0;
+      const p = T.createTillPays({ storage: memStorage(), transport: tx, settings, now: () => clock });
+      const rec = p.start({ engine: '', fundingId: 'f', bolt11: invoice(5000), expiresAt: clock + 600_000, amount: 5000, unit: 'sat' });
+      expect((await p.pay(rec.id, { card, pin: '1234' })).rec.state, code).toBe('sent');
+      clock += T.IN_FLIGHT_MS;
+      const out = await p.pay(rec.id, { card, pin: '1234' });
+      expect(out.rec.state, code).toBe(release ? 'ready' : 'sent');
+      expect(out.rec.clientRef === rec.clientRef, code).toBe(!release);
+    }
   });
 
   it('a till whose fee cap is below the gateway fee: one new price, then no endless requote', async () => {

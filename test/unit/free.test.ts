@@ -292,6 +292,35 @@ describe('the faucet', () => {
     expect(await code(() => f.challenge('a'))).toBe('faucet_limit');
   });
 
+  it('keeps nothing in memory for a challenge until it is solved, however many are asked for', async () => {
+    const { f } = make();
+    const sizes = () => Object.values(f).filter((v) => v instanceof Map || v instanceof Set).map((v) => (v as Map<unknown, unknown>).size);
+    let last = f.challenge('1.2.3.4');
+    for (let i = 0; i < 5000; i++) last = f.challenge('1.2.3.4');
+    expect(sizes().every((n) => n === 0)).toBe(true);
+    // Each one is still good, and spent once solved.
+    f.verify(solve(last.challenge, last.bits));
+    expect(((f as any).spentChallenges as Map<string, number>).size).toBe(1);
+    expect(await code(() => f.verify(solve(last.challenge, last.bits)))).toBe('challenge_used');
+  });
+
+  it('refuses a challenge it did not sign, or one whose bits or expiry were changed', async () => {
+    const { f } = make();
+    const c = f.challenge('a');
+    const [rand, bits, exp, sig] = c.challenge.split('.');
+    expect(c.challenge).not.toContain(':');
+    expect(Number(bits)).toBe(c.bits);
+    expect(Number(exp)).toBe(c.expires_at);
+    const easier = [rand, '0', exp, sig].join('.');
+    expect(await code(() => f.verify(solve(easier, 0)))).toBe('challenge_unknown');
+    const longer = [rand, bits, String(c.expires_at + 3_600_000), sig].join('.');
+    expect(await code(() => f.verify(solve(longer, c.bits)))).toBe('challenge_unknown');
+    // A challenge from another process (or from before a restart) is unknown here.
+    const other = make().f.challenge('a');
+    expect(await code(() => f.verify(solve(other.challenge, other.bits)))).toBe('challenge_unknown');
+    expect(await code(() => f.verify(solve(c.challenge, c.bits)))).toBe('ok');
+  });
+
   it('gives a harder puzzle more time, in step with the expected work, up to an hour', async () => {
     const { f, claimOne, tick, set } = make({ perAddress: 0, daily: 480 });
     const t0 = Date.UTC(2026, 11, 2, 10);

@@ -536,6 +536,11 @@ export function create(inputs) {
             home();
             return msg.set(t('fund.fedimint.expired'), 'err');
           case 'before':
+            // The till may still be finishing the request that got no answer: kept, and tried later.
+            if (out.held) {
+              home();
+              return msg.set(t('fund.fedimint.held'), 'err');
+            }
             // A payment kept as sent (an earlier request got no answer) is never dropped here.
             if (NEW_INVOICE.has(out.code) && rec.state === 'ready') {
               pays.drop(rec.id);

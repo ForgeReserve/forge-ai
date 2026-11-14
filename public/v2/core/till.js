@@ -188,6 +188,19 @@ const CARD_FINAL = new Set(['pin_blocked', 'unknown_card']);
 // Answered before the till looks up the client_ref (fedimintcard-pay pay.rs, pay and pay_on): such an
 // answer says nothing about a pay an earlier, unanswered POST may have started.
 const PRE_LOOKUP = new Set(['card_link_required', 'card_link_gone', 'pay_disabled', 'bad_request', 'bad_invoice', 'lightning_unavailable']);
+// Answered after the till looked up the client_ref (pay.rs pay_on: card_checks and refuse_new). A pay
+// that took, or may have taken, the card's money is replayed or answered undecided before these, so
+// one of them with no pay_id says the till holds no charge for this client_ref. The one exception is
+// an earlier request the till is still working on: see IN_FLIGHT_MS.
+const POST_LOOKUP = new Set(['invoice_expired', 'wrong_network', 'over_limit', 'daily_cap', 'fee_reserve_too_low', 'pin_required']);
+/**
+ * How long a POST /v1/pay that got no answer may still be charging the card at the till. The till
+ * runs such a pay beside a new request for the same client_ref, and while it charges, the new one is
+ * checked as if it were new. The charge needs the card link, which lives at most 120 s (POS-LINK.md)
+ * and closes when this phone's request ends. Until this long after that request was sent, a
+ * refusal from the till's checks proves nothing about it.
+ */
+export const IN_FLIGHT_MS = PAY_TIMEOUT_MS;
 
 const UNSETTLED = new Set(['charging', 'charged', 'paying']);
 
@@ -442,21 +455,29 @@ export function createTillPays({ storage, transport, settings = null, now = () =
    * Applies an answer about the pay (POST /v1/pay or GET /v1/pay/{id}). Returns {kind, code, ...}.
    * wasSent: an earlier POST for this payment got no answer, so the card may have paid with it.
    */
-  function applyPay(rec, r, { wasSent = false } = {}) {
+  function applyPay(rec, r, { wasSent = false, openSince = null } = {}) {
     const out = readPay(r);
     if (r) take(rec, r.body);
     rec.code = out.code;
     // A refusal after an unanswered POST proves nothing moved only when it carries the till's record
-    // of this client_ref (its pay_id, or not_charged). One the till gives before it looks the
-    // client_ref up (a closed card link, pay switched off, ...) does not: the payment stays sent,
-    // with the same client_ref, and the next tap sends the very same request.
+    // of this client_ref (its pay_id, or not_charged), or when the till gave it after looking the
+    // client_ref up (POST_LOOKUP) and the unanswered POST can no longer be charging the card. One the
+    // till gives before it looks the client_ref up (a closed card link, pay switched off, ...) does
+    // not: the payment stays sent, with the same client_ref, and the next tap sends the very same
+    // request.
     if (wasSent && (out.kind === 'card' || out.kind === 'before')) {
       const b = r?.body && typeof r.body === 'object' ? r.body : {};
       const known = Number.isSafeInteger(b.pay_id) || b.state === 'not_charged';
+      // A refusal started nothing: what may still run at the till is the earlier request.
+      if (!known) rec.openSince = openSince;
+      const after = !known && out.kind === 'before' && POST_LOOKUP.has(out.code);
+      const done = after && now() - (openSince ?? 0) >= IN_FLIGHT_MS;
       // A conflict names a pay the till holds for this client_ref: never let go of that client_ref.
-      if (PRE_LOOKUP.has(out.code) || !known || out.code === 'conflict') {
+      if (!done && (PRE_LOOKUP.has(out.code) || !known || out.code === 'conflict')) {
         rec.state = 'sent';
         if (out.kind === 'card') out.triesLeft = out.code === 'wrong_pin' ? triesLeft(rec.detail) : null;
+        // The till may still be finishing the earlier request: ask again once it cannot be.
+        if (after) out.held = true;
         save(rec);
         return { ...out, rec };
       }
@@ -478,6 +499,7 @@ export function createTillPays({ storage, transport, settings = null, now = () =
       case 'before':
         rec.state = 'ready';
         rec.clientRef = newRef();
+        delete rec.openSince;
         // A new price only when the till asks more than was sent. The same fee again means the till's
         // own cap is below the gateway's fee: this till cannot pay the invoice now (PAY.md).
         if (out.code === 'fee_reserve_too_low' && Number.isSafeInteger(r.body?.gateway_fee_msat)) {
@@ -554,11 +576,15 @@ export function createTillPays({ storage, transport, settings = null, now = () =
       if (rec.state === 'ready' && rec.expiresAt && rec.expiresAt - now() < MIN_LEFT_MS) return { kind: 'expired', code: 'invoice_expired', rec };
       const link = await openLink(card);
       const wasSent = rec.state === 'sent';
+      // When the request that may still run at the till was sent. A record stored before this was
+      // kept has its last write, which came after that request.
+      const openSince = wasSent ? (rec.openSince ?? rec.updatedAt ?? now()) : null;
       let r;
       try {
         // Saved before the till hears of it: from here the card may pay, so the payment stays.
         rec.state = 'sent';
         rec.sends = (rec.sends ?? 0) + 1;
+        rec.openSince = now();
         save(rec);
         const body = { bolt11: rec.bolt11, max_fee_msat: rec.maxFeeMsat, client_ref: rec.clientRef };
         if (pin) body.pin = pin;
@@ -567,7 +593,7 @@ export function createTillPays({ storage, transport, settings = null, now = () =
         link.close();
       }
       try {
-        return applyPay(rec, r, { wasSent });
+        return applyPay(rec, r, { wasSent, openSince });
       } catch (e) {
         // The till has the request and may have charged the card; the payment on the phone is still
         // 'sent', so the next tap sends it again.

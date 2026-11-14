@@ -618,6 +618,7 @@ export default {
   'fund.fedimint.unknownCard': 'This till does not take this card.',
   'fund.fedimint.requote': 'The till asks a larger Lightning fee. This is the new price.',
   'fund.fedimint.expired': 'The price ran out of time. See the price again.',
+  'fund.fedimint.held': 'The till may still be working on the last try. Wait two minutes, then hold the card to the phone again.',
   'fund.fedimint.wrongNetwork': 'This till pays on another Bitcoin network than this engine.',
   'fund.fedimint.dailyCap': 'This till has paid all it pays in a day. Try again tomorrow.',
   'fund.fedimint.payDisabled': 'This till does not pay invoices.',

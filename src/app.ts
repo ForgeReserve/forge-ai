@@ -100,6 +100,9 @@ interface SettleResult {
   changeId?: string;
 }
 
+/** POST routes that need no balance: rate limited by the client's address, whatever bearer is sent. */
+const OPEN_POSTS = /^\/v1\/(free|wallet\/fund\/card)\//i;
+
 export function createApp(d: Deps) {
   const { config, db, ledger, invites, wallet, rates, suppliers } = d;
   const env = config.env;
@@ -135,7 +138,9 @@ export function createApp(d: Deps) {
   app.use('/v1/*', (c, next) => (c.req.path === TRANSCRIPTIONS_PATH ? audioLimit(c, next) : defaultLimit(c, next)));
   app.use('/v1/*', async (c, next) => {
     if (c.req.method === 'OPTIONS' || c.req.method === 'GET') return next();
-    const key = bearer(c);
+    // The faucet and the card relay need no balance, so a bearer there proves nothing: any made-up one
+    // would be a fresh bucket. They are counted by address.
+    const key = OPEN_POSTS.test(c.req.path) ? null : bearer(c);
     const id = key ? 'k:' + key.slice(-12) : 'ip:' + clientIp(c);
     const wait = limiter.take(id);
     if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many requests', { 'Retry-After': String(wait) });

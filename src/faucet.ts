@@ -14,8 +14,12 @@
  * Steps: challenge (a random string and the bits it needs), verify (the solution; spends the challenge
  * and gives a one-time ticket), claim (the ticket; mints the voucher). A ticket whose minting fails
  * can be claimed again; a used challenge or ticket is refused.
+ *
+ * A challenge is not stored: it carries its bits and its expiry, signed with a key that lives only in
+ * this process, so asking for challenges without end costs this process no memory. Only a solved one
+ * is kept (until it expires), so it cannot be used twice.
  */
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { DB } from './db.ts';
 
 const DAY_MS = 86_400_000;
@@ -23,6 +27,8 @@ const TICKET_MS = 120_000;
 const MAX_NONCE = 64;
 /** The longest a challenge lives, however hard it is. */
 const MAX_CHALLENGE_MS = 3_600_000;
+/** A challenge: random, bits, expiry, and the signature over the three. No ':' (it ends at the nonce). */
+const CHALLENGE = /^([0-9a-f]{32})\.(\d{1,2})\.(\d{1,15})\.([0-9a-f]{64})$/;
 
 export class FaucetError extends Error {
   readonly code: string;
@@ -100,7 +106,8 @@ export function checkSolution(challenge: string, solution: string, bits: number)
 export class Faucet {
   private readonly o: FaucetOptions;
   private readonly now: () => number;
-  private readonly challenges = new Map<string, { bits: number; expiresAt: number }>();
+  /** Signs challenges. Made fresh at each start: a challenge from before a restart is unknown. */
+  private readonly challengeKey = randomBytes(32);
   private readonly spentChallenges = new Map<string, number>();
   private readonly tickets = new Map<string, { expiresAt: number }>();
   private readonly usedTickets = new Map<string, number>();
@@ -159,7 +166,6 @@ export class Faucet {
 
   /** Drops what has run out, so the maps stay small. */
   private sweep(t: number) {
-    for (const [k, v] of this.challenges) if (v.expiresAt <= t) this.challenges.delete(k);
     for (const [k, exp] of this.spentChallenges) if (exp <= t) this.spentChallenges.delete(k);
     for (const [k, v] of this.tickets) if (v.expiresAt <= t) this.tickets.delete(k);
     for (const [k, exp] of this.usedTickets) if (exp <= t) this.usedTickets.delete(k);
@@ -205,11 +211,23 @@ export class Faucet {
     this.sweep(t);
     this.refuseIfEmpty(t);
     this.refuseIfLimited(address, t);
-    const challenge = randomBytes(16).toString('hex');
     const bits = this.bitsNow(t);
     const expiresAt = t + this.challengeLifetime(bits);
-    this.challenges.set(challenge, { bits, expiresAt });
-    return { challenge, bits, expires_at: expiresAt };
+    const body = `${randomBytes(16).toString('hex')}.${bits}.${expiresAt}`;
+    return { challenge: `${body}.${this.sign(body)}`, bits, expires_at: expiresAt };
+  }
+
+  private sign(body: string): string {
+    return createHmac('sha256', this.challengeKey).update(body).digest('hex');
+  }
+
+  /** The bits and expiry a challenge carries, or null when this process did not sign it. */
+  private readChallenge(challenge: string): { bits: number; expiresAt: number } | null {
+    const m = CHALLENGE.exec(challenge);
+    if (!m) return null;
+    const want = Buffer.from(this.sign(`${m[1]}.${m[2]}.${m[3]}`), 'hex');
+    if (!timingSafeEqual(want, Buffer.from(m[4]!, 'hex'))) return null;
+    return { bits: Number(m[2]), expiresAt: Number(m[3]) };
   }
 
   /** Checks a solution. Spends the challenge and hands out a one-time ticket for the claim. */
@@ -218,14 +236,11 @@ export class Faucet {
     const s = typeof solution === 'string' ? solution : '';
     const challenge = s.split(':')[0] ?? '';
     if (this.spentChallenges.has(challenge)) throw new FaucetError('challenge_used', 'this puzzle was already used; ask for a new one', 409);
-    const c = this.challenges.get(challenge);
+    const c = this.readChallenge(challenge);
     if (!c) throw new FaucetError('challenge_unknown', 'unknown puzzle; ask for a new one', 400);
-    if (c.expiresAt <= t) {
-      this.challenges.delete(challenge);
-      throw new FaucetError('challenge_expired', 'this puzzle is too old; ask for a new one', 410);
-    }
+    if (c.expiresAt <= t) throw new FaucetError('challenge_expired', 'this puzzle is too old; ask for a new one', 410);
     if (!checkSolution(challenge, s, c.bits)) throw new FaucetError('pow_invalid', 'the puzzle answer is wrong', 400);
-    this.challenges.delete(challenge);
+    this.sweep(t);
     this.spentChallenges.set(challenge, c.expiresAt);
     const ticket = randomBytes(24).toString('base64url');
     const expiresAt = t + TICKET_MS;

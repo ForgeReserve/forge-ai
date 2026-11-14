@@ -148,6 +148,10 @@ export class MockTill {
   onPaid: ((bolt11: string) => void | Promise<void>) | null = null;
   /** Closes the connection without an answer after the next pay's outcome (an answer lost on the way). */
   dropNextAnswer = false;
+  /** Loses the next POST /v1/pay before the till acts on it: the connection closes with no answer. */
+  loseNextPay = false;
+  /** The invoice has run out of time at the till (pay.rs check_invoice, after the client_ref lookup). */
+  invoiceExpired = false;
   pays: Pay[] = [];
   /** Every request, for the tests: method, path, the bearer's scope, X-Card-Link, body. */
   log: { method: string; path: string; scope: string; link: string | null; body: any }[] = [];
@@ -296,6 +300,10 @@ export class MockTill {
   }
 
   private async pay(scope: string, link: string | null, body: any) {
+    if (this.loseNextPay) {
+      this.loseNextPay = false;
+      return null;
+    }
     if (scope === 'pay' && !link) return fail(400, 'card_link_required', 'a pay token pays only with the card behind its own card link');
     const l = link ? this.links.get(link) : null;
     if (link && !l?.open) return fail(409, 'card_link_gone', 'the card link is unknown or closed');
@@ -310,6 +318,7 @@ export class MockTill {
     if (p && p.payment_hash !== hash) return fail(409, 'conflict', 'client_ref was used for another invoice');
     if (p && p.state !== 'not_charged' && p.state !== 'charging') return this.final(p);
     // Every check that guards the card.
+    if (this.invoiceExpired) return fail(400, 'invoice_expired', 'the invoice has expired; ask for a new one');
     const reserve = Math.min(body.max_fee_msat ?? this.maxFeeCapMsat, this.maxFeeCapMsat);
     const margin = this.marginMsat + Math.floor((inv * this.marginBps) / 10_000);
     const price = inv + reserve + margin;
