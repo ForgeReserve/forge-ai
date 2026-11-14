@@ -27,6 +27,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - Lightning and on-chain funding go through the Forge mint. The mint sees the quote, the invoice or address and when it is paid; the gateway's mint requests are not linked to the balance key on the mint's side. The gateway stores the quote id, invoice or address, and amounts with the balance id, never the key.
 - On-chain status comes from the mint only, unless `FORGE_ESPLORA_URL` is set; then the gateway asks that Esplora server about the deposit address (point it at your own node to keep addresses private).
 - eCash from another mint: the gateway contacts that mint from its own IP address to swap and melt the token. That mint learns the Forge invoice it paid. The change or refund token handed back is fresh eCash from that mint.
+- A Cashu card (v2 Android app): the phone talks only to its engine, so the engine carries the card's swap to the card's mint from its own IP address and hands the answer back (`/v1/wallet/fund/card/*`). The engine and that mint see the card's pieces, and the secret of each piece names the card's key, so a card is recognisable from one tap to the next. They see the phone's outputs only blinded; the blinding factors stay on the phone, so neither can take the eCash. The engine stores nothing of it and logs nothing of the request. The eCash is then added like any other eCash, linked to the balance key it lands on. The card's own record (mint, PIN state, pieces) is read on the phone and not sent anywhere else.
 
 ## Free questions and the faucet
 
@@ -48,7 +49,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 The v2 app at `/v2/` keeps, on the phone only:
 
 - **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
-- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved) in `localStorage`, plus the last model list and look, and a mark that the first run was seen (`forge2.firstRun`). The invite code typed on the first run's Welcome step is held in the page's memory only, never stored.
+- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved; `forge2.cards`: a card payment until its swap is done and its eCash is in the vault, and change owed to a card until that card takes it back) in `localStorage`, plus the last model list and look, and a mark that the first run was seen (`forge2.firstRun`). The invite code typed on the first run's Welcome step is held in the page's memory only, never stored.
 - **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
 - **A photo shared in from another app**, for a moment: the service worker keeps it in its own cache (`forge2-share`) until the Share unseen screen opens and takes it, then deletes that cache. Opened any other way, the app deletes an old one it finds. A photo picked or taken inside the app is never stored.
 
@@ -83,6 +84,7 @@ The Android app (docs/ANDROID.md) keeps the same things in its own web view stor
 - Two kinds of photo file are written: the protected photo handed to the share sheet (the app's cache) and a photo taken with the camera for Share unseen (the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
 - Backups are off, so nothing of Forge goes into a cloud backup or a phone to phone transfer. Uninstalling the app removes everything it kept.
 - It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default).
+- Card taps: the NFC reader is on only while the Tap a card screen is open. The card's answers go to the page and nowhere else; a card's mint is reached through the engine as above.
 - Its web view sends nothing to Google: Safe Browsing link checks and WebView usage metrics are turned off in the app's manifest.
 
 ## Encrypted pass-through (Tinfoil EHBP)

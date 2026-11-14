@@ -87,6 +87,30 @@ The balance unit and the token unit may differ (a sat token can fund a usd balan
 
 Finalizing a mint runs in one transaction that checks the funding is still `minting` with the same stored outputs, so two pollers, a status request and a restart can race and the balance is credited once. The e2e suite injects faults after the mint, after the foreign swap and after the melt, restarts on the same database (with and without NUT-19 replay) and checks the credit is exact and single.
 
+### A Cashu card (the v2 Android app)
+
+A Cashu card (the card protocol 2.0 from the cashu-javacard applet, as flash-pos speaks it) holds pieces of eCash locked to the card's own key with `SIG_ALL`, and pays with one BIP-340 signature over a whole swap. The phone takes eCash off it in one tap where the card stays on the phone (`public/v2/core/card/`, ported from flash-pos `src/services/cashuCard.ts`):
+
+1. Read: `SELECT`, `GET_INFO`, `GET_CARD` (the mint, the unit, the refund key), `GET_PUBKEY` and `AUTH` (the card proves it holds that key), then the short listing of its pieces (`GET_PIECES`) and its open change outputs (`GET_CHANGE`).
+2. The card's mint, through the engine: `POST /v1/wallet/fund/card/mint {mint, unit}` answers its keysets and the active keys. The engine reaches the mint only if it is the engine's own (an alias goes to the main address) or passes the other-mint checks (`vetForeignMint`: the policy, the URL safety check, the unlisted prompt with `accept_unlisted`). The credit mint is refused.
+3. Plan: the pieces of one date that cover the amount (all of the largest group by default), the mint's input fee paid from the amount moved, the phone's outputs in powers of two, and the card's change. Change is made in the payment's keyset, so a card whose keyset is no longer active can move all of it only.
+4. Pay: `VERIFY_PIN` (a wrong PIN answers `63CX`, the tries left), then the phone makes its outputs and blinding factors, `SPEND_ALL_BEGIN` with the slots, `SPEND_ALL_OUTPUTS`, `SPEND_ALL_CHANGE` for each change amount (the card makes those outputs itself), and **only after all of that is written to the phone's storage and read back**, `SPEND_ALL_SIGN`. The card burns its pieces in the commit that releases the signature. The signature is checked against the payment's message and stored at once.
+5. Swap: `POST /v1/wallet/fund/card/swap {mint, inputs, outputs}`; the engine passes it to `<mint>/v1/swap` and the answer back. The phone checks each blind signature's amount, keyset and NUT-12 proof, unblinds its own outputs into a cashuB token (stored with the job before anything else), and loads the card's change back onto it (`GET_CHANGE` openings, `C = C_ - r·K`, `LOAD_PROOF`), in the same tap or the next one.
+6. Add: a token from the engine's own mint goes through `wallet.topup` (stored in the vault first). A token from another mint is kept in the vault, marked not added, and the Other mint screen opens with it (flow above).
+
+No money is lost on a broken tap:
+
+| The card leaves | What the phone holds | What finishes it |
+| - | - | - |
+| before `SPEND_ALL_SIGN` reaches it | the payment | The next read finds the pieces still there and drops the payment. Nothing moved |
+| after the commit, before the answer | the payment, without a signature | The next tap of that card: `SPEND_ALL_AGAIN` (with the PIN on a card that has one), checked against the stored payment, then the swap |
+| after the signature | the signed payment | The swap is sent again (now, on start, when the connection comes back, on Funds). If the mint already did it (`11001`, `11002`, `11003`), `POST /v1/wallet/fund/card/restore` (NUT-09) gets its signatures again |
+| after the swap, before the change is loaded | the token, and the mint's signatures for the card's change | The token goes to the vault at once; the change is loaded at the next tap of that card (the change grant, or the PIN) |
+
+A status word from `SPEND_ALL_SIGN` (`6A94` PIN needed, `6A8F` over the daily limit) is a refusal before the commit: nothing was burned and the payment is dropped. Any other failure there keeps it. A mint that refuses the swap outright marks the payment failed and keeps it on the phone for a person to look at; nothing retries it as if it might pass.
+
+Not covered: the card's clock and limits (`SET_HEADER`, the no-PIN allowance), the owner's commands, a card's DLEQ store, the NFC tag application, and a 0.x or Foxy 1.x card, which is refused as needing an update before anything is asked of it.
+
 ### Not yet: Fedimint
 
 Fedimint notes need a Fedimint client to reissue them in their federation and pay out to Lightning. The cashucard.org fund kit does this with `fedimint-receiver`, a separate Rust service. Forge AI does not run one, so Fedimint is not offered. Adding it would mean deploying that receiver beside the gateway and treating it like a foreign mint: reissue, pay the Forge bolt11 quote from the federation, mint and credit.
