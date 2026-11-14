@@ -4,7 +4,8 @@
 // opens the scanner in one tap. A second chip under it opens Add funds, for every other way in. Tapping the ring itself still opens Funds and memory, where Scan a note
 // is the first button while there are no funds.
 // The Add and More sheets open over it (ZAdd, ZMore): the rings fade and a floating card sits above
-// the bottom row, whose button turns dark and reads Close.
+// the bottom row, whose button turns dark and reads Close. The sheet covers the whole home, the talk
+// button included, and the bottom row stays fixed in view, so Close never needs a scroll.
 import { el, icon } from '../core/ui.js';
 import { bottomRow, rings, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
@@ -26,8 +27,10 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
   const ringBox = el('div', { class: 'rings home-rings' }, r.node, ringBtn, talk);
   const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, chip, held, hint);
-  const main = el('main', { class: 'screen home', 'data-screen': 'home' }, bar.node, stage);
-  if (sheet) main.append(el('div', { class: 'float-wrap' }, sheet));
+  const main = el('main', { class: `screen home${sheet ? ' with-sheet' : ''}`, 'data-screen': 'home' }, bar.node, stage);
+  // The sheet is a layer over the whole home (the talk button included), with the bottom row above it so
+  // Close is always in view. A tap on the layer outside the card closes it, as Close does.
+  if (sheet) main.append(el('div', { class: 'float-wrap', onclick: (e) => e.target === e.currentTarget && nav('home') }, sheet));
   main.append(bottomRow({ t, nav, open }));
 
   const update = () => {

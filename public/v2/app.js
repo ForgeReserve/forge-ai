@@ -22,6 +22,7 @@ import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
 import { ehbpBytes, estimate, holdMsub, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
+import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
@@ -1301,6 +1302,8 @@ function showErased(ok) {
 
 async function start() {
   document.title = t('app.name');
+  // The visible height above a phone keyboard, for Type (core/viewport.js).
+  watchViewport();
   // Erase everything in another tab clears localStorage there (key null) and deletes the database.
   onErasedElsewhere(erasedElsewhere);
   addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
