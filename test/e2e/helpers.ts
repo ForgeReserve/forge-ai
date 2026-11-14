@@ -18,6 +18,16 @@ export const MINT_B = process.env.TEST_MINT_B ?? 'http://127.0.0.1:3339';
 /** The "foreign" mint for other-mint funding tests (input fees 100 ppk). */
 export const MINT_C = process.env.TEST_MINT_C ?? 'http://127.0.0.1:3340';
 export const BTC_USD = 100_000;
+/** The credit mint for the free tier tests (usd only, no input fees). */
+export const MINT_CREDIT = process.env.TEST_MINT_CREDIT ?? 'http://127.0.0.1:3341';
+
+export async function creditMintUp(): Promise<boolean> {
+  try {
+    return (await fetch(`${MINT_CREDIT}/v1/info`)).ok;
+  } catch {
+    return false;
+  }
+}
 
 export async function mintsUp(): Promise<boolean> {
   try {
@@ -164,6 +174,8 @@ export async function startGateway(
     audio?: boolean;
     /** Changes the test catalog before the gateway loads it. */
     editCatalog?: (catalog: any) => void;
+    /** The faucet's clock (free tier tests). */
+    faucetNow?: () => number;
   } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
@@ -183,7 +195,13 @@ export async function startGateway(
   const catalog = testCatalog(opts.enclavePort, { audio: opts.audio });
   opts.editCatalog?.(catalog);
   const config = loadConfig(env as NodeJS.ProcessEnv, catalog);
-  const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv, faults: opts.faults, fundingFaults: opts.fundingFaults });
+  const deps = buildDeps(config, {
+    rateSources: [fixedRateSource('fixed', BTC_USD)],
+    env: env as NodeJS.ProcessEnv,
+    faults: opts.faults,
+    fundingFaults: opts.fundingFaults,
+    faucet: opts.faucetNow ? { now: opts.faucetNow } : undefined,
+  });
   if (opts.recover !== false) await startupRecovery(deps);
   const app = createApp(deps);
   const server: ServerType = await new Promise((resolve) => {

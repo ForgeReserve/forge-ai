@@ -37,3 +37,12 @@ services:
       <<: *env
       MINT_INPUT_FEE_PPK: "100"
       MINT_MNEMONIC: "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"
+  # The credit mint for the free tier tests (docs/FREE-TIER.md): usd only, 1 credit = 1 cent, since
+  # Nutshell 0.22.1 takes only the units sat, msat, usd, eur, btc and auth (no custom unit).
+  mint-credit:
+    <<: *mint
+    ports: ["127.0.0.1:3341:3338"]
+    environment:
+      <<: *env
+      MINT_BACKEND_BOLT11_SAT: ""
+      MINT_MNEMONIC: "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"
