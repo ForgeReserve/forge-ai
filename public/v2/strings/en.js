@@ -531,7 +531,7 @@ export default {
   'intro.welcome.account': 'No account',
   'intro.welcome.accountSub': 'No name, no email. There is nothing to sign up for.',
   'intro.welcome.cash': 'Paid like cash',
-  'intro.welcome.cashSub': 'You pay with eCash. It carries no name.',
+  'intro.welcome.cashSub': 'You can pay with eCash. It carries no name.',
   'intro.welcome.sealed': 'Read only in sealed hardware',
   'intro.welcome.sealedSub': 'Typed questions to private models. Not by Forge, not by the model provider.',
   'intro.welcome.phone': 'Kept on this phone',
