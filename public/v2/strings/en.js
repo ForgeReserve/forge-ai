@@ -369,6 +369,9 @@ export default {
   'dl.reading': 'Reading line {n} of {total}',
   'dl.failed': 'The download stopped. Check the connection and try again. ({message})',
   'dl.retry': 'Try again',
+  'voice.natural': 'Natural voice',
+  'voice.natural.Maeve': 'British English. Bright and to the point. The default.',
+  'voice.natural.Freya': 'British English. Young, quick and warm.',
   'voice.out.off': 'Off',
   'voice.out.offSub': 'Answers are not read aloud.',
 
@@ -918,6 +921,7 @@ export default {
   'lab.loadFailed': 'The voice lab could not load on this browser. Send this message:',
   'lab.lines': 'Lines to read',
   'lab.voicesApp': 'Voices in the app',
+  'lab.voicesOther': 'Other voices, lab only',
   'lab.voicesAccent': 'Accent test (English model)',
   'lab.accentVoice': '{name}, {locale} speaker',
   'lab.accentNote': 'Accent test, lab only: the English model reading English with a {locale} speaker. Catalog: {description}',

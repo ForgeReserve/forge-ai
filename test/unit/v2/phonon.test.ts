@@ -25,15 +25,21 @@ describe('the pinned voice files', () => {
     expect(LOCK.model.repo).toBe('gradium/phonon-31m-en');
     expect(LOCK.model.revision).toMatch(/^[0-9a-f]{40}$/);
     expect(LOCK.voiceRepo.revision).toMatch(/^[0-9a-f]{40}$/);
-    expect(LOCK.voices.map((v) => v.name)).toEqual(['Maeve', 'Freya', 'Pippa', 'Elodie-Rose', 'Imogen', 'Lottie', 'Bryony']);
-    for (const v of LOCK.voices) expect([v.locale, v.gender]).toEqual(['en-gb', 'female']);
+    // The app offers two: Maeve (the default) and Freya. The other five en-GB voices are the lab's.
+    expect(LOCK.voices.map((v) => v.name)).toEqual(['Maeve', 'Freya']);
+    expect(LOCK.defaultVoice).toBe('Maeve');
+    const others = (LOCK.labVoices ?? []).filter((v) => v.use === 'lab-only');
+    expect(others.map((v) => v.name)).toEqual(['Pippa', 'Elodie-Rose', 'Imogen', 'Lottie', 'Bryony']);
+    for (const v of [...LOCK.voices, ...others]) expect([v.locale, v.gender]).toEqual(['en-gb', 'female']);
+    // Every voice's file still ships: Freya's for the picker, the rest for the lab.
+    for (const v of [...LOCK.voices, ...(LOCK.labVoices ?? [])]) expect(INDEX.files.map((f) => f.path), v.name).toContain(v.file);
     for (const f of LOCK.files) expect(f.url).toContain(f.path.startsWith('31m') ? LOCK.model.revision : LOCK.voiceRepo.revision);
     // The weights file the model card names: 64.5 MB, 8-bit.
     expect(LOCK.files.find((f) => f.path === LOCK.model.weights)!.size).toBe(64_512_352);
   });
 
   it('pins the accent-test speakers for the voice lab alone: female es-MX, es-ES, pt-BR and fr-FR, from the same voice commit', () => {
-    const lab = LOCK.labVoices ?? [];
+    const lab = (LOCK.labVoices ?? []).filter((v) => v.use === 'accent-test');
     expect(lab.map((v) => [v.name, v.locale])).toEqual([
       ['Regina', 'es-mx'],
       ['Ximena', 'es-mx'],
@@ -50,17 +56,20 @@ describe('the pinned voice files', () => {
     }
     // The app's voices are what they were: the accent test is not among them.
     expect(INDEX.voices.map((v) => v.name)).not.toContain('Regina');
-    expect(INDEX.labVoices.map((v) => v.name)).toEqual(lab.map((v) => v.name));
+    expect(INDEX.labVoices.filter((v) => v.use === 'accent-test').map((v) => v.name)).toEqual(lab.map((v) => v.name));
     expect(INDEX.files.map((f) => f.path)).toEqual(expect.arrayContaining(lab.map((v) => v.file)));
   });
 
   it('refuses a lab voice that does not say what it is for, comes from elsewhere, or reuses a name', () => {
     const bad = structuredClone(LOCK);
-    bad.labVoices![0]!.use = 'app';
-    bad.labVoices![1]!.name = 'Maeve';
-    bad.labVoices![2]!.file = '31m-en-92741c5/x.safetensors';
+    const at = (n: string) => bad.labVoices!.find((v) => v.name === n)!;
+    at('Regina').use = 'app';
+    delete at('Pippa').use;
+    at('Ximena').name = 'Maeve';
+    at('Alba').file = '31m-en-92741c5/x.safetensors';
     const errors = checkLock(bad).join('\n');
-    expect(errors).toMatch(/Regina: a lab voice must say what it is for/);
+    expect(errors).toMatch(/Regina: a lab voice must say what it is for \(use: lab-only or accent-test\)/);
+    expect(errors).toMatch(/Pippa: a lab voice must say what it is for/);
     expect(errors).toMatch(/Maeve: voice name listed twice/);
     expect(errors).toMatch(/Alba: lab voice file not in files/);
     expect(errors).toMatch(/Alba: a lab voice must come from the pinned voice repo/);
@@ -81,7 +90,7 @@ describe('the pinned voice files', () => {
     const size = (p: string) => LOCK.files.find((f) => f.path === p)!.size;
     const def = LOCK.voices.find((v) => v.name === LOCK.defaultVoice)!;
     expect(INDEX.firstBytes).toBe(size(LOCK.model.weights) + size(LOCK.model.tokenizer) + size(LOCK.model.config) + size(def.file));
-    expect(INDEX.voices).toHaveLength(7);
+    expect(INDEX.voices).toHaveLength(2);
     expect(JSON.stringify(INDEX)).not.toMatch(/huggingface/);
   });
 
@@ -125,15 +134,19 @@ describe('the model as phonon-tts takes it', () => {
     const spec = P.modelSpec(INDEX, BASE);
     expect(spec.weights.q8).toBe(`${BASE}${LOCK.model.weights}`);
     expect(spec.defaultVoice).toBe(LOCK.defaultVoice);
-    expect(Object.keys(spec.voices)).toHaveLength(7);
+    expect(Object.keys(spec.voices)).toEqual(['Maeve', 'Freya']);
     expect(P.sameOrigin(spec, 'https://app.test')).toBe(true);
     expect(P.sameOrigin(spec, 'https://other.test')).toBe(false);
-    expect(P.modelSpec(INDEX, BASE, 'Bryony').defaultVoice).toBe('Bryony');
+    expect(P.modelSpec(INDEX, BASE, 'Freya').defaultVoice).toBe('Freya');
+    // A lab-only voice is not the app's to start with.
+    expect(P.modelSpec(INDEX, BASE, 'Bryony').defaultVoice).toBe(LOCK.defaultVoice);
+    expect(P.modelSpec(INDEX, BASE, 'Bryony', { lab: true }).defaultVoice).toBe('Bryony');
     expect(P.modelSpec(INDEX, BASE, 'Nobody').defaultVoice).toBe(LOCK.defaultVoice);
   });
 
-  it('hands the accent-test voices to the voice lab only', () => {
+  it('hands the other en-GB voices and the accent-test voices to the voice lab only', () => {
     expect(Object.keys(P.modelSpec(INDEX, BASE).voices)).not.toContain('Regina');
+    expect(Object.keys(P.modelSpec(INDEX, BASE).voices)).not.toContain('Bryony');
     const lab = P.modelSpec(INDEX, BASE, null, { lab: true });
     expect(Object.keys(lab.voices)).toEqual([...INDEX.voices.map((v: any) => v.name), ...INDEX.labVoices.map((v: any) => v.name)]);
     expect(lab.defaultVoice).toBe(LOCK.defaultVoice);
@@ -439,6 +452,21 @@ describe("the app's natural voice on the graphics chip, and its fallback to the 
     expect(f.loads[0]).toMatchObject({ device: 'cpu', threads: 'auto' });
     expect(tts.device).toBe('cpu');
     expect(asked).toBe(0);
+  });
+
+  it('reads with the voice the person picked when the app offers it, else the default', async () => {
+    const f = fakeLib();
+    let picked: string | null = 'Freya';
+    const { ph } = engine({ lib: f.lib, voice: () => picked });
+    const tts = await ph.load();
+    expect(f.loads[0].model.defaultVoice).toBe('Freya');
+    await readAll(tts, 'One.');
+    picked = 'Bryony'; // a lab-only voice: not the app's
+    await readAll(tts, 'Two.');
+    picked = null;
+    await readAll(tts, 'Three.');
+    expect(f.made[0].streams).toEqual(['Freya:One.', 'Maeve:Two.', 'Maeve:Three.']);
+    expect(ph.voice()).toBe('Maeve');
   });
 
   it('a stop while WebGPU starts its first line is not taken for a failure', async () => {

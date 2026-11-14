@@ -295,6 +295,8 @@ export function createPhonon({
   const loadApp = (opts) => {
     if (!app) {
       const p = (async () => {
+        await readIndex();
+        opts = { ...opts, voice: opts.voice ?? appVoice() };
         const c = await choose();
         if (c.device !== 'webgpu') {
           const tts = await loadLib({ ...opts, device: 'cpu', threads: c.threads });
@@ -344,8 +346,9 @@ export function createPhonon({
     }
   };
 
-  async function* appStream(text, { voice = appVoice(), signal, ...rest } = {}) {
-    let m = await loadApp({ voice });
+  async function* appStream(text, { voice = null, signal, ...rest } = {}) {
+    let m = await loadApp({});
+    voice ??= appVoice();
     if (m.gpu && !gpuSounded) {
       let got = 0;
       try {
@@ -362,7 +365,7 @@ export function createPhonon({
         giveUpGpu(m, e);
         // Some of this line was heard already: say it failed rather than read it twice.
         if (got) throw e;
-        m = await loadApp({ voice });
+        m = await loadApp({});
       }
     }
     yield* m.tts.stream(text, { ...rest, voice, signal });
@@ -411,7 +414,7 @@ export function createPhonon({
     },
     /** The model, loaded the first time (from the cache when it is there). */
     load({ device = null, threads = 'auto', voice = null, lab = false, onProgress, onMeter } = {}) {
-      if (device == null && !lab) return loadApp({ voice: voice ?? appVoice(), onProgress, onMeter }).then(() => appHandle);
+      if (device == null && !lab) return loadApp({ voice, onProgress, onMeter }).then(() => appHandle);
       const dev = device ?? 'cpu';
       const key = `${dev}|${threads}|${lab ? 'lab' : 'app'}`;
       if (!loaded.has(key)) {

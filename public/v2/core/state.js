@@ -33,6 +33,7 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * aloud unless voiceOut is 'off'.
  */
 /**
+ * naturalVoice: the natural voice's speaker ('' for the default, Maeve; the app offers Maeve and Freya).
  * voiceDevice: '' until the natural voice failed on the graphics chip (WebGPU) on this phone, then 'cpu'
  * (core/phonon.js GPU_FAILED): it starts on the processor from then on.
  */
@@ -40,7 +41,7 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * autoDelete: when conversations are removed from this phone ('off', 'close', 'hour', 'day', 'week';
  * core/history.js). One day by default, as the canvas shows it (DProtect, DErase).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', voiceDevice: '', autoDelete: 'day' });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', autoDelete: 'day' });
 
 /**
  * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's

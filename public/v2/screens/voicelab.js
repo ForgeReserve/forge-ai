@@ -27,10 +27,10 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const voiceSel = el('select', { id: 'labVoice', class: 'lab-select', 'aria-label': t('lab.voice') });
   // Under the list: what an accent-test voice is, with its description from the voice catalog.
   const voiceNote = el('p', { class: 'hint', id: 'labVoiceNote', hidden: true });
-  /** The lab voice picked (index.labVoices), or null for one of the app's voices. */
+  /** The lab voice picked (index.labVoices: lab-only or accent-test), or null for one of the app's voices. */
   const labVoice = () => phonon.index()?.labVoices?.find((v) => v.name === voiceSel.value) ?? null;
   const showVoiceNote = () => {
-    const v = labVoice();
+    const v = labVoice()?.use === 'accent-test' ? labVoice() : null;
     voiceNote.hidden = !v;
     voiceNote.textContent = v ? t('lab.accentNote', { locale: t(`lab.locale.${v.locale}`), description: v.description }) : '';
   };
@@ -87,8 +87,10 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     // only this page offers.
     const appVoices = (index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice }));
     const accent = (index?.labVoices ?? []).filter((v) => v.use === 'accent-test');
+    const others = (index?.labVoices ?? []).filter((v) => v.use === 'lab-only');
     voiceSel.replaceChildren(
       el('optgroup', { label: t('lab.voicesApp') }, ...appVoices),
+      others.length ? el('optgroup', { label: t('lab.voicesOther'), 'data-group': 'other' }, ...others.map((v) => el('option', { value: v.name, text: v.name }))) : null,
       accent.length ? el('optgroup', { label: t('lab.voicesAccent'), 'data-group': 'accent' }, ...accent.map((v) => el('option', { value: v.name, text: t('lab.accentVoice', { name: v.name, locale: t(`lab.locale.${v.locale}`) }) }))) : null,
     );
     showVoiceNote();
@@ -97,7 +99,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
 
   async function runPhonon(c, voice, signal, onRow) {
     const out = { id: c.id, device: c.device, threads: c.threads, rows: [] };
-    // An accent-test voice is only in the model the lab loads for itself (lab: true).
+    // A lab voice (lab-only or accent-test) is only in the model the lab loads for itself (lab: true).
     const opts = { device: c.device, threads: c.threads, lab: !!labVoice() };
     await phonon.unload(opts);
     let tts;
@@ -280,7 +282,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     }
     if (errorLine.hidden) meter.hidden = true;
     const lv = labVoice();
-    result = report({ env, voice, voiceLocale: lv?.locale ?? phonon.index()?.voices?.find((v) => v.name === voice)?.locale ?? null, accentTest: !!lv, candidates: done });
+    result = report({ env, voice, voiceLocale: lv?.locale ?? phonon.index()?.voices?.find((v) => v.name === voice)?.locale ?? null, accentTest: lv?.use === 'accent-test', candidates: done });
     status.textContent = signal.aborted ? t('lab.stopped') : errorLine.hidden ? t('lab.done') : t('lab.notDone');
     ctrl = null;
     runBtn.hidden = false;

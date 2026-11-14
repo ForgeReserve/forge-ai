@@ -114,6 +114,7 @@ const engineBase = () => S.settings.engine || defaultEngine(native);
 // (voiceDevice), so the next start goes straight to the processor.
 const phonon = createPhonon({
   native: !!native,
+  voice: () => S.settings.naturalVoice || null,
   memory: {
     get: () => S.settings.voiceDevice || null,
     set: (v) => {
@@ -1091,6 +1092,11 @@ const actions = {
     saveSettings();
     store.set({});
   },
+  setNaturalVoice: (name) => {
+    S.settings.naturalVoice = name;
+    saveSettings();
+    store.set({});
+  },
   setVoiceOut: (id) => {
     S.settings.voiceOut = id;
     if (id === 'off') talk.stopSpeaking();
@@ -1321,7 +1327,7 @@ function screenFor(name, params) {
     case 'model':
       return modelScreen(ctx);
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':
       return historyScreen(ctx);
     case 'voiceLab':

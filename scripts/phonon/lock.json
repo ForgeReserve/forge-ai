@@ -1,5 +1,5 @@
 {
-  "note": "Pinned files for the on-device voice (Phonon 31m English and its en-GB female voices). scripts/phonon-model.ts downloads them at build time into public/v2/voice/phonon and checks each against size and sha256. The app never fetches them from Hugging Face. labVoices are for the voice lab only (#/voice-lab): speakers from other locales read by the English model, to hear the accent it gives. The app never offers them.",
+  "note": "Pinned files for the on-device voice (Phonon 31m English and its en-GB female voices). scripts/phonon-model.ts downloads them at build time into public/v2/voice/phonon and checks each against size and sha256. The app never fetches them from Hugging Face. voices are the ones the app offers (Maeve, the default, and Freya). labVoices are for the voice lab only (#/voice-lab): use lab-only, the other en-GB voices, to compare by ear; use accent-test, speakers from other locales read by the English model, to hear the accent it gives. The app never offers them; their files still ship with the build and the APK.",
   "model": {
     "name": "Phonon 31m (English)",
     "repo": "gradium/phonon-31m-en",
@@ -37,7 +37,9 @@
       "gender": "female",
       "age": "Young",
       "description": "A young British voice, glossy and confident with fast, girly chatter and bubbly sparkle, perfect for a friendly receptionist or assistant."
-    },
+    }
+  ],
+  "labVoices": [
     {
       "name": "Pippa",
       "id": "uem82D50GRv2Dwma",
@@ -45,7 +47,8 @@
       "locale": "en-gb",
       "gender": "female",
       "age": "Adult",
-      "description": "A confident, upbeat British English adult voice with infectious energy. Perfect for proactive assistants and motivating customer success calls."
+      "description": "A confident, upbeat British English adult voice with infectious energy. Perfect for proactive assistants and motivating customer success calls.",
+      "use": "lab-only"
     },
     {
       "name": "Elodie-Rose",
@@ -54,7 +57,8 @@
       "locale": "en-gb",
       "gender": "female",
       "age": "Young",
-      "description": "A young British voice with sharp, enthusiastic energy and crisp articulation, sparky and to the point for customer support and care."
+      "description": "A young British voice with sharp, enthusiastic energy and crisp articulation, sparky and to the point for customer support and care.",
+      "use": "lab-only"
     },
     {
       "name": "Imogen",
@@ -63,7 +67,8 @@
       "locale": "en-gb",
       "gender": "female",
       "age": "Adult",
-      "description": "A bubbly, friendly British English adult voice that puts callers instantly at ease. Great for onboarding assistants and warm concierge interactions."
+      "description": "A bubbly, friendly British English adult voice that puts callers instantly at ease. Great for onboarding assistants and warm concierge interactions.",
+      "use": "lab-only"
     },
     {
       "name": "Lottie",
@@ -72,7 +77,8 @@
       "locale": "en-gb",
       "gender": "female",
       "age": "Young Adult",
-      "description": "Sparky and to the point, high forward energy with clean edges on the consonants and the range to drop low for one line then climb back."
+      "description": "Sparky and to the point, high forward energy with clean edges on the consonants and the range to drop low for one line then climb back.",
+      "use": "lab-only"
     },
     {
       "name": "Bryony",
@@ -81,10 +87,9 @@
       "locale": "en-gb",
       "gender": "female",
       "age": "Middle-age",
-      "description": "Full, rich mid-range tones, softly relaxed and spoken close to the mic, moving briskly with light pitch play."
-    }
-  ],
-  "labVoices": [
+      "description": "Full, rich mid-range tones, softly relaxed and spoken close to the mic, moving briskly with light pitch play.",
+      "use": "lab-only"
+    },
     {
       "name": "Regina",
       "id": "s58clrg2fe0MO7Y-",

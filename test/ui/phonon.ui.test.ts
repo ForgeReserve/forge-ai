@@ -179,6 +179,39 @@ describe('the natural voice', () => {
     await ctx.close();
   }, 60_000);
 
+  it('offers Maeve (the default) and Freya, and reads with the one picked', async () => {
+    const { ctx, page, errors, requests } = await phone();
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#naturalVoices:not([hidden])');
+    const speakers = await page.$$eval('#naturalVoices [role=radio]', (xs) => xs.map((x) => [x.querySelector('b')?.textContent, x.getAttribute('aria-checked')]));
+    expect(speakers).toEqual([
+      ['Maeve', 'true'],
+      ['Freya', 'false'],
+    ]);
+    expect(await page.textContent('[data-screen=voice]')).not.toMatch(/Pippa|Elodie|Imogen|Lottie|Bryony|Regina/);
+    await page.click('#naturalVoice-Freya');
+    expect(await page.getAttribute('#naturalVoice-Freya', 'aria-checked')).toBe('true');
+    expect(await page.getAttribute('#naturalVoice-Maeve', 'aria-checked')).toBe('false');
+    // Kept: still Freya after a reload.
+    await page.reload();
+    await page.waitForSelector('#naturalVoices:not([hidden])');
+    expect(await page.getAttribute('#naturalVoice-Freya', 'aria-checked')).toBe('true');
+    // With the engine's voice chosen, there is no speaker to pick.
+    await page.click('#voiceOut-engine');
+    expect(await page.isHidden('#naturalVoices')).toBe(true);
+    await page.click('#voiceOut-phonon');
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('#voiceDownload', { timeout: 20_000 });
+    await page.click('#voiceDlYes');
+    await expect.poll(() => played(page), { timeout: 60_000 }).toBeGreaterThan(5);
+    expect(requests.some((u) => u.endsWith('/voices-0ee1720/GgfEkEJtxZR7gnpy.safetensors'))).toBe(true); // Freya
+    expect(requests.some((u) => u.endsWith('/voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors'))).toBe(false); // Maeve
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
   it('reads a PDF on the isolated page with pdf.js in its own worker, as before', async () => {
     const { ctx, page, errors } = await phone();
     const warnings: string[] = [];
@@ -356,9 +389,10 @@ describe('the accent test in the voice lab', () => {
     await page.waitForSelector('[data-screen=voiceLab]');
     await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
     const groups = await page.$$eval('#labVoice optgroup', (gs) => gs.map((x) => ({ label: (x as HTMLOptGroupElement).label, options: [...x.querySelectorAll('option')].map((o) => o.textContent) })));
-    expect(groups.map((x) => x.label)).toEqual(['Voices in the app', 'Accent test (English model)']);
-    expect(groups[0]!.options).toHaveLength(7);
-    expect(groups[1]!.options).toEqual(['Regina, Mexican Spanish speaker', 'Ximena, Mexican Spanish speaker', 'Alba, Spanish from Spain speaker', 'Isadora, Brazilian Portuguese speaker', 'Maëlys, French speaker']);
+    expect(groups.map((x) => x.label)).toEqual(['Voices in the app', 'Other voices, lab only', 'Accent test (English model)']);
+    expect(groups[0]!.options).toEqual(['Maeve', 'Freya']);
+    expect(groups[1]!.options).toEqual(['Pippa', 'Elodie-Rose', 'Imogen', 'Lottie', 'Bryony']);
+    expect(groups[2]!.options).toEqual(['Regina, Mexican Spanish speaker', 'Ximena, Mexican Spanish speaker', 'Alba, Spanish from Spain speaker', 'Isadora, Brazilian Portuguese speaker', 'Maëlys, French speaker']);
     expect(await page.isVisible('#labVoiceNote')).toBe(false);
     await page.selectOption('#labVoice', 'Regina');
     expect(await page.textContent('#labVoiceNote')).toBe('Accent test, lab only: the English model reading English with a Mexican Spanish speaker. Catalog: A confident, upbeat Mexican Spanish adult voice with the natural assurance of a closer. Ideal for proactive assistants and sales-led customer interactions.');
@@ -379,7 +413,7 @@ describe('the accent test in the voice lab', () => {
     // The app's own voice settings know nothing of them.
     await page.goto(`${g.url}/v2/#/more/voice`);
     await page.waitForSelector('[data-screen=voice]');
-    expect(await page.textContent('[data-screen=voice]')).not.toMatch(/Regina|Accent/);
+    expect(await page.textContent('[data-screen=voice]')).not.toMatch(/Regina|Accent|Bryony|Pippa/);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 200_000);
