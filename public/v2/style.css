@@ -429,3 +429,12 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .search-row .ico { color: var(--teal); }
 .search-note { margin: 0; padding: 0 4px; font-size: 13px; line-height: 1.4; color: var(--text-2); }
 .home .search-box { width: min(336px, 100%); }
+
+/* The voice lab (#/voice-lab), a developer page. */
+.voicelab .lab-env { margin: 0 0 12px; padding-left: 18px; color: var(--text-body); font-size: 14px; }
+.voicelab .lab-check { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
+.voicelab .lab-check input { width: 22px; height: 22px; flex: none; }
+.voicelab .lab-select { min-height: 44px; flex: 1; font-size: 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 10px; }
+.voicelab .lab-results { overflow-x: auto; margin: 12px 0; }
+.voicelab table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.voicelab th, .voicelab td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }

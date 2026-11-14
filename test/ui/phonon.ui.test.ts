@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
@@ -192,4 +192,31 @@ describe('the natural voice', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  it('the voice lab measures the voices this phone runs and saves the results as JSON', async () => {
+    const { ctx, page, errors } = await phone();
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    expect(await page.inputValue('#labVoice')).toBeTruthy();
+    // A short run: the threaded processor only, without playing the sound.
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.click('#labRun');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    const dl = page.waitForEvent('download');
+    await page.click('#labSave');
+    const file = await (await dl).path();
+    const json = JSON.parse(readFileSync(file, 'utf8'));
+    expect(json.kind).toBe('forge-voice-lab');
+    expect(json.env.crossOriginIsolated).toBe(true);
+    const c = json.candidates[0];
+    expect(c.id).toBe('phonon-cpu-threads');
+    expect(c.got.threads).toBeGreaterThan(1);
+    expect(c.rows).toHaveLength(60);
+    expect(c.summary.failed + c.summary.nanRuns + c.summary.silentRuns).toBe(0);
+    expect(c.summary.rtf.median).toBeLessThan(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
 });

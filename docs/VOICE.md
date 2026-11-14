@@ -31,6 +31,10 @@ The Docker image runs the script during the build. The app never asks Hugging Fa
 
 With `require-corp`, the v2 page may only load other sites' files that opt in. The v2 app loads none: it talks to its engine with CORS requests (allowed), and every script, style, image and worker is its own. Checked with every UI and e2e test passing with the headers on: private (EHBP) answers, Lightning and eCash funding, camera notes, photos shared in, card taps. Classic (v1) at `/` gets no new headers.
 
+## The voice lab
+
+`/v2/#/voice-lab`, linked from no menu. It reads a fixed corpus of 60 lines (short replies, numbers and money, names, hard cases, long answers; `public/v2/core/voicelab.js`) with each way of reading this phone has: the natural voice on the processor with threads, on one thread, on the graphics chip (WebGPU), and the phone's own voice. Per line: time to the first sound, real-time factor, gaps a listener would hear (from when each piece arrived, or from the real speaker with Play on), NaN or silent sound, clipping. Per way: model load time, first and again, and the memory the browser reports. Save results writes a JSON file to send on. Kokoro is not in this build (it would need ONNX Runtime Web, a new dependency); its baseline is flash-mobile's measured numbers and the Emma clips.
+
 ## Updating
 
 - A new phonon-tts: change `VERSION` and `INTEGRITY` in `scripts/vendor-phonon.sh` (a version at least 3 days old), run it, run the tests.

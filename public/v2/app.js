@@ -1218,6 +1218,8 @@ function backTo(name) {
   nav(name, {}, { replace: true });
 }
 
+let voiceLab = null; // screens/voicelab.js, once the voice lab was opened
+
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
   const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
@@ -1248,6 +1250,17 @@ function screenFor(name, params) {
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio } });
     case 'history':
       return historyScreen(ctx);
+    case 'voiceLab':
+      // A developer page, linked from nowhere: measures the voices this phone can run. Loaded only
+      // when opened, so the app's first paint never waits for it.
+      if (!voiceLab) {
+        import('./screens/voicelab.js').then((m) => {
+          voiceLab = m.voiceLabScreen;
+          if (currentName === 'voiceLab') render();
+        });
+        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }) };
+      }
+      return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });
     case 'intro':
     case 'introPay':
     case 'introLimits':

@@ -5,12 +5,13 @@ import { appIndex, checkLock, type Lock } from '../../../scripts/phonon-model.ts
 
 // The natural voice made on the phone (Phonon 31m through the vendored phonon-tts): the model's files
 // and where they come from, the engine wrapper, the voice-out module, the choice of voice, the one-time
-// download question.
+// download question, and the voice lab's numbers.
 const P: any = await import('../../../public/v2/core/phonon.js' as string);
 const MOD: any = await import('../../../public/v2/modules/voice-out/phonon/index.js' as string);
 const STATE: any = await import('../../../public/v2/core/state.js' as string);
 const R: any = await import('../../../public/v2/core/registry.js' as string);
 const CTL: any = await import('../../../public/v2/core/talkctl.js' as string);
+const LAB: any = await import('../../../public/v2/core/voicelab.js' as string);
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 const PUBLIC = join(ROOT, 'public');
@@ -372,5 +373,61 @@ describe('the one-time download question', () => {
     answer(true);
     await flush();
     expect(spoken).toEqual([]);
+  });
+});
+
+describe('the voice lab', () => {
+  it('reads a fixed corpus of about sixty lines of every kind', () => {
+    expect(LAB.CORPUS.length).toBeGreaterThanOrEqual(55);
+    expect(LAB.CORPUS.length).toBeLessThanOrEqual(65);
+    expect(new Set(LAB.CORPUS.map((c: any) => c.id)).size).toBe(LAB.CORPUS.length);
+    const kinds = new Set(LAB.CORPUS.map((c: any) => c.kind));
+    for (const k of ['short', 'numbers', 'names', 'hard', 'medium', 'long']) expect(kinds.has(k), k).toBe(true);
+    const long = LAB.CORPUS.filter((c: any) => c.kind === 'long')[0];
+    expect(long.text.split(/\s+/).length).toBeGreaterThan(100);
+    for (const c of LAB.CORPUS) expect(c.text, c.id).not.toMatch(/[–—]/);
+  });
+
+  it('counts the gaps a listener would hear from when each piece arrived', () => {
+    // 80 ms pieces arriving every 40 ms: never a gap.
+    expect(LAB.virtualUnderruns([0, 40, 80, 120], [80, 80, 80, 80])).toEqual({ underruns: 0, stallMs: 0 });
+    // The third piece comes 200 ms after the second ends.
+    expect(LAB.virtualUnderruns([0, 100, 410], [80, 80, 80], 50)).toEqual({ underruns: 1, stallMs: 200 });
+    expect(LAB.virtualUnderruns([], [])).toEqual({ underruns: 0, stallMs: 0 });
+  });
+
+  it('sums up each way of reading with medians, 90th percentiles and broken runs', () => {
+    expect(LAB.percentile([5, 1, 3, 2, 4], 50)).toBe(3);
+    expect(LAB.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 90)).toBe(9);
+    expect(LAB.percentile([], 50)).toBeNull();
+    const s = LAB.summarize([
+      { firstMs: 10, rtf: 0.1, underruns: 0, nan: 0, silent: false, clipped: 0 },
+      { firstMs: 30, rtf: 0.3, underruns: 2, nan: 1, silent: false, clipped: 0 },
+      { firstMs: 20, rtf: 0.2, underruns: 0, nan: 0, silent: true, clipped: 1 },
+      { error: 'boom' },
+    ]);
+    expect(s).toEqual({ items: 4, failed: 1, firstMs: { median: 20, p90: 30 }, rtf: { median: 0.2, p90: 0.3 }, underruns: 2, nanRuns: 1, silentRuns: 1, clippedRuns: 1 });
+    const rep = LAB.report({ env: { cores: 8 }, voice: 'Maeve', candidates: [{ id: 'phonon-cpu-threads', rows: [] }, { id: 'phone-voice', error: 'none' }] });
+    expect(rep).toMatchObject({ kind: 'forge-voice-lab', corpusVersion: LAB.CORPUS_VERSION, voice: 'Maeve', env: { cores: 8 } });
+    expect(rep.candidates[1].summary).toBeNull();
+    expect(LAB.CANDIDATES.map((c: any) => c.id)).toEqual(['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu', 'phone-voice']);
+  });
+
+  it('is reachable only by its address: no menu or screen links to it', async () => {
+    const ROUTER: any = await import('../../../public/v2/core/router.js' as string);
+    expect(ROUTER.parse('#/voice-lab').name).toBe('voiceLab');
+    expect(ROUTER.parentOf('voiceLab')).toBe('home');
+    const v2 = join(PUBLIC, 'v2');
+    const links: string[] = [];
+    const walk = (d: string) => {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) {
+          if (!p.includes('/vendor')) walk(p);
+        } else if (/\.(js|html)$/.test(n) && /nav\(\s*'voiceLab'|href\(\s*'voiceLab'|["'`]#\/voice-lab/.test(readFileSync(p, 'utf8'))) links.push(p.slice(v2.length));
+      }
+    };
+    walk(v2);
+    expect(links).toEqual([]);
   });
 });
