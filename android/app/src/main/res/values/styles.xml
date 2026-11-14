@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Colours from the Light look (docs/design/SCREENS.md). -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/forge_ink</item>
+        <item name="colorPrimaryDark">@color/forge_bg</item>
+        <item name="colorAccent">@color/forge_teal</item>
+        <item name="android:statusBarColor">@color/forge_bg</item>
+        <item name="android:navigationBarColor">@color/forge_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="AppTheme">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- While the app starts: the page colour, no logo screen. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">
+        <item name="android:windowBackground">@color/forge_bg</item>
+    </style>
+</resources>

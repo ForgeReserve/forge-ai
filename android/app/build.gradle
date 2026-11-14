@@ -1,0 +1,63 @@
+import groovy.json.JsonSlurper
+
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+// The repository root: the web app (public/) and the script that bundles it live there.
+def repoRoot = rootProject.projectDir.parentFile
+def appVersion = new JsonSlurper().parse(new File(repoRoot, 'package.json')).version
+
+android {
+    namespace "com.forgereserve.ai"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.forgereserve.ai"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Raise versionCode by one for every APK published at /download, or phones will not update.
+        versionCode 1
+        versionName appVersion
+        aaptOptions {
+            // Files and dirs to omit from the packaged assets dir (Capacitor's default).
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // No signing here: scripts/android-release.sh signs the APK with a keystore the owner supplies.
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+}
+
+// The web app goes into the APK: public/v2 and the shared files it imports, never v1 and never
+// anything fetched at run time (scripts/android-web.ts). Runs before every build.
+def webAssets = tasks.register('forgeWebAssets', Exec) {
+    workingDir repoRoot
+    commandLine 'node', 'scripts/android-web.ts', file('src/main/assets').absolutePath
+    inputs.dir(new File(repoRoot, 'public'))
+    inputs.file(new File(repoRoot, 'scripts/android-web.ts'))
+    inputs.file(new File(repoRoot, 'capacitor.config.json'))
+    outputs.dir(file('src/main/assets/public'))
+    outputs.file(file('src/main/assets/capacitor.config.json'))
+    outputs.file(file('src/main/assets/capacitor.plugins.json'))
+}
+preBuild.dependsOn webAssets

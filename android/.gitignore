@@ -1,0 +1,27 @@
+# Built files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+build/
+.gradle/
+.kotlin/
+.cxx/
+captures/
+*.hprof
+*.iml
+.idea/
+
+# This Mac's SDK path (Android Studio writes it)
+local.properties
+
+# Never commit a signing key (scripts/android-release.sh asks for one)
+*.jks
+*.keystore
+*.p12
+
+# The web app, bundled at build time from public/ (scripts/android-web.ts)
+app/src/main/assets/public
+app/src/main/assets/capacitor.config.json
+app/src/main/assets/capacitor.plugins.json
