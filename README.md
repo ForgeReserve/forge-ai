@@ -82,7 +82,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_RATE_LIMIT_RPM` | `60` | Requests per minute per key or IP |
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
-| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries on connection errors, 408, 429 and 5xx |
+| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries only failures before the request was sent (refused, DNS, connect timeout, certificate), plus 408, 425, 429, 5xx and resets for a supplier with `idempotencyHeader` |
 | `FORGE_FUND_MINT` | first trusted mint | Mint used for Lightning, on-chain and other-mint funding |
 | `FORGE_LIGHTNING_ENABLED` | `true` | Lightning funding (NUT-04 bolt11 quotes) |
 | `FORGE_FUND_MAX_SAT` / `FORGE_FUND_MAX_USD` | `1000000` / `50000` | Largest Lightning funding, in sat / cents (the mint's own limit also applies) |
@@ -120,6 +120,8 @@ A customer can still use a mint that is not on the list (`FORGE_FOREIGN_UNLISTED
 `config/models.json` lists suppliers and models. Each model has a public `id`, its `supplier`, the `upstream` model name, the supplier's cost in USD per million input and output tokens, `max_output_tokens`, and `uncensored` (the chat page hides those behind an explicit toggle). Token Factory prices in the shipped catalog are placeholders marked `price_verified: false`; set them from your rate card. Tinfoil prices were read from `https://inference.tinfoil.sh/v1/models` on 2026-11-09.
 
 A supplier sets `pricing: "metered"` (charge on reported usage) or `pricing: "flat"` (charge a schedule by request body size plus declared max output). A metered supplier may also carry a `flat` schedule, used only when no usage signal arrives.
+
+A resent request can run, and bill, a second time upstream, so a request that may have reached the supplier is never resent blindly. A supplier that documents de-duplication by an idempotency key can set `idempotencyHeader` (for example `"Idempotency-Key"`): every plaintext request then carries a fresh key, the same on each of its attempts, and retryable statuses and resets are retried. No shipped supplier sets it.
 
 ### Suppliers
 

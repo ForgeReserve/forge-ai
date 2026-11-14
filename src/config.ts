@@ -143,6 +143,16 @@ const SupplierSchema = z.object({
   /** metered: settle on upstream usage. flat: settle on the flat schedule below. */
   pricing: z.enum(['metered', 'flat']).default('metered'),
   flat: FlatSchema.optional(),
+  /**
+   * openai and tinfoil plaintext: the header the supplier honours as an idempotency key (e.g. Idempotency-Key).
+   * Set it only when the supplier documents that it runs one request per key. With it, every attempt of a
+   * request carries the same fresh key and retryable statuses and resets are retried; without it, only
+   * failures before the request was sent (refused, DNS, connect timeout, certificate) are retried.
+   */
+  idempotencyHeader: z
+    .string()
+    .regex(/^[A-Za-z0-9-]+$/)
+    .optional(),
   /** tinfoil only: accept plaintext (non-EHBP) requests. The gateway can read those. */
   allowPlaintext: z.boolean().default(true),
   /** tinfoil only: hosts allowed in X-Tinfoil-Enclave-Url (exact or subdomain). */
