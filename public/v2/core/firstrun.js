@@ -15,6 +15,17 @@ export const stepOfRoute = (name) => Object.keys(STEP_ROUTES).find((k) => STEP_R
 export const SEEN_KEY = 'forge2.firstRun';
 export const SEEN_VALUE = 'done';
 
+/**
+ * What Listen reads on each step: its heading and its one sentence, the same words on every phone. The
+ * recorded clips (public/v2/voice/en/, scripts/record-voice) are made from exactly these strings.
+ */
+export const SPOKEN = {
+  welcome: ['intro.welcome.title', 'intro.welcome.lead'],
+  pay: ['intro.pay.title', 'intro.pay.lead'],
+  limits: ['intro.limits.title', 'intro.limits.lead'],
+  private: ['intro.private.title', 'intro.private.lead'],
+};
+
 /** The step for an id: an unknown one is the first step. */
 export const stepOf = (id) => (STEPS.includes(id) ? id : STEPS[0]);
 

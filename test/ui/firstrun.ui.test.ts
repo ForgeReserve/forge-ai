@@ -104,6 +104,11 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'welcome');
     expect(await page.evaluate(() => location.hash)).toBe('#/start');
     expect(await page.textContent('h1')).toBe("AI that doesn't know who you are.");
+    // One idea a step: icons first, a short heading, one sentence. The detail is under Learn more.
+    expect(await page.locator('#welcomeIcons .way').allTextContents()).toEqual(['No account', 'Like cash', 'Sealed', 'On this phone']);
+    expect(await page.textContent('#introLead')).toBe('No account, no name, and you pay like cash.');
+    expect(await page.isVisible('.intro-item')).toBe(false);
+    await page.click('#learnMore summary');
     expect(await page.locator('.intro-item b').allTextContents()).toEqual(['No account', 'Paid like cash', 'Read only in sealed hardware', 'Kept on this phone']);
     expect(await page.textContent('#introStep')).toBe('Step 1 of 4');
     expect(await page.isVisible('#introBack')).toBe(false);
@@ -124,7 +129,11 @@ describe('first run in a phone-sized browser', () => {
     expect(ways).not.toContain('card');
     expect(await page.locator('[data-way=note] svg').count()).toBe(1);
     expect(await page.textContent('[data-way=note]')).toBe('Paper note');
-    expect(await page.textContent('.callout.gold')).toBe('Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.');
+    expect(await page.textContent('#introLead')).toBe('Each question costs a little, and you see the price first.');
+    // Funds are like cash: said under Learn more, never dropped.
+    expect(await page.isVisible('#payCash')).toBe(false);
+    await page.click('#learnMore summary');
+    expect(await page.textContent('#payCash')).toBe('Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.');
 
     // Back goes to the step before, and what was typed there is still there.
     await page.click('#introBack');
@@ -136,6 +145,9 @@ describe('first run in a phone-sized browser', () => {
     await page.click('#introNext');
     await atStep(page, 'limits');
     expect(await page.textContent('h1')).toBe('What it can and cannot hide');
+    expect(await page.textContent('#introLead')).toBe('It hides your typed questions, not your network address.');
+    expect(await page.isVisible('#limitsCannot')).toBe(false);
+    await page.click('#learnMore summary');
     expect(await page.locator('#limitsCan .intro-item').count()).toBe(3);
     expect(await page.locator('#limitsCannot .intro-item b').allTextContents()).toEqual([
       'Your network address',
@@ -153,7 +165,10 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'private');
     // Private only is on by default, and the step says what that does and does not cover.
     expect(await page.textContent('#privateState')).toBe('On');
-    expect(await page.textContent('#privateSub')).toContain('Forge and the model provider cannot read them.');
+    expect(await page.textContent('#introLead')).toBe('Only models in sealed hardware, so Forge cannot read your typed questions.');
+    expect(await page.isVisible('#privateSub')).toBe(false);
+    await page.click('#learnMore summary');
+    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot read them.');
     expect(await page.textContent('#privateVoice')).toContain('The engine could hear or read them.');
     expect(await page.isVisible('#privateHidden')).toBe(true);
     expect(await page.isVisible('#privateTurnOn')).toBe(false);
@@ -247,11 +262,9 @@ describe('first run in a phone-sized browser', () => {
     expect(await page.textContent('#introListen')).toBe('Listen');
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
-    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 10_000 }).toBeGreaterThan(8);
-    const spoken: string[] = await page.evaluate(() => (window as any).__spoken);
-    expect(spoken[0]).toBe("AI that doesn't know who you are.");
-    expect(spoken).toContain('No account');
-    expect(spoken).toContain('Your history stays here. Erase it whenever you want.');
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 10_000 }).toBe(2);
+    // It reads the step's heading and its one sentence.
+    expect(await page.evaluate(() => (window as any).__spoken)).toEqual(["AI that doesn't know who you are.", 'No account, no name, and you pay like cash.']);
     await expect.poll(() => page.textContent('#introListen'), { timeout: 10_000 }).toBe('Listen');
     // Stop stops it.
     await page.click('#introNext');

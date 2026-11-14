@@ -405,3 +405,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .pow-ring::before { content: ''; grid-area: 1 / 1; width: 92px; height: 92px; border-radius: 50%; background: var(--bg); }
 .pow-ring .pow-pct { grid-area: 1 / 1; position: relative; font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 .pow-ring[hidden] { display: none; }
+
+/* First run: one idea a step. Icons first, then a short heading and one sentence; the detail is under
+   Learn more. */
+.intro-icons .way { min-height: 104px; }
+.intro-icons .tile-ico { width: 56px; height: 56px; border-radius: 18px; }
+[data-step] .intro-lead { font-size: 18px; line-height: 1.45; color: var(--text-body); }
+.learn { border-top: 1px solid var(--line); }
+.learn > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 48px; color: var(--teal); font-size: 15px; font-weight: 600; cursor: pointer; }
+.learn > summary::-webkit-details-marker { display: none; }
+.learn[open] > summary .ico { transform: rotate(45deg); }
+.learn-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
