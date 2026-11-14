@@ -1,0 +1,69 @@
+{
+  "voice": "bf_emma",
+  "model": "onnx-community/Kokoro-82M-v1.0-ONNX@1939ad2a8e416c0acfeecc08a694d14ef25f2231",
+  "speed": 0.9,
+  "format": "audio/ogg; codecs=opus",
+  "regenerate": ".tmp/voice/venv/bin/python scripts/record-voice/record.py",
+  "clips": {
+    "welcome": {
+      "file": "welcome.ogg",
+      "keys": [
+        "intro.welcome.title",
+        "intro.welcome.lead"
+      ],
+      "text": [
+        "AI that doesn't know who you are.",
+        "No account, no name, and you pay like cash."
+      ],
+      "text_sha256": "a4a8bc20dcabdb6010f6ebd9bd66885a28bfe2b5b973725f1292cdda79bad87d",
+      "bytes": 23573,
+      "sha256": "a1881567527a7c320592636244412c4c8a241839f7c5b44563ba97b4adb9c2eb",
+      "seconds": 5.83
+    },
+    "pay": {
+      "file": "pay.ogg",
+      "keys": [
+        "intro.pay.title",
+        "intro.pay.lead"
+      ],
+      "text": [
+        "How you pay",
+        "Each question costs a little, and you see the price first."
+      ],
+      "text_sha256": "1d096bd617af7646f569381bc1425cbc94bd0b6cf17f6c441f661fdee339a0d6",
+      "bytes": 20384,
+      "sha256": "437ec88cdfaea8828d6f85df963dfc5be64b14098347eaf6fdbed7a570de8bcc",
+      "seconds": 5.03
+    },
+    "limits": {
+      "file": "limits.ogg",
+      "keys": [
+        "intro.limits.title",
+        "intro.limits.lead"
+      ],
+      "text": [
+        "What it can and cannot hide",
+        "It hides your typed questions, not your network address."
+      ],
+      "text_sha256": "7d0540c9285ffd1a591d35a64f00156996d1782ad66ff4fc5469c4c5d45063fe",
+      "bytes": 25256,
+      "sha256": "cb77544ee974c4d7947c4b807938baebdbfda46a798f9f18a5d8a58d2f757daf",
+      "seconds": 6.17
+    },
+    "private": {
+      "file": "private.ogg",
+      "keys": [
+        "intro.private.title",
+        "intro.private.lead"
+      ],
+      "text": [
+        "Private only",
+        "Only models in sealed hardware, so Forge cannot read your typed questions."
+      ],
+      "text_sha256": "92f915e42d0d0309b9de2679a55c8e7e0a73823b6928f91123fb917c3b014546",
+      "bytes": 27589,
+      "sha256": "1db33fdbb256c27155bf95573675218f45b95f7ff5ce628b9062eb70305d83eb",
+      "seconds": 6.72
+    }
+  }
+}

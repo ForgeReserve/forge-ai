@@ -24,6 +24,7 @@ import { ehbpBytes, estimate, holdMsub, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
+import { createClips } from './core/clips.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
@@ -190,21 +191,32 @@ const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
 const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
 
 /**
- * Reads the first run's words aloud with the phone's own voice: free, and nothing leaves the phone. The
- * engine's voice is never used here (it costs money and the guide shows no price), so where the phone
- * has no voice of its own the Listen chip is not shown.
+ * Reads the first run's words aloud: the step's recorded clip (core/clips.js, public/v2/voice/en/), or,
+ * when there is none for these words or it cannot play, the phone's own voice. Both are free and nothing
+ * leaves the phone. The engine's voice is never used here (it costs money and the guide shows no price),
+ * so with neither a clip nor a voice of the phone's own the Listen chip is not shown.
  */
+const clips = createClips({ base: new URL('./voice/en/', import.meta.url) });
 const reader = {
   mod: () => {
     const m = voiceMods('voice-out').device;
     return m?.available() && m.private() ? m : null;
   },
-  available: () => !!reader.mod(),
-  read(pieces) {
-    const m = reader.mod();
-    if (!m || !pieces.length) return null;
+  available: (step, pieces) => (!!step && clips.has(step, pieces)) || !!reader.mod(),
+  read(pieces, step) {
+    if (!pieces.length) return null;
     talk.stopSpeaking();
-    return m.speak(pieces);
+    const phone = () => reader.mod()?.speak(pieces) ?? null;
+    const clip = step ? clips.play(step, pieces) : null;
+    if (!clip) return phone();
+    let current = clip;
+    const done = clip.done.catch((e) => {
+      const p = phone();
+      if (!p) throw e;
+      current = p;
+      return p.done;
+    });
+    return { done, stop: () => current.stop() };
   },
 };
 
@@ -1174,6 +1186,8 @@ function screenFor(name, params) {
     case 'introPay':
     case 'introLimits':
     case 'introPrivate':
+      // The recorded Listen clips: their manifest is read once, and Listen shows when it is in.
+      clips.load().then((m) => m && store.set({}));
       return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
     case 'erase':
       return eraseScreen(ctx);

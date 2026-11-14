@@ -10,7 +10,8 @@ import { el, icon } from '../core/ui.js';
  * ctx: t, state, actions, registry, wallet, plus
  * - step: the route param,
  * - go(step): opens another step, finish(): marks the guide seen and goes home, stepBack(): back a step,
- * - reader: {available(), read(pieces) -> {done, stop()}}, the phone's own voice (free, on the phone).
+ * - reader: {available(step, pieces), read(pieces, step) -> {done, stop()}}: the step's recorded clip, or
+ *   the phone's own voice (both free, on the phone).
  */
 export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, stepBack, reader }) {
   const S = state.S;
@@ -30,7 +31,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   const listen = el('button', { type: 'button', class: 'listen-chip', id: 'introListen', hidden: true });
   let speech = null;
   const drawListen = () => {
-    listen.hidden = !reader.available();
+    listen.hidden = !reader.available(step, words());
     listen.setAttribute('aria-pressed', String(!!speech));
     listen.replaceChildren(icon(speech ? 'stop' : 'speaker', 18), el('span', { text: t(speech ? 'intro.listenStop' : 'intro.listen') }));
   };
@@ -45,7 +46,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   synth?.addEventListener?.('voiceschanged', drawListen);
   listen.addEventListener('click', () => {
     if (speech) return stopListening();
-    const s = reader.read(words());
+    const s = reader.read(words(), step);
     if (!s) return;
     speech = s;
     drawListen();
