@@ -108,13 +108,14 @@ export function closePhoto(photo) {
 
 /**
  * Shares a file through the phone's share sheet, or saves it where there is no sheet for files.
- * Resolves 'shared', 'cancelled' or 'saved'.
+ * Resolves 'shared', 'opened' (the Android app's sheet opened), 'cancelled' or 'saved'.
  */
 export async function shareOrSave(file, share) {
   if (share.canShareFiles([file])) {
     try {
-      await share.files([file]);
-      return 'shared';
+      // The Android app's share sheet says only that it opened, not where the photo went.
+      const r = await share.files([file]);
+      return r?.opened ? 'opened' : 'shared';
     } catch (e) {
       if (e?.name === 'AbortError') return 'cancelled';
       throw e;

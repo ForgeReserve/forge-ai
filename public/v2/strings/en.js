@@ -234,6 +234,29 @@ export default {
   'more.eraseSub': 'Remove all of Forge from this phone',
   'more.intro': 'How Forge works',
   'more.introSub': 'Paying, what it cannot hide, Private only',
+  'more.engine': 'Engine',
+  'more.engineSite': 'This site',
+  // In the Android app, which has no Classic mode.
+  'more.lookSubApp': 'Light, Dark, Midnight',
+
+  // Engine (More, Engine): where questions and payments go
+  'engine.title': 'Engine',
+  'engine.lead': 'Forge sends your questions and payments to this engine, and to no other.',
+  'engine.now': 'In use: {address}',
+  'engine.site': 'this site',
+  'engine.label': 'Engine address',
+  'engine.placeholder': 'https://ai.forge-reserve.com',
+  'engine.defaultIs': 'The default is {address}.',
+  'engine.balance': 'A balance stays with the engine that holds it. Switch back to use it again.',
+  'engine.use': 'Use this engine',
+  'engine.default': 'Use the default',
+  'engine.checking': 'Checking the engine.',
+  'engine.same': 'Forge already uses this engine.',
+  'engine.err.empty': 'Type the engine address.',
+  'engine.err.invalid': 'That is not an engine address.',
+  'engine.err.insecure': 'Use an address that starts with https.',
+  'engine.err.extra': 'Type the address only, with nothing after it.',
+  'engine.err.offline': 'That engine did not answer. Check the address and try again.',
 
   // History (XHistoryLight)
   'history.title': 'History',
@@ -293,6 +316,7 @@ export default {
   'erase.goesEcash': 'eCash kept on this phone',
   'erase.goesClassic': 'The Classic app\'s conversations and settings in this browser',
   'erase.goesOffline': 'The offline copy of the app',
+  'erase.goesPhotos': 'Photo files the app made for sharing or took with the camera',
   'erase.auto': 'Delete automatically',
   'erase.hold': 'Hold to erase everything',
   'erase.holdHint': 'Press and hold for 2 seconds. A tap does nothing.',

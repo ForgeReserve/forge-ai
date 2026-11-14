@@ -5,7 +5,7 @@ import { backHeader, el, icon, msgLine } from '../core/ui.js';
 
 export const HOLD_MS = 2000;
 
-export function eraseScreen({ t, state, nav, back, actions, format, vault }) {
+export function eraseScreen({ t, state, nav, back, actions, format, vault, native = null }) {
   const S = state.S;
   const money = el('section', { class: 'warn-box', id: 'eraseMoney', 'aria-labelledby': 'eraseMoneyHead' });
   const unsaved = el('section', { class: 'warn-box', id: 'eraseUnsaved', 'aria-labelledby': 'eraseUnsavedHead' });
@@ -121,7 +121,9 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault }) {
       el(
         'ul',
         { class: 'goes', id: 'eraseGoes' },
-        ...['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesClassic', 'goesOffline'].map((k) => el('li', { text: t(`erase.${k}`) })),
+        // The Android app has no Classic app and no offline copy (its files are in the app), but it does
+        // keep photo files for sharing and from its camera.
+        ...(native ? ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesPhotos'] : ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesClassic', 'goesOffline']).map((k) => el('li', { text: t(`erase.${k}`) })),
       ),
       autoRow,
     ),

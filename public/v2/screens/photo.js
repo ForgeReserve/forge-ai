@@ -16,7 +16,12 @@ const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'ph
 /** A press that moves less than this (CSS pixels) is a tap. */
 const TAP_SLOP = 10;
 
-export function photoScreen({ t, ui, back, actions, params = {}, filters, share }) {
+/**
+ * take: where a photo shared in comes from (the service worker's cache on the website, the app's
+ * ForgeShareIn plugin in the Android app). forget: in the app, removes the photo files the app wrote
+ * (a photo the camera took for this screen) once the screen closes.
+ */
+export function photoScreen({ t, ui, back, actions, params = {}, filters, share, take = takeShared, forget = null }) {
   let photo = null;
   let result = null; // {steps, covers}
   let covers = [];
@@ -273,8 +278,9 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
       class: 'btn',
       id: 'photoSave',
       onclick: act(async () => {
-        share.save(await file());
-        ui.toast(t('photo.saved'), 3500);
+        // In the Android app the person picks where to save, and may close that screen instead.
+        const r = await share.save(await file());
+        if (r?.saved !== false) ui.toast(t('photo.saved'), 3500);
       }),
     },
     icon('download', 20),
@@ -310,9 +316,9 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
     // Once the shared copy is taken (it is deleted then), the address no longer says one is waiting: a
     // tab reopened after the phone closed it shows Share unseen, not "did not reach Forge".
     const taken = () => !gone && history.replaceState(history.state, '', '#/photo');
-    takeShared()
+    take()
       .then((f) => (taken(), gone ? null : f ? check(f) : drawStart('photo.missed')))
-      .catch(() => (taken(), !gone && drawStart('photo.missed')));
+      .catch((e) => (taken(), !gone && drawStart(e?.code === 'none' ? 'photo.none' : 'photo.missed')));
   } else drawStart({ missed: 'photo.missed', none: 'photo.none', sent: 'photo.sent' }[from] ?? null);
   // Start loading the face model now, so the check is quicker once a photo is picked.
   setTimeout(() => !gone && filters.forEach((f) => f.prepare?.().catch(() => {})), 300);
@@ -322,6 +328,7 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
     focus: main.querySelector('h1'),
     destroy() {
       gone = true;
+      forget?.();
       closePhoto(photo);
       photo = null;
       result = null;

@@ -18,6 +18,7 @@ export const ROUTES = {
   voice: 'more/voice',
   history: 'more/history',
   erase: 'more/erase',
+  engine: 'more/engine',
   photo: 'photo',
   // Share unseen, opened by a photo shared in from another app (public/v2/sw.js): it arrived, it did not
   // reach the app, or the share held no photo. photoSent: the worker was not running, so the phone posted
@@ -68,5 +69,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

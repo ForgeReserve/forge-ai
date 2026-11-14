@@ -5,13 +5,14 @@ import { fmtBalance, fmtCost, fmtInt, fmtUnits } from '../js/ui.js';
 import { kindOf, MAX_FILES, BODY_LIMIT } from '../js/files.js';
 import { lockKey } from '../js/lockkey.js';
 import * as QR from '../js/qr.js';
-import { adapters } from './core/adapters.js';
+import { adapters, setAdapter } from './core/adapters.js';
 import { againHistory, lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
 import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
+import { createNative, defaultEngine } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
 import { chargedFor, errorView } from './core/errors.js';
@@ -30,6 +31,7 @@ import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickMod
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
+import { engineScreen } from './screens/engine.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
@@ -93,7 +95,12 @@ const store = createStore({
 });
 const S = store.S;
 
-const engineBase = () => S.settings.engine ?? '';
+// Inside the Android app (core/native.js): its share sheet, photos shared in, and Forge's engine as the
+// default, since the app's own origin (https://localhost) has no engine. null on the website.
+const native = createNative();
+if (native) setAdapter('share', native.share);
+
+const engineBase = () => S.settings.engine || defaultEngine(native);
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
@@ -980,6 +987,25 @@ const actions = {
     if (!m) return nav('model');
     actions.chooseModel(m.id);
   },
+  /**
+   * Switches the engine (More, Engine): checks that the new one answers, saves it, then opens the app
+   * again on it, so every part (balance key, prices, models) is read from the new engine. null: the
+   * default. Resolves {ok: false} when the engine does not answer; nothing changes then.
+   */
+  setEngine: async (base) => {
+    const next = base ?? defaultEngine(native);
+    try {
+      await createEngine({ base: next }).models();
+    } catch {
+      return { ok: false };
+    }
+    gen?.controller.abort();
+    S.settings.engine = base ?? undefined;
+    await saveSettings();
+    history.replaceState(null, '', href('home'));
+    location.reload();
+    return { ok: true };
+  },
   chooseModel: (id) => {
     S.settings.model = id;
     saveSettings();
@@ -1079,7 +1105,7 @@ function backTo(name) {
 
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
-  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR };
+  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base };
   switch (name) {
     case 'add':
       return mode.home({ sheet: addSheet(ctx), open: 'add' });
@@ -1114,12 +1140,20 @@ function screenFor(name, params) {
       return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
     case 'erase':
       return eraseScreen(ctx);
+    case 'engine':
+      return engineScreen({ ...ctx, engine: { current: () => engine.base, fallback: defaultEngine(native), set: actions.setEngine } });
     case 'photo':
     case 'photoShared':
     case 'photoMissed':
     case 'photoNone':
     case 'photoSent':
-      return photoScreen({ ...ctx, params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent' }[name] }, filters: (registry.list('filter') ?? []).map((x) => x.instance), share: adapters.share });
+      return photoScreen({
+        ...ctx,
+        params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent' }[name] },
+        filters: (registry.list('filter') ?? []).map((x) => x.instance),
+        share: adapters.share,
+        ...(native ? { take: native.shareIn.take, forget: native.forget } : {}),
+      });
     default:
       return mode.home();
   }
@@ -1171,6 +1205,9 @@ async function eraseAll() {
   if (erased) return;
   halt();
   await workerSettled();
+  // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, and the web
+  // view's own cache.
+  if (native) await Promise.all([native.shareIn.clear(), native.forget()]);
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
@@ -1243,6 +1280,8 @@ async function start() {
   // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
   // other way, an old one that was never read is removed.
   if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
+  // In the Android app a photo shared in waits in the app (ForgeShareIn), and opens Share unseen.
+  if (native && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
   // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js).
   if (shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
   const cur = await kv.get('current').catch(() => null);
@@ -1261,6 +1300,7 @@ async function start() {
   applyLook();
 
   addEventListener('popstate', onPop);
+  native?.shareIn.onShared(() => !erased && nav('photoShared'));
   addEventListener('online', () => {
     store.set({ online: true });
     retryAll().then((n) => n && refreshBalance());
@@ -1289,7 +1329,8 @@ const engineProxy = new Proxy({}, { get: (_, k) => engine[k] });
 
 let workerReg = null;
 function registerWorker() {
-  if (erased || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  // The Android app has its files in the APK, so it needs no offline copy and no worker.
+  if (erased || native || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
   workerReg = navigator.serviceWorker.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
 }
 

@@ -2,7 +2,7 @@
 import { isPrivate, visibleModels } from '../core/state.js';
 import { backHeader, el, icon } from '../core/ui.js';
 
-export function lookScreen({ t, state, back, actions, registry }) {
+export function lookScreen({ t, state, back, actions, registry, native = null }) {
   const S = state.S;
   const looks = registry.list('look');
   // Colours from a look module go into SVG markup, so only plain hex colours are used.
@@ -48,7 +48,8 @@ export function lookScreen({ t, state, back, actions, registry }) {
       el('h2', { class: 'caps', text: t('look.mode') }),
       el('div', { class: 'mode-on', 'aria-current': 'true' }, icon('grid', 30), el('span', {}, el('b', { text: t('look.default') }), el('small', { text: t('look.defaultSub') })), el('span', { class: 'on-dot', 'aria-hidden': 'true' })),
       // Classic is the v1 chat page; Playful comes with a later slice and is not listed.
-      el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
+      // The Android app carries only this app, so it has no Classic to open.
+      native ? null : el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
       el('h2', { class: 'caps', text: t('look.look') }),
       group,
       follow,
