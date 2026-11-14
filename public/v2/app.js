@@ -1346,7 +1346,7 @@ function screenFor(name, params) {
             if (currentName === 'voiceLab') render();
           },
         );
-        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.loading') })) };
+        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.opening') })) };
       }
       try {
         return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });

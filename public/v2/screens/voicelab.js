@@ -5,7 +5,7 @@
 // sends on. Nothing here is sent anywhere.
 import { gpuInfo, meterNumbers, soundCheck } from '../core/phonon.js';
 import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
-import { CANDIDATES, CORPUS, phoneVoices, report, summarize, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
+import { CANDIDATES, CORPUS, candidateError, phoneVoices, readLine, report, summarize, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
 
 const now = () => performance.now();
 const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
@@ -141,6 +141,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       out.loadWarmMs = Math.round(now() - t0);
     } catch (e) {
       out.error = message(e);
+      out.loadFailed = true;
       return out;
     }
     out.got = { device: tts.device, deviceReason: tts.deviceReason, threads: tts.threads, threadsReason: tts.threadsReason, features: tts.features };
@@ -155,20 +156,16 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     for (const [i, item] of lines.entries()) {
       if (signal.aborted) break;
       meter.set({ phase: t('dl.reading', { n: i + 1, total: lines.length }) });
-      const s0 = now();
-      const arrivals = [];
-      const durations = [];
-      const chunks = [];
       const sp = playing ? speaker.stream({ sampleRate: tts.sampleRate }) : null;
       let row;
       try {
-        for await (const pcm of tts.stream(item.text, { voice, signal })) {
-          arrivals.push(now() - s0);
-          durations.push((pcm.length / tts.sampleRate) * 1000);
-          chunks.push(pcm);
-          sp?.push(pcm);
+        // Fails a line that stalls or ends with no sound and no error, rather than hang or count it
+        // as a silent line (core/voicelab.js readLine).
+        const { arrivals, durations, chunks, totalMs, stopped } = await readLine(tts, item.text, { voice, signal, now, onPcm: (pcm) => sp?.push(pcm) });
+        if (stopped) {
+          sp?.stop();
+          break;
         }
-        const totalMs = now() - s0;
         sp?.end();
         if (sp) await sp.done;
         const chk = soundCheck(chunks);
@@ -192,12 +189,21 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
         };
       } catch (e) {
         sp?.stop();
-        if (signal.aborted) break;
-        row = { id: item.id, kind: item.kind, error: message(e) };
+        // Kept even after Stop: an error is a result, and dropping it left a run with no rows and no
+        // error to show.
+        row = { id: item.id, kind: item.kind, error: message(e), ...(e?.code ? { code: e.code } : {}) };
       }
       out.rows.push(row);
       onRow(out.rows.length);
+      // A model that stalled may never answer again: the lines after it would only queue behind it.
+      if (row.code === 'stalled') {
+        out.stalled = true;
+        break;
+      }
     }
+    out.stopped = signal.aborted;
+    const failed = candidateError(out, { stopped: out.stopped });
+    if (failed) out.error = failed;
     out.memory = await pageMemory();
     await phonon.unload(opts);
     return out;
@@ -264,7 +270,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   function draw(cands) {
     const head = el('tr', {}, ...['lab.col.voice', 'lab.col.loadCold', 'lab.col.loadWarm', 'lab.col.first', 'lab.col.rtf', 'lab.col.gaps', 'lab.col.bad'].map((k) => el('th', { text: t(k) })));
     const rows = cands.map((c) => {
-      if (c.error) return el('tr', { 'data-candidate': c.id }, el('td', { text: t(`lab.c.${c.id}`) }), el('td', { colspan: '6', text: t('lab.failed', { message: c.error }) }));
+      const why = c.error ? t(c.loadFailed || !c.rows?.length ? 'lab.failed' : 'lab.readFailed', { message: c.error }) : !c.rows?.length && c.stopped ? t('lab.stoppedEarly') : null;
+      if (why) return el('tr', { 'data-candidate': c.id, class: c.error ? 'lab-failed' : '' }, el('td', { text: t(`lab.c.${c.id}`) }), el('td', { colspan: '6', text: why }));
       const s = summarize(c.rows);
       return el(
         'tr',
@@ -316,7 +323,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       draw(done);
       // A failed load says why at once, with Try again, rather than only in the table at the end.
       const failed = done.at(-1);
-      if (failed.error && c.engine === 'phonon' && !signal.aborted) {
+      if (failed.loadFailed && !signal.aborted) {
         errorLine.textContent = t('dl.failed', { message: failed.error });
         errorLine.hidden = retryBtn.hidden = false;
         meter.set({ phase: '' });

@@ -461,6 +461,52 @@ describe("the voice lab's phone voice", () => {
   }
 });
 
+/**
+ * A WebGPU that loads and then reads nothing, as the voice lab saw on desktop Safari: the worker is
+ * handed an adapter and a device that accept everything, and an engine whose every chunk ends with no
+ * sound and no error.
+ */
+async function silentGpu(ctx: BrowserContext) {
+  const shim = `
+    const __device = { lost: new Promise(() => {}), limits: { maxStorageBufferBindingSize: 2 ** 31 }, pushErrorScope() {}, popErrorScope: async () => null, destroy() {} };
+    const __adapter = { info: { vendor: 'apple', architecture: 'metal-3', isFallbackAdapter: false }, features: new Set(), limits: {}, requestDevice: async () => __device };
+    Object.defineProperty(WorkerNavigator.prototype, 'gpu', { configurable: true, get: () => ({ requestAdapter: async () => __adapter }) });
+  `;
+  await ctx.route('**/v2/vendor/phonon-tts/worker.js', async (r) => {
+    const real = await r.fetch();
+    r.fulfill({ response: real, contentType: 'text/javascript', body: shim + (await real.text()) });
+  });
+  await ctx.route('**/v2/vendor/phonon-tts/gpu/engine.js', (r) =>
+    r.fulfill({ contentType: 'text/javascript', body: 'export class GpuEngine { static async create() { return { addVoice: async () => 0, speakChunk: async () => ({ frames: 0, cancelled: false }) }; } }' }),
+  );
+}
+
+describe("the voice lab's results when a way of reading fails", () => {
+  it('a WebGPU that loads and reads nothing shows as a failure with its reason, not as a run with no lines', async () => {
+    const { ctx, page, errors } = await phone({ context: { serviceWorkers: 'block' }, before: silentGpu });
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.click('#labRun');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('[data-candidate=phonon-webgpu]')).toBe('Natural voice, graphics chipFailed: every line failed: the model ended the line with no sound and no error');
+    const dl = page.waitForEvent('download');
+    await page.click('#labSave');
+    const json = JSON.parse(readFileSync(await (await dl).path(), 'utf8'));
+    const c = json.candidates[0];
+    expect(c.id).toBe('phonon-webgpu');
+    expect(c.got.device).toBe('webgpu');
+    expect(c.rows).toHaveLength(3);
+    expect(c.rows.map((r: any) => r.code)).toEqual(['no-sound', 'no-sound', 'no-sound']);
+    expect(c.error).toMatch(/^every line failed/);
+    expect(c.summary.failed).toBe(3);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
+});
+
 describe('the accent test in the voice lab', () => {
   it('lists other locales\' speakers under their own group, reads English with one, and the app never offers them', async () => {
     const { ctx, page, errors, requests } = await phone();

@@ -200,3 +200,65 @@ export function waitForVoices(synth, ms = 4000, poll = 250) {
     timer = setTimeout(finish, ms);
   });
 }
+
+/** How long a line may go without sound, at its start or between two pieces, before the lab calls it hung. */
+export const LINE_STALL_MS = 30_000;
+
+/** A failed line: code 'stalled' (no sound in time), 'no-sound' (ended with none) or the stream's own error. */
+const lineError = (code, message) => Object.assign(new Error(message), { code });
+
+/**
+ * Reads one line with a loaded model and times each piece of sound: resolves to {arrivals, durations,
+ * chunks, totalMs, stopped} (ms from the start; stopped when signal was aborted). Throws when the
+ * stream fails, when no sound comes for stallMs (a model that hangs would otherwise hold the run for
+ * ever), and when the stream ends with no sound and no error: that is a failure, never a line of
+ * silence (a WebGPU run on desktop Safari read nothing and said nothing).
+ */
+export async function readLine(tts, text, { voice, signal, stallMs = LINE_STALL_MS, now = () => performance.now(), onPcm } = {}) {
+  const inner = new AbortController();
+  const stop = () => inner.abort();
+  if (signal?.aborted) inner.abort();
+  else signal?.addEventListener('abort', stop, { once: true });
+  const it = tts.stream(text, { voice, signal: inner.signal })[Symbol.asyncIterator]();
+  const s0 = now();
+  const out = { arrivals: [], durations: [], chunks: [], totalMs: 0, stopped: false };
+  let timer = null;
+  try {
+    for (;;) {
+      const stalled = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(lineError('stalled', `no sound for ${Math.round(stallMs / 1000)} s${out.chunks.length ? ` after ${out.chunks.length} pieces` : ''}`)), stallMs);
+      });
+      const r = await Promise.race([it.next(), stalled]);
+      clearTimeout(timer);
+      if (r.done) break;
+      out.arrivals.push(now() - s0);
+      out.durations.push((r.value.length / tts.sampleRate) * 1000);
+      out.chunks.push(r.value);
+      onPcm?.(r.value);
+    }
+  } catch (e) {
+    if (e?.code === 'stalled') inner.abort();
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', stop);
+    it.return?.()?.catch?.(() => {});
+  }
+  out.totalMs = now() - s0;
+  out.stopped = !!signal?.aborted;
+  if (!out.stopped && !out.chunks.some((c) => c.length > 0)) throw lineError('no-sound', 'the model ended the line with no sound and no error');
+  return out;
+}
+
+/**
+ * Why a candidate's run gave no result to read, or null when it did: its own error (a failed load),
+ * no line read although nobody pressed Stop, or every line failed (the first line's error). A run
+ * stopped before its first line is not a failure (stopped, from the caller).
+ */
+export function candidateError(c, { stopped = false } = {}) {
+  if (c.error) return c.error;
+  const rows = c.rows ?? [];
+  if (!rows.length) return stopped ? null : 'no line was read, and no error was given';
+  if (rows.every((r) => r.error)) return `every line failed: ${rows[0].error}`;
+  return null;
+}

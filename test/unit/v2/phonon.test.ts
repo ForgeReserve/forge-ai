@@ -856,6 +856,58 @@ describe('the voice lab', () => {
     expect(await LAB.waitForVoices(undefined)).toEqual([]);
   });
 
+  /** A loaded model as the lab reads it: each stream goes as `how` says. */
+  const labTts = (how: 'ok' | 'silent' | 'empty' | 'error' | 'hang' | 'stall') => ({
+    sampleRate: 24000,
+    stream: (_: string, { signal }: any = {}) => ({
+      async *[Symbol.asyncIterator]() {
+        if (how === 'error') throw new Error('GPU device lost');
+        if (how === 'empty') return;
+        if (how === 'hang') return void (await new Promise(() => {}));
+        for (let i = 0; i < 3; i++) {
+          if (signal?.aborted) return;
+          await new Promise((r) => setTimeout(r, 1));
+          yield how === 'silent' ? new Float32Array(1920) : new Float32Array(1920).fill(0.1);
+          if (how === 'stall') await new Promise(() => {});
+        }
+      },
+    }),
+  });
+
+  it('reads a line and times each piece of sound', async () => {
+    const r = await LAB.readLine(labTts('ok'), 'Hello.');
+    expect(r.chunks).toHaveLength(3);
+    expect(r.arrivals).toHaveLength(3);
+    expect(r.durations).toEqual([80, 80, 80]);
+    expect(r.stopped).toBe(false);
+    // Silence that arrives is still sound the model made: the silence check (soundCheck) counts it.
+    expect((await LAB.readLine(labTts('silent'), 'x')).chunks).toHaveLength(3);
+  });
+
+  it('fails a line that ends with no sound and no error, as WebGPU did on desktop Safari, rather than count nothing', async () => {
+    await expect(LAB.readLine(labTts('empty'), 'x')).rejects.toMatchObject({ code: 'no-sound', message: /no sound and no error/ });
+    await expect(LAB.readLine(labTts('error'), 'x')).rejects.toThrow('GPU device lost');
+  });
+
+  it('fails a line that hangs, at its start or between two pieces, instead of holding the run', async () => {
+    await expect(LAB.readLine(labTts('hang'), 'x', { stallMs: 20 })).rejects.toMatchObject({ code: 'stalled', message: 'no sound for 0 s' });
+    await expect(LAB.readLine(labTts('stall'), 'x', { stallMs: 20 })).rejects.toMatchObject({ code: 'stalled', message: /after 1 pieces/ });
+  });
+
+  it('a Stop is not a failure: the line ends, stopped', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    expect(await LAB.readLine(labTts('ok'), 'x', { signal: ctrl.signal })).toMatchObject({ stopped: true, chunks: [] });
+  });
+
+  it('names why a way of reading gave nothing to read: its error, no line, or every line failed', () => {
+    expect(LAB.candidateError({ error: 'load failed', rows: [] })).toBe('load failed');
+    expect(LAB.candidateError({ rows: [] })).toBe('no line was read, and no error was given');
+    expect(LAB.candidateError({ rows: [] }, { stopped: true })).toBeNull();
+    expect(LAB.candidateError({ rows: [{ error: 'the model ended the line with no sound and no error' }, { error: 'x' }] })).toBe('every line failed: the model ended the line with no sound and no error');
+    expect(LAB.candidateError({ rows: [{ error: 'x' }, { firstMs: 20 }] })).toBeNull();
+  });
+
   it('is reachable only by its address: no menu or screen links to it', async () => {
     const ROUTER: any = await import('../../../public/v2/core/router.js' as string);
     expect(ROUTER.parse('#/voice-lab').name).toBe('voiceLab');
