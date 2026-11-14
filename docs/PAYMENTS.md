@@ -21,7 +21,7 @@ The token is then swapped at the mint into new proofs that only the gateway know
 
 1. Client sends the request with no credentials.
 2. The gateway prices the worst case: input tokens estimated as `body bytes / FORGE_BYTES_PER_TOKEN` (default 2, deliberately high) plus `max_tokens` at the output price. It answers `402` with `X-Cashu: creqA...`, a NUT-18 request with `a` (amount), `u` (unit), `m` (trusted mints), `s: true` and `i`, the request id, which is also in the `X-Forge-Request-Id` header. Sat quotes carry `FORGE_SAT_PRICE_BUFFER` headroom.
-3. Client retries with `X-Cashu: cashuB...` and `X-Forge-Request-Id` set to that id (and `X-Forge-Invite` while invite-only). The paid request then runs under the id the client already holds, so its change stays findable at `GET /v1/change/{request_id}` even when the paid response is lost and error or startup recovery owes the change. An id carries one payment: an id that already has a request is `409 request_id_used`, before the token is touched; a malformed id is `400`. A retry without the header gets a new id, returned in `X-Forge-Request-Id`.
+3. Client retries with `X-Cashu: cashuB...` and `X-Forge-Request-Id` set to that id (and `X-Forge-Invite` while invite-only). The paid request then runs under the id the client already holds, so its change stays findable at `GET /v1/change/{request_id}` even when the paid response is lost and error or startup recovery owes the change. Each id can be used for one paid attempt, even one that fails: an id that already has a request is `409 request_id_used`, before the token is touched; a malformed id is `400`. A retry without the header gets a new id, returned in `X-Forge-Request-Id`.
 4. The gateway re-prices, checks the token covers it, swaps it, calls the supplier, and charges `ceil(actual cost)` capped at what was paid.
 5. Change, if any, is issued as a new token from the same mint: in the `X-Cashu-Change` response header for non-streaming responses, in the final `event: forge` of a stream, and always at `GET /v1/change/{request_id}`.
 
@@ -131,6 +131,8 @@ Recovery of a `prepared` row: (a) replay the stored swap; (b) else restore the c
 A second submission of the same token never reaches the mint twice: it finds the row. For a topup to the same key it returns `replay: true` with the current balance; anything else is `token_spent`. When a topup's outcome is unknown (mint timeout), the gateway keeps the new balance and returns its key with HTTP 503 `topup_pending`; retrying with that key and the same token completes it.
 
 A NUT-24 request interrupted after payment (process died during the upstream call) is marked aborted at startup, and its full payment is owed back as change at `GET /v1/change/{request_id}`, the id from the 402 when the paid request echoed it.
+
+A NUT-24 payment whose swap outcome was unknown when its request failed (a mint timeout, `mint_unavailable`, or a failure after the swap) is settled by whichever comes first: a retry with the same token, `GET /v1/change/{request_id}`, or the next startup. Recovery that finalizes the swap marks the request aborted and owes the whole payment back as change under that id at once. Until the mint answers, `GET /v1/change/{request_id}` returns `409 not_settled` with `Retry-After`, never `404`.
 
 ### Paying out (change, refund, export)
 

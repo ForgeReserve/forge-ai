@@ -129,6 +129,86 @@ describe.skipIf(!up)('change is findable by the id from the 402', () => {
   });
 });
 
+// Review of H4: a paid attempt that failed after the swap (in production, a mint timeout on completeSwap)
+// left its change unreachable without a restart. /v1/change/{id} answered 404 although the token was held,
+// and a retry that recovered the swap marked the request paid, so /v1/change/{id} answered 409 until restart.
+describe.skipIf(!up)('change after runtime recovery, without a restart', () => {
+  let g: Gateway;
+  let invite: string;
+  beforeAll(async () => {
+    g = await startGateway({ faults: { afterReceiveSwap: true } });
+    invite = createInvite(g);
+  });
+  afterAll(() => g.close());
+
+  /** Pays under the 402 id; the injected fault fails the attempt after the mint has swapped the token. */
+  async function failedPaidAttempt(): Promise<{ id: string; amount: number; token: string }> {
+    const { id, amount } = await ask402(g, invite);
+    const token = await mintToken(MINT_A, 'usd', amount + 4);
+    const res = await post(g, chatBody('mock-echo'), { 'X-Forge-Invite': invite, 'X-Cashu': token, 'X-Forge-Request-Id': id });
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    const inc: any = g.deps.db.prepare('SELECT status FROM incoming WHERE request_id = ?').get(id);
+    expect(inc.status).toBe('prepared');
+    return { id, amount, token };
+  }
+
+  const resend = (token: string, id?: string) =>
+    post(g, chatBody('mock-echo'), { 'X-Forge-Invite': invite, 'X-Cashu': token, ...(id ? { 'X-Forge-Request-Id': id } : {}) });
+
+  it('the 402 id finds the held payment at once, and retries with the same token leave it there', async () => {
+    const { id, amount, token } = await failedPaidAttempt();
+    const first = await fetch(`${g.url}/v1/change/${id}`);
+    expect([200, 409]).toContain(first.status);
+    const withId = await resend(token, id);
+    expect(withId.status).toBe(409);
+    const msg = (await withId.json()).error.message;
+    expect(msg).toContain(`/v1/change/${id}`);
+    expect(msg).toContain('its token was spent there');
+    const withoutId = await resend(token);
+    expect(withoutId.status).toBe(400);
+    expect((await withoutId.json()).error.code).toBe('token_spent');
+    const ch = await changeFor(g, id);
+    expect(ch.status).toBe(200);
+    expect(await redeem((await ch.json()).token)).toBe(amount + 4);
+    const row: any = g.deps.db.prepare('SELECT status, paid_units, change_units FROM requests WHERE id = ?').get(id);
+    expect(row).toEqual({ status: 'aborted', paid_units: amount + 4, change_units: amount + 4 });
+    expect(g.deps.wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change')).toHaveLength(1);
+  });
+
+  it('a retry without the id that recovers the swap owes the change under the 402 id', async () => {
+    const { id, amount, token } = await failedPaidAttempt();
+    // The retry finalizes the original swap through the recovery hook; the token is then spent.
+    const retry = await resend(token);
+    expect(retry.status).toBe(400);
+    expect((await retry.json()).error.code).toBe('token_spent');
+    const retryId = retry.headers.get('x-forge-request-id')!;
+    const ch = await changeFor(g, id);
+    expect(ch.status).toBe(200);
+    expect(await redeem((await ch.json()).token)).toBe(amount + 4);
+    // The retry's own id carries no payment and no change.
+    expect((await fetch(`${g.url}/v1/change/${retryId}`)).status).toBe(404);
+  });
+
+  it('answers 409, never 404, while the mint cannot settle the swap', async () => {
+    const { id, amount } = await failedPaidAttempt();
+    const recover = g.deps.wallet.recoverIncomingFor.bind(g.deps.wallet);
+    g.deps.wallet.recoverIncomingFor = async () => {
+      throw new Error('mint offline');
+    };
+    try {
+      const res = await fetch(`${g.url}/v1/change/${id}`);
+      expect(res.status).toBe(409);
+      expect(res.headers.get('retry-after')).toBeTruthy();
+      expect((await res.json()).error.code).toBe('not_settled');
+    } finally {
+      g.deps.wallet.recoverIncomingFor = recover;
+    }
+    const ch = await changeFor(g, id);
+    expect(ch.status).toBe(200);
+    expect(await redeem((await ch.json()).token)).toBe(amount + 4);
+  });
+});
+
 describe.skipIf(!up)('change after startup recovery', () => {
   it('a paid retry whose receive was interrupted owes its change under the 402 id after a restart', async () => {
     const faulty = await startGateway({ faults: { afterReceiveSwap: true } });

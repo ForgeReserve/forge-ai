@@ -422,10 +422,25 @@ export function createApp(d: Deps) {
   app.get('/v1/change/:id', async (c) => {
     const id = c.req.param('id');
     // Other-mint funding change shares purpose 'change' but is delivered with the funding, behind its key.
-    const isRequest = !!db.prepare('SELECT 1 FROM requests WHERE id = ?').get(id);
-    const rows = isRequest ? wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change') : [];
+    const readReq = () => db.prepare('SELECT payment, status FROM requests WHERE id = ?').get(id) as { payment: string; status: string } | undefined;
+    const changeRows = () => wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change');
+    const swapUnsettled = () => !!db.prepare("SELECT 1 FROM incoming WHERE request_id = ? AND status = 'prepared'").get(id);
+    let req = readReq();
+    let rows = req ? changeRows() : [];
+    // A paid attempt whose swap outcome is unknown (the mint timed out, or failed after swapping) failed
+    // with its token held at the mint. Settle that swap now, so the whole payment is owed back under this id;
+    // while the mint stays silent the answer is "not yet", never "nothing".
+    if (!rows.length && req?.payment === 'nut24' && req.status === 'failed' && swapUnsettled()) {
+      try {
+        await wallet.recoverIncomingFor(id);
+      } catch (e) {
+        log.warn('change_recovery_deferred', { request_id: id, err: errText(e) });
+      }
+      if (swapUnsettled()) return apiError(c, 409, 'not_settled', 'payment outcome not known yet; the mint has not answered', { 'Retry-After': '5' });
+      req = readReq();
+      rows = changeRows();
+    }
     if (!rows.length) {
-      const req = db.prepare('SELECT status FROM requests WHERE id = ?').get(id) as { status: string } | undefined;
       if (req && !['settled', 'failed', 'aborted'].includes(req.status)) return apiError(c, 409, 'not_settled', 'request still running', { 'Retry-After': '2' });
       return apiError(c, 404, 'not_found', 'no change for this request');
     }
@@ -594,7 +609,7 @@ export function createApp(d: Deps) {
           c,
           409,
           'request_id_used',
-          `request ${requestId} already has a payment; any change it is owed is at /v1/change/${requestId}. Your token was not used: send it without X-Forge-Request-Id, or ask for a new 402.`,
+          `request ${requestId} already exists. This attempt did not touch the token it carried. If you are retrying a request that already reached us, its token was spent there and its outcome and any change are at /v1/change/${requestId}. Otherwise ask for a new 402, or send the token without X-Forge-Request-Id.`,
         );
       }
       try {
@@ -956,7 +971,13 @@ function installRecoveryHooks(d: Deps) {
     if (row.purpose === 'topup' && row.account_id) {
       d.ledger.creditRaw(row.account_id, row.amount * MSUB_PER_UNIT, 'topup', 'recovered');
     } else if (row.purpose === 'nut24' && row.request_id) {
-      d.db.prepare("UPDATE requests SET status = 'paid', paid_units = ? WHERE id = ?").run(row.amount, row.request_id);
+      // The attempt that paid is gone, so nothing will run or settle it: owe the whole payment back as change
+      // under its id now, as the startup sweep would. That sweep picks only paid or running requests, and the
+      // hook fires once per receive, so nothing is owed twice.
+      const req = d.db.prepare('SELECT status, lock_pubkey FROM requests WHERE id = ?').get(row.request_id) as { status: string; lock_pubkey: string | null } | undefined;
+      if (req?.status === 'settled' || req?.status === 'aborted') return;
+      if (row.amount > 0) d.wallet.oweRaw({ mint: row.mint, unit: row.unit, amount: row.amount, purpose: 'change', requestId: row.request_id, lockPubkey: req?.lock_pubkey ?? null });
+      d.db.prepare("UPDATE requests SET status = 'aborted', paid_units = ?, change_units = ? WHERE id = ?").run(row.amount, row.amount, row.request_id);
     }
   };
 }
