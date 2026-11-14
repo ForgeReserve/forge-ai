@@ -72,4 +72,10 @@ describe('PWA files', () => {
     expect(wasm.headers.get('content-type')).toBe('application/wasm');
     for (const f of ['pdfjs-dist.txt', 'pdfjs-dist-assets.txt']) expect(existsSync(resolve(import.meta.dirname, '../../public/vendor/licenses', f))).toBe(true);
   });
+
+  it('serves the first-run voice clips as audio/ogg, which Safari needs to play them', async () => {
+    const r = await fetch(`${g.url}/v2/voice/en/welcome.ogg`, { method: 'HEAD' });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('audio/ogg');
+  });
 });
