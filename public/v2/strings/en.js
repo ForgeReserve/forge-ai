@@ -899,6 +899,7 @@ export default {
   'lab.no': 'no',
   'lab.unknown': 'not known',
   'lab.voice': 'Voice',
+  'lab.lines': 'Lines to read',
   'lab.candidates': 'Run with',
   'lab.c.phonon-cpu-threads': 'Natural voice, processor, several threads',
   'lab.c.phonon-cpu-single': 'Natural voice, processor, one thread',

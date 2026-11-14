@@ -201,6 +201,7 @@ describe('the natural voice', () => {
     expect(await page.inputValue('#labVoice')).toBeTruthy();
     // A short run: the threaded processor only, without playing the sound.
     for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
     await page.click('#labRun');
     await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
@@ -213,7 +214,7 @@ describe('the natural voice', () => {
     const c = json.candidates[0];
     expect(c.id).toBe('phonon-cpu-threads');
     expect(c.got.threads).toBeGreaterThan(1);
-    expect(c.rows).toHaveLength(60);
+    expect(c.rows).toHaveLength(3); // the quick run; the corpus itself has 60 lines (core/voicelab.js)
     expect(c.summary.failed + c.summary.nanRuns + c.summary.silentRuns).toBe(0);
     expect(c.summary.rtf.median).toBeLessThan(1);
     expect(errors).toEqual([]);

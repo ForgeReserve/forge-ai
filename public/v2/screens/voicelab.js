@@ -38,6 +38,10 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const voiceSel = el('select', { id: 'labVoice', class: 'lab-select', 'aria-label': t('lab.voice') });
   const boxes = Object.fromEntries(CANDIDATES.map((c) => [c.id, el('input', { type: 'checkbox', id: `lab-${c.id}`, checked: true })]));
   const play = el('input', { type: 'checkbox', id: 'labPlay' });
+  // How many corpus lines a run reads: all of them by default, fewer for a quick look on a slow phone.
+  const linesSel = el('select', { id: 'labLines', class: 'lab-select', 'aria-label': t('lab.lines') });
+  for (const n of [CORPUS.length, 10, 3]) linesSel.append(el('option', { value: String(n), text: String(n) }));
+  let lines = CORPUS;
   const runBtn = el('button', { type: 'button', class: 'btn primary block', id: 'labRun', text: t('lab.run') });
   const stopBtn = el('button', { type: 'button', class: 'btn block', id: 'labStop', text: t('lab.stop'), hidden: true });
   const status = el('p', { class: 'hint', id: 'labStatus', role: 'status' });
@@ -95,7 +99,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       return out;
     }
     out.got = { device: tts.device, deviceReason: tts.deviceReason, threads: tts.threads, threadsReason: tts.threadsReason, features: tts.features };
-    for (const item of CORPUS) {
+    for (const item of lines) {
       if (signal.aborted) break;
       const s0 = now();
       const arrivals = [];
@@ -154,7 +158,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       return out;
     }
     out.voice = `${voices[0].name} (${voices[0].lang})`;
-    for (const item of CORPUS) {
+    for (const item of lines) {
       if (signal.aborted) break;
       const row = await new Promise((resolve) => {
         const u = new SpeechSynthesisUtterance(item.text);
@@ -204,11 +208,12 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     stopBtn.hidden = false;
     saveBtn.hidden = copyBtn.hidden = true;
     const voice = voiceSel.value || null;
+    lines = CORPUS.slice(0, Number(linesSel.value) || CORPUS.length);
     const chosen = CANDIDATES.filter((c) => boxes[c.id].checked);
     const done = [];
     for (const c of chosen) {
       if (signal.aborted) break;
-      const onRow = (n) => (status.textContent = t('lab.progress', { done: n, total: CORPUS.length, name: t(`lab.c.${c.id}`) }));
+      const onRow = (n) => (status.textContent = t('lab.progress', { done: n, total: lines.length, name: t(`lab.c.${c.id}`) }));
       done.push(c.engine === 'phonon' ? await runPhonon(c, voice, signal, onRow) : await runPhoneVoice(signal, onRow));
       draw(done);
     }
@@ -245,6 +250,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('p', { class: 'hint', text: t('lab.lead', { count: CORPUS.length }) }),
       envList,
       el('label', { class: 'lab-check', for: 'labVoice' }, el('span', { text: t('lab.voice') }), voiceSel),
+      el('label', { class: 'lab-check', for: 'labLines' }, el('span', { text: t('lab.lines') }), linesSel),
       el('h2', { class: 'caps', text: t('lab.candidates') }),
       ...CANDIDATES.map((c) => label(boxes[c.id], t(`lab.c.${c.id}`))),
       label(play, t('lab.play')),

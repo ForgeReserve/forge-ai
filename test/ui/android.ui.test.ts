@@ -210,6 +210,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await page.waitForSelector('[data-screen=voiceLab]');
     await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
     for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
     await page.click('#labRun');
     await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labResults')).toMatch(/several threads/);
