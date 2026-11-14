@@ -23,6 +23,9 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
   let showing = 'after';
   let busy = false;
   let gone = false;
+  // A check did not run (say the face detector could not load): the first tap on Share, Ask about it or
+  // Save only warns, so the photo never goes out with that part unchecked on a single tap.
+  let confirmedFailed = false;
 
   const main = el('main', { class: 'screen sub photo', 'data-screen': 'photo' });
   const head = backHeader(t('photo.title'), back, t('common.back'));
@@ -43,6 +46,9 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
 
   function drawStart(alertKey = null) {
     const alert = alertKey ? [el('div', { class: 'error-box', role: 'alert', id: 'photoAlert' }, el('p', { text: t(alertKey) }))] : [];
+    // The phone already sent the shared photo to the server (photo.sent), so "it does not leave this
+    // phone" is not said there.
+    const free = alertKey === 'photo.sent' ? [] : [el('p', { class: 'note', id: 'photoFree', text: t('photo.free') })];
     body.replaceChildren(
       el('p', { class: 'lead', id: 'photoLead', text: t('photo.lead') }),
       ...alert,
@@ -52,7 +58,7 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
         el('button', { type: 'button', class: 'pick-btn', id: 'photoTake', onclick: () => camera.click() }, el('span', { class: 'tile-ico tint-gold' }, icon('camera', 26)), el('b', { text: t('photo.take') })),
         el('button', { type: 'button', class: 'pick-btn', id: 'photoPick', onclick: () => picker.click() }, el('span', { class: 'tile-ico tint-blue' }, icon('image', 26)), el('b', { text: t('photo.pick') })),
       ),
-      el('p', { class: 'note', id: 'photoFree', text: t('photo.free') }),
+      ...free,
       camera,
       picker,
     );
@@ -77,6 +83,7 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
     busy = true;
     closePhoto(photo);
     photo = null;
+    confirmedFailed = false;
     stepState.clear();
     body.replaceChildren(el('p', { class: 'lead', id: 'photoWorking', role: 'status', text: t('photo.working') }), stepList);
     foot.replaceChildren();
@@ -225,8 +232,15 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
 
   const act = (fn) => async () => {
     if (busy || !photo) return;
+    if (result?.steps.some((s) => !s.ok) && !confirmedFailed) {
+      confirmedFailed = true;
+      status.textContent = t('photo.confirmFailed');
+      status.className = 'msg err';
+      return;
+    }
     busy = true;
     status.textContent = '';
+    status.className = 'msg';
     try {
       await fn();
     } catch (e) {
@@ -269,6 +283,8 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
   const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (closePhoto(photo), (photo = null), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
 
   function drawReview() {
+    status.textContent = '';
+    status.className = 'msg';
     body.replaceChildren(
       el('p', { class: 'lead', id: 'photoReviewLead', text: t('photo.reviewLead') }),
       seg,
@@ -291,10 +307,13 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share 
   const from = params.from;
   if (from === 'shared') {
     drawStart();
+    // Once the shared copy is taken (it is deleted then), the address no longer says one is waiting: a
+    // tab reopened after the phone closed it shows Share unseen, not "did not reach Forge".
+    const taken = () => !gone && history.replaceState(history.state, '', '#/photo');
     takeShared()
-      .then((f) => (gone ? null : f ? check(f) : drawStart('photo.missed')))
-      .catch(() => !gone && drawStart('photo.missed'));
-  } else drawStart(from === 'missed' ? 'photo.missed' : from === 'none' ? 'photo.none' : null);
+      .then((f) => (taken(), gone ? null : f ? check(f) : drawStart('photo.missed')))
+      .catch(() => (taken(), !gone && drawStart('photo.missed')));
+  } else drawStart({ missed: 'photo.missed', none: 'photo.none', sent: 'photo.sent' }[from] ?? null);
   // Start loading the face model now, so the check is quicker once a photo is picked.
   setTimeout(() => !gone && filters.forEach((f) => f.prepare?.().catch(() => {})), 300);
 

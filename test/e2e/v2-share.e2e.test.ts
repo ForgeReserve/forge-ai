@@ -5,7 +5,7 @@ import { type Gateway, startGateway } from './helpers.ts';
 
 // Share unseen as the gateway serves it: the share target in the manifest, the filter modules with the
 // face detector and its model from this origin, and the fallback for a photo shared in while the app's
-// worker is not running (dropped unread, the page says it did not arrive).
+// worker is not running (dropped unread, the page says the phone sent it to the server, which dropped it).
 const SIGN = readFileSync(resolve(import.meta.dirname, '../unit/fixtures/photos/sign.jpg'));
 
 describe('v2 Share unseen', () => {
@@ -39,12 +39,12 @@ describe('v2 Share unseen', () => {
     expect((await fetch(`${g.url}/vendor/licenses/face-api.txt`)).status).toBe(200);
   });
 
-  it('a photo posted to the share target without the worker is dropped unread and the page opens on "did not arrive"', async () => {
+  it('a photo posted to the share target without the worker is dropped unread and the page opens on "sent to the server"', async () => {
     const form = new FormData();
     form.append('photo', new Blob([SIGN], { type: 'image/jpeg' }), 'IMG_1.jpg');
     const r = await fetch(`${g.url}/v2/share`, { method: 'POST', body: form, redirect: 'manual' });
     expect(r.status).toBe(303);
-    expect(r.headers.get('location')).toBe('/v2/#/photo/missed');
+    expect(r.headers.get('location')).toBe('/v2/#/photo/sent');
     expect(await r.text()).toBe('');
     // Nothing else answers to it.
     expect((await fetch(`${g.url}/v2/share`, { redirect: 'manual' })).status).not.toBe(303);

@@ -395,6 +395,30 @@ describe('shared in from another app', () => {
     expect(['shared', 'none', 'missed'].map((x) => R.parse(`#/photo/${x}`).name)).toEqual(['photoShared', 'photoNone', 'photoMissed']);
   });
 
+  it('a photo the gateway dropped (no worker) has its own route and words, apart from the worker failing', async () => {
+    const R = await imp('core/router.js');
+    expect(R.parse('#/photo/sent').name).toBe('photoSent');
+    expect(R.href('photoSent')).toBe('#/photo/sent');
+    expect(R.parentOf('photoSent')).toBe('home');
+    const app = readFileSync(resolve(V2, '../../src/app.ts'), 'utf8');
+    expect(app).toContain("app.post('/v2/share', (c) => c.redirect('/v2/#/photo/sent', 303));");
+    expect(sw).not.toContain('/v2/#/photo/sent');
+    expect(en['photo.sent']).toMatch(/sent this photo to the Forge server/);
+    expect(en['photo.missed']).toMatch(/did not reach Forge/);
+  });
+
+  it('a new worker activating clears its old caches but keeps a shared photo waiting for the page', async () => {
+    const store = new Set(['forge2-runtime-v0', 'forge2-share', 'forge2-runtime-v1', 'forge-shell-v9']);
+    const on: Record<string, ((e: any) => void)[]> = {};
+    const self = { addEventListener: (k: string, f: (e: any) => void) => (on[k] ??= []).push(f), clients: { claim: async () => {} }, skipWaiting: async () => {}, location: { origin: 'https://forge.test' } };
+    const caches = { keys: async () => [...store], delete: async (k: string) => store.delete(k) };
+    new Function('self', 'caches', sw)(self, caches);
+    const waits: Promise<unknown>[] = [];
+    for (const f of on.activate!) f({ waitUntil: (p: Promise<unknown>) => waits.push(p) });
+    await Promise.all(waits);
+    expect([...store].sort()).toEqual(['forge-shell-v9', 'forge2-runtime-v1', 'forge2-share']);
+  });
+
   it('the page takes the shared photo once and deletes the copy, even when reading it fails', async () => {
     const P = await imp('core/photo.js');
     const store = new Map<string, Map<string, any>>();

@@ -4,6 +4,9 @@
 // key or eCash are never cached or touched. The cache name does not start with "forge-", which v1's
 // worker treats as its own and clears.
 const CACHE = 'forge2-runtime-v1';
+// A photo shared in waits in its own cache (see the share target below). A new worker activating must
+// not delete it before the page has taken it.
+const SHARE = 'forge2-share';
 const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/manifest.webmanifest'];
 const MINE = /^\/(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
 const NEVER = /^\/(v1\/|v1$|admin|beta|attestation|\.well-known\/|healthz|__dev)/;
@@ -21,7 +24,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      for (const k of await caches.keys()) if (k.startsWith('forge2-') && k !== CACHE) await caches.delete(k);
+      for (const k of await caches.keys()) if (k.startsWith('forge2-') && k !== CACHE && k !== SHARE) await caches.delete(k);
       await self.clients.claim();
     })(),
   );
@@ -31,8 +34,7 @@ self.addEventListener('activate', (event) => {
 // own cache only until the page reads it (core/photo.js takeShared deletes it at once), and the page
 // opens on Share unseen. Nothing is sent anywhere. Without this worker (it is not installed yet, or
 // Erase everything removed it) the phone posts the photo to the gateway, which drops it unread and
-// opens the page saying it did not arrive (src/app.ts).
-const SHARE = 'forge2-share';
+// opens the page saying the phone sent it there (src/app.ts, route photo/sent).
 const SHARE_KEY = '/v2/__shared-photo';
 const SHARE_MAX = 40 * 1024 * 1024;
 

@@ -123,6 +123,20 @@ async function solid(page: Page, bytes: number[], boxes: { x: number; y: number;
 
 const inside = (p: { x: number; y: number }, b: { x: number; y: number; w: number; h: number }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
+/** The raw GPS latitude and longitude values (three rationals each) in a JPEG's Exif block. */
+function gpsValues(jpeg: Buffer): Buffer[] {
+  const t = jpeg.indexOf(Buffer.from('Exif\0\0', 'latin1')) + 6;
+  const le = jpeg[t] === 0x49;
+  const u16 = (o: number) => (le ? jpeg.readUInt16LE(t + o) : jpeg.readUInt16BE(t + o));
+  const u32 = (o: number) => (le ? jpeg.readUInt32LE(t + o) : jpeg.readUInt32BE(t + o));
+  const entries = (ifd: number) => Array.from({ length: u16(ifd) }, (_, i) => ifd + 2 + i * 12);
+  const pointer = entries(u32(4)).find((e) => u16(e) === 0x8825)!;
+  return entries(u32(pointer + 8))
+    .filter((e) => u16(e) === 2 || u16(e) === 4)
+    .map((e) => jpeg.subarray(t + u32(e + 8), t + u32(e + 8) + 24));
+}
+const SIGN_GPS = gpsValues(SIGN);
+
 describe('Share unseen', () => {
   it('covers the faces, takes out the hidden details, and shares a clean file through the share sheet', async () => {
     const { ctx, page, errors, requests } = await phone();
@@ -258,8 +272,11 @@ describe('Share unseen', () => {
       const out = new Uint8Array(readFileSync((await download.path())!));
       expect(META.readDetails(out).found).toEqual([]);
       expect(META.leftDetails(out)).toEqual([]);
-      // The GPS position is not in the file in any form.
+      // The phone model is not in the file in any form.
       expect(Buffer.from(out).includes(Buffer.from('SM-S906U1'))).toBe(false);
+      // Nor are the GPS latitude and longitude values the original carries.
+      expect(SIGN_GPS).toHaveLength(2);
+      for (const v of SIGN_GPS) expect(Buffer.from(out).includes(v)).toBe(false);
       const px = await solid(page, [...out], await blocks(page));
       expect(px.flat.every(Boolean)).toBe(true);
     }
@@ -294,6 +311,35 @@ describe('Share unseen', () => {
     await ctx.close();
   }, 120_000);
 
+  it('when a check did not run, the first tap on Share only warns and the second one shares', async () => {
+    // No worker, so the route below sees the page's own request for the detector.
+    const { ctx, page, errors } = await phone({ workers: 'block' });
+    // The face detector cannot load (not cached and the phone offline, say).
+    await page.route('**/vendor/face-api/face-api.js', (r) => r.abort());
+    await pick(page, 'IMG_2041.jpg', CREW);
+    expect(await changes(page)).toContainEqual(['Faces', 'failed']);
+    expect(await page.isVisible('#photoFailed')).toBe(true);
+    await page.click('#photoShare');
+    await page.waitForSelector('#photoStatus.err');
+    expect(await page.textContent('#photoStatus')).toBe('A check did not run. Tap again to share anyway.');
+    expect(await page.evaluate(() => (window as any).__shared.length)).toBe(0);
+    await page.click('#photoShare');
+    await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    const out = new Uint8Array((await page.evaluate(() => (window as any).__shared[0])).bytes);
+    expect(META.readDetails(out).found).toEqual([]);
+    // A new photo is checked afresh and warns again.
+    await page.click('#photoAnother');
+    await page.setInputFiles('#photoFile', { name: 'IMG_2042.jpg', mimeType: 'image/jpeg', buffer: CREW });
+    await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+    expect(await page.textContent('#photoStatus')).toBe('');
+    await page.click('#photoShare');
+    await page.waitForSelector('#photoStatus.err');
+    expect(await page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    // The aborted detector load (the only request aborted) is the only error on the page.
+    expect(errors.filter((e) => e !== 'Failed to load resource: net::ERR_FAILED')).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
   it('takes a photo shared in from another app through the service worker, and keeps no copy', async () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/`);
@@ -301,6 +347,8 @@ describe('Share unseen', () => {
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.reload();
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    // The address each page opens on, kept before the app runs.
+    await page.addInitScript(() => ((window as any).__openedOn = location.hash));
     // What the phone does for a share: a POST of the photo to the manifest's share target.
     await page.evaluate((bytes) => {
       const form = document.createElement('form');
@@ -317,16 +365,22 @@ describe('Share unseen', () => {
       document.body.append(form);
       form.submit();
     }, [...SIGN]);
-    await page.waitForURL(/#\/photo\/shared$/);
     await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+    expect(await page.evaluate(() => (window as any).__openedOn)).toBe('#/photo/shared');
     expect(await changes(page)).toContainEqual(['Where it was taken', 'removed']);
+    // Once taken, the address no longer says a shared photo waits: a tab the phone reopens later does not
+    // claim the photo did not arrive.
+    expect(await page.evaluate(() => location.hash)).toBe('#/photo');
+    await page.reload();
+    await page.waitForSelector('#photoPick');
+    expect(await page.locator('#photoAlert').count()).toBe(0);
     // The copy the worker kept for the page is gone once the page has it.
     expect(await page.evaluate(() => caches.keys())).not.toContain('forge2-share');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);
 
-  it('without its worker, a shared photo is dropped by the gateway and the page says so', async () => {
+  it('without its worker, a shared photo is dropped by the gateway and the page says it was sent there', async () => {
     const { ctx, page } = await phone({ workers: 'block' });
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
@@ -338,11 +392,18 @@ describe('Share unseen', () => {
       document.body.append(form);
       form.submit();
     });
-    await page.waitForURL(/#\/photo\/missed$/);
+    await page.waitForURL(/#\/photo\/sent$/);
     await page.waitForSelector('#photoAlert');
-    expect(await page.textContent('#photoAlert')).toBe('The shared photo did not reach Forge. Share it again, or pick it here.');
+    expect(await page.textContent('#photoAlert')).toBe('The app was not ready, so the phone sent this photo to the Forge server. The server dropped it without reading or keeping it. Share it again, or pick it here.');
+    // The photo did leave the phone, so "it does not leave this phone" is not said here.
+    expect(await page.locator('#photoFree').count()).toBe(0);
     expect(await page.isVisible('#photoPick')).toBe(true);
     expect(await page.textContent('[data-screen=photo]')).not.toMatch(/null|undefined/);
+    // "Did not reach Forge" stays for the worker's own failure, where it is true.
+    await page.goto(`${g.url}/v2/#/photo/missed`);
+    await page.waitForSelector('#photoAlert');
+    expect(await page.textContent('#photoAlert')).toBe('The shared photo did not reach Forge. Share it again, or pick it here.');
+    expect(await page.locator('#photoFree').count()).toBe(1);
     await ctx.close();
   }, 60_000);
 });

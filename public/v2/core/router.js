@@ -18,10 +18,12 @@ export const ROUTES = {
   erase: 'more/erase',
   photo: 'photo',
   // Share unseen, opened by a photo shared in from another app (public/v2/sw.js): it arrived, it did not
-  // reach the app, or the share held no photo.
+  // reach the app, or the share held no photo. photoSent: the worker was not running, so the phone posted
+  // the photo to the gateway, which dropped it (src/app.ts).
   photoShared: 'photo/shared',
   photoMissed: 'photo/missed',
   photoNone: 'photo/none',
+  photoSent: 'photo/sent',
 };
 
 /** '#/funds/add/ecash' -> {name: 'fund', params: {id: 'ecash'}}. Unknown routes go home. */
@@ -59,5 +61,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

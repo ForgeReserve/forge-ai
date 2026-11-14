@@ -64,7 +64,7 @@ What these do not do:
 - What leaves the app is a new file, never the original: the picture drawn again at up to 2048 px, with solid black blocks (not a blur, which can be undone), saved as a new JPEG named `photo.jpg`. Every place a JPEG can carry notes (Exif with GPS, make, model, serial and dates, XMP, IPTC, colour profile, extra images, thumbnails, comments, data after the end) is taken out, and the file is checked; one that still holds any is not shared. Blocks are widened to the encoder's 16 px grid, so the file is the same, byte for byte, whatever was under a block.
 - What it cannot do: the automatic checks miss things (a face turned away or in shadow, small, blurred or slanted writing, a tattoo, a reflection). The screen says so and shows every block. It does not change the picture outside the blocks: a place, a building, clothes or a skyline can still say where and who. It does not stop the app you share to from keeping its copy.
 - Ask about it sends the new file, made smaller, with the question to the engine, like any added photo.
-- A photo shared into Forge while its service worker is not running (just installed, or after Erase everything) is posted by the phone to the gateway at `/v2/share`. The gateway does not read it, keeps nothing and opens the page saying the photo did not arrive.
+- A photo shared into Forge while its service worker is not running (just installed, or after Erase everything) is posted by the phone to the gateway at `/v2/share`. The gateway does not read it, keeps nothing and opens the page saying so: the phone sent the photo to the server, which dropped it.
 
 ## Encrypted pass-through (Tinfoil EHBP)
 

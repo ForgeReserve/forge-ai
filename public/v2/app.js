@@ -874,7 +874,8 @@ function screenFor(name, params) {
     case 'photoShared':
     case 'photoMissed':
     case 'photoNone':
-      return photoScreen({ ...ctx, params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none' }[name] }, filters: (registry.list('filter') ?? []).map((x) => x.instance), share: adapters.share });
+    case 'photoSent':
+      return photoScreen({ ...ctx, params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent' }[name] }, filters: (registry.list('filter') ?? []).map((x) => x.instance), share: adapters.share });
     default:
       return mode.home();
   }
