@@ -60,6 +60,10 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
 
+      - name: Natural voice files
+        # Not in git: fetched pinned by commit and SHA-256 (scripts/phonon/lock.json), as the Dockerfile does.
+        run: node scripts/phonon-model.ts
+
       - name: End-to-end and UI tests against local mints
         # The UI tests drive the runner's installed Chrome (channel: 'chrome'), so no browser is downloaded.
         run: |
