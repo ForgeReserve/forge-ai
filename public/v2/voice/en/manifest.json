@@ -58,12 +58,12 @@
       ],
       "text": [
         "Private only",
-        "Only models in sealed hardware, so Forge cannot read your typed questions."
+        "Only private models, so Forge cannot read your typed questions."
       ],
-      "text_sha256": "92f915e42d0d0309b9de2679a55c8e7e0a73823b6928f91123fb917c3b014546",
-      "bytes": 27589,
-      "sha256": "1db33fdbb256c27155bf95573675218f45b95f7ff5ce628b9062eb70305d83eb",
-      "seconds": 6.72
+      "text_sha256": "21d9ee2629aff93bb790e613c4fae4609f2c235bd54ad5267bb6cd9ab6559624",
+      "bytes": 24960,
+      "sha256": "15389135f2c57cee8a860d75a29bde013145ac6c075f20ed80b711a0c31b4b5b",
+      "seconds": 6.1
     }
   }
 }

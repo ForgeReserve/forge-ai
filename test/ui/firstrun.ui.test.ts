@@ -105,11 +105,11 @@ describe('first run in a phone-sized browser', () => {
     expect(await page.evaluate(() => location.hash)).toBe('#/start');
     expect(await page.textContent('h1')).toBe("AI that doesn't know who you are.");
     // One idea a step: icons first, a short heading, one sentence. The detail is under Learn more.
-    expect(await page.locator('#welcomeIcons .way').allTextContents()).toEqual(['No account', 'Like cash', 'Sealed', 'On this phone']);
+    expect(await page.locator('#welcomeIcons .way').allTextContents()).toEqual(['No account', 'Like cash', 'Private', 'On this phone']);
     expect(await page.textContent('#introLead')).toBe('No account, no name, and you pay like cash.');
     expect(await page.isVisible('.intro-item')).toBe(false);
     await page.click('#learnMore summary');
-    expect(await page.locator('.intro-item b').allTextContents()).toEqual(['No account', 'Paid like cash', 'Read only in sealed hardware', 'Kept on this phone']);
+    expect(await page.locator('.intro-item b').allTextContents()).toEqual(['No account', 'Paid like cash', 'Only the AI reads it', 'Kept on this phone']);
     expect(await page.textContent('#introStep')).toBe('Step 1 of 4');
     expect(await page.isVisible('#introBack')).toBe(false);
     expect(await page.isVisible('#introSkip')).toBe(true);
@@ -165,10 +165,10 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'private');
     // Private only is on by default, and the step says what that does and does not cover.
     expect(await page.textContent('#privateState')).toBe('On');
-    expect(await page.textContent('#introLead')).toBe('Only models in sealed hardware, so Forge cannot read your typed questions.');
+    expect(await page.textContent('#introLead')).toBe('Only private models, so Forge cannot read your typed questions.');
     expect(await page.isVisible('#privateSub')).toBe(false);
     await page.click('#learnMore summary');
-    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot read them.');
+    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot.');
     expect(await page.textContent('#privateVoice')).toContain('The engine could hear or read them.');
     expect(await page.isVisible('#privateHidden')).toBe(true);
     expect(await page.isVisible('#privateTurnOn')).toBe(false);
