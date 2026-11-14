@@ -149,6 +149,20 @@ describe('admin invites and waitlist', () => {
     expect(left.map((s: any) => s.id)).toEqual([email.id]);
     expect(JSON.stringify(deps.db.prepare('SELECT * FROM invites').all())).not.toContain(npub);
   });
+
+  it('refuses a contact carrying mailto query controls and never links one stored earlier (finding 11)', async () => {
+    const { call, app, deps } = gateway();
+    const injected = 'victim@example.com?bcc=thief%40evil.net&x=.org';
+    const res = await app.request(`${ORIGIN}/v1/beta/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact: injected }) });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error.code).toBe('invalid_contact');
+    expect(deps.db.prepare('SELECT COUNT(*) AS n FROM beta_signups').get()).toEqual({ n: 0 });
+    // A row the older, looser rule let in: the invite still works, but no mailto link is built for it.
+    deps.db.prepare("INSERT INTO beta_signups (id, contact, kind, note, created_at) VALUES ('beta_legacy', ?, 'email', NULL, 1)").run(injected);
+    const inv = (await (await call('/admin/api/waitlist/beta_legacy/invite', { method: 'POST', body: {} })).json()) as any;
+    expect(inv.code).toMatch(/^inv-/);
+    expect(inv.mailto).toBeNull();
+  });
 });
 
 describe('admin settings and accounts', () => {
