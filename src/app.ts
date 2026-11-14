@@ -57,6 +57,8 @@ const EXPOSE = [
   'X-Forge-Privacy',
   'Ehbp-Response-Nonce',
   'Retry-After',
+  // A Bellows engine's proof of work challenge (public/v2/core/pow.js); the app reads it from a 428.
+  'X-Bellows-Pow-Challenge',
 ];
 const ALLOW = [
   'Accept',
@@ -71,6 +73,8 @@ const ALLOW = [
   'X-Tinfoil-Model',
   'X-Tinfoil-Max-Output-Tokens',
   'X-Tinfoil-Completion-Count',
+  // The app's answer to a Bellows proof of work challenge, sent again with the same request.
+  'X-Bellows-Pow',
 ];
 
 function apiError(c: Context, status: number, code: string, message: string, headers: Record<string, string> = {}, extra: object = {}) {
