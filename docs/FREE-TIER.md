@@ -1,6 +1,6 @@
 # Free tier design
 
-Status: design, not built. Written 2026-11-12.
+Status: steps 1 to 4 built in the v2 branch (slice B1), off by default; step 5 not built. Written 2026-11-12. See "What is built" at the end.
 
 People on the front line often have no money and no way to buy bitcoin, and most private AI tools they could use instead have a free tier. Forge has to be free where it counts without asking anyone who they are. It does that in three layers.
 
@@ -93,3 +93,23 @@ A page on the website, `ai.forge-reserve.com/free`, gives out free vouchers ever
 - Whether a free question may use voice transcription in the enclave (costs more) or only on-device voice.
 - Who funds the faucet budget: Forge revenue, a grant, or sponsors topping it up.
 - Expiry period for credits.
+
+## What is built
+
+Slice B1 of `docs/V2-BUILD.md` built steps 1 to 4 and a minimal issuing tool. Everything is off until the owner sets `FORGE_CREDIT_MINT` (credits) and `FORGE_FAUCET_ENABLED` (the faucet); with neither, a deploy changes nothing.
+
+- **Unit, answered:** Nutshell 0.22.1 takes only sat, msat, usd, eur, btc and auth (read from its `Unit` enum in the image). There is no custom unit, so the credit mint uses usd and 1 credit = 1 cent. The gateway treats every token from the credit mint as credits, whatever its unit says.
+- **Credit mint:** `mint-credit` in `docker-compose.test.yml` for the tests (port 3341). `deploy/credit-mint/`: a compose file (127.0.0.1 only, FakeWallet), nginx blocks that make only info, keys, keysets, swap and checkstate public, and the steps. Not deployed.
+- **Gateway** (`src/credits.ts`, `src/accounts.ts`, `src/app.ts`): a balance funded with credits is a free balance. It pays only `FORGE_FREE_MODELS`, one credit per answered question, none for a failed one, within the caps (4,000 tokens in, 1,500 out by default). Change and refunds are credits. Money never goes on a free balance and credits never go on a paid one; credits per request and other-mint funding with credits are refused. A credit keyset is taken for 90 days after the gateway first saw it, or until its own `final_expiry`. Free balances and credits are left out of revenue.
+- **Faucet** (`src/faucet.ts`): `/free` and `/v1/free` (status, challenge, verify, claim). A daily budget in drips, proof of work rising with the claim rate, an in-memory per-address limit (never stored or logged), and "More at" when empty.
+- **App:** Free questions first in Add funds; a free balance with its own key; the lighter ring segment; "Free, 2 of 3 left"; the three ways forward when they run out. See README, The v2 app.
+- **Issuing tool:** `scripts/issue-credits.ts`, from a credit mint on the same computer only, writes a 0600 sheet in the paper note layout.
+
+Differences from the design above, and why:
+
+- The faucet's limit per address is not skipped for Tor exits: the gateway has no list of exits yet, so people on Tor share an exit's limit.
+- Credits sent per request (NUT-24 `X-Cashu`) are refused: free questions are paid from a free balance, where the caps and the free list apply in one place.
+- A free question may not use speech to text or text to speech on the engine (the open question above): they are refused on a free balance. A voice question in the app uses the paid balance for the speech part.
+- A free balance needs no invite, even on an invite-only engine: it can only ever hold free questions.
+
+Not verified: the credit mint in production (its DNS name, certificate, the nginx blocks on a live server, a gateway minting faucet vouchers there), the default proof-of-work difficulty on a real mid-range phone (22 bits is a guess at about 20 seconds; tune `FORGE_FAUCET_POW_BITS`), and real usage costs.

@@ -28,6 +28,13 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - On-chain status comes from the mint only, unless `FORGE_ESPLORA_URL` is set; then the gateway asks that Esplora server about the deposit address (point it at your own node to keep addresses private).
 - eCash from another mint: the gateway contacts that mint from its own IP address to swap and melt the token. That mint learns the Forge invoice it paid. The change or refund token handed back is fresh eCash from that mint.
 
+## Free questions and the faucet
+
+- Credits are Cashu eCash from the credit mint, with the same blind signatures, so the credit mint cannot link a voucher it signed to the balance it lands on. A free balance is a balance like any other: the gateway stores a SHA-256 of its key, never the key, and the `requests` rows of its questions, never their content.
+- The faucet keeps a count of vouchers given out per UTC day (`faucet_days`), with no address and no time of a claim. Its per-address limit is held in the gateway's memory only, keyed by an HMAC of the address with a key made fresh at each start, and is never written to disk or logged. It resets on restart. The address still reaches the gateway, as for any request; behind a proxy only with `FORGE_TRUST_PROXY`. Tor exits are not told apart yet, so people on Tor share an exit's limit.
+- The puzzle is worked on the phone. No name, email or CAPTCHA is asked for.
+- The `/free` page's Add to Forge keeps the voucher in this site's `localStorage` (the v2 vault) until the app adds it. Copy and Print put it wherever the person chooses.
+
 ## Audio (speech to text, text to speech)
 
 - `POST /v1/audio/transcriptions` and `POST /v1/audio/speech` are not encrypted end to end. The gateway receives the recording or the text in plain form, holds it in memory while it relays it to the supplier, and drops it when the request ends. It is never logged or stored: the log line and the `requests` row carry the model, seconds or characters, price and status.
