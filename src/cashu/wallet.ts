@@ -13,6 +13,7 @@ import {
   type Proof,
   serializeProofs,
   serializeSwapPreview,
+  setGlobalRequestOptions,
   type SwapPreview,
   Wallet,
 } from '@cashu/cashu-ts';
@@ -23,6 +24,21 @@ import { errText, log } from '../log.ts';
 
 /** NUT error codes we treat as definitive rejections of the inputs. */
 const SPENT = 11001;
+
+/**
+ * Transport policy for every cashu-ts request in this process (the SDK applies these RequestInit
+ * fields to every call, overriding per-call values; setting them again replaces the whole set).
+ *  - redirect 'error': a mint may never send a Cashu request (discovery, keysets, keys, swap, melt,
+ *    checks, restore) on to another address. The safety check vets the mint URL; a redirect would
+ *    take the request to a host that was never vetted. The SDK already refuses redirects on POSTs.
+ *  - requestTimeout 60 s (SDK default: 5 min). A timeout is an unknown outcome; every mint operation
+ *    is persisted first and finished by replay or restore, so a slow mint cannot hold a request open.
+ */
+export const CASHU_REQUEST_OPTIONS = { redirect: 'error', requestTimeout: 60_000 } as const;
+
+export function applyCashuRequestPolicy(): void {
+  setGlobalRequestOptions({ ...CASHU_REQUEST_OPTIONS });
+}
 
 export class PaymentError extends Error {
   readonly code: string;
@@ -106,6 +122,11 @@ export interface WalletOptions {
   units: Unit[];
   maxTokenBytes: number;
   seed?: Uint8Array;
+  /**
+   * Safety check for a mint outside trustedMints (other-mint eCash), run before every load of its
+   * wallet, cached or not, so the mint actually contacted passes it each time. Throws to refuse.
+   */
+  vetMint?: (mint: string) => Promise<unknown>;
   /** Test-only fault injection: throw after the mint swap, before the DB write. */
   faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
 }
@@ -174,6 +195,7 @@ export class GatewayWallet {
     this.db = db;
     this.opts = { ...opts, trustedMints: opts.trustedMints.map(normalizeMintUrl) };
     this.seed = opts.seed ?? this.loadOrCreateSeed();
+    applyCashuRequestPolicy();
   }
 
   private loadOrCreateSeed(): Uint8Array {
@@ -194,6 +216,7 @@ export class GatewayWallet {
 
   async wallet(mint: string, unit: Unit): Promise<Wallet> {
     const m = normalizeMintUrl(mint);
+    if (this.opts.vetMint && !this.isTrusted(m)) await this.opts.vetMint(m);
     const key = `${m}|${unit}`;
     let p = this.wallets.get(key);
     if (!p) {
@@ -230,6 +253,7 @@ export class GatewayWallet {
     try {
       w = await this.wallet(mint, unit);
     } catch (e) {
+      if (e instanceof PaymentError) throw e;
       throw new PaymentError('mint_unavailable', `could not reach mint: ${errText(e)}`, 503);
     }
     let proofs: Proof[];

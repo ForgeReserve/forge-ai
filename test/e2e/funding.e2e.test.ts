@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { GatewayWallet, PaymentError } from '../../src/cashu/wallet.ts';
 import { openDb } from '../../src/db.ts';
 import { sqliteStore } from '../../src/mint-discovery.ts';
 import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintProofs, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
@@ -310,6 +311,39 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
       expect(hits).toEqual([]);
     } finally {
       listener.close();
+    }
+  });
+
+  // Report finding 3: the mint actually contacted passes the same safety check as the quoted one,
+  // on every load, not only the first.
+  it('every untrusted mint the wallet loads is vetted, cached or not; a plain-http mint is refused by default', async () => {
+    let calls = 0;
+    let allow = true;
+    const w = new GatewayWallet(openDb(':memory:'), {
+      trustedMints: [MINT_A],
+      units: ['sat'],
+      maxTokenBytes: 4000,
+      vetMint: async () => {
+        calls++;
+        if (!allow) throw new PaymentError('mint_not_allowed', 'this mint address is not allowed');
+      },
+    });
+    await w.wallet(MINT_C, 'sat');
+    await w.wallet(MINT_C, 'sat');
+    expect(calls).toBe(2);
+    allow = false;
+    await expect(w.wallet(MINT_C, 'sat')).rejects.toMatchObject({ code: 'mint_not_allowed' });
+    await w.wallet(MINT_A, 'sat');
+    expect(calls).toBe(3);
+
+    // FORGE_FUND_MINT is operator configuration: like the trusted mints, it is not a foreign mint.
+    const plain = await startGateway({ env: { FORGE_FUND_MINT: `${MINT_B}/` } });
+    try {
+      await expect(plain.deps.wallet.wallet(MINT_C, 'sat')).rejects.toMatchObject({ code: 'mint_not_allowed' });
+      await expect(plain.deps.wallet.wallet(MINT_A, 'usd')).resolves.toBeDefined();
+      await expect(plain.deps.wallet.wallet(MINT_B, 'sat')).resolves.toBeDefined();
+    } finally {
+      await plain.close();
     }
   });
 
