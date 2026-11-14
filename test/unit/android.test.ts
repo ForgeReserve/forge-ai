@@ -43,6 +43,9 @@ describe('Android app project', () => {
   it('keeps nothing in backups and talks to the engine over HTTPS only', () => {
     expect(manifest).toContain('android:allowBackup="false"');
     expect(manifest).toContain('android:usesCleartextTraffic="false"');
+    // Nothing to Google from the WebView: no Safe Browsing checks, no usage metrics.
+    expect(manifest).toContain('<meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />');
+    expect(manifest).toContain('<meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />');
     const rules = read('android/app/src/main/res/xml/data_extraction_rules.xml');
     expect(rules.match(/<exclude /g)?.length).toBe(10);
     expect(readConfig(join(ROOT, 'capacitor.config.json'))).toMatchObject({ loggingBehavior: 'none', android: { allowMixedContent: false } });

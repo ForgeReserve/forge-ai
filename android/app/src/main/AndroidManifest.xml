@@ -16,6 +16,13 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/AppTheme">
 
+        <!--
+          The WebView sends nothing to Google: no Safe Browsing URL checks, and no usage metrics even
+          when the phone's owner has turned on Google diagnostics. The app talks only to its engine.
+        -->
+        <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
+        <meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"

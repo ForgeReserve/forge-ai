@@ -366,7 +366,7 @@ describe('v2 money paths in a phone-sized browser', () => {
       await page.click('#foreignConfirm');
       await expect
         .poll(async () => JSON.parse((await page.evaluate(() => localStorage.getItem('forge2.vault')))!).in, { timeout: 20_000 })
-        .toMatchObject([{ via: 'othermint', state: 'pending', code: 'in_flight', fundingId: expect.stringMatching(/.+/) }]);
+        .toMatchObject([{ via: 'othermint', state: 'pending', code: 'in_flight', fundingId: expect.stringMatching(/.+/), engine: '' }]);
       // Leave at once: the fund screen's poller stops. Funds looks the funding up and settles it.
       await page.goto(`${gf.url}/v2/#/funds`);
       await page.waitForSelector('[data-screen=funds]');

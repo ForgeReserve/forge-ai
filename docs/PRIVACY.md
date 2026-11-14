@@ -83,6 +83,7 @@ The Android app (docs/ANDROID.md) keeps the same things in its own web view stor
 - Two kinds of photo file are written: the protected photo handed to the share sheet (the app's cache) and a photo taken with the camera for Share unseen (the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
 - Backups are off, so nothing of Forge goes into a cloud backup or a phone to phone transfer. Uninstalling the app removes everything it kept.
 - It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default).
+- Its web view sends nothing to Google: Safe Browsing link checks and WebView usage metrics are turned off in the app's manifest.
 
 ## Encrypted pass-through (Tinfoil EHBP)
 

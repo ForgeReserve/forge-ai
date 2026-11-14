@@ -79,11 +79,13 @@ export function settleForeign(vault, entry, x) {
 /**
  * Looks up every other-mint token still pending on the phone and settles it (see settleForeign).
  * Returns how many entries changed. An unknown funding (404) means the engine never took the token.
+ * Only entries sent to this engine are looked up: another engine does not know the funding, and its
+ * 404 must never mark a token the first engine may still be working on (core/vault.js).
  */
 export async function settlePendingForeign({ engine, vault, key }) {
   if (!key) return 0;
   let n = 0;
-  for (const e of vault.incoming().filter((x) => x.via === 'othermint' && x.state === 'pending' && x.fundingId)) {
+  for (const e of vault.incoming().filter((x) => x.via === 'othermint' && x.state === 'pending' && x.fundingId && (x.engine ?? '') === (engine?.base ?? ''))) {
     let r;
     try {
       r = await engine.funding(key, e.fundingId);

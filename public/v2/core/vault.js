@@ -7,10 +7,22 @@
 //
 // Out: a refund token stays here until the person says they saved it.
 //
+// Every incoming entry records the engine it was sent to (its base: '' for the page's own origin). Only
+// that engine is asked about it again: after a switch in More, Engine, a token sent to the old engine is
+// never sent to the new one, and the new engine's answers never settle it. It waits, pending, until the
+// person goes back to that engine. An entry with no engine field is from before this rule, when only the
+// page's own origin was used, so it belongs to base ''.
+//
 // Storage is passed in (localStorage in the page, a Map in tests). Pure apart from that.
 import { errorFrom } from './engine.js';
 
 const STORE = 'forge2.vault';
+
+/** The engine a vault entry belongs to: its base URL, '' for the page's own origin. */
+export const engineOf = (engine) => engine?.base ?? '';
+
+/** True when the incoming entry was sent to this engine (an entry with no engine is the page's own origin). */
+export const sentTo = (entry, engine) => (entry?.engine ?? '') === engineOf(engine);
 
 export function createVault(storage) {
   const read = () => {
@@ -96,7 +108,7 @@ export function createVault(storage) {
  * Returns {credited, unit, replay}, plus free: true when the token went on a free balance. Throws EngineError (with .retryable) when the token was not credited.
  */
 export async function topupWithVault({ engine, vault, token, key, invite, setKey, setFreeKey, via = 'topup' }) {
-  const entry = vault.hold(token, via);
+  const entry = vault.hold(token, via, { engine: engineOf(engine) });
   let r;
   try {
     r = await engine.topup(key, token, invite);
@@ -117,13 +129,14 @@ export async function topupWithVault({ engine, vault, token, key, invite, setKey
 
 /**
  * Sends every pending top-up token again (on start and when the connection comes back). Tokens held
- * by another flow (other-mint funding) are left to that flow. Returns how many were credited.
+ * by another flow (other-mint funding) are left to that flow, and tokens sent to another engine are
+ * left alone (see the top of this file). Returns how many were credited.
  * via: 'topup' for the paid balance, 'free' for free question vouchers, which go on the free balance
  * with its own key (core/free.js).
  */
 export async function retryPending({ engine, vault, getKey, invite, setKey, setFreeKey, via = 'topup' }) {
   let n = 0;
-  for (const e of vault.incoming().filter((x) => x.state === 'pending' && (x.via ?? 'topup') === via)) {
+  for (const e of vault.incoming().filter((x) => x.state === 'pending' && (x.via ?? 'topup') === via && sentTo(x, engine))) {
     try {
       await topupWithVault({ engine, vault, token: e.token, key: getKey(), invite, setKey, setFreeKey, via });
       n++;

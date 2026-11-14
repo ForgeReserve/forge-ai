@@ -55,6 +55,8 @@ def webAssets = tasks.register('forgeWebAssets', Exec) {
     commandLine 'node', 'scripts/android-web.ts', file('src/main/assets').absolutePath
     inputs.dir(new File(repoRoot, 'public'))
     inputs.file(new File(repoRoot, 'scripts/android-web.ts'))
+    // The KEEP and SKIP rules that decide what goes in the APK.
+    inputs.file(new File(repoRoot, 'scripts/lib/android-web.ts'))
     inputs.file(new File(repoRoot, 'capacitor.config.json'))
     outputs.dir(file('src/main/assets/public'))
     outputs.file(file('src/main/assets/capacitor.config.json'))

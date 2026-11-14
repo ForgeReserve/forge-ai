@@ -97,7 +97,8 @@ export function create(inputs) {
         confirm.addEventListener('click', async () => {
           confirm.disabled = true;
           st.textContent = t('fund.othermint.receiving');
-          held = vault.hold(token, 'othermint', { fundingId: f.id });
+          // Tied to this engine: only it is asked about the funding later (kit.js, settlePendingForeign).
+          held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
           try {
             const r = await engine.foreignConfirm(wallet.key(), { id: f.id, token, pubkey: wallet.lockKey() || undefined });
             if (!r.ok) {

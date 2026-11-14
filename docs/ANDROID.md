@@ -7,6 +7,8 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 - Name **Forge**, application id `com.forgereserve.ai`, Android 9 (API 28) and up.
 - No Google services, no Firebase, no analytics. It should run on GrapheneOS without Google Play; that is not tested on a phone yet.
 - The engine is `https://ai.forge-reserve.com` until the person sets another in **More, Engine**. HTTPS only.
+- eCash on its way in is tied to the engine it was sent to. After a switch, it is never sent to the new engine. It waits on the phone until the person goes back to the first one (`public/v2/core/vault.js`).
+- The web view sends nothing to Google: Safe Browsing link checks and WebView usage metrics are off in `AndroidManifest.xml`.
 
 ## What it does that the website does not
 
