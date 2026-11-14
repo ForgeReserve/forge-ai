@@ -79,7 +79,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_RATE_TTL_SECONDS` / `FORGE_RATE_MAX_STALE_SECONDS` | `60` / `900` | Cache time; after max staleness sat pricing returns 503 instead of guessing |
 | `FORGE_SAT_PRICE_BUFFER` | `1.02` | Headroom on sat 402 amounts so a rate move between quote and payment does not reject the token |
 | `FORGE_BYTES_PER_TOKEN` | `2` | Conservative bytes per input token used to size the reservation |
-| `FORGE_RATE_LIMIT_RPM` | `60` | Requests per minute per key or IP |
+| `FORGE_RATE_LIMIT_RPM` | `60` | POST requests under `/v1` per minute per client IP, whatever key a request carries; a key that verifies is also held to the same rate across all its addresses |
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
 | `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries only failures before the request was sent (refused, DNS, connect timeout, certificate), plus 408, 425, 429, 5xx and resets for a supplier with `idempotencyHeader` |

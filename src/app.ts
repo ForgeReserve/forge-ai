@@ -126,9 +126,15 @@ export function createApp(d: Deps) {
   );
   app.use('/v1/*', async (c, next) => {
     if (c.req.method === 'OPTIONS' || c.req.method === 'GET') return next();
-    const key = bearer(c);
-    const id = key ? 'k:' + key.slice(-12) : 'ip:' + clientIp(c);
-    const wait = limiter.take(id);
+    // Every request pays from its client IP's bucket, whatever bearer it carries: a made-up key
+    // must not buy a fresh burst or a new bucket. A key that verifies also pays from its account's
+    // bucket, so one balance spread over many addresses stays limited too.
+    let wait = limiter.take('ip:' + clientIp(c));
+    if (wait === 0) {
+      const key = bearer(c);
+      const account = key ? ledger.findByKey(key) : undefined;
+      if (account) wait = limiter.take('acct:' + account.id);
+    }
     if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many requests', { 'Retry-After': String(wait) });
     return next();
   });
