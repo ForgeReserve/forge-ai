@@ -909,6 +909,8 @@ export default {
   'lab.no': 'no',
   'lab.unknown': 'not known',
   'lab.voice': 'Voice',
+  'lab.loading': 'Loading the voice lab.',
+  'lab.loadFailed': 'The voice lab could not load on this browser. Send this message:',
   'lab.lines': 'Lines to read',
   'lab.voicesApp': 'Voices in the app',
   'lab.voicesAccent': 'Accent test (English model)',

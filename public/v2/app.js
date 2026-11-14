@@ -1263,6 +1263,19 @@ function backTo(name) {
 }
 
 let voiceLab = null; // screens/voicelab.js, once the voice lab was opened
+let voiceLabError = null; // why the voice lab could not load, shown on its page
+/** The voice lab's page when it cannot load or draw: the error in words, with the browser's own message. */
+function labErrorScreen(e) {
+  return {
+    node: ui.el(
+      'main',
+      { class: 'screen sub', 'data-screen': 'voiceLabError' },
+      ui.el('h1', { text: t('lab.title') }),
+      ui.el('p', { class: 'hint', id: 'labLoadError', text: t('lab.loadFailed') }),
+      ui.el('pre', { class: 'hint', id: 'labLoadErrorDetail', text: `${e?.name ?? 'Error'}: ${e?.message ?? String(e)}\n${navigator.userAgent}` }),
+    ),
+  };
+}
 
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
@@ -1297,14 +1310,26 @@ function screenFor(name, params) {
     case 'voiceLab':
       // A developer page, linked from nowhere: measures the voices this phone can run. Loaded only
       // when opened, so the app's first paint never waits for it.
+      if (voiceLabError) return labErrorScreen(voiceLabError);
       if (!voiceLab) {
-        import('./screens/voicelab.js').then((m) => {
-          voiceLab = m.voiceLabScreen;
-          if (currentName === 'voiceLab') render();
-        });
-        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }) };
+        import('./screens/voicelab.js').then(
+          (m) => {
+            voiceLab = m.voiceLabScreen;
+            if (currentName === 'voiceLab') render();
+          },
+          (e) => {
+            // A developer page: say what failed instead of staying blank (an older Safari, say).
+            voiceLabError = e;
+            if (currentName === 'voiceLab') render();
+          },
+        );
+        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.loading') })) };
       }
-      return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });
+      try {
+        return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });
+      } catch (e) {
+        return labErrorScreen(e);
+      }
     case 'intro':
     case 'introPay':
     case 'introLimits':
