@@ -1,0 +1,12 @@
+{
+  "id": "forge.voice-out.engine",
+  "kind": "voice-out",
+  "version": "1.0.0",
+  "name": {
+    "en": "Engine voice"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

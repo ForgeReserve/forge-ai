@@ -488,6 +488,16 @@ export class FundingService {
   }
 
   /**
+   * The largest token quoteForeign takes from another mint, in the token's unit: FORGE_FOREIGN_MAX_*,
+   * and for an unlisted mint the lower unlisted cap. null for a unit other-mint funding does not take.
+   */
+  foreignMax(unit: string, unlisted: boolean): number | null {
+    if (unit !== 'sat' && unit !== 'usd') return null;
+    if (unlisted) return this.unlistedMax()[unit];
+    return unit === 'sat' ? this.env.FORGE_FOREIGN_MAX_SAT : this.env.FORGE_FOREIGN_MAX_USD;
+  }
+
+  /**
    * Other mints whose eCash is accepted under the policy: the operator's (env list and admin-added),
    * then the discovered set (under 'discovered', and under 'any' with no env list, where they are
    * suggestions). Denied and Forge's own mints are never listed. Never waits on a relay.
@@ -538,6 +548,9 @@ export class FundingService {
     if (!env.FORGE_FOREIGN_ENABLED) throw new PaymentError('method_unavailable', 'eCash from other mints is not accepted here', 400);
     const m = normalizeMintUrl(mint);
     if (this.wallet.isTrusted(m)) throw new PaymentError('use_topup', 'this token is from an accepted mint: add it as eCash instead');
+    // Credits are free questions, not money: melting them into a paid balance would turn them into money.
+    // (Optional call: test doubles of the wallet may predate the free tier.)
+    if (this.wallet.isCredit?.(m)) throw new PaymentError('credits_not_money', 'free questions cannot be turned into money; add them as eCash to a free balance');
     const insecure = env.FORGE_FOREIGN_ALLOW_INSECURE;
     const key = mintKey(m, insecure);
     if (this.keySet(env.FORGE_FOREIGN_DENY).has(key)) throw new PaymentError('mint_not_allowed', 'eCash from this mint is not accepted');

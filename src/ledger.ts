@@ -23,6 +23,8 @@ export interface Account {
   balance_msub: number;
   invite_id: string | null;
   created_at: number;
+  /** 1 for a free balance: funded with credits, pays only free questions, refunds only as credits. */
+  free: number;
 }
 
 export class LedgerError extends Error {
@@ -47,21 +49,21 @@ export class Ledger {
   }
 
   findByKey(key: string): Account | undefined {
-    return this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at FROM accounts WHERE key_hash = ?').get(sha256(key)) as
+    return this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at, free FROM accounts WHERE key_hash = ?').get(sha256(key)) as
       | Account
       | undefined;
   }
 
   get(id: string): Account | undefined {
-    return this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at FROM accounts WHERE id = ?').get(id) as Account | undefined;
+    return this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at, free FROM accounts WHERE id = ?').get(id) as Account | undefined;
   }
 
   /** Must run inside a transaction when combined with other writes. */
-  createAccountRaw(key: string, unit: Unit, inviteId: string | null): Account {
+  createAccountRaw(key: string, unit: Unit, inviteId: string | null, free = false): Account {
     const id = 'acct_' + randomUUID();
     this.db
-      .prepare('INSERT INTO accounts (id, key_hash, unit, balance_msub, invite_id, created_at) VALUES (?, ?, ?, 0, ?, ?)')
-      .run(id, sha256(key), unit, inviteId, now());
+      .prepare('INSERT INTO accounts (id, key_hash, unit, balance_msub, invite_id, created_at, free) VALUES (?, ?, ?, 0, ?, ?, ?)')
+      .run(id, sha256(key), unit, inviteId, now(), free ? 1 : 0);
     return this.get(id)!;
   }
 
@@ -190,13 +192,13 @@ export class Ledger {
   }
 
   list(): Array<Account & { reserved_msub: number }> {
-    const rows = this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at FROM accounts ORDER BY created_at').all() as unknown as Account[];
+    const rows = this.db.prepare('SELECT id, unit, balance_msub, invite_id, created_at, free FROM accounts ORDER BY created_at').all() as unknown as Account[];
     return rows.map((a) => ({ ...a, reserved_msub: this.reservedMsub(a.id) }));
   }
 
-  /** Total customer liability per unit, in msub. */
+  /** Total customer liability per unit, in msub. Free balances hold credits, not money, so they are not counted. */
   liabilities(): Record<string, number> {
-    const rows = this.db.prepare('SELECT unit, COALESCE(SUM(balance_msub), 0) AS s FROM accounts GROUP BY unit').all() as Array<{ unit: string; s: number }>;
+    const rows = this.db.prepare('SELECT unit, COALESCE(SUM(balance_msub), 0) AS s FROM accounts WHERE free = 0 GROUP BY unit').all() as Array<{ unit: string; s: number }>;
     return Object.fromEntries(rows.map((r) => [r.unit, r.s]));
   }
 }

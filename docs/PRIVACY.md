@@ -27,6 +27,66 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - Lightning and on-chain funding go through the Forge mint. The mint sees the quote, the invoice or address and when it is paid; the gateway's mint requests are not linked to the balance key on the mint's side. The gateway stores the quote id, invoice or address, and amounts with the balance id, never the key.
 - On-chain status comes from the mint only, unless `FORGE_ESPLORA_URL` is set; then the gateway asks that Esplora server about the deposit address (point it at your own node to keep addresses private).
 - eCash from another mint: the gateway contacts that mint from its own IP address to swap and melt the token. That mint learns the Forge invoice it paid. The change or refund token handed back is fresh eCash from that mint.
+- A Cashu card (v2 Android app): the phone talks only to its engine, so the engine carries the card's swap to the card's mint from its own IP address and hands the answer back (`/v1/wallet/fund/card/*`). The engine and that mint see the card's pieces, and the secret of each piece names the card's key, so a card is recognisable from one tap to the next. They see the phone's outputs only blinded; the blinding factors stay on the phone, so neither can take the eCash. The engine stores nothing of it and logs nothing of the request. The eCash is then added like any other eCash, linked to the balance key it lands on. The card's own record (mint, PIN state, pieces) is read on the phone and not sent anywhere else.
+- A Fedimint card (v2 Android app) pays through a till the person paired with, not through the engine. The phone sends the till the engine's Lightning invoice, the card's PIN and the card's answers to the till's commands, from the phone's own network address. The till learns that card, its PIN, the amount and the invoice (so it can tell the invoice is the engine's), and it keeps a record of the pay. The engine sees only a Lightning payment of its invoice, credited to the balance key that asked for it; it learns nothing of the card or the till from the app. The phone keeps the payment (`forge2.tillpays`: the invoice, its amounts, the till's pay id and the card's short id) until the funds are credited or the till has given the card its money back, never the PIN. The till's address and pay token are kept by the app, sealed in the Android Keystore.
+
+## Free questions and the faucet
+
+- Credits are Cashu eCash from the credit mint, with the same blind signatures, so the credit mint cannot link a voucher it signed to the balance it lands on. A free balance is a balance like any other: the gateway stores a SHA-256 of its key, never the key, and the `requests` rows of its questions, never their content.
+- Faucet vouchers are made by the gateway itself, so the gateway sees each voucher it hands out and sees it again when it is added to a balance. It stores neither the voucher nor the address that claimed it. The log line of a claim has its time and the number of questions, nothing else. The app adds a voucher as soon as it gets one, so in the gateway's logs a claim and the top-up that follows sit close together in time. Whoever reads those logs could pair them by time.
+- The faucet keeps a count of vouchers given out per UTC day (`faucet_days`), with no address and no time of a claim. Its per-address limit is held in the gateway's memory only, keyed by an HMAC of the address with a key made fresh at each start, and is never written to disk or logged. It resets on restart. The address still reaches the gateway, as for any request; behind a proxy only with `FORGE_TRUST_PROXY`. Tor exits are not told apart yet, so people on Tor share an exit's limit.
+- The puzzle is worked on the phone. No name, email or CAPTCHA is asked for.
+- The `/free` page's Add to Forge keeps the voucher in this site's `localStorage` (the v2 vault) until the app adds it. Copy and Print put it wherever the person chooses.
+
+## Audio (speech to text, text to speech)
+
+- `POST /v1/audio/transcriptions` and `POST /v1/audio/speech` are not encrypted end to end. The gateway receives the recording or the text in plain form, holds it in memory while it relays it to the supplier, and drops it when the request ends. It is never logged or stored: the log line and the `requests` row carry the model, seconds or characters, price and status.
+- With an enclave supplier (Tinfoil) the sound and text are read by the model inside an attested enclave, so the supplier's staff cannot read them; the gateway operator could, while they pass. A Tinfoil supplier set to `allowPlaintext: false` refuses audio.
+- In the v2 app the engine way is labelled Engine, not private, and its words say the engine could hear the recording, or read the answer it reads aloud, on the way. With Private only on, the engine still sees the recording, the transcript that comes back and, when it reads answers aloud, the answer text.
+- In the v2 app, Private only sends voice only to an enclave audio model, and never uses the browser's own recogniser, which may send the voice to the browser's maker. The phone's own voices are used only when they run on the phone (`localService`).
+
+## The v2 app: what it keeps and how it removes it
+
+The v2 app at `/v2/` keeps, on the phone only:
+
+- **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
+- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved; `forge2.cards`: a card payment until its swap is done and its eCash is in the vault, and change owed to a card until that card takes it back) in `localStorage`, plus the last model list and look, and a mark that the first run was seen (`forge2.firstRun`). The invite code typed on the first run's Welcome step is held in the page's memory only, never stored.
+- **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
+- **A photo shared in from another app**, for a moment: the service worker keeps it in its own cache (`forge2-share`) until the Share unseen screen opens and takes it, then deletes that cache. Opened any other way, the app deletes an old one it finds. A photo picked or taken inside the app is never stored.
+
+Ways to remove things, each tested in Chrome against every IndexedDB store, every Cache Storage entry, `localStorage` and `sessionStorage` (`test/ui/history.ui.test.ts`):
+
+- **Burn** (on the answer screen, or the flame on a History card) removes that conversation from IndexedDB and from the page's memory at once, together with any spoken answer kept in memory for it. An answer still streaming into it is stopped and never written back.
+- **Burn all now** (History) removes every conversation, what waits for the next question, and every spoken answer kept in memory. It does not touch the balance key or eCash.
+- **Auto-delete** (History, and the row on Erase): Never, On close, 1 hour, 1 day (the default) or 1 week. A conversation is timed from when it was last used (a question asked or answered), not from when it was last opened. Timed choices are applied when the app opens and by a timer while it is open, which also runs again when the app comes back to the front, since a phone pauses timers while its screen is off. When the timer removes something while the app is open, a short message says so. On close starts removing everything as the page closes or reloads; the browser may stop the page before that finishes, so everything is also removed the next time the app opens. What waits for the next question is timed the same way.
+- **Erase everything** (More) removes every trace of the site this browser keeps, for v2 and the Classic app alike, since they share the site's storage and the balance key: all of `localStorage` and `sessionStorage`, every IndexedDB database (`forge2`, `forge-chat` and any other), every Cache Storage cache and every service worker. It first shows the balance that will be lost and offers Take funds out. It does so whenever the phone holds a balance key, also at a balance of zero or one it cannot read, since a payment still on its way (an on-chain deposit, say) is added to that balance later and is lost with the key. It warns about eCash on the phone that was not saved, and needs the button held for two seconds. It then checks again and says so when something stayed (a database held open by another tab). Nothing is written afterwards: the page stops all work, and the v2 worker never re-creates its cache once it is gone. Another open v2 tab stops too when it sees the erase (the cleared `localStorage` or the deleted database), so it cannot write a look, a model list or a conversation back, and shows the Erased screen once its own check finds nothing left. A Classic app tab left open is not stopped this way; close it before erasing.
+
+What these do not do:
+
+- They remove data from the browser's storage on this phone. The browser and the phone's flash memory may keep the old bytes until they are overwritten; the app cannot reach below the browser.
+- They cannot reach a copy made elsewhere: a screenshot, a copied answer, a shared file.
+- The engine keeps no copy of conversations: content is never logged or stored by the gateway, and questions to private models are encrypted to the enclave. A standard model's provider may keep what it was sent.
+- Erase everything does not close the balance on the engine. Without the key nobody can spend it, and it cannot be recovered, which is why the app offers Take funds out first.
+
+### Share unseen (photos)
+
+- Everything runs in the page on the phone: reading the file's hidden details, finding faces (face-api's tiny face detector on TensorFlow.js, loaded with its model from this app's own address) and finding writing. The photo is not sent anywhere to be checked, and Share and Save make no request at all (tested in Chrome).
+- What leaves the app is a new file, never the original: the picture drawn again at up to 2048 px, with solid black blocks (not a blur, which can be undone), saved as a new JPEG named `photo.jpg`. Every place a JPEG can carry notes (Exif with GPS, make, model, serial and dates, XMP, IPTC, colour profile, extra images, thumbnails, comments, data after the end) is taken out, and the file is checked; one that still holds any is not shared. Blocks are widened to the encoder's 16 px grid, so the file is the same, byte for byte, whatever was under a block.
+- What it cannot do: the automatic checks miss things (a face turned away or in shadow, small, blurred or slanted writing, a tattoo, a reflection). The screen says so and shows every block. It does not change the picture outside the blocks: a place, a building, clothes or a skyline can still say where and who. It does not stop the app you share to from keeping its copy.
+- Ask about it sends the new file, made smaller, with the question to the engine, like any added photo.
+- A photo shared into Forge while its service worker is not running (just installed, or after Erase everything) is posted by the phone to the gateway at `/v2/share`. The gateway does not read it, keeps nothing and opens the page saying so: the phone sent the photo to the server, which dropped it.
+
+### In the Android app
+
+The Android app (docs/ANDROID.md) keeps the same things in its own web view storage, and Erase everything removes them the same way. The differences:
+
+- No offline copy and no service worker: the app's files are in the APK.
+- A photo shared in from another app is read into the app's memory and handed to Share unseen once; it is never written to storage.
+- Two kinds of photo file are written: the protected photo handed to the share sheet (the app's cache) and a photo taken with the camera for Share unseen (the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
+- Backups are off, so nothing of Forge goes into a cloud backup or a phone to phone transfer. Uninstalling the app removes everything it kept.
+- It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default), and to a till the person paired with in Tap a Fedimint card, over https.
+- Card taps: the NFC reader is on only while the Tap a card or Tap a Fedimint card screen is open. A Fedimint card's answers go to the page and on to the paired till only. The card's answers go to the page and nowhere else; a card's mint is reached through the engine as above.
+- Its web view sends nothing to Google: Safe Browsing link checks and WebView usage metrics are turned off in the app's manifest.
 
 ## Encrypted pass-through (Tinfoil EHBP)
 

@@ -99,4 +99,22 @@ describe('Cashu transport: redirects are refused, untrusted mints are vetted bef
     await expect(w.wallet(redirector.url, 'sat')).rejects.toThrow();
     expect(vetted).toEqual([]);
   });
+
+  it('the credit mint is operator configuration too: not put through the foreign-mint check, redirects still refused', async () => {
+    const vetted: string[] = [];
+    const w = new GatewayWallet(openDb(':memory:'), {
+      trustedMints: ['https://forge.example'],
+      creditMint: redirector.url,
+      creditUnit: 'usd',
+      units: ['sat'],
+      maxTokenBytes: 2000,
+      vetMint: async (m) => {
+        vetted.push(m);
+      },
+    });
+    await expect(w.wallet(redirector.url, 'usd')).rejects.toThrow();
+    expect(vetted).toEqual([]);
+    expect(redirector.hits).toContain('/v1/info');
+    expect(target.hits).toEqual([]);
+  });
 });

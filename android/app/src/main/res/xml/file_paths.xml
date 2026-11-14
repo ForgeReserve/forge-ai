@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app may hand to another app: the photo being shared out, and photos the camera takes for the page. -->
+<paths>
+    <cache-path name="shared_out" path="shared-out/" />
+    <external-files-path name="captures" path="Pictures/" />
+</paths>

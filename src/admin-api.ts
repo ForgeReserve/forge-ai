@@ -292,6 +292,12 @@ export function createAdminRouter(d: Deps): Hono {
     return Math.round(usd * 1e6) / 1e6;
   };
 
+  /**
+   * A request paid with money: free questions (a free balance, paid in credits) are left out of revenue.
+   * They still count as requests.
+   */
+  const PAID = '(account_id IS NULL OR account_id NOT IN (SELECT id FROM accounts WHERE free = 1))';
+
   const windowStats = (since: number, rate: number | undefined) => {
     const rows = db
       .prepare(
@@ -300,7 +306,7 @@ export function createAdminRouter(d: Deps): Hono {
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
           SUM(encrypted) AS enc,
           COALESCE(SUM(input_tokens), 0) AS tin, COALESCE(SUM(output_tokens), 0) AS tout,
-          COALESCE(SUM(charged_msub), 0) AS rev
+          COALESCE(SUM(CASE WHEN ${PAID} THEN charged_msub ELSE 0 END), 0) AS rev
          FROM requests WHERE created_at >= ? GROUP BY unit, model, supplier`,
       )
       .all(since) as Array<{ unit: Unit; model: string; supplier: string; n: number; ok: number; failed: number; enc: number; tin: number; tout: number; rev: number }>;
@@ -352,16 +358,24 @@ export function createAdminRouter(d: Deps): Hono {
     midnight.setUTCHours(0, 0, 0, 0);
     const t = Date.now();
     const collected = db
-      .prepare("SELECT unit, COALESCE(SUM(charged_msub), 0) AS s, COUNT(*) AS n FROM requests WHERE status = 'settled' GROUP BY unit")
+      .prepare(`SELECT unit, COALESCE(SUM(charged_msub), 0) AS s, COUNT(*) AS n FROM requests WHERE status = 'settled' AND ${PAID} GROUP BY unit`)
       .all() as Array<{ unit: Unit; s: number; n: number }>;
     const exported = db
       .prepare("SELECT e.unit, COALESCE(SUM(e.amount), 0) AS s, COUNT(*) AS n FROM revenue_exports e JOIN outgoing o ON o.id = e.outgoing_id WHERE o.status = 'done' GROUP BY e.unit")
       .all() as Array<{ unit: Unit; s: number; n: number }>;
     const units = env.FORGE_UNITS.map((u) => {
       const rv = revenue(d, u);
-      const owedBy = db
-        .prepare("SELECT purpose, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS s FROM outgoing WHERE unit = ? AND status IN ('owed', 'reserved', 'prepared') GROUP BY purpose")
-        .all(u) as Array<{ purpose: string; n: number; s: number }>;
+      // Credits owed at the credit mint are not money (revenue.ts leaves them out of owed_payouts too).
+      const owedBy: Array<{ purpose: string; n: number; s: number }> = [];
+      const owedRows = db
+        .prepare("SELECT purpose, mint, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS s FROM outgoing WHERE unit = ? AND status IN ('owed', 'reserved', 'prepared') GROUP BY purpose, mint")
+        .all(u) as Array<{ purpose: string; mint: string; n: number; s: number }>;
+      for (const o of owedRows) {
+        if (wallet.isCredit(o.mint)) continue;
+        const p = owedBy.find((x) => x.purpose === o.purpose) ?? (owedBy.push({ purpose: o.purpose, n: 0, s: 0 }), owedBy[owedBy.length - 1]!);
+        p.n += o.n;
+        p.s += o.s;
+      }
       return {
         unit: u,
         collected_msub: collected.find((x) => x.unit === u)?.s ?? 0,

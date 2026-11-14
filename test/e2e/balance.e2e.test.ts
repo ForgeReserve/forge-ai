@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { EnvSchema, setMintAliases } from '../../src/config.ts';
 import { chatBody, createInvite, expectedMsub, type Gateway, MINT_A, mintToken, mintsUp, readSse, redeem, startGateway } from './helpers.ts';
 
 const up = await mintsUp();
@@ -193,6 +194,26 @@ describe.skipIf(!up)('prepaid balance keys', () => {
     expect(echo.pricing.sat_per_mtok.input).toBe(100_000); // $100 at $100k/BTC = 0.001 BTC
     expect(m.data.find((x: any) => x.id === 'mock-uncensored').uncensored).toBe(true);
     expect(m.data.find((x: any) => x.id === 'tinfoil/enc-model').tier).toBe('enclave');
+    // The mints it takes. The default alias folds into the Forge mint, which this engine does not take.
+    expect(m.mints).toEqual([MINT_A]);
+    expect(m.mint_aliases).toEqual([]);
+  });
+});
+
+describe.skipIf(!up)('mint aliases in /v1/models', () => {
+  // The default alias of the Forge mint is listed when the engine takes the Forge mint; that case is in
+  // test/unit/mint-alias.test.ts, since a gateway trusting the real Forge mint is not started in tests.
+  it('lists a configured alias of a mint the engine takes', async () => {
+    const alias = MINT_A.replace('127.0.0.1', 'localhost');
+    const g = await startGateway({ env: { FORGE_MINT_ALIASES: `${alias}=${MINT_A}` } });
+    try {
+      const m = await (await fetch(`${g.url}/v1/models`)).json();
+      expect(m.mints).toEqual([MINT_A]);
+      expect(m.mint_aliases).toEqual([alias]);
+    } finally {
+      await g.close();
+      setMintAliases(EnvSchema.parse({}).FORGE_MINT_ALIASES);
+    }
   });
 });
 

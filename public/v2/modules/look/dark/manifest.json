@@ -1,0 +1,12 @@
+{
+  "id": "forge.look.dark",
+  "kind": "look",
+  "version": "1.0.0",
+  "name": {
+    "en": "Dark"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

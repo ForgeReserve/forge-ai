@@ -1,0 +1,9 @@
+{
+  "appId": "com.forgereserve.ai",
+  "appName": "Forge",
+  "webDir": "dist/android-web",
+  "loggingBehavior": "none",
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -1,0 +1,57 @@
+// The Light look: design tokens only. A look module is handed no inputs (core/registry.js).
+// Canvas tokens, except `teal` as a text colour: #0D7A69, a shade darker than the canvas #0E7C6B, so
+// teal text on the teal tint reaches 4.5 to 1. The memory ring keeps #0E7C6B.
+export const tokens = Object.freeze({
+  "bg": "#F6F5F1",
+  "backdrop": "#D9D6CD",
+  "surface": "#FFFFFF",
+  "surface-2": "#F6F5F1",
+  "ink": "#14161A",
+  "text-2": "#5B6068",
+  "text-body": "#3F4348",
+  "line": "#E3E0D8",
+  "line-2": "#DAD8D0",
+  "bar-track": "#E6E4DD",
+  "grabber": "#C9C6BE",
+  "dash": "#B9B5AA",
+  "teal": "#0D7A69",
+  "teal-tint": "#E3F4F0",
+  "teal-line": "#9AD3C8",
+  "teal-bright": "#3FCFB4",
+  "memory": "#0E7C6B",
+  "memory-track": "#D5F2EA",
+  "gold": "#D4A544",
+  "gold-track": "#F3E3BC",
+  "gold-ink": "#8A6410",
+  "gold-line": "#C9A24A",
+  "gold-callout": "#D9B45A",
+  "gold-tint": "#F6E9C8",
+  "gold-free": "#E8C97A",
+  "danger": "#B3402F",
+  "danger-tint": "#FBDAD5",
+  "danger-ink": "#FFFFFF",
+  "low": "#C2600A",
+  "low-tint": "#FCE9D6",
+  "low-line": "#E7B98A",
+  "low-ink": "#8A3A12",
+  "blue": "#2459B8",
+  "blue-tint": "#DCE9FF",
+  "violet": "#5B3FC4",
+  "violet-tint": "#E8E0FF",
+  "green": "#4C7A12",
+  "green-tint": "#E9F5C9",
+  "primary": "#14161A",
+  "primary-ink": "#FFFFFF",
+  "talk": "#14161A",
+  "talk-ink": "#FFFFFF",
+  "shadow-raised": "inset 0 -5px 0 rgba(20,22,26,0.09), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)",
+  "shadow-raised-sm": "inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)",
+  "shadow-primary": "inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14)",
+  "shadow-talk": "inset 0 -9px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14)",
+  "shadow-float": "0 12px 40px rgba(20,22,26,0.18), inset 0 2px 0 rgba(255,255,255,0.75)",
+  "focus": "#2459B8"
+});
+
+export function create() {
+  return { id: 'light', scheme: 'light', tokens };
+}

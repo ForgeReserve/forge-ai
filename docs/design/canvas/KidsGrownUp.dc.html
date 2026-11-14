@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Playful mode setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0D10; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding-top: 24px">
+<div style="flex: 1; background: #171A22; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; padding: 10px 16px 20px; gap: 12px">
+<div style="align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #3A404C"></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px">
+<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Playful mode</div>
+<div style="font-size: 14px; line-height: 1.45; color: #9A9DA3">A friendly look with the same protection. Opened with your passphrase.</div>
+</div>
+<div style="font-size: 13px; color: #9A9DA3; padding: 0 4px">Who is it for?</div>
+<button aria-pressed="true" style="text-align: left; padding: 14px 16px; background: #111317; border: 2px solid #F1EFE9; border-radius: 18px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 600">Me</span>
+<span style="font-size: 13px; line-height: 1.45; color: #9A9DA3">A cover. Everything works as normal behind the playful look: all your models, wallet and sharing.</span>
+</button>
+<button style="text-align: left; padding: 14px 16px; background: transparent; border: 1px solid #2A2F3A; border-radius: 18px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 600">A child</span>
+<span style="font-size: 13px; line-height: 1.45; color: #9A9DA3">Adds limits: answers suited to their age, uncensored models blocked, a daily spending cap, sharing off, chats deleted on close.</span>
+</button>
+<div style="display: flex; flex-direction: column; border: 1px solid #2A2F3A; border-radius: 18px; background: #111317">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #2A2F3A; font-size: 15px">
+<div>Open as a game first</div>
+<div style="color: #3FCFB4">On</div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #2A2F3A; font-size: 15px">
+<div>How to open the helper</div>
+<div style="color: #F1EFE9">Hold Pip, 3 seconds</div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #2A2F3A; font-size: 15px">
+<div>Home screen name and icon</div>
+<div style="color: #F1EFE9">Pip's Garden</div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 16px; font-size: 15px">
+<div>Hide prices and wallet</div>
+<div style="color: #3FCFB4">On</div>
+</div>
+</div>
+<div style="border: 1px solid #6B5527; border-radius: 16px; padding: 12px 16px; font-size: 13px; line-height: 1.45; color: #9A9DA3">This hides Forge from a quick look at your screen. It does not hide it from someone who searches the phone.</div>
+<div style="flex: 1"></div>
+<button style="height: 56px; background: #F1EFE9; color: #0B0D10; border: 0; border-radius: 16px; font-family: Inter, sans-serif; font-size: 16px; font-weight: 600">Turn on playful mode</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

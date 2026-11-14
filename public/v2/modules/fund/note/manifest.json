@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.note",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Scan a note"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -1,0 +1,36 @@
+# The Forge credit mint (docs/FREE-TIER.md): a Cashu mint whose eCash is credits, one free question each.
+# Not deployed by this repository. See README.md in this folder for the steps.
+#
+# It listens on 127.0.0.1 only. nginx (nginx-credit-mint.conf) puts the holder endpoints on the public
+# address and blocks minting and melting there, so credits are made only on this host.
+name: forge-credit-mint
+services:
+  credit-mint:
+    # Nutshell 0.22.1, pinned by digest (multi-arch index, the same image as docker-compose.test.yml).
+    image: cashubtc/nutshell:0.22.1@sha256:05b536e0e3d6beee75417ece319a3f89a687d34cfb3cc12c6b19d253104b450e
+    command: ["poetry", "run", "mint"]
+    restart: unless-stopped
+    ports: ["127.0.0.1:3348:3338"]
+    # MINT_MNEMONIC (and nothing else) comes from this file, which is never committed. Create it with mode 0600.
+    env_file: ./credit-mint.env
+    environment:
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: "3338"
+      # Nutshell 0.22.1 has no custom unit (sat, msat, usd, eur, btc, auth only), so 1 credit = 1 cent of usd.
+      MINT_BACKEND_BOLT11_USD: FakeWallet
+      MINT_BACKEND_BOLT11_SAT: ""
+      # FakeWallet marks the mint's own quotes paid. That is what makes credits free to issue, and it is
+      # safe only while /v1/mint and /v1/melt are unreachable from outside (nginx blocks them).
+      MINT_INPUT_FEE_PPK: "0"
+      MINT_DATABASE: data/mint
+      MINT_INFO_NAME: "Forge credits"
+      MINT_INFO_DESCRIPTION: "Free questions for Forge AI. Not money: these cannot be cashed out."
+    volumes:
+      - credit-mint-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3338/v1/info')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+volumes:
+  credit-mint-data:

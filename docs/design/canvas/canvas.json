@@ -1,0 +1,1218 @@
+{
+  "attachments": {},
+  "boards": {
+    "AddFunds.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "B. Add funds, ranked by privacy",
+      "w": 390,
+      "x": 470,
+      "y": 1300
+    },
+    "Bridge.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Forge in a private messenger",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Card.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Tap your card",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "CoverPicker.dc.html": {
+      "h": 844,
+      "page": "playful",
+      "title": "W. Cover picker",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "DAddFunds.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Add funds, ranked by privacy",
+      "w": 390,
+      "x": 0,
+      "y": 1300
+    },
+    "DCard.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Tap your card",
+      "w": 390,
+      "x": 470,
+      "y": 1300
+    },
+    "DErase.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Erase",
+      "w": 390,
+      "x": 2820,
+      "y": 1300
+    },
+    "DFirstFunds.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "First funds",
+      "w": 390,
+      "x": 940,
+      "y": 2600
+    },
+    "DFunded.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "After the tap",
+      "w": 390,
+      "x": 940,
+      "y": 1300
+    },
+    "DHowPay.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "The two rings",
+      "w": 390,
+      "x": 470,
+      "y": 2600
+    },
+    "DInbox.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Inbox",
+      "w": 390,
+      "x": 1410,
+      "y": 3900
+    },
+    "DLimits.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Know the limits",
+      "w": 390,
+      "x": 1880,
+      "y": 2600
+    },
+    "DLink.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Read a link",
+      "w": 390,
+      "x": 470,
+      "y": 3900
+    },
+    "DLock.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Passphrase lock",
+      "w": 390,
+      "x": 2350,
+      "y": 1300
+    },
+    "DPhoto.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Photo check",
+      "w": 390,
+      "x": 0,
+      "y": 3900
+    },
+    "DPrivateOnly.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Private only",
+      "w": 390,
+      "x": 1410,
+      "y": 1300
+    },
+    "DProtect.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Protect this phone",
+      "w": 390,
+      "x": 1410,
+      "y": 2600
+    },
+    "DReview.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Review before send",
+      "w": 390,
+      "x": 940,
+      "y": 3900
+    },
+    "DShareIn.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Shared in from a messenger",
+      "w": 390,
+      "x": 1880,
+      "y": 3900
+    },
+    "DShareOut.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Share an answer out",
+      "w": 390,
+      "x": 2350,
+      "y": 3900
+    },
+    "DVoiceNote.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Send as a voice note",
+      "w": 390,
+      "x": 2820,
+      "y": 3900
+    },
+    "DWelcome.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Welcome",
+      "w": 390,
+      "x": 0,
+      "y": 2600
+    },
+    "Erase.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "F. Erase",
+      "w": 390,
+      "x": 2350,
+      "y": 1300
+    },
+    "FirstFunds.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "P. First funds",
+      "w": 390,
+      "x": 940,
+      "y": 5200
+    },
+    "Funded.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "C. After the tap",
+      "w": 390,
+      "x": 940,
+      "y": 1300
+    },
+    "GAnswer.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "An answer from the guide",
+      "w": 390,
+      "x": 940,
+      "y": 5200
+    },
+    "GLibrary.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Guides library",
+      "w": 390,
+      "x": 0,
+      "y": 5200
+    },
+    "GOpen.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "A guide, ready to ask",
+      "w": 390,
+      "x": 470,
+      "y": 5200
+    },
+    "Home.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "A. Home on the real layout",
+      "w": 390,
+      "x": 0,
+      "y": 1300
+    },
+    "HomeLight.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Home, light theme",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "HomeTray.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Home, tray open",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "HowPay.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "O. How paying works",
+      "w": 390,
+      "x": 470,
+      "y": 5200
+    },
+    "Inbox.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Inbox",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "KidsChat.dc.html": {
+      "h": 844,
+      "page": "playful",
+      "title": "U. Playful answer",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "KidsCover.dc.html": {
+      "h": 844,
+      "page": "playful",
+      "title": "S. Opens as a game",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "KidsGrownUp.dc.html": {
+      "h": 844,
+      "page": "playful",
+      "title": "V. Playful mode setup",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "KidsHome.dc.html": {
+      "h": 844,
+      "page": "playful",
+      "title": "T. Playful home: same rings, brighter",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Limits.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "R. Know the limits",
+      "w": 390,
+      "x": 1880,
+      "y": 5200
+    },
+    "Link.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "K. Read a link",
+      "w": 390,
+      "x": 940,
+      "y": 3900
+    },
+    "Lock.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "E. Passphrase lock",
+      "w": 390,
+      "x": 1880,
+      "y": 1300
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "page": "early",
+      "title": "Retired: standalone intake tray",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "PExpert.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Live help: free helpline or paid call",
+      "w": 390,
+      "x": 940,
+      "y": 6500
+    },
+    "PProtect.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Protection: Forge and your phone",
+      "w": 390,
+      "x": 0,
+      "y": 6500
+    },
+    "PStep.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "One step, with a button",
+      "w": 390,
+      "x": 470,
+      "y": 6500
+    },
+    "Photo.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "I. Photo check",
+      "w": 390,
+      "x": 0,
+      "y": 3900
+    },
+    "PrivateOnly.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "D. Private only",
+      "w": 390,
+      "x": 1410,
+      "y": 1300
+    },
+    "Protect.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Q. Protect this phone",
+      "w": 390,
+      "x": 1410,
+      "y": 5200
+    },
+    "Review.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "L. Review before send",
+      "w": 390,
+      "x": 1410,
+      "y": 3900
+    },
+    "SAnswer.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Shutdown 3: answer arrives later",
+      "w": 390,
+      "x": 940,
+      "y": 7800
+    },
+    "SHome.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Shutdown 1: no internet, still ask",
+      "w": 390,
+      "x": 0,
+      "y": 7800
+    },
+    "STravel.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Shutdown 2: sealed and travelling",
+      "w": 390,
+      "x": 470,
+      "y": 7800
+    },
+    "Scrub.dc.html": {
+      "h": 844,
+      "page": "early",
+      "title": "2. Scrub before send",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "ShareIn.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "H. Shared in from a messenger",
+      "w": 390,
+      "x": 470,
+      "y": 2600
+    },
+    "ShareOut.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "G. Share an answer out",
+      "w": 390,
+      "x": 0,
+      "y": 2600
+    },
+    "Shield.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "Protection details",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Speak.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "J. Speak",
+      "w": 390,
+      "x": 470,
+      "y": 3900
+    },
+    "Voice.dc.html": {
+      "h": 844,
+      "page": "early",
+      "title": "3. Private voice",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "VoiceNote.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "M. Send as a voice note",
+      "w": 390,
+      "x": 940,
+      "y": 2600
+    },
+    "WRecord.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Witness 1: say what happened",
+      "w": 390,
+      "x": 1410,
+      "y": 6500
+    },
+    "WReview.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Witness 2: check it, send to the helpline",
+      "w": 390,
+      "x": 1880,
+      "y": 6500
+    },
+    "Welcome.dc.html": {
+      "h": 844,
+      "page": "flows",
+      "title": "N. Welcome",
+      "w": 390,
+      "x": 0,
+      "y": 5200
+    },
+    "XAnswerLight.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "3. The answer",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "XHistory.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "History, as slips",
+      "w": 390,
+      "x": 1410,
+      "y": 1300
+    },
+    "XHistoryLight.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "4. History",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "XHomeLight.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Earlier home: tiles spread",
+      "w": 390,
+      "x": 470,
+      "y": 10400
+    },
+    "XHomeStack.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Earlier home: tiles stacked",
+      "w": 390,
+      "x": 0,
+      "y": 10400
+    },
+    "XKit.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit: tasks, not a prompt",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "XKit2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v2: colour tiles plus talk",
+      "w": 390,
+      "x": 940,
+      "y": 1300
+    },
+    "XKit3Bright.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v3: full colour, bright ground",
+      "w": 390,
+      "x": 470,
+      "y": 2600
+    },
+    "XKit3Dark.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v3: full colour, dark ground",
+      "w": 390,
+      "x": 0,
+      "y": 2600
+    },
+    "XKit4Outline.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v4: colour outlines, dark",
+      "w": 390,
+      "x": 0,
+      "y": 3900
+    },
+    "XKit4Soft.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v4: soft colour, softer dark",
+      "w": 390,
+      "x": 470,
+      "y": 3900
+    },
+    "XKit4Tint.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Kit v4: soft tints, light",
+      "w": 390,
+      "x": 940,
+      "y": 3900
+    },
+    "XListenLight.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "2. Listening",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "XSpending.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Spending, as a receipt",
+      "w": 390,
+      "x": 1880,
+      "y": 1300
+    },
+    "XSpendingLight.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "5. Spending",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    },
+    "XThemes.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "6. Mode and look",
+      "w": 390,
+      "x": 3290,
+      "y": 0
+    },
+    "XWalkie.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Walkie: talk first",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "XWalkieAnswer.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Walkie: the answer",
+      "w": 390,
+      "x": 470,
+      "y": 1300
+    },
+    "XWalkieListen.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Walkie: listening",
+      "w": 390,
+      "x": 0,
+      "y": 1300
+    },
+    "YHand1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "B. Hand of cards: tucked",
+      "w": 390,
+      "x": 940,
+      "y": 5200
+    },
+    "YHand2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "B. Hand of cards: fanned",
+      "w": 390,
+      "x": 1410,
+      "y": 5200
+    },
+    "YOrbit1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "A. Orbit: beads on the ring",
+      "w": 390,
+      "x": 0,
+      "y": 5200
+    },
+    "YOrbit2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "A. Orbit: slide to a task",
+      "w": 390,
+      "x": 470,
+      "y": 5200
+    },
+    "YTabs1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "D. Tabs: hanging",
+      "w": 390,
+      "x": 2820,
+      "y": 5200
+    },
+    "YTabs2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "D. Tabs: one pulled",
+      "w": 390,
+      "x": 3290,
+      "y": 5200
+    },
+    "YWheel1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "C. Wheel: resting",
+      "w": 390,
+      "x": 1880,
+      "y": 5200
+    },
+    "YWheel2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "C. Wheel: raised",
+      "w": 390,
+      "x": 2350,
+      "y": 5200
+    },
+    "ZAdd.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "8. Add",
+      "w": 390,
+      "x": 4230,
+      "y": 0
+    },
+    "ZBoth.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "1c. Tap the rings: funds and memory",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "ZCtx1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Context orbit: empty",
+      "w": 390,
+      "x": 0,
+      "y": 7800
+    },
+    "ZCtx2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Context orbit: building",
+      "w": 390,
+      "x": 470,
+      "y": 7800
+    },
+    "ZCtx3.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Context orbit: too heavy",
+      "w": 390,
+      "x": 940,
+      "y": 7800
+    },
+    "ZCtx4.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Context orbit: tap a satellite",
+      "w": 390,
+      "x": 1410,
+      "y": 7800
+    },
+    "ZHome1.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "1. Home: the rings",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "ZHome2.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "1b. Running low",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "ZMore.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "7. More",
+      "w": 390,
+      "x": 3760,
+      "y": 0
+    },
+    "ZOrbit1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Orbit 1: what your voice cannot do",
+      "w": 390,
+      "x": 0,
+      "y": 6500
+    },
+    "ZOrbit2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Orbit 2: what is in play",
+      "w": 390,
+      "x": 470,
+      "y": 6500
+    },
+    "ZOrbit3.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Orbit 3: ideas drifting past",
+      "w": 390,
+      "x": 940,
+      "y": 6500
+    },
+    "ZOrbit4.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Orbit 4: answers until they burn",
+      "w": 390,
+      "x": 1410,
+      "y": 6500
+    },
+    "ZRing1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Rings: funds and memory",
+      "w": 390,
+      "x": 0,
+      "y": 9100
+    },
+    "ZRing2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Rings: both running low",
+      "w": 390,
+      "x": 470,
+      "y": 9100
+    },
+    "ZRing3.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Rings: tap memory to see inside",
+      "w": 390,
+      "x": 940,
+      "y": 9100
+    },
+    "ZSpace1.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Space: now",
+      "w": 390,
+      "x": 1410,
+      "y": 9100
+    },
+    "ZSpace2.dc.html": {
+      "h": 844,
+      "page": "exp",
+      "title": "Space: hours later",
+      "w": 390,
+      "x": 1880,
+      "y": 9100
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-11T16:10:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "wk",
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "head",
+    "deeper",
+    "share",
+    "intake",
+    "onboard",
+    "kids",
+    "early",
+    "exp",
+    "exp2",
+    "exp3",
+    "exp4",
+    "wk",
+    "wk1300",
+    "wk2600",
+    "wk3900",
+    "wk5200",
+    "wk6500",
+    "exp6",
+    "exp7",
+    "exp8",
+    "exp9",
+    "exp10"
+  ],
+  "notes": {
+    "deeper": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "flows",
+      "text": "Going deeper: cash funding, private only, phone safety",
+      "w": 240,
+      "x": 0,
+      "y": 1000
+    },
+    "early": {
+      "kind": "title1",
+      "maxW": 1330,
+      "page": "early",
+      "text": "Early concepts, replaced by the Flows page",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "exp": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "exp",
+      "text": "Experiments: how Walkie and Kit got here",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "exp10": {
+      "kind": "title1",
+      "maxW": 860,
+      "page": "exp",
+      "text": "Earlier home, before the rings",
+      "w": 240,
+      "x": 0,
+      "y": 10100
+    },
+    "exp2": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "exp",
+      "text": "Walkie and Kit developed. Slips and Receipt moved to History and Spending",
+      "w": 240,
+      "x": 0,
+      "y": 1000
+    },
+    "exp3": {
+      "kind": "title1",
+      "maxW": 860,
+      "page": "exp",
+      "text": "Kit v3",
+      "w": 240,
+      "x": 0,
+      "y": 2300
+    },
+    "exp4": {
+      "kind": "title1",
+      "maxW": 1330,
+      "page": "exp",
+      "text": "Kit v4: three calmer colour treatments",
+      "w": 240,
+      "x": 0,
+      "y": 3600
+    },
+    "exp6": {
+      "kind": "title1",
+      "maxW": 3680,
+      "page": "exp",
+      "text": "Four ways to tuck and reveal the six tasks",
+      "w": 240,
+      "x": 0,
+      "y": 4900
+    },
+    "exp7": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "exp",
+      "text": "Orbit, rethought: four things that could circle the button",
+      "w": 240,
+      "x": 0,
+      "y": 6200
+    },
+    "exp8": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "exp",
+      "text": "Orbit 2 developed: see what the AI is carrying",
+      "w": 240,
+      "x": 0,
+      "y": 7500
+    },
+    "exp9": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "exp",
+      "text": "Two forks: clean rings, and a drifting space orbit",
+      "w": 240,
+      "x": 0,
+      "y": 8800
+    },
+    "head": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "flows",
+      "text": "Classic mode: the original chat layout",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "intake": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "flows",
+      "text": "Camera, voice and links on the real layout",
+      "w": 240,
+      "x": 0,
+      "y": 3600
+    },
+    "kids": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "playful",
+      "text": "Playful mode: a cover for adults, with limits for children",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "onboard": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "flows",
+      "text": "First run, for someone new to eCash",
+      "w": 240,
+      "x": 0,
+      "y": 4900
+    },
+    "share": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "flows",
+      "text": "Sharing with secure messengers",
+      "w": 240,
+      "x": 0,
+      "y": 2300
+    },
+    "wk": {
+      "kind": "title1",
+      "maxW": 4620,
+      "page": "wk",
+      "text": "Default mode: Walkie Kit",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "wk1300": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "wk",
+      "text": "Money and protection",
+      "w": 240,
+      "x": 0,
+      "y": 1000
+    },
+    "wk2600": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "wk",
+      "text": "First run",
+      "w": 240,
+      "x": 0,
+      "y": 2300
+    },
+    "wk3900": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "wk",
+      "text": "Adding things and sharing",
+      "w": 240,
+      "x": 0,
+      "y": 3600
+    },
+    "wk5200": {
+      "kind": "title1",
+      "maxW": 1330,
+      "page": "wk",
+      "text": "Ask a guide: trusted handbooks, asked by voice",
+      "w": 240,
+      "x": 0,
+      "y": 4900
+    },
+    "wk6500": {
+      "kind": "title1",
+      "maxW": 1330,
+      "page": "wk",
+      "text": "Protection: what Forge does, and expert steps for your phone",
+      "w": 240,
+      "x": 0,
+      "y": 6200
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Scrub.dc.html",
+    "Voice.dc.html",
+    "Card.dc.html",
+    "Bridge.dc.html",
+    "Shield.dc.html",
+    "Home.dc.html",
+    "AddFunds.dc.html",
+    "Funded.dc.html",
+    "PrivateOnly.dc.html",
+    "Lock.dc.html",
+    "Erase.dc.html",
+    "ShareOut.dc.html",
+    "ShareIn.dc.html",
+    "Photo.dc.html",
+    "Speak.dc.html",
+    "Link.dc.html",
+    "Review.dc.html",
+    "VoiceNote.dc.html",
+    "Welcome.dc.html",
+    "HowPay.dc.html",
+    "FirstFunds.dc.html",
+    "Protect.dc.html",
+    "Limits.dc.html",
+    "KidsCover.dc.html",
+    "KidsHome.dc.html",
+    "KidsChat.dc.html",
+    "KidsGrownUp.dc.html",
+    "CoverPicker.dc.html",
+    "HomeLight.dc.html",
+    "HomeTray.dc.html",
+    "Inbox.dc.html",
+    "XWalkie.dc.html",
+    "XKit.dc.html",
+    "XWalkieListen.dc.html",
+    "XWalkieAnswer.dc.html",
+    "XKit2.dc.html",
+    "XHistory.dc.html",
+    "XSpending.dc.html",
+    "XKit3Dark.dc.html",
+    "XKit3Bright.dc.html",
+    "XKit4Outline.dc.html",
+    "XKit4Soft.dc.html",
+    "XKit4Tint.dc.html",
+    "XHomeLight.dc.html",
+    "XAnswerLight.dc.html",
+    "XThemes.dc.html",
+    "XListenLight.dc.html",
+    "XHistoryLight.dc.html",
+    "XSpendingLight.dc.html",
+    "DAddFunds.dc.html",
+    "DCard.dc.html",
+    "DFunded.dc.html",
+    "DPrivateOnly.dc.html",
+    "DLock.dc.html",
+    "DErase.dc.html",
+    "DWelcome.dc.html",
+    "DHowPay.dc.html",
+    "DFirstFunds.dc.html",
+    "DProtect.dc.html",
+    "DLimits.dc.html",
+    "DPhoto.dc.html",
+    "DLink.dc.html",
+    "DReview.dc.html",
+    "DInbox.dc.html",
+    "DShareIn.dc.html",
+    "DShareOut.dc.html",
+    "DVoiceNote.dc.html",
+    "GLibrary.dc.html",
+    "GOpen.dc.html",
+    "GAnswer.dc.html",
+    "PStep.dc.html",
+    "PProtect.dc.html",
+    "XHomeStack.dc.html",
+    "YOrbit1.dc.html",
+    "YOrbit2.dc.html",
+    "YHand1.dc.html",
+    "YHand2.dc.html",
+    "YWheel1.dc.html",
+    "YWheel2.dc.html",
+    "YTabs1.dc.html",
+    "YTabs2.dc.html",
+    "ZOrbit1.dc.html",
+    "ZOrbit2.dc.html",
+    "ZOrbit3.dc.html",
+    "ZOrbit4.dc.html",
+    "ZCtx1.dc.html",
+    "ZCtx2.dc.html",
+    "ZCtx3.dc.html",
+    "ZCtx4.dc.html",
+    "ZRing1.dc.html",
+    "ZRing2.dc.html",
+    "ZRing3.dc.html",
+    "ZSpace1.dc.html",
+    "ZSpace2.dc.html",
+    "ZHome1.dc.html",
+    "ZHome2.dc.html",
+    "ZBoth.dc.html",
+    "ZMore.dc.html",
+    "ZAdd.dc.html",
+    "PExpert.dc.html",
+    "WRecord.dc.html",
+    "WReview.dc.html",
+    "SHome.dc.html",
+    "STravel.dc.html",
+    "SAnswer.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "wk",
+      "name": "Default mode"
+    },
+    {
+      "id": "flows",
+      "name": "Classic mode"
+    },
+    {
+      "id": "playful",
+      "name": "Playful mode"
+    },
+    {
+      "id": "exp",
+      "name": "Experiments"
+    },
+    {
+      "id": "early",
+      "name": "Early concepts"
+    }
+  ],
+  "title": "Forge AI v2: new ways in",
+  "v": 3
+}

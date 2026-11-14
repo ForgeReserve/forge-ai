@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { PaymentRequest } from '@cashu/cashu-ts';
@@ -7,11 +9,16 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
+import { audioModelList, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
+import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
-import type { Config, ModelConfig, Unit } from './config.ts';
+import { type Config, mintAliasList, type ModelConfig, type Unit } from './config.ts';
+import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
+import { apkSource, registerDownloadRoutes } from './download.ts';
+import { type Faucet, FaucetError } from './faucet.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
 import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
@@ -34,6 +41,10 @@ export interface Deps {
   suppliers: Map<string, Supplier>;
   funding: FundingService;
   discovery: MintDiscovery;
+  /** The free tier's rules, when a credit mint is set (docs/FREE-TIER.md). */
+  free?: FreeRules;
+  /** The daily faucet, when it is turned on. */
+  faucet?: Faucet;
   publicDir?: string;
 }
 
@@ -48,6 +59,8 @@ const EXPOSE = [
   'X-Forge-Privacy',
   'Ehbp-Response-Nonce',
   'Retry-After',
+  // A Bellows engine's proof of work challenge (public/v2/core/pow.js); the app reads it from a 428.
+  'X-Bellows-Pow-Challenge',
 ];
 const ALLOW = [
   'Accept',
@@ -63,6 +76,8 @@ const ALLOW = [
   'X-Tinfoil-Model',
   'X-Tinfoil-Max-Output-Tokens',
   'X-Tinfoil-Completion-Count',
+  // The app's answer to a Bellows proof of work challenge, sent again with the same request.
+  'X-Bellows-Pow',
 ];
 
 function apiError(c: Context, status: number, code: string, message: string, headers: Record<string, string> = {}, extra: object = {}) {
@@ -90,6 +105,12 @@ interface SettleResult {
   changeToken?: string;
   changeId?: string;
 }
+
+/**
+ * POST routes that need no balance: limited by the client's address only (the bucket every route pays),
+ * whatever bearer is sent. A bearer there is never looked up, so it opens no bucket and costs no lookup.
+ */
+const OPEN_POSTS = /^\/v1\/(free|wallet\/fund\/card)\//i;
 
 export function createApp(d: Deps) {
   const { config, db, ledger, invites, wallet, rates, suppliers } = d;
@@ -120,17 +141,19 @@ export function createApp(d: Deps) {
   app.use('/v1/*', cors({ origin: '*', allowHeaders: ALLOW, exposeHeaders: EXPOSE, allowMethods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
   app.use('/attestation', cors({ origin: '*', allowMethods: ['GET'] }));
   app.use('/.well-known/*', cors({ origin: '*', allowMethods: ['GET'] }));
-  app.use(
-    '/v1/*',
-    bodyLimit({ maxSize: env.FORGE_MAX_BODY_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `request body over ${env.FORGE_MAX_BODY_BYTES} bytes`) }),
-  );
+  const defaultLimit = bodyLimit({ maxSize: env.FORGE_MAX_BODY_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `request body over ${env.FORGE_MAX_BODY_BYTES} bytes`) });
+  // A recording is larger than any chat body, so speech to text has its own limit.
+  const audioLimit = bodyLimit({ maxSize: env.FORGE_AUDIO_MAX_BYTES, onError: (c) => apiError(c, 413, 'request_too_large', `audio over ${env.FORGE_AUDIO_MAX_BYTES} bytes`) });
+  app.use('/v1/*', (c, next) => (c.req.path === TRANSCRIPTIONS_PATH ? audioLimit(c, next) : defaultLimit(c, next)));
   app.use('/v1/*', async (c, next) => {
     if (c.req.method === 'OPTIONS' || c.req.method === 'GET') return next();
     // Every request pays from its client IP's bucket, whatever bearer it carries: a made-up key
     // must not buy a fresh burst or a new bucket. A key that verifies also pays from its account's
-    // bucket, so one balance spread over many addresses stays limited too.
+    // bucket, so one balance spread over many addresses stays limited too. The faucet and the card
+    // relay (OPEN_POSTS) take no balance, so a bearer there is never looked up: they pay the address
+    // bucket only, once per request.
     let wait = limiter.take('ip:' + clientIp(c));
-    if (wait === 0) {
+    if (wait === 0 && !OPEN_POSTS.test(c.req.path)) {
       const key = bearer(c);
       const account = key ? ledger.findByKey(key) : undefined;
       if (account) wait = limiter.take('acct:' + account.id);
@@ -142,6 +165,10 @@ export function createApp(d: Deps) {
   app.onError((e, c) => {
     if (e instanceof PaymentError) return apiError(c, e.status, e.code, e.message, {}, e.extra ?? {});
     if (e instanceof LedgerError) return apiError(c, e.status, e.code, e.message);
+    if (e instanceof FaucetError) {
+      const retry = e.extra?.retry_after;
+      return apiError(c, e.status, e.code, e.message, retry ? { 'Retry-After': String(retry) } : {}, e.extra ?? {});
+    }
     if (e instanceof UpstreamError) return apiError(c, e.status, 'upstream_error', e.message);
     log.error('unhandled', { path: c.req.path, err: errText(e) });
     return apiError(c, 500, 'internal_error', 'internal error');
@@ -183,7 +210,28 @@ export function createApp(d: Deps) {
         upstream_model: s.type === 'tinfoil' ? m.upstream : undefined,
       };
     });
-    return c.json({ object: 'list', data, units: env.FORGE_UNITS, mints: wallet.trustedMints, invite_only: env.FORGE_INVITE_ONLY, btc_usd: rate ?? null });
+    return c.json({
+      object: 'list',
+      data,
+      // Speech to text and text to speech, listed apart so a chat client never offers them as chat models.
+      audio: audioModelList(config, rate),
+      units: env.FORGE_UNITS,
+      mints: wallet.trustedMints,
+      mint_aliases: mintAliasList(wallet.trustedMints),
+      invite_only: env.FORGE_INVITE_ONLY,
+      btc_usd: rate ?? null,
+      // Free questions (docs/FREE-TIER.md): null while no credit mint is set.
+      free: d.free
+        ? {
+            mint: d.free.mint,
+            unit: d.free.unit,
+            models: d.free.models,
+            max_input_tokens: d.free.maxInputTokens,
+            max_output_tokens: d.free.maxOutputTokens,
+            faucet: d.faucet ? { questions: env.FORGE_FAUCET_QUESTIONS } : null,
+          }
+        : null,
+    });
   });
 
   // ------------------------------------------------------------------ wallet
@@ -199,7 +247,8 @@ export function createApp(d: Deps) {
     const invite = typeof body?.invite === 'string' ? body.invite : c.req.header('x-forge-invite');
     const t = await wallet.inspect(token);
 
-    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit });
+    // Credits open or fill a free balance, never a paid one (src/accounts.ts).
+    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit, free: t.credit });
     const account = opened.account;
     const created = opened.created;
     const generated = !!opened.generatedKey;
@@ -212,11 +261,12 @@ export function createApp(d: Deps) {
         onFinalize: (amount) => ledger.creditRaw(acct.id, amount * MSUB_PER_UNIT, 'topup', null),
       });
       const a = ledger.get(acct.id)!;
-      log.info('topup', { account: a.id, unit: a.unit, amount: r.amount, replay: r.replay });
+      log.info('topup', { account: a.id, unit: a.unit, amount: r.amount, replay: r.replay, free: !!a.free });
       return c.json({
         key: generated ? key : undefined,
         account_id: a.id,
         unit: a.unit,
+        free: !!a.free,
         credited: r.replay ? 0 : r.amount,
         replay: r.replay,
         balance_msub: a.balance_msub,
@@ -256,6 +306,8 @@ export function createApp(d: Deps) {
     return c.json({
       account_id: a.id,
       unit: a.unit,
+      // A free balance: its units are free questions (credits), and it is taken out only as credits.
+      free: !!a.free,
       balance_msub: a.balance_msub,
       available_msub: a.balance_msub - reserved,
       balance: a.balance_msub / MSUB_PER_UNIT,
@@ -296,7 +348,8 @@ export function createApp(d: Deps) {
     if (!Number.isInteger(units) || units < 1 || units > maxUnits) {
       return apiError(c, 400, 'invalid_amount', `refundable amount is 1..${maxUnits} ${a.unit}`);
     }
-    const mint = pickMint(a.unit, units);
+    // A free balance is taken out as credits from the credit mint, never as money.
+    const mint = a.free ? pickCreditMint(a.unit, units) : pickMint(a.unit, units);
     if (!mint) return apiError(c, 503, 'wallet_insufficient', 'gateway cannot cover this refund from a single mint right now');
     const outId = tx(db, () => {
       ledger.debitRaw(a.id, units * MSUB_PER_UNIT, 'refund', 'pending');
@@ -309,13 +362,14 @@ export function createApp(d: Deps) {
       log.warn('refund_issue_deferred', { id: outId, err: errText(e) });
     }
     const after = ledger.get(a.id)!;
-    log.info('refund', { account: a.id, unit: a.unit, amount: units, issued: !!token, locked: !!lockPubkey });
+    log.info('refund', { account: a.id, unit: a.unit, amount: units, issued: !!token, locked: !!lockPubkey, free: !!a.free });
     return c.json(
       {
         id: outId,
         token,
         amount: units,
         unit: a.unit,
+        free: !!a.free,
         status: token ? 'done' : 'owed',
         locked_to: lockPubkey,
         balance_msub: after.balance_msub,
@@ -331,6 +385,12 @@ export function createApp(d: Deps) {
       .holdings()
       .filter((x) => x.unit === unit && wallet.isTrusted(x.mint))
       .sort((a, b) => b.unspent - a.unspent)[0];
+    return h && h.unspent >= amount ? h.mint : undefined;
+  };
+
+  /** The credit mint, if it holds enough credits of this unit. */
+  const pickCreditMint = (unit: Unit, amount: number): string | undefined => {
+    const h = wallet.holdings().find((x) => x.unit === unit && wallet.isCredit(x.mint));
     return h && h.unspent >= amount ? h.mint : undefined;
   };
 
@@ -361,7 +421,7 @@ export function createApp(d: Deps) {
     }
   };
 
-  app.get('/v1/wallet/fund/methods', async (c) => c.json({ ...(await funding.methods()), invite_only: env.FORGE_INVITE_ONLY }));
+  app.get('/v1/wallet/fund/methods', async (c) => c.json({ ...(await funding.methods()), invite_only: env.FORGE_INVITE_ONLY, free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null } }));
 
   // Other mints whose eCash is accepted for funding. Public; never waits on a relay.
   app.get(FOREIGN_MINTS_PATH, (c) => {
@@ -409,6 +469,9 @@ export function createApp(d: Deps) {
     const out = await funding.confirmForeign(row.id, String(body?.token ?? '').trim(), lockPubkey);
     return fundingResponse(c, out);
   });
+
+  // A Cashu card's swap, carried to the card's mint for the phone (src/cardrelay.ts).
+  installCardRelay(app, { wallet, funding, readJson });
 
   app.get('/v1/wallet/fund', (c) => {
     const a = requireAccount(c);
@@ -501,6 +564,7 @@ export function createApp(d: Deps) {
     // 1. Resolve model, max output, and the body we send upstream.
     let model: ModelConfig | undefined;
     let maxOut: number;
+    let requestedOut: number | undefined;
     let stream = false;
     let upstreamBody: Record<string, unknown> | undefined;
     let clientWantsUsage = false;
@@ -511,6 +575,7 @@ export function createApp(d: Deps) {
       if (!model) return apiError(c, 404, 'model_not_found', `no enclave model ${name}`);
       const hdr = c.req.header('x-tinfoil-max-output-tokens');
       maxOut = hdr ? Number(hdr) : model.max_output_tokens;
+      requestedOut = hdr ? maxOut : undefined;
       if (c.req.header('x-tinfoil-completion-count') && c.req.header('x-tinfoil-completion-count') !== '1') {
         return apiError(c, 400, 'invalid_request', 'only one completion per request');
       }
@@ -528,6 +593,7 @@ export function createApp(d: Deps) {
       if (!model) return apiError(c, 404, 'model_not_found', `unknown model ${body.model}; see GET /v1/models`);
       if (body.n !== undefined && body.n !== 1) return apiError(c, 400, 'invalid_request', 'n must be 1');
       maxOut = Number(body.max_completion_tokens ?? body.max_tokens ?? model.max_output_tokens);
+      requestedOut = body.max_completion_tokens != null || body.max_tokens != null ? maxOut : undefined;
       stream = body.stream === true;
       clientWantsUsage = body.stream_options?.include_usage === true;
       const ub: Record<string, unknown> = { ...body, model: model.upstream };
@@ -559,14 +625,26 @@ export function createApp(d: Deps) {
       if (!account) return apiError(c, 401, 'invalid_key', 'unknown balance key');
       unit = account.unit;
     } else if (cashu) {
-      unit = (await wallet.inspect(cashu)).unit;
+      const paidWith = await wallet.inspect(cashu);
+      // Credits pay only through a free balance, where the free model list and the caps apply.
+      if (paidWith.credit) return apiError(c, 400, 'credits_need_balance', 'free questions are paid from a free balance: add the voucher with POST /v1/wallet/topup, then send its key');
+      unit = paidWith.unit;
     } else {
       const u = (c.req.header('x-forge-unit') ?? env.FORGE_DEFAULT_UNIT) as Unit;
       if (!env.FORGE_UNITS.includes(u)) return apiError(c, 400, 'wrong_unit', `unit must be one of ${env.FORGE_UNITS.join(', ')}`);
       unit = u;
     }
+    // A free balance pays one credit per question, only on the free model list and within the caps.
+    const free = !!account?.free;
+    if (free) {
+      if (!d.free) return apiError(c, 403, 'not_free_model', 'free questions are not taken on this engine');
+      const chk = checkFreeQuestion(d.free, model, estimateTokensFromBytes(raw.length, env.FORGE_BYTES_PER_TOKEN), requestedOut);
+      if (!chk.ok) return apiError(c, chk.status, chk.code, chk.message, {}, chk.code === 'not_free_model' ? { free_models: d.free.models } : {});
+      maxOut = chk.maxOut;
+      if (upstreamBody && requestedOut === undefined) upstreamBody.max_tokens = maxOut;
+    }
     let rate: number | undefined;
-    if (unit === 'sat') {
+    if (unit === 'sat' && !free) {
       rate = await rates.get();
       if (!rate) return apiError(c, 503, 'rate_unavailable', 'BTC/USD rate unavailable; sat pricing is paused. Pay in usd or retry later.');
     }
@@ -580,7 +658,7 @@ export function createApp(d: Deps) {
     const flatNano = flat ? flatCostNanoUsd(flat, raw.length, maxOut, markup) : 0;
     const meteredMax = costNanoUsd(model, { inputTokens: estimateTokensFromBytes(raw.length, env.FORGE_BYTES_PER_TOKEN), outputTokens: maxOut }, markup);
     const maxNano = alwaysFlat ? flatNano : Math.max(meteredMax, flatNano);
-    const reserveMsub = Math.max(1, nanoUsdToMsub(maxNano, unit, rate));
+    const reserveMsub = free ? CREDIT_MSUB : Math.max(1, nanoUsdToMsub(maxNano, unit, rate));
     const requiredUnits = msubToUnitsCeil(reserveMsub);
 
     // 4. Payment.
@@ -650,7 +728,9 @@ export function createApp(d: Deps) {
           if (alwaysFlat || source === 'flat') nano = flatNano;
           else if (usage) nano = costNanoUsd(model, usage, markup);
         }
-        const actualMsub = nanoUsdToMsub(nano, unit, rate);
+        // A free question costs one credit when it is answered, nothing when it fails.
+        if (free) nano = 0;
+        const actualMsub = free ? (status === 'ok' || status === 'partial' ? CREDIT_MSUB : 0) : nanoUsdToMsub(nano, unit, rate);
         // Our cost: the supplier's own figure when it sends one, else the usage at our catalog cost (no markup).
         let costNusd: number | null = null;
         let costSource: string | null = null;
@@ -707,6 +787,7 @@ export function createApp(d: Deps) {
           supplier: model.supplier,
           payment: pay.kind,
           unit,
+          free: free || undefined,
           status,
           encrypted,
           stream,
@@ -929,6 +1010,33 @@ export function createApp(d: Deps) {
     });
   };
 
+  // ------------------------------------------------------------------ audio (speech to text, text to speech)
+
+  registerAudioRoutes(app, d, apiError, bearer);
+
+  // ------------------------------------------------------------------ the daily faucet (docs/FREE-TIER.md)
+  // 404 unless FORGE_FAUCET_ENABLED. The client address goes only to the faucet's in-memory limit: it is
+  // never stored or logged.
+  const faucet = d.faucet;
+  const noFaucet = (c: Context) => apiError(c, 404, 'not_found', 'free questions are not given out here');
+  app.get('/v1/free', (c) => (faucet ? c.json(faucet.status()) : noFaucet(c)));
+  app.post('/v1/free/challenge', (c) => (faucet ? c.json(faucet.challenge(clientIp(c))) : noFaucet(c)));
+  app.post('/v1/free/verify', async (c) => {
+    if (!faucet) return noFaucet(c);
+    const body = await readJson(c);
+    return c.json(faucet.verify(body?.solution));
+  });
+  app.post('/v1/free/claim', async (c) => {
+    if (!faucet) return noFaucet(c);
+    const body = await readJson(c);
+    const r = await faucet.claim(clientIp(c), body?.ticket);
+    log.info('faucet_claim', { questions: r.questions });
+    return c.json({ token: r.token, questions: r.questions, mint: d.free?.mint, unit: d.free?.unit });
+  });
+
+  // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH));
+
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
   const waitlist = new BetaWaitlist(d.db);
@@ -965,6 +1073,23 @@ export function createApp(d: Deps) {
       const { body, version } = sw();
       return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version });
     });
+    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js).
+    app.get('/v2', (c) => c.redirect('/v2/', 301));
+    // A photo shared into the v2 app is caught by its service worker (public/v2/sw.js) and never sent.
+    // When that worker is not running, the phone posts it here instead: it is dropped unread and the
+    // page opens saying the phone sent it to the server, which dropped it (photo/sent, not photo/missed:
+    // the photo did leave the phone).
+    app.post('/v2/share', (c) => c.redirect('/v2/#/photo/sent', 303));
+    // The faucet page (public/v2/free/), at /free. Not found while the faucet is off.
+    const publicDir = d.publicDir;
+    const freePage = (c: Context) => (faucet ? c.html(readFileSync(join(publicDir, 'v2', 'free', 'index.html'), 'utf8')) : c.notFound());
+    app.get('/free', freePage);
+    app.get('/free/', freePage);
+    app.use('/v2/free/*', async (c, next) => (faucet ? next() : c.notFound()));
+    // The Android app's download page (public/v2/download/), at /download. It reads /download/info.
+    const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    app.get('/download', downloadPage);
+    app.get('/download/', downloadPage);
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
 

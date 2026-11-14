@@ -1,0 +1,603 @@
+import { describe, expect, it, vi } from 'vitest';
+import { wavInfo } from '../../../src/audio.ts';
+
+// Hold to talk and read aloud: the recorder state machine, WAV encoding, sentence chunking, voice
+// prices, the module choice, the engine client's audio calls, the voice modules, and the controller.
+const TALK: any = await import('../../../public/v2/core/talk.js' as string);
+const WAV: any = await import('../../../public/v2/core/wav.js' as string);
+const SPEECH: any = await import('../../../public/v2/core/speech.js' as string);
+const VOICE: any = await import('../../../public/v2/core/voice.js' as string);
+const STATE: any = await import('../../../public/v2/core/state.js' as string);
+const E: any = await import('../../../public/v2/core/engine.js' as string);
+const R: any = await import('../../../public/v2/core/registry.js' as string);
+const CTL: any = await import('../../../public/v2/core/talkctl.js' as string);
+const VIN: any = await import('../../../public/v2/modules/voice-in/engine/index.js' as string);
+const VIN_DEVICE: any = await import('../../../public/v2/modules/voice-in/device/index.js' as string);
+const VOUT: any = await import('../../../public/v2/modules/voice-out/engine/index.js' as string);
+const VOUT_DEVICE: any = await import('../../../public/v2/modules/voice-out/device/index.js' as string);
+
+/** Runs events through the state machine from idle; returns the final state and every effect. */
+function run(events: object[]) {
+  let s = TALK.initial();
+  const effects: string[] = [];
+  for (const ev of events) {
+    const r = TALK.step(s, ev);
+    s = r.s;
+    effects.push(...r.effects);
+  }
+  return { s, effects };
+}
+
+describe('the recorder state machine', () => {
+  it('records on press and sends on release after a hold', () => {
+    const r = run([{ type: 'down', at: 0 }, { type: 'tick', at: 500, maxMs: 60_000 }, { type: 'up', at: 2000 }]);
+    expect(r.s.phase).toBe('sending');
+    expect(r.effects).toEqual(['start', 'haptic:start', 'send', 'haptic:send']);
+    expect(run([{ type: 'down', at: 0 }, { type: 'up', at: 2000 }, { type: 'done' }]).s.phase).toBe('idle');
+  });
+
+  it('treats a short press as a tap: nothing is sent and the button explains itself', () => {
+    const r = run([{ type: 'down', at: 0 }, { type: 'up', at: TALK.HOLD_MS - 1 }]);
+    expect(r.s.phase).toBe('idle');
+    expect(r.effects).toEqual(['start', 'haptic:start', 'discard', 'explain']);
+    expect(r.effects).not.toContain('send');
+    expect(run([{ type: 'down', at: 0 }, { type: 'up', at: TALK.HOLD_MS }]).effects).toContain('send');
+  });
+
+  it('cancels when the finger slides off and lets go there, and not when it comes back', () => {
+    const off = run([{ type: 'down', at: 0 }, { type: 'move', inside: false }, { type: 'up', at: 3000 }]);
+    expect(off.s.phase).toBe('idle');
+    expect(off.effects).toEqual(['start', 'haptic:start', 'haptic:leave', 'discard', 'haptic:cancel', 'cancelled']);
+    const back = run([{ type: 'down', at: 0 }, { type: 'move', inside: false }, { type: 'move', inside: true }, { type: 'up', at: 3000 }]);
+    expect(back.effects).toEqual(['start', 'haptic:start', 'haptic:leave', 'haptic:back', 'send', 'haptic:send']);
+    // A move that changes nothing has no effect.
+    expect(run([{ type: 'down', at: 0 }, { type: 'move', inside: true }]).effects).toEqual(['start', 'haptic:start']);
+  });
+
+  it('sends by itself at the longest length, and ignores the release that follows', () => {
+    const r = run([{ type: 'down', at: 0 }, { type: 'tick', at: 59_000, maxMs: 60_000 }, { type: 'tick', at: 60_000, maxMs: 60_000 }, { type: 'up', at: 61_000 }]);
+    expect(r.s.phase).toBe('sending');
+    expect(r.effects.filter((e) => e === 'send')).toHaveLength(1);
+    expect(r.effects).toContain('maxed');
+  });
+
+  it('drops the recording on cancel or a microphone failure, and a failed send goes back to idle', () => {
+    expect(run([{ type: 'down', at: 0 }, { type: 'cancel' }]).effects).toEqual(['start', 'haptic:start', 'discard', 'haptic:cancel', 'cancelled']);
+    expect(run([{ type: 'down', at: 0 }, { type: 'failed' }]).effects).toEqual(['start', 'haptic:start', 'discard', 'failed']);
+    const r = run([{ type: 'down', at: 0 }, { type: 'up', at: 1000 }, { type: 'failed' }]);
+    expect(r.s.phase).toBe('idle');
+    expect(r.effects.at(-1)).toBe('failed');
+  });
+
+  it('ignores what does not apply: a release while idle, a second press while recording', () => {
+    expect(run([{ type: 'up', at: 5 }]).effects).toEqual([]);
+    const r = run([{ type: 'down', at: 0 }, { type: 'down', at: 100 }]);
+    expect(r.effects).toEqual(['start', 'haptic:start']);
+    expect(r.s.at).toBe(0);
+    expect(run([{ type: 'down', at: 0 }, { type: 'up', at: 1000 }, { type: 'down', at: 1100 }]).s.phase).toBe('sending');
+  });
+
+  it('knows when a finger is on the button, with a margin', () => {
+    const rect = { left: 100, right: 300, top: 100, bottom: 300 };
+    expect(TALK.inside(rect, 200, 200)).toBe(true);
+    expect(TALK.inside(rect, 100 - TALK.SLIDE_MARGIN, 200)).toBe(true);
+    expect(TALK.inside(rect, 100 - TALK.SLIDE_MARGIN - 1, 200)).toBe(false);
+    expect(TALK.inside(rect, 200, 400)).toBe(false);
+  });
+
+  it('shows the time as minutes and seconds', () => {
+    expect(TALK.clock(0)).toBe('0:00');
+    expect(TALK.clock(7400)).toBe('0:07');
+    expect(TALK.clock(65_000)).toBe('1:05');
+  });
+});
+
+describe('WAV recordings', () => {
+  it('encodes 16-bit mono PCM that the engine reads with the same length', () => {
+    const samples = new Float32Array(16000 * 1.5).map((_, i) => Math.sin(i / 10) * 0.5);
+    const wav = WAV.encodeWav(samples, 16000);
+    expect(wav.length).toBe(44 + samples.length * 2);
+    expect(WAV.wavSeconds(wav)).toBeCloseTo(1.5, 6);
+    // The gateway's own reader agrees.
+    expect(wavInfo(wav)).toMatchObject({ sampleRate: 16000, channels: 1, bitsPerSample: 16 });
+    expect(wavInfo(wav)!.seconds).toBeCloseTo(1.5, 6);
+    const dv = new DataView(wav.buffer);
+    expect(dv.getInt16(44 + 2 * 16, true)).toBe(Math.round(Math.sin(1.6) * 0.5 * 0x7fff));
+  });
+
+  it('clips out-of-range samples', () => {
+    const dv = new DataView(WAV.encodeWav(new Float32Array([2, -2]), 8000).buffer);
+    expect(dv.getInt16(44, true)).toBe(0x7fff);
+    expect(dv.getInt16(46, true)).toBe(-0x8000);
+  });
+
+  it('resamples to 16 kHz, keeping the length in seconds', () => {
+    const one = new Float32Array(48000).fill(0.25);
+    const down = WAV.resample(one, 48000, 16000);
+    expect(down.length).toBe(16000);
+    expect(down[100]).toBeCloseTo(0.25, 6);
+    expect(WAV.resample(new Float32Array(44100), 44100, 16000).length).toBe(16000);
+    expect(WAV.resample(new Float32Array(8000), 8000, 16000).length).toBe(16000);
+    expect(WAV.resample(one, 16000, 16000)).not.toBe(one);
+    expect(() => WAV.resample(one, 0, 16000)).toThrow();
+  });
+
+  it('joins chunks and measures loudness from 0 to 1', () => {
+    expect(Array.from(WAV.concat([new Float32Array([1, 2]), new Float32Array([3])]))).toEqual([1, 2, 3]);
+    expect(WAV.level(new Float32Array(100))).toBe(0);
+    expect(WAV.level(new Float32Array(100).fill(1))).toBe(1);
+    expect(WAV.level(new Float32Array(100).fill(0.1))).toBeCloseTo(0.4, 5);
+    expect(WAV.level(new Float32Array())).toBe(0);
+  });
+});
+
+describe('what is read aloud', () => {
+  it('turns Markdown into plain sentences and leaves code out', () => {
+    const md = '# Bring\n\nYou need **water** and [your ID](https://x.test).\n\n- a map\n- a phone\n\n| Item | Why |\n| - | - |\n| water | heat |\n\n```js\nconsole.log(1)\n```\nThat is all';
+    expect(SPEECH.speakable(md)).toBe('Bring. You need water and your ID. a map. a phone. Item, Why. water, heat. That is all.');
+    expect(SPEECH.speakable('Use `npm test` now.')).toBe('Use npm test now.');
+  });
+
+  it('splits sentences and groups them into pieces no longer than the limit', () => {
+    expect(SPEECH.sentences('One. Two? Three! Four')).toEqual(['One.', 'Two?', 'Three!', 'Four']);
+    const pieces = SPEECH.chunk('First sentence here. Second one. Third sentence is a bit longer than the others.', 40);
+    expect(pieces).toEqual(['First sentence here. Second one.', 'Third sentence is a bit longer than the', 'others.']);
+    for (const p of pieces) expect([...p].length).toBeLessThanOrEqual(40);
+  });
+
+  it('splits a long sentence at a comma, then a space, and cuts a word longer than the limit', () => {
+    expect(SPEECH.chunk('Water, bread and a map for the long walk.', 20)).toEqual(['Water, bread and a', 'map for the long', 'walk.']);
+    expect(SPEECH.chunk('a'.repeat(25), 10)).toEqual(['a'.repeat(10), 'a'.repeat(10), 'a'.repeat(5)]);
+    expect(() => SPEECH.chunk('x', 0)).toThrow();
+  });
+
+  it('reads at most the first part of a long answer', () => {
+    const long = Array.from({ length: 200 }, (_, i) => `Sentence number ${i}.`).join(' ');
+    const pieces = SPEECH.speechPieces(long, 100, 500);
+    expect(pieces.reduce((s: number, p: string) => s + p.length, 0)).toBeLessThanOrEqual(500);
+    expect(pieces[0].startsWith('Sentence number 0.')).toBe(true);
+    expect(SPEECH.speechPieces('', 100)).toEqual([]);
+    expect(SPEECH.speechPieces('x'.repeat(900), 600, 500)).toEqual(['x'.repeat(500)]);
+  });
+});
+
+const sttModel = (over: object = {}) => ({ id: 'stt', kind: 'transcription', tier: 'enclave', max_seconds: 30, pricing: { usd: { request: 0.0125, second: 0.001, kchar: 0 }, sat: { request: 12.5, second: 1, kchar: 0 } }, ...over });
+const ttsModel = (over: object = {}) => ({ id: 'tts', kind: 'speech', tier: 'enclave', max_chars: 100, voices: ['v1', 'v2'], pricing: { usd: { request: 0.0025, second: 0, kchar: 0.01 }, sat: null }, ...over });
+
+describe('voice prices and models', () => {
+  it('uses only private audio models with Private only on', () => {
+    const list = [sttModel({ id: 'std', tier: 'standard' }), sttModel(), ttsModel({ tier: 'standard' })];
+    expect(VOICE.audioModels(list, { privateOnly: true })).toEqual({ transcription: list[1], speech: null });
+    expect(VOICE.audioModels(list, { privateOnly: false })).toEqual({ transcription: list[0], speech: list[2] });
+    expect(VOICE.audioModels(undefined, { privateOnly: true })).toEqual({ transcription: null, speech: null });
+  });
+
+  it('prices in msub: per request, per second, per character', () => {
+    // 0.0125 USD + 3 s x 0.001 = 0.0155 USD = 1.55 cents = 1550 msub.
+    expect(VOICE.audioMsub(sttModel(), 'usd', { seconds: 3 })).toBe(1550);
+    expect(VOICE.audioMsub(sttModel(), 'sat', { seconds: 3 })).toBe(15_500);
+    // Whole seconds, rounded up, so the shown price is never below the bill.
+    expect(VOICE.transcribeMsub(sttModel(), 'usd', 2.1)).toBe(1550);
+    expect(VOICE.speakMsub(ttsModel(), 'usd', ['Hello there.', 'Bye.'])).toBe(Math.ceil((0.005 + (16 / 1000) * 0.01) * 100_000));
+    expect(VOICE.speakMsub(ttsModel(), 'usd', [])).toBe(0);
+    expect(VOICE.audioMsub(ttsModel(), 'sat', { chars: 10 })).toBeNull();
+    expect(VOICE.audioMsub(null, 'usd', {})).toBeNull();
+  });
+
+  const mod = (id: string, available: boolean, priv: boolean) => ({ id, available: () => available, private: () => priv });
+  it('chooses voice in: the engine by default, the browser only when chosen and Private only is off', () => {
+    const mods = { engine: mod('engine', true, true), device: mod('device', true, false) };
+    expect(STATE.DEFAULT_SETTINGS.voiceIn).toBe('engine');
+    expect(STATE.pickVoiceIn(mods, { ...STATE.DEFAULT_SETTINGS })?.id).toBe('engine');
+    expect(STATE.pickVoiceIn(mods, { privateOnly: true, voiceIn: 'device' })?.id).toBe('engine');
+    expect(STATE.pickVoiceIn(mods, { privateOnly: false, voiceIn: 'device' })?.id).toBe('device');
+    expect(STATE.pickVoiceIn({ engine: mod('engine', false, true), device: mods.device }, { privateOnly: true, voiceIn: 'engine' })).toBeNull();
+    expect(STATE.pickVoiceIn({ engine: mod('engine', true, false) }, { privateOnly: true, voiceIn: 'engine' })).toBeNull();
+  });
+
+  it('chooses voice out: the phone voice when it has one, else the engine, or none when off', () => {
+    const both = { engine: mod('engine', true, true), device: mod('device', true, true) };
+    expect(STATE.DEFAULT_SETTINGS.voiceOut).toBe('auto');
+    expect(STATE.pickVoiceOut(both, { voiceOut: 'auto', privateOnly: true })?.id).toBe('device');
+    expect(STATE.pickVoiceOut({ ...both, device: mod('device', false, true) }, { voiceOut: 'auto', privateOnly: true })?.id).toBe('engine');
+    expect(STATE.pickVoiceOut(both, { voiceOut: 'engine', privateOnly: true })?.id).toBe('engine');
+    expect(STATE.pickVoiceOut(both, { voiceOut: 'off', privateOnly: true })).toBeNull();
+    expect(STATE.pickVoiceOut({ engine: mod('engine', true, false) }, { voiceOut: 'engine', privateOnly: true })).toBeNull();
+  });
+});
+
+describe('the engine client audio calls', () => {
+  it('sends a recording as multipart and reads the charge from the headers', async () => {
+    let seen: any;
+    const engine = E.createEngine({
+      fetch: async (url: string, init: any) => {
+        seen = { url, init };
+        return new Response(JSON.stringify({ text: 'Hello' }), { headers: { 'content-type': 'application/json', 'x-forge-charged-msub': '1250', 'x-forge-balance-msub': '98750' } });
+      },
+    });
+    const r = await engine.transcribe('sk-forge-k', { model: 'stt', audio: WAV.encodeWav(new Float32Array(16000)), seconds: 1, language: 'en' });
+    expect(r).toEqual({ text: 'Hello', chargedMsub: 1250, balanceMsub: 98750 });
+    expect(seen.url).toBe('/v1/audio/transcriptions');
+    expect(seen.init.headers.authorization).toBe('Bearer sk-forge-k');
+    const form: FormData = seen.init.body;
+    expect(form.get('model')).toBe('stt');
+    expect(form.get('duration')).toBe('1');
+    expect(form.get('language')).toBe('en');
+    const file = form.get('file') as File;
+    expect(file.type).toBe('audio/wav');
+    expect(WAV.wavSeconds(new Uint8Array(await file.arrayBuffer()))).toBe(1);
+  });
+
+  it('turns a refused or failed audio request into an EngineError, and answers proof of work', async () => {
+    const engine = E.createEngine({ fetch: async () => new Response(JSON.stringify({ error: { code: 'insufficient_balance', message: 'low' } }), { status: 402 }) });
+    await expect(engine.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).rejects.toMatchObject({ code: 'insufficient_balance', status: 402 });
+    await expect(engine.speech('k', { model: 'tts', input: 'x', voice: 'v' })).rejects.toMatchObject({ code: 'insufficient_balance' });
+    const bad = E.createEngine({ fetch: async () => new Response('{}', { status: 200 }) });
+    await expect(bad.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).rejects.toMatchObject({ code: 'bad_answer' });
+    let calls = 0;
+    const pow = E.createEngine({
+      solve: async () => 'solved',
+      fetch: async (_u: string, init: any) => {
+        calls++;
+        if (calls === 1) return new Response(JSON.stringify({ error: { code: 'pow_required' }, pow: { challenge: 'c', bits: 1 } }), { status: 428 });
+        expect(init.headers['X-Bellows-Pow'] ?? init.headers['x-bellows-pow']).toBe('solved');
+        return new Response(JSON.stringify({ text: 'ok' }));
+      },
+    });
+    expect((await pow.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).text).toBe('ok');
+  });
+
+  it('asks for WAV speech and returns the sound', async () => {
+    let body: any;
+    const engine = E.createEngine({
+      fetch: async (_u: string, init: any) => {
+        body = JSON.parse(init.body);
+        return new Response(new Uint8Array([82, 73, 70, 70]), { headers: { 'content-type': 'audio/wav', 'x-forge-charged-msub': '300' } });
+      },
+    });
+    const r = await engine.speech('k', { model: 'tts', input: 'Hi.', voice: 'v1' });
+    expect(body).toEqual({ model: 'tts', input: 'Hi.', voice: 'v1', response_format: 'wav' });
+    expect(r.chargedMsub).toBe(300);
+    expect(r.balanceMsub).toBeNull();
+    expect((await r.blob.arrayBuffer()).byteLength).toBe(4);
+  });
+});
+
+describe('voice modules get only their own inputs', () => {
+  it('hands voice in the microphone and speech to text, voice out the speaker and text to speech', () => {
+    const fn = () => {};
+    const all = { t: fn, ui: {}, engine: {}, wallet: {}, vault: {}, state: {}, actions: {}, mic: {}, recognizer: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, transcribe: fn, speak: fn } };
+    const vin = R.inputsFor('voice-in', all);
+    expect(Object.keys(vin).sort()).toEqual(['audio', 'mic', 'recognizer', 't']);
+    expect(Object.keys(vin.audio).sort()).toEqual(['model', 'price', 'transcribe']);
+    const vout = R.inputsFor('voice-out', all);
+    expect(Object.keys(vout).sort()).toEqual(['audio', 'speaker', 'synth', 't']);
+    expect(Object.keys(vout.audio).sort()).toEqual(['model', 'price', 'speak']);
+    for (const x of [vin, vout]) for (const k of ['engine', 'wallet', 'vault', 'state', 'actions']) expect(x).not.toHaveProperty(k);
+  });
+
+  it('bundles both ways for each direction', () => {
+    const ids = R.BUNDLED.filter((b: any) => b.kind.startsWith('voice')).map((b: any) => `${b.kind}/${b.folder}`);
+    expect(ids.sort()).toEqual(['voice-in/device', 'voice-in/engine', 'voice-out/device', 'voice-out/engine']);
+  });
+});
+
+/** A fake microphone that delivers `seconds` of sound at `rate` when started. */
+function fakeMic(seconds: number, rate = 48000) {
+  const m = {
+    stopped: 0,
+    available: () => true,
+    async open() {
+      let fn: (b: Float32Array) => void = () => {};
+      return {
+        sampleRate: rate,
+        onData: (f: any) => {
+          fn = f;
+          for (let i = 0; i < seconds * 10; i++) fn(new Float32Array(rate / 10).fill(0.2));
+        },
+        stop: () => m.stopped++,
+      };
+    },
+  };
+  return m;
+}
+
+describe('voice in through the engine', () => {
+  const audioFor = (model: any) => {
+    const sent: any[] = [];
+    return {
+      sent,
+      model: (k: string) => (k === 'transcription' ? model : null),
+      price: (_k: string, u: any) => VOICE.audioMsub(model, 'usd', u),
+      transcribe: async (wav: Uint8Array, o: any) => {
+        sent.push({ wav, ...o });
+        return { text: 'What should I bring?', chargedMsub: 1300, balanceMsub: 5000 };
+      },
+    };
+  };
+
+  it('records, makes a 16 kHz WAV of it and sends it, stopping the microphone', async () => {
+    const mic = fakeMic(2);
+    const audio = audioFor(sttModel());
+    const m = VIN.create({ mic, audio });
+    expect(m.available()).toBe(true);
+    expect(m.private()).toBe(true);
+    expect(m.maxSeconds()).toBe(30);
+    const levels: number[] = [];
+    const session = await m.start({ onLevel: (l: number) => levels.push(l) });
+    expect(session.seconds()).toBeCloseTo(2, 5);
+    expect(levels.length).toBe(20);
+    const r = await session.finish({});
+    expect(r.text).toBe('What should I bring?');
+    expect(mic.stopped).toBe(1);
+    expect(audio.sent[0].seconds).toBeCloseTo(2, 5);
+    expect(wavInfo(audio.sent[0].wav)).toMatchObject({ sampleRate: 16000, channels: 1 });
+    expect(wavInfo(audio.sent[0].wav)!.seconds).toBeCloseTo(2, 3);
+  });
+
+  it('sends nothing when cancelled, and is not available without a model or a microphone', async () => {
+    const mic = fakeMic(1);
+    const audio = audioFor(sttModel());
+    const session = await VIN.create({ mic, audio }).start({});
+    session.cancel();
+    expect(mic.stopped).toBe(1);
+    expect(audio.sent).toHaveLength(0);
+    expect(VIN.create({ mic, audio: audioFor(null) }).available()).toBe(false);
+    expect(VIN.create({ mic: { ...mic, available: () => false }, audio }).available()).toBe(false);
+    expect(VIN.create({ mic, audio: audioFor(sttModel({ tier: 'standard' })) }).private()).toBe(false);
+  });
+
+  it('sends nothing and pays nothing for a recording under half a second, or none at all', async () => {
+    // A hold on first use lasts while the person taps Allow, so the microphone may start just before
+    // the finger lifts: 0.2 s, or no sound at all, must not reach the engine (which refuses under 0.3 s).
+    expect(VIN.MIN_SEND_SECONDS).toBeGreaterThan(0.3);
+    for (const secs of [0.2, 0]) {
+      const mic = fakeMic(secs);
+      const audio = audioFor(sttModel());
+      const session = await VIN.create({ mic, audio }).start({});
+      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+      expect(audio.sent).toHaveLength(0);
+      expect(mic.stopped).toBe(1);
+    }
+    // A little over half a second is sent.
+    const audio = audioFor(sttModel());
+    await (await VIN.create({ mic: fakeMic(0.6), audio }).start({})).finish({});
+    expect(audio.sent).toHaveLength(1);
+  });
+
+  it('the browser recogniser is free and never private', async () => {
+    const recognizer = { available: () => true, start: async ({ onText }: any) => (onText('Hello'), { stop: async () => 'Hello there', cancel: vi.fn() }) };
+    const m = VIN_DEVICE.create({ recognizer });
+    expect(m.private()).toBe(false);
+    expect(m.price(10)).toBeNull();
+    const heard: string[] = [];
+    const s = await m.start({ onText: (x: string) => heard.push(x) });
+    expect(heard).toEqual(['Hello']);
+    expect(await s.finish()).toEqual({ text: 'Hello there', chargedMsub: 0, balanceMsub: null });
+  });
+});
+
+describe('voice out through the engine', () => {
+  /**
+   * fail: every fetch fails. playFails: how many plays are refused first (autoplay refused, say).
+   * onPlayed(n): called as the nth piece starts to sound.
+   */
+  const setup = (fail = false, { playFails = 0, onPlayed = (_n: number) => {} } = {}) => {
+    const fetched: string[] = [];
+    const played: string[] = [];
+    let refused = 0;
+    const audio = {
+      model: (k: string) => (k === 'speech' ? ttsModel() : null),
+      price: (_k: string, u: any) => VOICE.audioMsub(ttsModel(), 'usd', u),
+      speak: async (input: string) => {
+        fetched.push(input);
+        if (fail) throw Object.assign(new Error('upstream'), { code: 'upstream_error' });
+        return { blob: new Blob([input]), chargedMsub: 260 };
+      },
+    };
+    const speaker = {
+      play: (blob: Blob) => {
+        let stop = () => {};
+        if (refused < playFails) {
+          refused++;
+          return { done: Promise.reject(Object.assign(new Error('play() was refused'), { name: 'NotAllowedError' })), stop };
+        }
+        const done = blob.text().then((x) => {
+          played.push(x);
+          onPlayed(played.length);
+          return new Promise<void>((r) => {
+            stop = r;
+            setTimeout(r, 5);
+          });
+        });
+        return { done, stop: () => stop() };
+      },
+    };
+    return { fetched, played, m: VOUT.create({ audio, speaker }) };
+  };
+
+  it('fetches and plays each piece in order, pays once, and replays from memory', async () => {
+    const { fetched, played, m } = setup();
+    const pieces = ['One.', 'Two.', 'Three.'];
+    expect(m.price(pieces, 'a1')).toBe(VOICE.audioMsub(ttsModel(), 'usd', { requests: 3, chars: 14 }));
+    const states: string[] = [];
+    const r = await m.speak(pieces, { key: 'a1', onState: (s: string) => states.push(s) }).done;
+    expect(r.chargedMsub).toBe(780);
+    expect(fetched).toEqual(pieces);
+    expect(played).toEqual(pieces);
+    expect(states[0]).toBe('loading');
+    expect(m.cached('a1')).toBe(true);
+    expect(m.price(pieces, 'a1')).toBe(0);
+    expect((await m.speak(pieces, { key: 'a1' }).done).chargedMsub).toBe(0);
+    expect(fetched).toHaveLength(3);
+    expect(played).toHaveLength(6);
+  });
+
+  it('stops when asked and keeps nothing half fetched', async () => {
+    const { fetched, m } = setup();
+    const ctl = m.speak(['One.', 'Two.', 'Three.'], { key: 'b' });
+    ctl.stop();
+    await ctl.done.catch(() => {});
+    expect(fetched.length).toBeLessThanOrEqual(2);
+    expect(m.cached('b')).toBe(false);
+  });
+
+  it('keeps each piece once paid: after a stop part way, Listen pays only for the pieces not fetched', async () => {
+    let ctl: any;
+    // Stop while the first piece sounds. The second was fetched (and paid) while the first played.
+    const { fetched, played, m } = setup(false, { onPlayed: (n) => n === 1 && ctl.stop() });
+    const pieces = ['One.', 'Two.', 'Three.'];
+    ctl = m.speak(pieces, { key: 'd' });
+    expect((await ctl.done).chargedMsub).toBe(520);
+    expect(fetched).toEqual(['One.', 'Two.']);
+    expect(m.cached('d')).toBe(false);
+    // Only the third piece is priced and fetched again; the first two play from memory.
+    expect(m.price(pieces, 'd')).toBe(VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 6 }));
+    expect((await m.speak(pieces, { key: 'd' }).done).chargedMsub).toBe(260);
+    expect(fetched).toEqual(['One.', 'Two.', 'Three.']);
+    expect(played).toEqual(['One.', 'One.', 'Two.', 'Three.']);
+    expect(m.cached('d')).toBe(true);
+    expect(m.price(pieces, 'd')).toBe(0);
+  });
+
+  it('keeps a paid piece when playing it was refused, so Listen does not pay for it again', async () => {
+    const { fetched, played, m } = setup(false, { playFails: 1 });
+    const pieces = ['One.', 'Two.'];
+    await expect(m.speak(pieces, { key: 'e' }).done).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(played).toEqual([]);
+    const paid = fetched.length;
+    expect(paid).toBeGreaterThanOrEqual(1);
+    expect(m.price(pieces, 'e')).toBe(paid === 2 ? 0 : VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 4 }));
+    expect((await m.speak(pieces, { key: 'e' }).done).chargedMsub).toBe((2 - paid) * 260);
+    expect(fetched).toEqual(pieces);
+    expect(played).toEqual(pieces);
+  });
+
+  it('does not take a kept piece for a different text under the same key', async () => {
+    const { fetched, m } = setup();
+    await m.speak(['One.'], { key: 'f' }).done;
+    expect(m.price(['Uno.'], 'f')).toBe(VOICE.audioMsub(ttsModel(), 'usd', { requests: 1, chars: 4 }));
+    await m.speak(['Uno.'], { key: 'f' }).done;
+    expect(fetched).toEqual(['One.', 'Uno.']);
+  });
+
+  it('reports a failed piece', async () => {
+    const { m } = setup(true);
+    await expect(m.speak(['One.'], { key: 'c' }).done).rejects.toMatchObject({ code: 'upstream_error' });
+    expect(m.cached('c')).toBe(false);
+  });
+
+  it('the phone voice is free and private, and stops', async () => {
+    const spoken: string[] = [];
+    const synth = { voices: () => [{}], speak: (p: string) => (spoken.push(p), { done: Promise.resolve(), stop: () => {} }) };
+    const m = VOUT_DEVICE.create({ synth });
+    expect(m.available()).toBe(true);
+    expect(m.private()).toBe(true);
+    expect(m.price(['x'])).toBe(0);
+    expect((await m.speak(['A.', 'B.']).done).chargedMsub).toBe(0);
+    expect(spoken).toEqual(['A.', 'B.']);
+    expect(VOUT_DEVICE.create({ synth: { ...synth, voices: () => [] } }).available()).toBe(false);
+  });
+});
+
+describe('the talk controller', () => {
+  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?' } = {}) {
+    let now = 0;
+    const S: any = {};
+    const store = { S, set: (p: object) => Object.assign(S, p) };
+    const toasts: string[] = [];
+    const navs: string[] = [];
+    const asked: any[] = [];
+    const pulses: unknown[] = [];
+    let cancelled = 0;
+    const voiceInMod = {
+      id: 'engine',
+      maxSeconds: () => 30,
+      start: async () => ({
+        finish: async () => {
+          if (failWith) throw failWith;
+          return { text, chargedMsub: 1300, balanceMsub: 4000 };
+        },
+        cancel: () => cancelled++,
+      }),
+    };
+    const ctl = CTL.createTalk({
+      store,
+      t: (k: string) => k,
+      ui: { toast: (x: string) => toasts.push(x) },
+      nav: (n: string) => navs.push(n),
+      haptics: { pulse: (p: unknown) => pulses.push(p) },
+      voiceIn: () => voiceInMod,
+      voiceOut: () => null,
+      blocker: () => blocked,
+      ask: async (q: string, meta: any) => asked.push({ q, meta }),
+      refresh: () => {},
+      errorText: () => 'error',
+      now: () => now,
+    });
+    return { S, ctl, toasts, navs, asked, pulses, advance: (ms: number) => (now += ms), cancelled: () => cancelled };
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('asks the heard words as a voice question and keeps the new balance', async () => {
+    const x = setup();
+    x.ctl.down();
+    expect(x.S.talk.phase).toBe('recording');
+    await flush();
+    x.advance(1500);
+    x.ctl.up();
+    expect(x.navs).toEqual(['answer']);
+    await flush();
+    await flush();
+    expect(x.asked).toEqual([{ q: 'What should I bring?', meta: { voice: true } }]);
+    expect(x.S.balanceMsub).toBe(4000);
+    expect(x.S.talk.phase).toBe('idle');
+    expect(x.pulses.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not record when a question cannot be asked, and says why', () => {
+    const go = vi.fn();
+    const x = setup({ blocked: { key: 'type.noFunds', go } });
+    x.ctl.down();
+    expect(x.S.talk.phase).toBe('idle');
+    expect(x.toasts).toEqual(['type.noFunds']);
+    expect(go).toHaveBeenCalled();
+  });
+
+  it('explains on a tap and cancels the recording it started', async () => {
+    const x = setup();
+    x.ctl.down();
+    await flush();
+    x.advance(100);
+    x.ctl.up();
+    expect(x.toasts).toEqual(['talk.explain']);
+    expect(x.cancelled()).toBe(1);
+    expect(x.asked).toEqual([]);
+  });
+
+  it('keeps a failed transcription as an error for the answer screen, not charged when the engine refused it', async () => {
+    const x = setup({ failWith: Object.assign(new Error('upstream failed'), { code: 'upstream_error', status: 502 }) });
+    x.ctl.down();
+    await flush();
+    x.advance(2000);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.talk.error).toEqual({ code: 'upstream_error', message: 'upstream failed', charged: 0 });
+    expect(x.asked).toEqual([]);
+    x.ctl.clearError();
+    expect(x.S.talk.error).toBeNull();
+  });
+
+  it('says so when nothing was heard', async () => {
+    const x = setup({ text: '   ' });
+    x.ctl.down();
+    await flush();
+    x.advance(2000);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.talk.error).toEqual({ key: 'talk.empty' });
+    expect(x.asked).toEqual([]);
+  });
+});

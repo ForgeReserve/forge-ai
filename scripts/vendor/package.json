@@ -5,6 +5,7 @@
   "dependencies": {
     "@gandlaf21/bc-ur": "1.1.12",
     "@highlightjs/cdn-assets": "11.12.0",
+    "@vladmandic/face-api": "1.7.15",
     "buffer": "6.0.3",
     "dompurify": "3.4.17",
     "esbuild": "0.28.2",

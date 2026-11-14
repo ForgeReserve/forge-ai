@@ -1,0 +1,12 @@
+{
+  "id": "forge.filter.cover-numbers",
+  "kind": "filter",
+  "version": "1.0.0",
+  "name": {
+    "en": "Cover writing and numbers"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

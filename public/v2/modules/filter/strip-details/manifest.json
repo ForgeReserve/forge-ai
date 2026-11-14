@@ -1,0 +1,12 @@
+{
+  "id": "forge.filter.strip-details",
+  "kind": "filter",
+  "version": "1.0.0",
+  "name": {
+    "en": "Hidden details"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -353,5 +353,100 @@
       "vision": false,
       "reasoning": false
     }
+  ],
+  "audio": [
+    {
+      "id": "mock-transcribe",
+      "kind": "transcription",
+      "supplier": "mock",
+      "upstream": "mock-transcribe",
+      "name": "Mock transcription",
+      "request_usd": 0.001,
+      "usd_per_second": 0.0001,
+      "price_verified": true,
+      "max_seconds": 60,
+      "formats": [
+        "wav"
+      ],
+      "languages": [
+        "en"
+      ]
+    },
+    {
+      "id": "mock-speech",
+      "kind": "speech",
+      "supplier": "mock",
+      "upstream": "mock-speech",
+      "name": "Mock speech",
+      "request_usd": 0.001,
+      "usd_per_kchar": 0.001,
+      "price_verified": true,
+      "max_chars": 500,
+      "voices": [
+        "neutral_female"
+      ],
+      "languages": [
+        "en"
+      ]
+    },
+    {
+      "id": "tinfoil/whisper-large-v3-turbo",
+      "kind": "transcription",
+      "supplier": "tinfoil",
+      "upstream": "whisper-large-v3-turbo",
+      "name": "Whisper Large V3 Turbo",
+      "request_usd": 0.01,
+      "usd_per_second": 0,
+      "price_verified": true,
+      "max_seconds": 60,
+      "formats": [
+        "wav"
+      ],
+      "languages": []
+    },
+    {
+      "id": "tinfoil/voxtral-tts",
+      "kind": "speech",
+      "supplier": "tinfoil",
+      "upstream": "voxtral-tts",
+      "name": "Voxtral TTS",
+      "request_usd": 0.002,
+      "usd_per_kchar": 0,
+      "price_verified": true,
+      "max_chars": 500,
+      "voices": [
+        "neutral_female",
+        "neutral_male",
+        "casual_female",
+        "casual_male",
+        "cheerful_female",
+        "ar_male",
+        "de_female",
+        "de_male",
+        "es_female",
+        "es_male",
+        "fr_female",
+        "fr_male",
+        "hi_female",
+        "hi_male",
+        "it_female",
+        "it_male",
+        "nl_female",
+        "nl_male",
+        "pt_female",
+        "pt_male"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "es",
+        "de",
+        "it",
+        "pt",
+        "nl",
+        "ar",
+        "hi"
+      ]
+    }
   ]
 }

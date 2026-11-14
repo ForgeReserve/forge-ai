@@ -1,0 +1,6 @@
+rootProject.name = 'forge'
+include ':app'
+
+// The Capacitor runtime, from node_modules (pnpm install at the repository root).
+include ':capacitor-android'
+project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')

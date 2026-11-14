@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit v2: colour tiles plus talk</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0D10; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding: 16px; gap: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #2C5A55; background: #16292A; border-radius: 22px; color: #3FCFB4; font-size: 14px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3FCFB4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span>Private</span></div>
+<button style="min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #111317; border: 1px solid #6B5527; border-radius: 22px; color: #F1EFE9; font-family: Inter, sans-serif; font-size: 15px; font-weight: 600"><span style="width: 10px; height: 10px; border-radius: 5px; background: #D4A544"></span><span>$9.99</span></button>
+</div>
+<div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: center">
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #D4A544; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Read this</span><span style="font-size: 12px; color: #9A9DA3">A photo or a paper</span></span></button>
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #3FCFB4; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c3 3 3 15 0 18c-3-3-3-15 0-18z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Translate</span><span style="font-size: 12px; color: #9A9DA3">Any language</span></span></button>
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #7FB4FF; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M9 18h6"></path><path d="M10 21h4"></path><path d="M12 3a6 6 0 0 0-4 10.500c.700.700 1 1.500 1 2.500h6c0-1 .300-1.800 1-2.500A6 6 0 0 0 12 3z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Explain</span><span style="font-size: 12px; color: #9A9DA3">In plain words</span></span></button>
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #F0685A; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Check it</span><span style="font-size: 12px; color: #9A9DA3">True? Safe?</span></span></button>
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #B9A2FF; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 5h16v11H9l-5 4z"></path><path d="M8 9h8M8 12h5"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Write a reply</span><span style="font-size: 12px; color: #9A9DA3">Message or letter</span></span></button>
+<button style="min-height: 148px; background: #111317; border: 1px solid #2A2F3A; border-radius: 24px; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; text-align: left"><span style="width: 64px; height: 64px; border-radius: 20px; background: #F1EFE9; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 6h16M4 11h12M4 16h7"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Make it short</span><span style="font-size: 12px; color: #9A9DA3">Text or voice note</span></span></button>
+</div>
+<div style="display: flex; align-items: center; gap: 12px">
+<button aria-label="Type instead" style="flex: none; width: 64px; height: 64px; border-radius: 32px; background: #111317; border: 1px solid #2A2F3A; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F1EFE9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"></path></svg></button>
+<button aria-label="Hold to talk" style="flex: 1; height: 76px; border-radius: 38px; background: #F1EFE9; border: 4px solid #D4A544; color: #0B0D10; font-family: Inter, sans-serif; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Hold to talk</span></button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

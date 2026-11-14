@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SupplierConfig } from '../config.ts';
 import { errText, log } from '../log.ts';
-import { type ChatCall, type Supplier, UpstreamError } from './types.ts';
+import { type ChatCall, type SpeechCall, type Supplier, type TranscribeCall, UpstreamError } from './types.ts';
 
 export interface RetryOptions {
   retries: number;
@@ -117,6 +117,40 @@ export class OpenAISupplier implements Supplier {
       call.signal,
       this.retry,
       !!idem,
+    );
+  }
+
+  private endpoint(path: string): string {
+    return `${this.config.baseUrl!.replace(/\/$/, '')}${path}`;
+  }
+
+  /** Multipart upload, as the OpenAI API takes it. The audio stays in memory; FormData can be sent again on a retry. */
+  async transcribe(call: TranscribeCall): Promise<Response> {
+    if (!this.apiKey) throw new UpstreamError(`supplier ${this.id} has no API key configured`, 503);
+    const form = new FormData();
+    form.append('file', new Blob([call.audio as Uint8Array<ArrayBuffer>], { type: 'audio/wav' }), `audio.${call.format}`);
+    form.append('model', call.model.upstream);
+    form.append('response_format', 'json');
+    if (call.language) form.append('language', call.language);
+    return fetchWithRetry(
+      this.endpoint('/audio/transcriptions'),
+      { method: 'POST', headers: { accept: 'application/json', authorization: `Bearer ${this.apiKey}`, ...this.extraHeaders() }, body: form },
+      call.signal,
+      this.retry,
+    );
+  }
+
+  async speech(call: SpeechCall): Promise<Response> {
+    if (!this.apiKey) throw new UpstreamError(`supplier ${this.id} has no API key configured`, 503);
+    return fetchWithRetry(
+      this.endpoint('/audio/speech'),
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'audio/wav', authorization: `Bearer ${this.apiKey}`, ...this.extraHeaders() },
+        body: JSON.stringify({ model: call.model.upstream, input: call.input, voice: call.voice, response_format: 'wav' }),
+      },
+      call.signal,
+      this.retry,
     );
   }
 }

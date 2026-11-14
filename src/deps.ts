@@ -1,7 +1,9 @@
 import { resolve } from 'node:path';
 import { GatewayWallet, type WalletFaults } from './cashu/wallet.ts';
 import { type Config, normalizeMintUrl } from './config.ts';
+import { CreditKeysets, freeRules, mintCredits } from './credits.ts';
 import { openDb } from './db.ts';
+import { Faucet } from './faucet.ts';
 import { Invites, Ledger } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
 import { checkForeignMintUrl, type FundingFaults, FundingService } from './funding.ts';
@@ -20,6 +22,8 @@ export function buildDeps(
     fundingFaults?: FundingFaults;
     /** Tests: stand-ins for the Nostr relays and the mint probe used by other-mint discovery. */
     discovery?: { query?: RelayQuery; probe?: (url: string) => Promise<MintProbe>; now?: () => number };
+    /** Tests: the faucet's clock and voucher maker. */
+    faucet?: { now?: () => number; issue?: (questions: number) => Promise<string> };
   } = {},
 ): Deps {
   const env = config.env;
@@ -32,6 +36,7 @@ export function buildDeps(
       return s;
     });
   const ledger = new Ledger(db);
+  const free = freeRules(config);
   const fundMint = env.FORGE_FUND_MINT ?? config.trustedMints[0]!;
   const wallet = new GatewayWallet(db, {
     trustedMints: config.trustedMints,
@@ -42,7 +47,28 @@ export function buildDeps(
     // The operator's funding mint is configuration, not customer input, like the trusted mints.
     vetMint: async (m) => (m === normalizeMintUrl(fundMint) ? undefined : checkForeignMintUrl(m, env.FORGE_FOREIGN_ALLOW_INSECURE)),
     faults: opts.faults,
+    creditMint: free?.mint,
+    creditUnit: free?.unit,
+    creditKeysets: free ? new CreditKeysets(db, free.keysetDays) : undefined,
   });
+  // The faucet mints vouchers where minting is open (the credit mint's own host), written with its public address.
+  const faucet =
+    free && env.FORGE_FAUCET_ENABLED
+      ? new Faucet({
+          db,
+          daily: env.FORGE_FAUCET_DAILY_VOUCHERS,
+          questions: env.FORGE_FAUCET_QUESTIONS,
+          drips: env.FORGE_FAUCET_DRIPS_PER_DAY,
+          powBits: env.FORGE_FAUCET_POW_BITS,
+          powMaxBits: env.FORGE_FAUCET_POW_MAX_BITS,
+          perAddress: env.FORGE_FAUCET_PER_ADDRESS,
+          challengeMs: env.FORGE_FAUCET_CHALLENGE_SECONDS * 1000,
+          now: opts.faucet?.now,
+          issue:
+            opts.faucet?.issue ??
+            (async (questions) => (await mintCredits({ issueUrl: env.FORGE_CREDIT_MINT_ISSUE_URL ?? free.mint, publicUrl: free.mint, unit: free.unit, amounts: [questions] }))[0]!),
+        })
+      : undefined;
   const rates = new RateOracle(sources, {
     minSources: Math.min(env.FORGE_RATE_MIN_SOURCES, sources.length),
     ttlMs: env.FORGE_RATE_TTL_SECONDS * 1000,
@@ -84,6 +110,8 @@ export function buildDeps(
     rates,
     funding,
     discovery,
+    free,
+    faucet,
     suppliers: buildSuppliers(config, opts.env ?? process.env),
     publicDir: resolve(import.meta.dirname, '..', 'public'),
   };

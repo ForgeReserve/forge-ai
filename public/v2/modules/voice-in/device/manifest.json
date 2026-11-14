@@ -1,0 +1,12 @@
+{
+  "id": "forge.voice-in.device",
+  "kind": "voice-in",
+  "version": "1.0.0",
+  "name": {
+    "en": "This browser"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

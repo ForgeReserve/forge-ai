@@ -1,0 +1,12 @@
+{
+  "id": "forge.look.light",
+  "kind": "look",
+  "version": "1.0.0",
+  "name": {
+    "en": "Light"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

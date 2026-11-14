@@ -124,6 +124,48 @@ export const EnvSchema = z.object({
   /** Origin admin POSTs must come from (e.g. https://ai.forge-reserve.com). Unset: the request's own Host. */
   FORGE_ADMIN_ORIGIN: z.string().url().optional(),
   FORGE_ADMIN_RATE_LIMIT_RPM: z.coerce.number().int().min(1).default(120),
+  /** Largest audio upload for POST /v1/audio/transcriptions, in bytes. Other routes keep FORGE_MAX_BODY_BYTES. */
+  FORGE_AUDIO_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(4_000_000),
+
+  // ---------------------------------------------------------------- free tier (docs/FREE-TIER.md)
+  // Everything here is off until FORGE_CREDIT_MINT is set, and the faucet until FORGE_FAUCET_ENABLED.
+  /**
+   * The credit mint: eCash from it is a credit, one free question each, never money. Its public address,
+   * as written in the vouchers. Unset: no credits are taken anywhere.
+   */
+  FORGE_CREDIT_MINT: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  /** Where the gateway mints faucet vouchers (minting is open only on the credit mint's own host). Default: FORGE_CREDIT_MINT. */
+  FORGE_CREDIT_MINT_ISSUE_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  /** The credit mint's unit. Nutshell has no custom unit, so a credit is one cent of usd there. */
+  FORGE_CREDIT_UNIT: z.enum(UNITS).default('usd'),
+  /** The models a free balance may use. Ids not in the catalog are ignored. */
+  FORGE_FREE_MODELS: csv.default(['tinfoil/gpt-oss-120b', 'tinfoil/gemma4-31b']),
+  /** Caps on one free question, in tokens. Input is estimated from the body size like any request. */
+  FORGE_FREE_MAX_INPUT_TOKENS: z.coerce.number().int().min(1).default(4000),
+  FORGE_FREE_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).default(1500),
+  /** A credit keyset is taken for this many days after the gateway first saw it (or until the mint's own final_expiry). */
+  FORGE_CREDIT_KEYSET_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  /** The daily faucet at /free. Needs FORGE_CREDIT_MINT. */
+  FORGE_FAUCET_ENABLED: bool.default(false),
+  /** Vouchers the faucet gives out per day (UTC), released in drips. */
+  FORGE_FAUCET_DAILY_VOUCHERS: z.coerce.number().int().min(1).max(1_000_000).default(1000),
+  FORGE_FAUCET_QUESTIONS: z.coerce.number().int().min(1).max(100).default(3),
+  /** Drips per day: 24 releases 1/24 of the day's budget each hour. */
+  FORGE_FAUCET_DRIPS_PER_DAY: z.coerce.number().int().min(1).max(1440).default(24),
+  /** Proof of work: leading zero bits of SHA-256 at the base difficulty, and the most it rises to. */
+  FORGE_FAUCET_POW_BITS: z.coerce.number().int().min(0).max(32).default(22),
+  FORGE_FAUCET_POW_MAX_BITS: z.coerce.number().int().min(0).max(32).default(28),
+  /** Claims per address per day, counted in memory only. 0 turns the limit off. */
+  FORGE_FAUCET_PER_ADDRESS: z.coerce.number().int().min(0).default(3),
+  /** How long a challenge may be worked on at the base difficulty. Doubled for each bit over the base, up to an hour. */
+  FORGE_FAUCET_CHALLENGE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
+
+  // ---------------------------------------------------------------- the Android app (docs/ANDROID.md)
+  /**
+   * The release APK that /download offers, with its SHA-256 shown on the page. Unset (or no file there):
+   * the page says the app is coming.
+   */
+  FORGE_APK_PATH: z.string().optional().or(z.literal('').transform(() => undefined)),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
@@ -188,10 +230,45 @@ const ModelSchema = z.object({
 });
 export type ModelConfig = z.infer<typeof ModelSchema>;
 
+/**
+ * An audio model: speech to text (POST /v1/audio/transcriptions) or text to speech (POST /v1/audio/speech).
+ * Priced per request: the supplier's cost per request, plus per second of audio in or per character out,
+ * all in USD before FORGE_MARKUP.
+ */
+const AudioModelSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['transcription', 'speech']),
+  supplier: z.string(),
+  upstream: z.string(),
+  name: z.string().optional(),
+  request_usd: z.number().nonnegative().default(0),
+  /** transcription: per second of audio sent. */
+  usd_per_second: z.number().nonnegative().default(0),
+  /** speech: per 1,000 characters of text sent. */
+  usd_per_kchar: z.number().nonnegative().default(0),
+  /** true once the cost above has been checked against the supplier's price list. */
+  price_verified: z.boolean().default(false),
+  /** transcription: the longest recording taken, in seconds. */
+  max_seconds: z.number().int().positive().max(3600).default(60),
+  /** speech: the most characters in one request. */
+  max_chars: z.number().int().positive().max(20_000).default(1000),
+  /**
+   * transcription: audio containers taken. WAV only: it states its own length, so max_seconds and the
+   * per-second price apply to the real length. An MP3's length cannot be read from its size.
+   */
+  formats: z.array(z.enum(['wav'])).default(['wav']),
+  /** speech: the voices the upstream offers; the first is the default. */
+  voices: z.array(z.string().min(1)).default([]),
+  /** Language codes the model handles well (shown to the app; not enforced). */
+  languages: z.array(z.string()).default([]),
+});
+export type AudioModelConfig = z.infer<typeof AudioModelSchema>;
+
 export const CatalogSchema = z
   .object({
     suppliers: z.record(z.string(), SupplierSchema),
     models: z.array(ModelSchema).min(1),
+    audio: z.array(AudioModelSchema).default([]),
   })
   .superRefine((c, ctx) => {
     const ids = new Set<string>();
@@ -199,6 +276,12 @@ export const CatalogSchema = z
       if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });
       ids.add(m.id);
       if (!c.suppliers[m.supplier]) ctx.addIssue({ code: 'custom', message: `model ${m.id}: unknown supplier ${m.supplier}` });
+    }
+    for (const m of c.audio) {
+      if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });
+      ids.add(m.id);
+      if (!c.suppliers[m.supplier]) ctx.addIssue({ code: 'custom', message: `audio model ${m.id}: unknown supplier ${m.supplier}` });
+      if (m.kind === 'speech' && m.voices.length === 0) ctx.addIssue({ code: 'custom', message: `audio model ${m.id}: speech needs at least one voice` });
     }
     for (const [id, s] of Object.entries(c.suppliers)) {
       if (s.pricing === 'flat' && !s.flat) ctx.addIssue({ code: 'custom', message: `supplier ${id}: flat pricing needs a flat schedule` });
@@ -210,6 +293,8 @@ export interface Config {
   env: Env;
   catalog: Catalog;
   trustedMints: string[];
+  /** The credit mint (normalized), when the free tier is on. */
+  creditMint?: string;
 }
 
 let mintAliases = new Map<string, string>();
@@ -224,6 +309,15 @@ export function setMintAliases(pairs: string[]): void {
       return [clean(alias), clean(main)];
     }),
   );
+}
+
+/**
+ * The alias addresses whose main address is one of these mints (all of them when no list is given).
+ * /v1/models lists them so a phone can tell that a note made under an alias is one the engine takes.
+ */
+export function mintAliasList(mainMints?: string[]): string[] {
+  const mains = mainMints && new Set(mainMints.map((m) => m.trim().replace(/\/+$/, '')));
+  return [...mintAliases].filter(([, main]) => !mains || mains.has(main)).map(([alias]) => alias);
 }
 
 export function normalizeMintUrl(url: string): string {
@@ -252,5 +346,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverr
   );
   const models = cat.data.models.filter((m) => !keyless.has(m.supplier));
   if (models.length === 0) throw new Error('no models left: set the API key of at least one supplier');
-  return { env, catalog: { ...cat.data, models }, trustedMints: env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl) };
+  const audio = cat.data.audio.filter((m) => !keyless.has(m.supplier));
+  const trustedMints = env.FORGE_TRUSTED_MINTS.map(normalizeMintUrl);
+  const creditMint = env.FORGE_CREDIT_MINT ? normalizeMintUrl(env.FORGE_CREDIT_MINT) : undefined;
+  if (creditMint && trustedMints.includes(creditMint)) throw new Error('FORGE_CREDIT_MINT must not be one of FORGE_TRUSTED_MINTS: credits are never money');
+  if (env.FORGE_FAUCET_ENABLED && !creditMint) throw new Error('FORGE_FAUCET_ENABLED needs FORGE_CREDIT_MINT');
+  if (env.FORGE_FAUCET_POW_MAX_BITS < env.FORGE_FAUCET_POW_BITS) throw new Error('FORGE_FAUCET_POW_MAX_BITS must be at least FORGE_FAUCET_POW_BITS');
+  return { env, catalog: { ...cat.data, models, audio }, trustedMints, creditMint };
 }

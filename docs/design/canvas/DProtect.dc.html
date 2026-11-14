@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Protect this phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F6F5F1; color: #14161A; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding: 20px; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<button style="min-height: 44px; padding: 0 4px; background: transparent; color: #5B6068; border: 0; font-family: Inter, sans-serif; font-size: 15px">Back</button>
+<button style="min-height: 44px; padding: 0 14px; background: #E3F4F0; color: #0E7C6B; border: 1px solid #9AD3C8; border-radius: 12px; font-family: Inter, sans-serif; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E7C6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"></path><path d="M16 9a4 4 0 0 1 0 6"></path></svg><span>Listen</span></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 28px; font-weight: 700; line-height: 1.2">If someone takes this phone</div>
+<div style="font-size: 15px; line-height: 1.5; color: #5B6068">Two choices now. Both can be changed later.</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="newpass" style="font-size: 15px; font-weight: 600">Lock the app with a passphrase</label>
+<input id="newpass" type="password" placeholder="Four or more words is best" style="height: 52px; box-sizing: border-box; background: #FFFFFF; color: #14161A; border: 1px solid #E3E0D8; border-radius: 16px; padding: 0 16px; font-family: Inter, sans-serif; font-size: 15px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<div style="font-size: 13px; line-height: 1.45; color: #5B6068">Forge cannot reset it. If you forget it, chats and money on this phone are gone.</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 15px; font-weight: 600">Delete chats automatically</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px">
+<button style="min-height: 48px; background: transparent; color: #14161A; border: 1px solid #E3E0D8; border-radius: 12px; font-family: Inter, sans-serif; font-size: 14px">On close</button>
+<button aria-pressed="true" style="min-height: 48px; background: #14161A; color: #FFFFFF; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14); border: 0; border-radius: 12px; font-family: Inter, sans-serif; font-size: 14px; font-weight: 600">1 day</button>
+<button style="min-height: 48px; background: transparent; color: #14161A; border: 1px solid #E3E0D8; border-radius: 12px; font-family: Inter, sans-serif; font-size: 14px">7 days</button>
+<button style="min-height: 48px; background: transparent; color: #14161A; border: 1px solid #E3E0D8; border-radius: 12px; font-family: Inter, sans-serif; font-size: 14px">Never</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #9AD3C8; background: #E3F4F0; border-radius: 18px; padding: 14px 16px; gap: 6px">
+<div style="font-size: 14px; font-weight: 600; color: #0E7C6B">Already on</div>
+<div style="font-size: 13px; line-height: 1.5; color: #14161A">Private models only. Your network address hidden from Forge. Photos and files cleaned before sending.</div>
+</div>
+<div style="flex: 1"></div>
+<button style="height: 56px; background: #14161A; color: #FFFFFF; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14); border: 0; border-radius: 16px; font-family: Inter, sans-serif; font-size: 16px; font-weight: 600">Continue</button>
+<button style="height: 48px; background: transparent; color: #5B6068; border: 0; font-family: Inter, sans-serif; font-size: 15px">Not now</button>
+<div style="text-align: center; font-size: 13px; color: #5B6068">Step 4 of 4</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

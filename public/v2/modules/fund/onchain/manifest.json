@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.onchain",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "On-chain"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -19,6 +19,16 @@ export const MINT_B = process.env.TEST_MINT_B ?? 'http://127.0.0.1:3339';
 /** The "foreign" mint for other-mint funding tests (input fees 100 ppk). */
 export const MINT_C = process.env.TEST_MINT_C ?? 'http://127.0.0.1:3340';
 export const BTC_USD = 100_000;
+/** The credit mint for the free tier tests (usd only, no input fees). */
+export const MINT_CREDIT = process.env.TEST_MINT_CREDIT ?? 'http://127.0.0.1:3341';
+
+export async function creditMintUp(): Promise<boolean> {
+  try {
+    return (await fetch(`${MINT_CREDIT}/v1/info`)).ok;
+  } catch {
+    return false;
+  }
+}
 
 export async function mintsUp(): Promise<boolean> {
   try {
@@ -71,7 +81,39 @@ export async function redeem(token: string, mint = MINT_A, unit: 'usd' | 'sat' =
 export const PRICE_IN = 100; // USD per million input tokens
 export const PRICE_OUT = 1000; // USD per million output tokens
 
-export function testCatalog(enclavePort = 1) {
+/** Audio prices in the test catalog (USD, before markup). */
+export const AUDIO_PRICES = { transcribeRequest: 0.01, perSecond: 0.001, speechRequest: 0.002, perKchar: 0.01 };
+
+/** Audio models for the tests: private (enclave tier) mock models, a failing one each, and a standard one. */
+export function testAudio() {
+  const t = (id: string, upstream: string, supplier = 'mockenclave') => ({
+    id,
+    kind: 'transcription',
+    supplier,
+    upstream,
+    request_usd: AUDIO_PRICES.transcribeRequest,
+    usd_per_second: AUDIO_PRICES.perSecond,
+    price_verified: true,
+    max_seconds: 30,
+    formats: ['wav'],
+    languages: ['en'],
+  });
+  const s = (id: string, upstream: string) => ({
+    id,
+    kind: 'speech',
+    supplier: 'mockenclave',
+    upstream,
+    request_usd: AUDIO_PRICES.speechRequest,
+    usd_per_kchar: AUDIO_PRICES.perKchar,
+    price_verified: true,
+    max_chars: 200,
+    voices: ['neutral_female', 'neutral_male'],
+    languages: ['en'],
+  });
+  return [t('mock-transcribe', 'mock-transcribe'), t('mock-transcribe-fail', 'mock-fail'), t('mock-transcribe-standard', 'mock-transcribe', 'mock'), s('mock-speech', 'mock-speech'), s('mock-speech-fail', 'mock-fail')];
+}
+
+export function testCatalog(enclavePort = 1, { audio = false }: { audio?: boolean } = {}) {
   const mock = { type: 'mock', tier: 'standard' } as const;
   const m = (id: string, supplier = 'mock', extra: object = {}) => ({
     id,
@@ -83,7 +125,7 @@ export function testCatalog(enclavePort = 1) {
     price_verified: true,
     ...extra,
   });
-  return {
+  const cat = {
     suppliers: {
       mock,
       mockflat: { ...mock, pricing: 'flat', flat: { buckets: [{ maxBytes: 1000, usd: 0.03 }, { maxBytes: 1_000_000, usd: 0.1 }], output_usd_per_mtok: 0 } },
@@ -108,7 +150,10 @@ export function testCatalog(enclavePort = 1) {
       { ...m('flat-echo', 'mockflat'), upstream: 'mock-echo' },
       { ...m('tinfoil/enc-model', 'tinfoil'), upstream: 'enc-model' },
     ],
+    ...(audio ? { audio: testAudio() } : {}),
   };
+  if (audio) (cat.suppliers as Record<string, object>).mockenclave = { ...mock, tier: 'enclave' };
+  return cat;
 }
 
 export interface Gateway {
@@ -126,6 +171,12 @@ export async function startGateway(
     faults?: WalletFaults;
     fundingFaults?: FundingFaults;
     recover?: boolean;
+    /** Adds the audio models (testAudio) and their private mock supplier. */
+    audio?: boolean;
+    /** Changes the test catalog before the gateway loads it. */
+    editCatalog?: (catalog: any) => void;
+    /** The faucet's clock (free tier tests). */
+    faucetNow?: () => number;
   } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
@@ -142,8 +193,16 @@ export async function startGateway(
     FORGE_FOREIGN_POLICY: 'any',
     ...opts.env,
   };
-  const config = loadConfig(env as NodeJS.ProcessEnv, testCatalog(opts.enclavePort));
-  const deps = buildDeps(config, { rateSources: [fixedRateSource('fixed', BTC_USD)], env: env as NodeJS.ProcessEnv, faults: opts.faults, fundingFaults: opts.fundingFaults });
+  const catalog = testCatalog(opts.enclavePort, { audio: opts.audio });
+  opts.editCatalog?.(catalog);
+  const config = loadConfig(env as NodeJS.ProcessEnv, catalog);
+  const deps = buildDeps(config, {
+    rateSources: [fixedRateSource('fixed', BTC_USD)],
+    env: env as NodeJS.ProcessEnv,
+    faults: opts.faults,
+    fundingFaults: opts.fundingFaults,
+    faucet: opts.faucetNow ? { now: opts.faucetNow } : undefined,
+  });
   if (opts.recover !== false) await startupRecovery(deps);
   const app = createApp(deps);
   const server: ServerType = await new Promise((resolve) => {

@@ -1,4 +1,7 @@
 # Local Cashu mints for the e2e suite. FakeWallet backends: quotes are paid automatically.
+# One project name for every checkout and worktree, so `pnpm mint:up` finds mints that are already
+# running instead of starting a second set on the same ports.
+name: forge-ai
 x-mint: &mint
   # Nutshell 0.22.1, pinned by digest (multi-arch index, checked 2026-11-13).
   image: cashubtc/nutshell:0.22.1@sha256:05b536e0e3d6beee75417ece319a3f89a687d34cfb3cc12c6b19d253104b450e
@@ -35,3 +38,12 @@ services:
       <<: *env
       MINT_INPUT_FEE_PPK: "100"
       MINT_MNEMONIC: "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"
+  # The credit mint for the free tier tests (docs/FREE-TIER.md): usd only, 1 credit = 1 cent, since
+  # Nutshell 0.22.1 takes only the units sat, msat, usd, eur, btc and auth (no custom unit).
+  mint-credit:
+    <<: *mint
+    ports: ["127.0.0.1:3341:3338"]
+    environment:
+      <<: *env
+      MINT_BACKEND_BOLT11_SAT: ""
+      MINT_MNEMONIC: "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"

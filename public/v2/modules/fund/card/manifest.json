@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.card",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Tap a card"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

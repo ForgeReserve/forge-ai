@@ -1,5 +1,9 @@
+import { silentWav } from '../audio.ts';
 import type { SupplierConfig } from '../config.ts';
-import type { ChatCall, Supplier } from './types.ts';
+import type { ChatCall, SpeechCall, Supplier, TranscribeCall } from './types.ts';
+
+/** What the mock transcription model always hears. */
+export const MOCK_TRANSCRIPT = 'What should I bring on Saturday?';
 
 /**
  * Deterministic in-process supplier for tests and local demos. Behaviour is chosen by the upstream model name:
@@ -9,6 +13,11 @@ import type { ChatCall, Supplier } from './types.ts';
  *  mock-fail      HTTP 500
  *  mock-flaky     HTTP 503 on every other call (retry tests)
  *  mock-think     streams 12 reasoning tokens (delta.reasoning_content) before a markdown answer
+ * Audio models, by upstream name:
+ *  mock-transcribe  answers {"text": MOCK_TRANSCRIPT} whatever the audio
+ *  mock-slow        transcription: the same, after 5 s, failing at once when the request is aborted
+ *  mock-speech      answers a WAV of silence, 50 ms per character (at most 30 s)
+ *  mock-fail        HTTP 500
  * It never inspects message content beyond its byte length.
  */
 export class MockSupplier implements Supplier {
@@ -77,6 +86,30 @@ export class MockSupplier implements Supplier {
     });
     return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
   }
+
+  async transcribe(call: TranscribeCall): Promise<Response> {
+    this.calls++;
+    if (call.model.upstream === 'mock-fail') return Response.json({ error: { message: 'mock failure', type: 'server_error' } }, { status: 500 });
+    if (call.model.upstream === 'mock-slow') await abortableDelay(5000, call.signal);
+    return Response.json({ text: MOCK_TRANSCRIPT });
+  }
+
+  async speech(call: SpeechCall): Promise<Response> {
+    this.calls++;
+    if (call.model.upstream === 'mock-fail') return Response.json({ error: { message: 'mock failure', type: 'server_error' } }, { status: 500 });
+    const wav = silentWav(Math.min(30, Math.max(0.2, [...call.input].length * 0.05)));
+    return new Response(wav as Uint8Array<ArrayBuffer>, { headers: { 'content-type': 'audio/wav' } });
+  }
+}
+
+/** Waits `ms`, or rejects as soon as `signal` aborts (as a real upstream fetch does). */
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abort = () => (clearTimeout(t), reject(new Error('aborted')));
+    const t = setTimeout(() => (signal.removeEventListener('abort', abort), resolve()), ms);
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+  });
 }
 
 const THINK_REASONING = ['The', ' user', ' asked', ' a', ' question.', ' I', ' will', ' answer', ' with', ' a', ' short', ' example.'];

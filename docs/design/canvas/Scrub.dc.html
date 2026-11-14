@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scrub before send</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0D10; color: #F1EFE9; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding: 20px; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: Inter, sans-serif; font-weight: 600; font-size: 22px">Check what leaves this phone</div>
+<div style="font-size: 14px; line-height: 1.45; color: #9A9DA3">Cleaned here, before anything is sent.</div>
+</div>
+<div style="height: 250px; border: 1px dashed #5B626B; border-radius: 14px; background: #171A22; position: relative; display: flex; align-items: center; justify-content: center">
+<div style="font-size: 13px; color: #9A9DA3">Photo preview</div>
+<div style="position: absolute; left: 44px; top: 40px; width: 64px; height: 64px; border: 2px solid #D4A544; border-radius: 8px; background: #2A2F3A"></div>
+<div style="position: absolute; left: 228px; top: 58px; width: 56px; height: 56px; border: 2px solid #D4A544; border-radius: 8px; background: #2A2F3A"></div>
+<div style="position: absolute; left: 120px; bottom: 34px; width: 150px; height: 22px; border: 2px solid #D4A544; border-radius: 6px; background: #2A2F3A"></div>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #2A2F3A; border-radius: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2A2F3A">
+<div style="font-size: 15px">Location and camera details</div>
+<div style="font-size: 13px; color: #3FCFB4">Removed</div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2A2F3A">
+<div style="font-size: 15px">2 faces</div>
+<button style="min-height: 44px; padding: 0 12px; background: transparent; color: #D4A544; border: 1px solid #D4A544; border-radius: 10px; font-family: Inter, sans-serif; font-size: 13px">Blurred. Undo</button>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2A2F3A">
+<div style="font-size: 15px">1 phone number</div>
+<button style="min-height: 44px; padding: 0 12px; background: transparent; color: #D4A544; border: 1px solid #D4A544; border-radius: 10px; font-family: Inter, sans-serif; font-size: 13px">Covered. Undo</button>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px">
+<div style="font-size: 15px">Original file</div>
+<div style="font-size: 13px; color: #3FCFB4">Stays on this phone</div>
+</div>
+</div>
+<div style="flex: 1"></div>
+<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 14px">
+<div style="color: #9A9DA3">1 page image to a vision model</div>
+<div style="font-family: 'JetBrains Mono', monospace; color: #D4A544">under $0.01</div>
+</div>
+<div style="display: flex; gap: 10px">
+<button style="flex: 1; height: 52px; background: transparent; color: #F1EFE9; border: 1px solid #5B626B; border-radius: 12px; font-family: Inter, sans-serif; font-size: 15px; font-weight: 500">Cover more</button>
+<button style="flex: 2; height: 52px; background: #F1EFE9; color: #0B0D10; border: 0; border-radius: 12px; font-family: Inter, sans-serif; font-size: 15px; font-weight: 600">Send private</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

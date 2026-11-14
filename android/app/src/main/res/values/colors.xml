@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="forge_bg">#F6F5F1</color>
+    <color name="forge_ink">#14161A</color>
+    <color name="forge_teal">#0E7C6B</color>
+    <!-- The launcher icon's tile, as in public/icons/maskable-512.png. -->
+    <color name="forge_icon_tile">#0B0D10</color>
+    <color name="forge_icon_mark">#F2F0EA</color>
+</resources>

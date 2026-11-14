@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paste a link</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #D9D6CD; color: #14161A; font-family: Inter, sans-serif; display: flex; flex-direction: column; padding-top: 24px">
+<div style="flex: 1; background: #F6F5F1; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; padding: 10px 16px 20px; gap: 14px">
+<div style="align-self: center; width: 44px; height: 5px; border-radius: 3px; background: #C9C6BE"></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 0 4px">
+<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Read a link</div>
+<div style="font-size: 14px; line-height: 1.45; color: #5B6068">The page is fetched for you inside the enclave. The site never sees your phone or your address.</div>
+</div>
+<label for="url" style="font-size: 13px; color: #5B6068; padding: 0 4px">Link</label>
+<input id="url" type="url" value="https://example.org/notice" style="height: 52px; box-sizing: border-box; background: #FFFFFF; color: #14161A; border: 1px solid #E3E0D8; border-radius: 16px; padding: 0 16px; font-family: Inter, sans-serif; font-size: 15px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<div style="display: flex; flex-direction: column; border: 1px solid #E3E0D8; border-radius: 18px">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #E3E0D8; font-size: 15px">
+<div>Tracking codes in the link</div>
+<div style="color: #0E7C6B">Removed</div>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #E3E0D8; font-size: 15px">
+<div>What the site sees</div>
+<div style="color: #0E7C6B">An anonymous visitor</div>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; font-size: 15px">
+<div>What Forge sees</div>
+<div style="color: #0E7C6B">Nothing readable</div>
+</div>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E3E0D8; border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08)">
+<div style="font-size: 12px; color: #5B6068; letter-spacing: 0.04em; text-transform: uppercase">Page text, about 900 words</div>
+<div style="font-size: 14px; line-height: 1.5; color: #14161A">Public notice. Gatherings of more than 50 people in the square are not permitted on Saturday between...</div>
+</div>
+<div style="border: 1px solid #D9B45A; border-radius: 16px; padding: 12px 16px; font-size: 13px; line-height: 1.45; color: #5B6068">Pages behind a login cannot be read this way. Share the page text or a screenshot instead.</div>
+<div style="flex: 1"></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px; padding: 0 4px">
+<div style="color: #5B6068">Fetch and read</div>
+<div style="color: #8A6410">under $0.01</div>
+</div>
+<button style="height: 56px; background: #14161A; color: #FFFFFF; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14); border: 0; border-radius: 16px; font-family: Inter, sans-serif; font-size: 16px; font-weight: 600">Add to message</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
