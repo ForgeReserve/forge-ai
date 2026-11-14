@@ -22,10 +22,17 @@ export function create({ speaker, phonon }) {
       let out = null;
       const done = (async () => {
         onState('loading');
+        // {loaded, total, fraction, phase}: bytes of the whole load (the model and the voice), then
+        // 'ready' once they are all here and the model is being set up.
+        let last = { loaded: 0, total: 0, fraction: 0 };
         const tts = await phonon.load({
-          onProgress: ({ file, loaded, total }) => file === 'weights' && total && onProgress(loaded / total),
+          onMeter: (m) => {
+            last = m;
+            onProgress({ ...m, phase: m.fraction >= 1 ? 'ready' : 'download' });
+          },
         });
         if (ctrl.signal.aborted) throw aborted();
+        onProgress({ ...last, fraction: 1, phase: 'ready' });
         for (const piece of pieces) {
           const stream = tts.stream(piece, { signal: ctrl.signal });
           for await (const pcm of stream) {

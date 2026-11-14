@@ -25,7 +25,7 @@ import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
-import { createPhonon } from './core/phonon.js';
+import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
@@ -985,6 +985,7 @@ const talk = createTalk({
   refresh: () => refreshBalance(),
   errorText: (err) => errorText(err, S.unit),
   askDownload: (bytes) => askVoiceDownload(bytes),
+  showDownload: (bytes) => showVoiceDownload(bytes),
   unlockAudio: () => adapters.speaker.unlock?.(),
 });
 
@@ -1014,6 +1015,54 @@ function askVoiceDownload(bytes) {
     document.body.append(dlg);
     dlg.showModal();
   });
+}
+
+/**
+ * The natural voice's first download, once the person said Download: a bar with MB done of MB in all and
+ * the percent, then the phase in words, until the voice starts reading. A failed download says so here,
+ * with Try again. Hide leaves it downloading (Listen shows the percent).
+ */
+function showVoiceDownload(bytes = 0) {
+  let open = true;
+  const meter = ui.meterBar({ id: 'voiceMeter', label: t('voiceDl.label') });
+  const error = ui.el('p', { class: 'msg err', id: 'voiceDlError', role: 'alert', hidden: true });
+  const hide = ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlHide', text: t('voiceDl.hide'), onclick: () => close() });
+  const retry = ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlRetry', text: t('dl.retry'), hidden: true });
+  const dlg = ui.el('dialog', { class: 'float-card voice-dl', id: 'voiceProgress', 'aria-labelledby': 'voiceProgTitle' }, ui.el('h2', { id: 'voiceProgTitle', text: t('voiceDl.getting') }), meter, error, ui.el('div', { class: 'row-btns' }, hide, retry));
+  const close = () => {
+    if (!open) return;
+    open = false;
+    dlg.close();
+    dlg.remove();
+  };
+  dlg.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    close();
+  });
+  meter.set({ fraction: 0, text: t('dl.amount', phononMeter({ total: bytes })), phase: t('dl.downloading') });
+  document.body.append(dlg);
+  dlg.showModal();
+  return {
+    progress(p) {
+      if (!open) return;
+      const n = phononMeter(p);
+      meter.set({ fraction: p.fraction, text: t('dl.amount', n), phase: t(p.phase === 'ready' ? 'dl.ready' : 'dl.downloading') });
+    },
+    fail(message, again) {
+      if (!open) return false;
+      error.textContent = t('dl.failed', { message });
+      error.hidden = false;
+      meter.set({ phase: '' });
+      hide.textContent = t('voiceDl.close');
+      retry.hidden = false;
+      retry.onclick = () => {
+        close();
+        again();
+      };
+      return true;
+    },
+    close,
+  };
 }
 
 const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;

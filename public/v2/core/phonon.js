@@ -30,6 +30,62 @@ export function modelSpec(index, base = PHONON_BASE, voice = null) {
   return { weights: { q8: url(index?.model?.weights) }, tokenizer: url(index?.model?.tokenizer), config: url(index?.model?.config), voices, defaultVoice: pick };
 }
 
+/**
+ * The files one load fetches, as phonon-tts names them in its progress reports, with the size the index
+ * gives each: the weights, the tokenizer, the config and the voice it starts with.
+ */
+export function loadFiles(index, voice = null) {
+  const size = (p) => index?.files?.find((f) => f.path === p)?.size ?? 0;
+  const v = (index?.voices ?? []).find((x) => x.name === voice) ?? (index?.voices ?? []).find((x) => x.name === index?.defaultVoice) ?? index?.voices?.[0];
+  const files = [
+    { file: 'weights', bytes: size(index?.model?.weights) },
+    { file: 'tokenizer', bytes: size(index?.model?.tokenizer) },
+    { file: 'config', bytes: size(index?.model?.config) },
+  ];
+  if (v) files.push({ file: `voice:${v.name}`, bytes: v.size ?? size(v.file) });
+  return files;
+}
+
+/**
+ * Adds up phonon-tts's progress reports ({file, loaded, total, cached}, one stream per file) into one
+ * download: update(report) returns {loaded, total, fraction, fetched}. total is every byte the load
+ * reads (the server's length when it sends one, else the index's size); fraction runs 0 to 1; fetched
+ * is true once any byte came over the network rather than from the phone's cache.
+ */
+export function createMeter(index, voice = null) {
+  const expected = new Map(loadFiles(index, voice).map((f) => [f.file, f.bytes]));
+  const got = new Map();
+  let fetched = false;
+  const view = () => {
+    let loaded = 0;
+    let total = 0;
+    for (const [file, bytes] of expected) {
+      const g = got.get(file);
+      const size = g?.total || bytes;
+      total += size;
+      loaded += Math.min(g?.loaded ?? 0, size);
+    }
+    return { loaded, total, fraction: total > 0 ? loaded / total : 0, fetched };
+  };
+  return {
+    update(p) {
+      if (p?.file) {
+        if (!expected.has(p.file)) expected.set(p.file, p.total ?? 0);
+        got.set(p.file, { loaded: Number(p.loaded) || 0, total: Number(p.total) || 0 });
+        if (p.cached === false) fetched = true;
+      }
+      return view();
+    },
+    view,
+  };
+}
+
+/** A meter's numbers as people read them: MB done and in all (one decimal) and a whole percent. */
+export function meterNumbers({ loaded = 0, total = 0, fraction = 0 } = {}) {
+  const mb = (x) => (Math.floor((x / 1e6) * 10) / 10).toFixed(1);
+  return { done: mb(loaded), total: mb(total), pct: Math.max(0, Math.min(100, Math.floor(fraction * 100))) };
+}
+
 /** Whether every model URL is on this app's own origin. */
 export function sameOrigin(spec, origin) {
   const urls = [spec.weights.q8, spec.tokenizer, spec.config, ...Object.values(spec.voices)];
@@ -77,7 +133,8 @@ export function soundCheck(chunks) {
  * - base: the model folder; native: true in the Android app, where the files are in the APK (nothing
  *   to download, and nothing is copied into the browser's cache);
  * - importLib: loads phonon-tts (tests pass a fake); fetch, caches: the browser's.
- * load() takes {device: 'cpu' | 'webgpu', threads: 'auto' | n, onProgress} and gives the PhononTTS.
+ * load() takes {device: 'cpu' | 'webgpu', threads: 'auto' | n, voice, onProgress, onMeter} and gives the
+ * PhononTTS. onProgress gets phonon-tts's own reports; onMeter gets them added up (createMeter).
  */
 export function createPhonon({ base = PHONON_BASE, native = false, importLib = () => import('../vendor/phonon-tts/index.js'), fetch: f = (...a) => globalThis.fetch(...a), caches: cs = globalThis.caches, env = globalThis } = {}) {
   let index = null; // the build's index.json, once read
@@ -112,7 +169,7 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
       return { needed: !have, bytes: have ? 0 : index.firstBytes ?? 0 };
     },
     /** The model, loaded the first time (from the cache when it is there). */
-    load({ device = 'cpu', threads = 'auto', voice = null, onProgress } = {}) {
+    load({ device = 'cpu', threads = 'auto', voice = null, onProgress, onMeter } = {}) {
       const key = `${device}|${threads}`;
       if (!loaded.has(key)) {
         const p = (async () => {
@@ -120,9 +177,14 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
           if (!index) throw new Error('The voice files are not on this app.');
           const lib = await importLib();
           const spec = modelSpec(index, base, voice);
+          const meter = createMeter(index, spec.defaultVoice);
+          const report = (p) => {
+            onProgress?.(p);
+            onMeter?.(meter.update(p));
+          };
           // Files inside the Android app are read straight from the APK: a copy in the cache would only
           // take the same space twice.
-          return lib.PhononTTS.load({ lang: 'en', model: spec, cache: !native, device, threads, onProgress });
+          return lib.PhononTTS.load({ lang: 'en', model: spec, cache: !native, device, threads, onProgress: report });
         })();
         loaded.set(key, p);
         p.catch(() => loaded.delete(key));

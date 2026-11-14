@@ -331,3 +331,94 @@ describe('sound that may only start inside a tap, as on iPhone Safari', () => {
     await ctx.close();
   }, 150_000);
 });
+
+/** Records every value the bar with this id shows, and every phase line under it, from now on. */
+async function watchMeter(page: Page, id: string) {
+  await page.evaluate((id) => {
+    const w = window as any;
+    w.__meter = { values: [] as number[], phases: [] as string[], amounts: [] as string[] };
+    new MutationObserver(() => {
+      const m = document.getElementById(id);
+      if (!m) return;
+      const v = Number(m.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow'));
+      if (w.__meter.values.at(-1) !== v) w.__meter.values.push(v);
+      const ph = m.querySelector('.meter-phase')?.textContent ?? '';
+      if (ph && w.__meter.phases.at(-1) !== ph) w.__meter.phases.push(ph);
+      const am = m.querySelector('.meter-amount')?.textContent ?? '';
+      if (am && w.__meter.amounts.at(-1) !== am) w.__meter.amounts.push(am);
+    }).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  }, id);
+}
+const meterSeen = (page: Page) => page.evaluate(() => (window as any).__meter as { values: number[]; phases: string[]; amounts: string[] });
+
+describe('the natural voice download, shown as it goes', () => {
+  it('the voice lab shows MB and percent up to 100%, then the phases; a failed download says so with Try again', async () => {
+    const { ctx, page, errors } = await phone();
+    await strictAudio(ctx);
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.check('#labPlay');
+
+    // The weights fail to arrive: the lab says the download stopped, with Try again.
+    await ctx.route('**/model.q8.gguf', (r) => r.abort('internetdisconnected'));
+    await page.click('#labRun');
+    await page.waitForSelector('#labRetry:not([hidden])', { timeout: 60_000 });
+    expect(await page.textContent('#labError')).toMatch(/^The download stopped\. Check the connection and try again\./);
+    expect(await page.isVisible('#labMeter')).toBe(true);
+    await ctx.unroute('**/model.q8.gguf');
+
+    // Try again, with the connection back: the bar runs to 100%, then Getting ready and the lines.
+    await watchMeter(page, 'labMeter');
+    await page.click('#labRetry');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    expect(await page.isVisible('#labRetry')).toBe(false);
+    const m = await meterSeen(page);
+    expect(m.values.some((v) => v > 0 && v < 100)).toBe(true);
+    expect(Math.max(...m.values)).toBe(100);
+    expect(m.amounts.at(-1)).toMatch(/^6\d\.\d of 6\d\.\d MB, 100%$/);
+    expect(m.amounts.some((a) => /^\d+\.\d of 6\d\.\d MB, ([1-9]|[1-9]\d)%$/.test(a))).toBe(true);
+    expect(m.phases).toEqual(expect.arrayContaining(['Downloading', 'Getting ready', 'Reading line 1 of 3', 'Reading line 3 of 3']));
+    expect(m.phases.indexOf('Downloading')).toBeLessThan(m.phases.indexOf('Getting ready'));
+    expect(await heard(page)).toBeGreaterThan(10);
+    expect(errors.filter((e) => !/ERR_INTERNET_DISCONNECTED|Failed to fetch|net::/.test(e))).toEqual([]);
+    await ctx.close();
+  }, 200_000);
+
+  it('after Download, the app shows the download with a bar; a failure offers Try again, which reads the answer', async () => {
+    const { ctx, page, errors } = await phone();
+    await strictAudio(ctx);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await ctx.route('**/model.q8.gguf', (r) => r.abort('internetdisconnected'));
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('#voiceDownload', { timeout: 20_000 });
+    await page.click('#voiceDlYes');
+    await page.waitForSelector('#voiceProgress');
+    expect(await page.getAttribute('#voiceMeter [role=progressbar]', 'aria-label')).toBe('Natural voice download');
+    await page.waitForSelector('#voiceDlRetry:not([hidden])', { timeout: 60_000 });
+    expect(await page.textContent('#voiceDlError')).toMatch(/^The download stopped\./);
+    expect(await heard(page)).toBe(0);
+    await ctx.unroute('**/model.q8.gguf');
+
+    await watchMeter(page, 'voiceMeter');
+    await page.click('#voiceDlRetry');
+    // No second question: the download shows at once, and the answer is read when it is in.
+    expect(await page.isVisible('#voiceDownload')).toBe(false);
+    await page.waitForSelector('#voiceProgress');
+    await expect.poll(() => heard(page), { timeout: 60_000 }).toBeGreaterThan(5);
+    // The window closes once the voice starts reading.
+    await page.waitForSelector('#voiceProgress', { state: 'detached', timeout: 10_000 });
+    const m = await meterSeen(page);
+    expect(m.values.some((v) => v > 0 && v < 100)).toBe(true);
+    expect(Math.max(...m.values)).toBe(100);
+    expect(m.phases).toEqual(expect.arrayContaining(['Downloading', 'Getting ready']));
+    expect(m.amounts.at(-1)).toMatch(/^6\d\.\d of 6\d\.\d MB, 100%$/);
+    expect(errors.filter((e) => !/ERR_INTERNET_DISCONNECTED|Failed to fetch|net::/.test(e))).toEqual([]);
+    await ctx.close();
+  }, 200_000);
+});

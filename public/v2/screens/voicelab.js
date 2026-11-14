@@ -3,8 +3,8 @@
 // sound, the real-time factor, gaps a listener would hear, and broken sound (NaN or silence), plus the
 // model's load time and the memory the browser reports. The results are saved as a JSON file the owner
 // sends on. Nothing here is sent anywhere.
-import { soundCheck } from '../core/phonon.js';
-import { backHeader, copy, el, toast } from '../core/ui.js';
+import { meterNumbers, soundCheck } from '../core/phonon.js';
+import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
 import { CANDIDATES, CORPUS, report, summarize, virtualUnderruns } from '../core/voicelab.js';
 
 const now = () => performance.now();
@@ -45,6 +45,11 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const runBtn = el('button', { type: 'button', class: 'btn primary block', id: 'labRun', text: t('lab.run') });
   const stopBtn = el('button', { type: 'button', class: 'btn block', id: 'labStop', text: t('lab.stop'), hidden: true });
   const status = el('p', { class: 'hint', id: 'labStatus', role: 'status' });
+  // The download, then the phases in words: Downloading, Getting ready, Reading line 3 of 10.
+  const meter = meterBar({ id: 'labMeter', label: t('voiceDl.label') });
+  meter.hidden = true;
+  const errorLine = el('p', { class: 'hint lab-error', id: 'labError', role: 'alert', hidden: true });
+  const retryBtn = el('button', { type: 'button', class: 'btn', id: 'labRetry', text: t('dl.retry'), hidden: true });
   const blockedNote = el('p', { class: 'hint lab-error', id: 'labBlocked', role: 'alert', hidden: true, text: t('lab.blocked') });
   const table = el('div', { class: 'lab-results', id: 'labResults' });
   const saveBtn = el('button', { type: 'button', class: 'btn', id: 'labSave', text: t('lab.save'), hidden: true });
@@ -85,12 +90,23 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     await phonon.unload(opts);
     let tts;
     let downloaded = false;
+    const amount = (m) => t('dl.amount', meterNumbers(m));
     try {
       status.textContent = t('lab.loading', { name: t(`lab.c.${c.id}`) });
+      meter.hidden = false;
+      meter.set({ fraction: 0, text: amount({ total: phonon.index()?.firstBytes ?? 0 }), phase: t('dl.downloading') });
       let t0 = now();
-      tts = await phonon.load({ ...opts, onProgress: (p) => p.cached === false && (downloaded = true) });
+      tts = await phonon.load({
+        ...opts,
+        onProgress: (p) => p.cached === false && (downloaded = true),
+        onMeter: (m) => meter.set({ fraction: m.fraction, text: amount(m), phase: t(m.fraction >= 1 ? 'dl.ready' : 'dl.downloading') }),
+      });
       out.loadColdMs = Math.round(now() - t0);
       out.downloaded = downloaded;
+      meter.set({ fraction: 1, phase: t('dl.ready') });
+      // phonon-tts keeps a download in the cache once the model has it, without waiting: give it a
+      // moment, so the second load reads from the phone rather than downloading it all again.
+      if (downloaded) await inCache(30_000);
       await phonon.unload(opts);
       t0 = now();
       tts = await phonon.load(opts);
@@ -108,8 +124,9 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       out.audioBlocked = true;
       blockedNote.hidden = false;
     }
-    for (const item of lines) {
+    for (const [i, item] of lines.entries()) {
       if (signal.aborted) break;
+      meter.set({ phase: t('dl.reading', { n: i + 1, total: lines.length }) });
       const s0 = now();
       const arrivals = [];
       const durations = [];
@@ -209,11 +226,22 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     table.replaceChildren(el('table', {}, el('thead', {}, head), el('tbody', {}, ...rows)), el('p', { class: 'hint', text: t('lab.legend') }));
   }
 
-  runBtn.addEventListener('click', async () => {
+  /** Resolves once the model is in the phone's cache (phonon.download says nothing is needed), or after ms. */
+  async function inCache(ms) {
+    const end = now() + ms;
+    while (now() < end) {
+      if (!(await phonon.download().catch(() => ({ needed: false }))).needed) return true;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  }
+
+  async function run() {
     // First, before any await: iPhone Safari starts sound only inside the tap itself.
     speaker.unlock?.();
     if (ctrl) return;
     blockedNote.hidden = true;
+    errorLine.hidden = retryBtn.hidden = true;
     ctrl = new AbortController();
     const signal = ctrl.signal;
     runBtn.hidden = true;
@@ -228,14 +256,26 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       const onRow = (n) => (status.textContent = t('lab.progress', { done: n, total: lines.length, name: t(`lab.c.${c.id}`) }));
       done.push(c.engine === 'phonon' ? await runPhonon(c, voice, signal, onRow) : await runPhoneVoice(signal, onRow));
       draw(done);
+      // A failed load says why at once, with Try again, rather than only in the table at the end.
+      const failed = done.at(-1);
+      if (failed.error && c.engine === 'phonon' && !signal.aborted) {
+        errorLine.textContent = t('dl.failed', { message: failed.error });
+        errorLine.hidden = retryBtn.hidden = false;
+        meter.set({ phase: '' });
+        // The other ways read the same files: stop here, and Try again starts the run over.
+        break;
+      }
     }
+    if (errorLine.hidden) meter.hidden = true;
     result = report({ env, voice, candidates: done });
-    status.textContent = signal.aborted ? t('lab.stopped') : t('lab.done');
+    status.textContent = signal.aborted ? t('lab.stopped') : errorLine.hidden ? t('lab.done') : t('lab.notDone');
     ctrl = null;
     runBtn.hidden = false;
     stopBtn.hidden = true;
     saveBtn.hidden = copyBtn.hidden = false;
-  });
+  }
+  runBtn.addEventListener('click', run);
+  retryBtn.addEventListener('click', run);
   stopBtn.addEventListener('click', () => ctrl?.abort());
   saveBtn.addEventListener('click', () => {
     if (!result) return;
@@ -269,6 +309,9 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       runBtn,
       stopBtn,
       status,
+      meter,
+      errorLine,
+      retryBtn,
       blockedNote,
       table,
       el('div', { class: 'row-btns' }, saveBtn, copyBtn),

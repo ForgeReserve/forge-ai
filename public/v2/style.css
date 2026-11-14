@@ -175,6 +175,12 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .held-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar { height: 5px; border-radius: 3px; background: var(--bar-track); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--memory); border-radius: 3px; }
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter .meter-bar { height: 8px; border-radius: 4px; }
+.meter .meter-bar > span { background: var(--gold); border-radius: 4px; transition: width 120ms linear; }
+.meter p { margin: 0; font-size: 14px; }
+.meter .meter-amount { color: var(--ink); font-variant-numeric: tabular-nums; }
+.meter .meter-phase { color: var(--text-2); }
 .vault-box { display: flex; flex-direction: column; gap: 10px; }
 .vault-row { padding: 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--gold-callout); display: flex; flex-direction: column; gap: 8px; }
 .vault-row.refused { border-color: var(--danger); }

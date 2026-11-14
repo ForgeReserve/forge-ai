@@ -159,6 +159,38 @@ function engine({ index = INDEX as any, native = false, cached = false, lib = fa
   return { ph: P.createPhonon({ base: BASE, native, importLib: async () => lib, fetch, caches, env }), fetched };
 }
 
+describe('the download meter', () => {
+  const size = (p: string) => LOCK.files.find((f) => f.path === p)!.size;
+  it('adds up phonon-tts reports per file into one download of the first-use size', () => {
+    const m = P.createMeter(INDEX);
+    expect(m.view()).toEqual({ loaded: 0, total: INDEX.firstBytes, fraction: 0, fetched: false });
+    const w = size(LOCK.model.weights);
+    let v = m.update({ file: 'weights', loaded: w / 2, total: w, cached: false });
+    expect(v.loaded).toBe(w / 2);
+    expect(v.total).toBe(INDEX.firstBytes);
+    expect(v.fetched).toBe(true);
+    // A file from the cache counts as done at once; a report without a length uses the index's size.
+    m.update({ file: 'config', loaded: size(LOCK.model.config), total: size(LOCK.model.config), cached: true });
+    m.update({ file: 'tokenizer', loaded: 1000, total: null, cached: false });
+    m.update({ file: 'weights', loaded: w, total: w, cached: false });
+    m.update({ file: 'tokenizer', loaded: size(LOCK.model.tokenizer), total: null, cached: false });
+    v = m.update({ file: `voice:${LOCK.defaultVoice}`, loaded: 256136, total: 256136, cached: false });
+    expect(v).toEqual({ loaded: INDEX.firstBytes, total: INDEX.firstBytes, fraction: 1, fetched: true });
+  });
+
+  it('counts the voice it starts with, not the default, when another is picked', () => {
+    const files = P.loadFiles(INDEX, 'Bryony').map((f: any) => f.file);
+    expect(files).toEqual(['weights', 'tokenizer', 'config', 'voice:Bryony']);
+    expect(P.loadFiles(INDEX).at(-1).file).toBe(`voice:${LOCK.defaultVoice}`);
+  });
+
+  it('reads as MB done of MB in all and a whole percent', () => {
+    expect(P.meterNumbers({ loaded: 12_345_678, total: 65_123_456, fraction: 12_345_678 / 65_123_456 })).toEqual({ done: '12.3', total: '65.1', pct: 18 });
+    expect(P.meterNumbers({ loaded: 65e6, total: 65e6, fraction: 1 })).toEqual({ done: '65.0', total: '65.0', pct: 100 });
+    expect(P.meterNumbers()).toEqual({ done: '0.0', total: '0.0', pct: 0 });
+  });
+});
+
 describe('the phone Phonon engine', () => {
   it('offers the voice only once the build put its files here', async () => {
     const none = engine({ index: null });
@@ -227,11 +259,15 @@ describe('voice out with the natural voice', () => {
     const m = MOD.create({ speaker, phonon: ph });
     expect([m.id, m.available(), m.private(), m.price(), m.cached()]).toEqual(['phonon', true, true, 0, true]);
     const states: string[] = [];
-    const progress: number[] = [];
-    const r = await m.speak(['First piece.', 'Second piece.'], { onState: (s: string) => states.push(s), onProgress: (f: number) => progress.push(f) }).done;
+    const progress: any[] = [];
+    const r = await m.speak(['First piece.', 'Second piece.'], { onState: (s: string) => states.push(s), onProgress: (p: any) => progress.push(p) }).done;
     expect(r).toEqual({ chargedMsub: 0 });
     expect(states).toEqual(['loading', 'playing']);
-    expect(progress).toEqual([0.5]);
+    // The whole load (model and voice) as one download, then Getting ready once it is all here.
+    expect(progress.map((p) => p.phase)).toEqual(['download', 'ready']);
+    expect(progress[0].loaded).toBe(50);
+    expect(progress[0].total).toBe(INDEX.firstBytes - LOCK.files.find((f) => f.path === LOCK.model.weights)!.size + 100);
+    expect(progress[1].fraction).toBe(1);
     expect(speaker.rate).toBe(24000);
     expect(speaker.pushed).toHaveLength(4);
     expect(speaker.ended).toBe(true);
@@ -383,6 +419,60 @@ describe('the one-time download question', () => {
     expect(calls).toEqual(['unlock']);
     ctl.up();
     expect(calls).toEqual(['unlock', 'unlock']);
+  });
+
+  it('shows the download it asked for until the voice reads; a failure offers Try again, which does not ask twice', async () => {
+    const asked: number[] = [];
+    const views: any[] = [];
+    let fail = true;
+    const S: any = {};
+    const ctl = CTL.createTalk({
+      store: { S, set: (p: object) => Object.assign(S, p) },
+      t: (k: string) => k,
+      ui: { toast() {} },
+      nav() {},
+      haptics: { pulse() {} },
+      voiceIn: () => null,
+      voiceOut: () => ({
+        id: 'phonon',
+        pieceSize: () => 1500,
+        download: async () => ({ needed: true, bytes: 65e6 }),
+        speak: (_: string[], { onProgress, onState }: any) => {
+          setTimeout(() => onProgress({ loaded: 10, total: 100, fraction: 0.1, phase: 'download' }), 0);
+          const later = new Promise((r) => setTimeout(r, 5));
+          const done = later.then(() => (fail ? Promise.reject(new Error('Failed to fetch')) : onState('playing')));
+          return { done, stop() {} };
+        },
+      }),
+      blocker: () => null,
+      ask: async () => {},
+      refresh() {},
+      errorText: () => 'error',
+      askDownload: async (bytes: number) => (asked.push(bytes), true),
+      showDownload: (bytes: number) => {
+        const v: any = { bytes, progress: [] as any[], closed: false, failed: null, retry: null };
+        v.progress = (p: any) => v.progress.list.push(p);
+        v.progress.list = [];
+        v.close = () => (v.closed = true);
+        v.fail = (m: string, again: () => void) => ((v.failed = m), (v.retry = again), true);
+        views.push(v);
+        return v;
+      },
+    });
+    ctl.speak(msg);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(asked).toEqual([65e6]);
+    expect(views).toHaveLength(1);
+    expect(views[0].bytes).toBe(65e6);
+    expect(views[0].progress.list[0]).toMatchObject({ fraction: 0.1, phase: 'download' });
+    expect(views[0].failed).toBe('Failed to fetch');
+    expect(views[0].closed).toBe(false);
+    fail = false;
+    views[0].retry();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(asked).toHaveLength(1); // Try again does not ask again
+    expect(views).toHaveLength(2);
+    expect(views[1].closed).toBe(true); // closed once the voice started reading
   });
 
   it('a blocked sound asks for a tap on Listen', async () => {
