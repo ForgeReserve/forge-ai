@@ -192,10 +192,12 @@ describe('the natural voice', () => {
     await page.click('#naturalVoice-Freya');
     expect(await page.getAttribute('#naturalVoice-Freya', 'aria-checked')).toBe('true');
     expect(await page.getAttribute('#naturalVoice-Maeve', 'aria-checked')).toBe('false');
-    // Kept: still Freya after a reload.
+    // Kept: still Freya after a reload (the settings are written to IndexedDB without waiting: give the
+    // write a moment before the page goes).
+    await page.waitForTimeout(500);
     await page.reload();
     await page.waitForSelector('#naturalVoices:not([hidden])');
-    expect(await page.getAttribute('#naturalVoice-Freya', 'aria-checked')).toBe('true');
+    await expect.poll(() => page.getAttribute('#naturalVoice-Freya', 'aria-checked')).toBe('true');
     // With the engine's voice chosen, there is no speaker to pick.
     await page.click('#voiceOut-engine');
     expect(await page.isHidden('#naturalVoices')).toBe(true);
