@@ -40,7 +40,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 The v2 app at `/v2/` keeps, on the phone only:
 
 - **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
-- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved) in `localStorage`, plus the last model list and look.
+- **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved) in `localStorage`, plus the last model list and look, and a mark that the first run was seen (`forge2.firstRun`). The invite code typed on the first run's Welcome step is held in the page's memory only, never stored.
 - **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
 - **A photo shared in from another app**, for a moment: the service worker keeps it in its own cache (`forge2-share`) until the Share unseen screen opens and takes it, then deletes that cache. Opened any other way, the app deletes an old one it finds. A photo picked or taken inside the app is never stored.
 
