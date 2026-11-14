@@ -14,6 +14,7 @@ import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
+import { SHARE_CACHE } from './core/photo.js';
 import { estimate, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { createTalk } from './core/talkctl.js';
@@ -29,6 +30,7 @@ import { settlePendingForeign } from './modules/fund/kit.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
 import { historyScreen } from './screens/history.js';
+import { photoScreen } from './screens/photo.js';
 import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
 import { typeScreen } from './screens/type.js';
@@ -598,6 +600,22 @@ async function attach(files, want) {
   store.set({});
 }
 
+/**
+ * Share unseen, Ask about it: the protected photo (never the original) waits for the next question,
+ * like a photo added from Add. Then the Type screen opens, with the price before sending.
+ */
+async function attachPhoto(file) {
+  const model = pickModel(S.models, S.settings);
+  if (!model) return nav('model');
+  if (!model.capabilities?.vision) return ui.toast(t('add.noPhotos'), 3500);
+  if (S.pending.filter((a) => a.kind === 'image').length >= MAX_IMAGES) return ui.toast(t('add.tooMany'));
+  const img = await shrinkImage(file);
+  S.pending.push({ id: newId('a'), kind: 'image', name: t('add.photo'), status: 'ready', ...img });
+  await savePending();
+  store.set({});
+  nav('type');
+}
+
 async function removePending(id) {
   S.pending = S.pending.filter((a) => a.id !== id);
   await savePending();
@@ -712,6 +730,7 @@ const actions = {
   startFresh,
   forgetConversation,
   attach,
+  attachPhoto,
   removePending,
   estimate: estimateFor,
   saveDraft: (v) => {
@@ -851,6 +870,11 @@ function screenFor(name, params) {
       return historyScreen(ctx);
     case 'erase':
       return eraseScreen(ctx);
+    case 'photo':
+    case 'photoShared':
+    case 'photoMissed':
+    case 'photoNone':
+      return photoScreen({ ...ctx, params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none' }[name] }, filters: (registry.list('filter') ?? []).map((x) => x.instance), share: adapters.share });
     default:
       return mode.home();
   }
@@ -963,6 +987,9 @@ async function start() {
   S.draft = (await kv.get('draft').catch(() => null)) ?? '';
   // Auto-delete on open: what is past its time (or everything, with "on close") goes before anything is shown.
   await sweeper.sweep({ opening: true }).catch(() => {});
+  // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
+  // other way, an old one that was never read is removed.
+  if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
   // An answer that was streaming when the tab was killed is kept as stopped.

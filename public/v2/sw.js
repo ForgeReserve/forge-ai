@@ -27,6 +27,36 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Share target (manifest.webmanifest): another app shares a photo into Forge. The photo is kept in its
+// own cache only until the page reads it (core/photo.js takeShared deletes it at once), and the page
+// opens on Share unseen. Nothing is sent anywhere. Without this worker (it is not installed yet, or
+// Erase everything removed it) the phone posts the photo to the gateway, which drops it unread and
+// opens the page saying it did not arrive (src/app.ts).
+const SHARE = 'forge2-share';
+const SHARE_KEY = '/v2/__shared-photo';
+const SHARE_MAX = 40 * 1024 * 1024;
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.method !== 'POST' || url.origin !== self.location.origin || url.pathname !== '/v2/share') return;
+  event.respondWith(receiveShare(req));
+});
+
+async function receiveShare(req) {
+  try {
+    const form = await req.formData();
+    const photo = form.getAll('photo').find((f) => typeof f === 'object' && f && /^image\//.test(f.type) && f.size > 0 && f.size <= SHARE_MAX);
+    await caches.delete(SHARE);
+    if (!photo) return Response.redirect('/v2/#/photo/none', 303);
+    const box = await caches.open(SHARE);
+    await box.put(SHARE_KEY, new Response(photo, { headers: { 'content-type': photo.type } }));
+    return Response.redirect('/v2/#/photo/shared', 303);
+  } catch {
+    return Response.redirect('/v2/#/photo/missed', 303);
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;

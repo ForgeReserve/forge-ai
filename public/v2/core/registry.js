@@ -151,4 +151,8 @@ export const BUNDLED = [
   { kind: 'voice-in', folder: 'device' },
   { kind: 'voice-out', folder: 'device' },
   { kind: 'voice-out', folder: 'engine' },
+  // Share unseen runs the filters in this order: hidden details, then faces, then writing.
+  { kind: 'filter', folder: 'strip-details' },
+  { kind: 'filter', folder: 'cover-faces' },
+  { kind: 'filter', folder: 'cover-numbers' },
 ];

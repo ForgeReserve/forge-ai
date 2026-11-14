@@ -3,13 +3,8 @@
 import { ACCEPT } from '../../js/files.js';
 import { el, listRow } from '../core/ui.js';
 
-export function addSheet({ t, actions }) {
-  const photo = el('input', { type: 'file', accept: 'image/*', id: 'photoInput', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
+export function addSheet({ t, nav, actions }) {
   const file = el('input', { type: 'file', accept: ACCEPT.split(',').filter((x) => x !== 'image/*').join(','), id: 'fileInput', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
-  photo.addEventListener('change', () => {
-    if (photo.files?.length) actions.attach([...photo.files], 'image');
-    photo.value = '';
-  });
   file.addEventListener('change', () => {
     if (file.files?.length) actions.attach([...file.files], 'doc');
     file.value = '';
@@ -17,9 +12,9 @@ export function addSheet({ t, actions }) {
   return el(
     'section',
     { class: 'float-card', 'aria-label': t('add.title'), id: 'addSheet' },
-    listRow({ ico: 'camera', tint: 'gold', title: t('add.photo'), sub: t('add.photoSub'), id: 'addPhoto', onclick: () => photo.click() }),
+    // Photo opens Share unseen: the photo is cleaned on the phone before it can be asked about or shared.
+    listRow({ ico: 'camera', tint: 'gold', title: t('add.photo'), sub: t('add.photoSub'), id: 'addPhoto', onclick: () => nav('photo') }),
     listRow({ ico: 'file', tint: 'blue', title: t('add.file'), sub: t('add.fileSub'), id: 'addFile', onclick: () => file.click() }),
-    photo,
     file,
   );
 }

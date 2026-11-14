@@ -1,6 +1,6 @@
 // Small adapters for the phone's hardware, so tests can put a fake in their place: the camera (scanning
-// an eCash code), the microphone, the browser's own speech recogniser and voices, the speaker, and
-// vibration. NFC comes with a later slice.
+// an eCash code), the microphone, the browser's own speech recogniser and voices, the speaker, the share
+// sheet, and vibration. NFC comes with a later slice.
 import { loadScript } from '../../js/ui.js';
 
 const Recognition = () => (typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined);
@@ -144,6 +144,28 @@ const defaults = {
       });
       speechSynthesis.speak(u);
       return { done, stop: () => speechSynthesis.cancel() };
+    },
+  },
+
+  /**
+   * The phone's share sheet, for a file made on the phone (Share unseen). files(list) opens the sheet
+   * and resolves once the person picked an app or closed it (an AbortError when closed). save(file)
+   * hands the file to the browser as a download, where there is no share sheet or for Save.
+   */
+  share: {
+    canShareFiles: (files) => typeof navigator !== 'undefined' && typeof navigator.share === 'function' && !!navigator.canShare?.({ files }),
+    files: (files) => navigator.share({ files }),
+    save(file) {
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.rel = 'noopener';
+      a.hidden = true;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     },
   },
 

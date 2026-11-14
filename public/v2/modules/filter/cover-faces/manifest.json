@@ -1,0 +1,12 @@
+{
+  "id": "forge.filter.cover-faces",
+  "kind": "filter",
+  "version": "1.0.0",
+  "name": {
+    "en": "Cover faces"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

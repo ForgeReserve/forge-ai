@@ -308,3 +308,24 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .centre h1 { margin: 0; font-size: 26px; }
 .centre p { margin: 0; max-width: 32ch; }
 .big-ico { width: 64px; height: 64px; border-radius: 32px; }
+
+/* Share unseen (photos). Built from the Photo check sheet (DPhoto): white photo card, gold outlined
+   blocks, the list of changes in a bordered card. The blocks are solid in the picture itself. */
+.photo-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick-btn { min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 0; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow-raised); color: var(--ink); font-size: 16px; }
+.photo-stage { position: relative; align-self: center; max-width: 100%; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-raised-sm); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; line-height: 0; }
+.photo-canvas { display: block; max-width: 100%; max-height: 52dvh; width: auto; height: auto; }
+.cover-layer { position: absolute; inset: 0; pointer-events: none; }
+.photo-stage[data-view="before"] .cover-layer { display: none; }
+.cover-box { position: absolute; padding: 0; margin: 0; border: 2px solid var(--gold); border-radius: 4px; background: transparent; pointer-events: auto; min-width: 12px; min-height: 12px; }
+.cover-box:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.cover-draft { position: absolute; border: 2px dashed var(--gold); background: rgba(0, 0, 0, 0.35); pointer-events: none; }
+.changes { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.change-row { display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; font-size: 15px; border-bottom: 1px solid var(--line); }
+.change-row:last-child { border-bottom: 0; }
+.change-row b { flex: none; font-weight: 600; color: var(--text-2); }
+.change-row[data-state="removed"] b, .change-row[data-state="done"] b { color: var(--teal); }
+.change-row[data-state="covered"] b, .change-row[data-state="running"] b { color: var(--gold-ink); }
+.change-row[data-state="failed"] b, .change-row[data-state="uncovered"] b { color: var(--danger); }
+.note.warn-text { color: var(--low-ink); }
+.centre-text { text-align: center; }
