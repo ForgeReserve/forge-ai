@@ -326,7 +326,18 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
         continue;
       }
       if (!pinOk && job.pinSet) continue;
-      const sig = await apdu.spendAllAgain(tx);
+      let sig;
+      try {
+        sig = await apdu.spendAllAgain(tx);
+      } catch (e) {
+        // The card left: try again at its next tap. The PIN missing: wait for it.
+        if (!(e instanceof apdu.CardError)) throw e;
+        if (e.sw === apdu.SW.SECURITY_NOT_SATISFIED) continue;
+        // The card has no signature to give (6A88), or refuses another way: this payment cannot be
+        // finished from the card. It is kept, marked, and no longer stands in the way of the card.
+        store.put({ ...job, state: 'failed', error: `the card could not give its signature again (${e.message})` });
+        continue;
+      }
       if (!schnorrVerify(sig, message(job), pubkey)) {
         store.put({ ...job, state: 'failed', error: 'the card gave a signature for another payment' });
         continue;
@@ -337,8 +348,9 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
       try {
         await loadChange(tx, job);
       } catch (e) {
-        if (!(e instanceof apdu.CardError && e.sw === apdu.SW.SECURITY_NOT_SATISFIED)) throw e;
-        // Not this tap's to load without the PIN: it waits for the PIN or the next tap.
+        // The card left: the change waits for its next tap. A refusal (no PIN in this tap, a full card)
+        // keeps it owed too, and never stops the card being read.
+        if (!(e instanceof apdu.CardError)) throw e;
       }
     }
   }

@@ -161,4 +161,52 @@ describe('a signature that does not come back clean', () => {
     await s.flow.finish(s.card.transceive, { summary: again, pin: '1234' });
     expect(s.flow.pending()[0]).toMatchObject({ state: 'swapped', received: 24 });
   });
+
+  it('a card that cannot give its signature again does not stand in the way of the card', async () => {
+    const s = await ready(null);
+    s.card.breaks.push({ ins: 0x24, when: 'after' });
+    await s.flow.pay(s.card.transceive, { summary: s.summary, info: s.info, plan: s.plan, pin: '' }).catch(() => {});
+    // Something else makes the card forget its last signature (here: it answers 6A88 to SPEND_ALL_AGAIN).
+    const noAgain = async (apdu: number[]) => (apdu[1] === 0x25 ? [0x6a, 0x88] : s.card.transceive(apdu));
+    s.card.tap();
+    const r = await s.flow.read(noAgain);
+    expect(r.balance).toBe(0);
+    expect(r.unfinished).toBe(false);
+    expect(s.flow.pending()[0]).toMatchObject({ state: 'failed' });
+  });
+
+  it('change the card refuses to take (a full card) stays owed and the card is still read', async () => {
+    const s = await ready();
+    const plan = s.flow.plan(s.summary, s.info, 20);
+    // The card leaves after the swap, before its change is loaded.
+    let swapped = false;
+    const relay = s.mint.relay.swap;
+    s.mint.relay.swap = async (b: any) => {
+      const r = await relay(b);
+      swapped = true;
+      return r;
+    };
+    const leaving = async (apdu: number[]) => {
+      if (swapped && apdu[1] === 0x19) throw new Error('Tag was lost.');
+      return s.card.transceive(apdu);
+    };
+    const job = await s.flow.pay(leaving, { summary: s.summary, info: s.info, plan, pin: '1234' });
+    expect(job.changeOwed).toBe(true);
+    s.flow.handed(job.id);
+    s.card.lift();
+    s.card.tap();
+    const full = async (apdu: number[]) => (apdu[1] === 0x30 ? [0x6a, 0x84] : s.card.transceive(apdu));
+    const r = await s.flow.read(full);
+    expect(r.balance).toBe(0);
+    expect(s.flow.pending()[0]).toMatchObject({ changeOwed: true });
+    expect(r.unfinished).toBe(true);
+    // A later tap with room: no change grant any more, so the PIN loads it.
+    s.card.lift();
+    s.card.tap();
+    const later = await s.flow.read(s.card.transceive);
+    expect(later).toMatchObject({ balance: 0, unfinished: true });
+    s.card.tap();
+    expect((await s.flow.finish(s.card.transceive, { summary: later, pin: '1234' })).balance).toBe(4);
+    expect(s.flow.pending()).toEqual([]);
+  });
 });
