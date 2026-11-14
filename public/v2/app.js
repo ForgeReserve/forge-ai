@@ -985,6 +985,7 @@ const talk = createTalk({
   refresh: () => refreshBalance(),
   errorText: (err) => errorText(err, S.unit),
   askDownload: (bytes) => askVoiceDownload(bytes),
+  unlockAudio: () => adapters.speaker.unlock?.(),
 });
 
 /**
@@ -1004,7 +1005,7 @@ function askVoiceDownload(bytes) {
       { class: 'float-card voice-dl', id: 'voiceDownload', 'aria-labelledby': 'voiceDlTitle' },
       ui.el('h2', { id: 'voiceDlTitle', text: t('voiceDl.title') }),
       ui.el('p', { text: t('voiceDl.body', { size }) }),
-      ui.el('div', { class: 'row-btns' }, ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlNo', text: t('voiceDl.no'), onclick: () => close(false) }), ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlYes', text: t('voiceDl.yes'), onclick: () => close(true) })),
+      ui.el('div', { class: 'row-btns' }, ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlNo', text: t('voiceDl.no'), onclick: () => close(false) }), ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlYes', text: t('voiceDl.yes'), onclick: () => (adapters.speaker.unlock?.(), close(true)) })),
     );
     dlg.addEventListener('cancel', (e) => {
       e.preventDefault();

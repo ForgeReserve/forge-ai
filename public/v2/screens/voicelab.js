@@ -45,6 +45,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const runBtn = el('button', { type: 'button', class: 'btn primary block', id: 'labRun', text: t('lab.run') });
   const stopBtn = el('button', { type: 'button', class: 'btn block', id: 'labStop', text: t('lab.stop'), hidden: true });
   const status = el('p', { class: 'hint', id: 'labStatus', role: 'status' });
+  const blockedNote = el('p', { class: 'hint lab-error', id: 'labBlocked', role: 'alert', hidden: true, text: t('lab.blocked') });
   const table = el('div', { class: 'lab-results', id: 'labResults' });
   const saveBtn = el('button', { type: 'button', class: 'btn', id: 'labSave', text: t('lab.save'), hidden: true });
   const copyBtn = el('button', { type: 'button', class: 'btn', id: 'labCopy', text: t('lab.copy'), hidden: true });
@@ -54,7 +55,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   let ctrl = null;
 
   (async () => {
-    const index = await phonon.init();
+    const index = await phonon.init().catch(() => null);
     const gpu = await gpuInfo();
     env = {
       userAgent: navigator.userAgent,
@@ -76,7 +77,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     );
     voiceSel.replaceChildren(...(index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice })));
     runBtn.disabled = !index && !(globalThis.speechSynthesis?.getVoices().length > 0);
-  })();
+  })().catch((e) => (status.textContent = t('lab.failed', { message: message(e) })));
 
   async function runPhonon(c, voice, signal, onRow) {
     const out = { id: c.id, device: c.device, threads: c.threads, rows: [] };
@@ -99,13 +100,21 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       return out;
     }
     out.got = { device: tts.device, deviceReason: tts.deviceReason, threads: tts.threads, threadsReason: tts.threadsReason, features: tts.features };
+    // The Run tap unlocked the sound (speaker.unlock). If the phone still keeps it off, measure without
+    // playing and say so, rather than wait for sound that never ends.
+    let playing = play.checked;
+    if (playing && speaker.ready && !(await speaker.ready(1500))) {
+      playing = false;
+      out.audioBlocked = true;
+      blockedNote.hidden = false;
+    }
     for (const item of lines) {
       if (signal.aborted) break;
       const s0 = now();
       const arrivals = [];
       const durations = [];
       const chunks = [];
-      const sp = play.checked ? speaker.stream({ sampleRate: tts.sampleRate }) : null;
+      const sp = playing ? speaker.stream({ sampleRate: tts.sampleRate }) : null;
       let row;
       try {
         for await (const pcm of tts.stream(item.text, { voice, signal })) {
@@ -201,7 +210,10 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   }
 
   runBtn.addEventListener('click', async () => {
+    // First, before any await: iPhone Safari starts sound only inside the tap itself.
+    speaker.unlock?.();
     if (ctrl) return;
+    blockedNote.hidden = true;
     ctrl = new AbortController();
     const signal = ctrl.signal;
     runBtn.hidden = true;
@@ -257,6 +269,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       runBtn,
       stopBtn,
       status,
+      blockedNote,
       table,
       el('div', { class: 'row-btns' }, saveBtn, copyBtn),
     ),

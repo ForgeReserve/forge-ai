@@ -5,6 +5,38 @@ import { loadScript } from '../../js/ui.js';
 
 const Recognition = () => (typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined);
 
+/** The page's one Web Audio context for sound out (speaker.stream), made on first use; null without Web Audio. */
+let audioOut = null;
+function outputContext() {
+  if (audioOut && audioOut.state !== 'closed') return audioOut;
+  const Ctx = typeof window !== 'undefined' ? (window.AudioContext ?? window.webkitAudioContext) : undefined;
+  audioOut = typeof Ctx === 'function' ? new Ctx() : null;
+  return audioOut;
+}
+
+/**
+ * On iOS 17 and later, a page's Web Audio follows the ring switch (silent mode mutes it) unless the page
+ * says it plays sound on purpose. Sets the audio session to playback while a stream plays; returns a
+ * function that puts back 'auto'. Nothing happens where there is no navigator.audioSession, or where the
+ * page already set one.
+ */
+function playbackSession() {
+  const s = typeof navigator !== 'undefined' ? navigator.audioSession : null;
+  if (!s || s.type !== 'auto') return () => {};
+  try {
+    s.type = 'playback';
+  } catch {
+    return () => {};
+  }
+  return () => {
+    try {
+      if (s.type === 'playback') s.type = 'auto';
+    } catch {
+      /* left as it is */
+    }
+  };
+}
+
 const defaults = {
   camera: {
     available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
@@ -101,28 +133,74 @@ const defaults = {
 
   /**
    * Plays a sound file: play(blob) returns {done: Promise, stop()}. Or plays sound as it is made:
-   * stream({sampleRate}) returns {push(samples), end(), done, stop(), underruns()}. Each pushed piece
-   * (a Float32Array) is queued right after the one before; a piece that arrives after the one before
-   * has finished playing is an underrun (a gap the listener hears).
+   * stream({sampleRate}) returns {push(samples), end(), done, stop(), underruns(), blocked()}. Each
+   * pushed piece (a Float32Array) is queued right after the one before; a piece that arrives after the
+   * one before has finished playing is an underrun (a gap the listener hears).
+   *
+   * All streamed sound goes through one Web Audio context, kept for the life of the page. iPhone Safari
+   * (and every browser on iOS) starts a context only inside a tap: one made or resumed later, after a
+   * download or a model load, stays suspended and plays nothing. So every tap that leads to sound
+   * (Listen, Download, the talk button, Run in the voice lab) calls unlock() first, before any await.
+   * ready(ms) says whether the context is running, after giving a resume up to ms to land.
    */
   speaker: {
+    unlock() {
+      try {
+        const ctx = outputContext();
+        if (!ctx) return;
+        if (ctx.state !== 'running') ctx.resume().catch(() => {});
+        // A moment of silence started inside the tap: older iOS only opens the sound on a played source.
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        src.connect(ctx.destination);
+        src.start(0);
+      } catch {
+        /* no Web Audio here */
+      }
+    },
+    async ready(ms = 1000) {
+      const ctx = outputContext();
+      if (!ctx) return false;
+      if (ctx.state === 'running') return true;
+      await Promise.race([ctx.resume().catch(() => {}), new Promise((res) => setTimeout(res, ms))]);
+      return ctx.state === 'running';
+    },
+    state: () => audioOut?.state ?? 'none',
     stream({ sampleRate }) {
-      const Ctx = window.AudioContext ?? window.webkitAudioContext;
-      const ctx = new Ctx();
-      ctx.resume().catch(() => {});
+      const ctx = outputContext();
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+      const restore = playbackSession();
+      // Each stream has its own gain node on the shared context, so stop() silences only this one.
+      const out = ctx.createGain();
+      out.connect(ctx.destination);
+      const sources = new Set();
       let at = 0; // when the queued sound ends, in the context's time
       let started = false;
       let ended = false;
+      let closed = false;
       let gaps = 0;
-      let live = 0;
+      let guard = 0;
       let finish;
       const done = new Promise((res) => (finish = res));
       const close = () => {
-        ctx.close().catch(() => {});
+        if (closed) return;
+        closed = true;
+        clearTimeout(guard);
+        for (const s of sources) {
+          s.onended = null;
+          try {
+            s.stop();
+          } catch {
+            /* not started */
+          }
+        }
+        sources.clear();
+        out.disconnect();
+        restore();
         finish();
       };
       const settle = () => {
-        if (ended && live === 0) close();
+        if (ended && sources.size === 0) close();
       };
       return {
         push(samples) {
@@ -131,7 +209,7 @@ const defaults = {
           buf.getChannelData(0).set(samples);
           const src = ctx.createBufferSource();
           src.buffer = buf;
-          src.connect(ctx.destination);
+          src.connect(out);
           // A little lead on the first piece, so the next has time to arrive.
           if (!started) at = ctx.currentTime + 0.05;
           else if (at < ctx.currentTime) {
@@ -139,9 +217,9 @@ const defaults = {
             at = ctx.currentTime + 0.02;
           }
           started = true;
-          live++;
+          sources.add(src);
           src.onended = () => {
-            live--;
+            sources.delete(src);
             settle();
           };
           src.start(at);
@@ -150,14 +228,17 @@ const defaults = {
         end() {
           ended = true;
           settle();
+          // A context that never runs never ends a source: done must not wait for ever. Give the
+          // queued sound its length on the clock, and a little more.
+          if (!closed) guard = setTimeout(close, (Math.max(0, at - ctx.currentTime) + 2) * 1000);
         },
         done,
         stop() {
           ended = true;
-          live = 0;
           close();
         },
         underruns: () => gaps,
+        blocked: () => ctx.state !== 'running',
       };
     },
 

@@ -5,6 +5,7 @@
 const PIECE = 1500;
 
 const aborted = () => Object.assign(new Error('stopped'), { name: 'AbortError' });
+const blocked = () => Object.assign(new Error('the sound is blocked until a tap'), { name: 'AudioBlocked' });
 
 export function create({ speaker, phonon }) {
   return {
@@ -30,6 +31,9 @@ export function create({ speaker, phonon }) {
           for await (const pcm of stream) {
             if (ctrl.signal.aborted) break;
             if (!out) {
+              // On iPhone the sound only starts if a tap unlocked it (speaker.unlock). When it did not,
+              // say so rather than play into silence.
+              if (speaker.ready && !(await speaker.ready(1500))) throw blocked();
               out = speaker.stream({ sampleRate: tts.sampleRate });
               onState('playing');
             }

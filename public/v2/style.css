@@ -436,5 +436,6 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .voicelab .lab-check input { width: 22px; height: 22px; flex: none; }
 .voicelab .lab-select { min-height: 44px; flex: 1; font-size: 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 10px; }
 .voicelab .lab-results { overflow-x: auto; margin: 12px 0; }
+.voicelab .lab-error { color: var(--danger); font-weight: 600; }
 .voicelab table { border-collapse: collapse; font-size: 13px; width: 100%; }
 .voicelab th, .voicelab td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }

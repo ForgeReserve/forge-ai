@@ -67,6 +67,7 @@ export default {
   'speak.loadingPct': 'Getting the voice, {pct}%',
   'speak.viaEngine': 'Read by the engine. It sees the answer on the way.',
   'speak.failed': 'The answer could not be read aloud.',
+  'speak.blocked': 'The phone kept the sound off. Tap Listen to hear the answer.',
 
   // Type
   'type.title': 'Type',
@@ -913,6 +914,7 @@ export default {
   'lab.done': 'Done. Save the results and send the file.',
   'lab.stopped': 'Stopped. The results so far can be saved.',
   'lab.failed': 'Did not run: {message}',
+  'lab.blocked': 'The phone kept the sound off, so this run measures without playing. Press Run again to hear it.',
   'lab.col.voice': 'Voice',
   'lab.col.loadCold': 'Load, first',
   'lab.col.loadWarm': 'Load, again',

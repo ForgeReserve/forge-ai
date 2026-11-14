@@ -57,7 +57,8 @@ async function phone(): Promise<Phone> {
     (window as any).__played = 0;
     const start = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...a: any[]) {
-      (window as any).__played++;
+      // Not the one-sample silence a tap plays to unlock the sound (adapters.js speaker.unlock).
+      if ((this.buffer?.length ?? 0) > 1) (window as any).__played++;
       return start.apply(this, a as any);
     };
   });
@@ -89,6 +90,73 @@ async function hold(page: Page, sel: string, ms: number) {
 }
 
 const played = (page: Page) => page.evaluate(() => (window as any).__played as number);
+
+/**
+ * Web Audio as iPhone Safari allows it: a context made, or resumed, outside a tap stays suspended, and
+ * sound queued on it is never heard. Chrome lets a page start sound for seconds after any tap, so this
+ * holds it to the stricter rule: only inside the handling of the tap itself (a pointerup, click, key or
+ * touchend, and the microtasks it queues). Counts the pieces queued on a running context (heard).
+ */
+async function strictAudio(ctx: BrowserContext) {
+  await ctx.addInitScript(() => {
+    const w = window as any;
+    const Real = window.AudioContext;
+    let inTap = false;
+    for (const type of ['pointerup', 'click', 'keydown', 'keyup', 'touchend', 'mouseup']) {
+      addEventListener(
+        type,
+        (e) => {
+          if (!e.isTrusted) return;
+          inTap = true;
+          setTimeout(() => (inTap = false), 0);
+        },
+        true,
+      );
+    }
+    // While the microphone is on, Safari lets a page's sound start (the recorder's own context).
+    let capturing = 0;
+    const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (c) => {
+      const s = await gum(c);
+      for (const tr of s.getTracks()) {
+        capturing++;
+        const stop = tr.stop.bind(tr);
+        tr.stop = () => {
+          if (tr.readyState === 'live') capturing--;
+          stop();
+        };
+      }
+      return s;
+    };
+    w.__audio = { made: [] as boolean[], resumed: [] as boolean[], heard: 0 };
+    class Strict extends Real {
+      __ok: boolean;
+      constructor(...a: any[]) {
+        super(...(a as []));
+        this.__ok = inTap || capturing > 0;
+        w.__audio.made.push(this.__ok);
+        if (!this.__ok) Real.prototype.suspend.call(this);
+      }
+      override get state() {
+        return this.__ok ? super.state : 'suspended';
+      }
+      override resume() {
+        w.__audio.resumed.push(inTap);
+        if (inTap) this.__ok = true;
+        return this.__ok ? super.resume() : new Promise<void>(() => {});
+      }
+    }
+    w.AudioContext = Strict;
+    w.webkitAudioContext = Strict;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...a: any[]) {
+      if (this.context.state === 'running' && (this.buffer?.length ?? 0) > 1) w.__audio.heard++;
+      return start.apply(this, a as any);
+    };
+  });
+}
+
+const heard = (page: Page) => page.evaluate(() => (window as any).__audio.heard as number);
 
 describe('the natural voice', () => {
   it('runs on a cross-origin isolated page, and is the voice answers are read with by default', async () => {
@@ -220,4 +288,46 @@ describe('the natural voice', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 180_000);
+});
+
+describe('sound that may only start inside a tap, as on iPhone Safari', () => {
+  it('the voice lab plays what it measures: the sound is unlocked inside the Run tap', async () => {
+    const { ctx, page, errors } = await phone();
+    await strictAudio(ctx);
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.check('#labPlay');
+    await page.click('#labRun');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 90_000 });
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    // The one sound context was made or resumed inside the tap, and every line was heard.
+    const audio = await page.evaluate(() => (window as any).__audio);
+    expect(audio.made.length + audio.resumed.length).toBeGreaterThan(0);
+    expect([...audio.made, ...audio.resumed][0]).toBe(true);
+    expect(audio.heard).toBeGreaterThan(10);
+    expect(await page.textContent('#labResults')).not.toMatch(/blocked/i);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 150_000);
+
+  it('an answer to a spoken question is read aloud after Download, and Listen reads it again', async () => {
+    const { ctx, page, errors } = await phone();
+    await strictAudio(ctx);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('#voiceDownload', { timeout: 20_000 });
+    await page.click('#voiceDlYes');
+    await expect.poll(() => heard(page), { timeout: 60_000 }).toBeGreaterThan(5);
+    await page.waitForSelector('#speakBtn', { timeout: 60_000 });
+    const before = await heard(page);
+    await page.click('#speakBtn');
+    await expect.poll(() => heard(page), { timeout: 30_000 }).toBeGreaterThan(before);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 150_000);
 });

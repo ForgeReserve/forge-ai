@@ -11,10 +11,12 @@ const TICK_MS = 100;
 /**
  * deps: store ({S, set}), t, ui, nav, haptics, voiceIn() and voiceOut() (the chosen module instance or
  * null), blocker() (null, or {key, go} when a question cannot be asked now), ask(text, meta),
- * refresh() (the balance), errorText(err, unit), now(), and askDownload(bytes) (resolves true when the
- * person agrees to the one-time download a voice needs before its first use).
+ * refresh() (the balance), errorText(err, unit), now(), askDownload(bytes) (resolves true when the
+ * person agrees to the one-time download a voice needs before its first use), and unlockAudio(), called
+ * inside every tap that may lead to sound, before anything is awaited (iPhone Safari starts sound only
+ * there: adapters.js speaker.unlock).
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, unlockAudio = () => {} }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -143,6 +145,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   // ---------------------------------------------------------------- the talk button
 
   function down() {
+    unlockAudio();
     if (S.talk.phase !== 'idle') return;
     const b = blocker();
     if (b) {
@@ -153,7 +156,11 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     dispatch({ type: 'down', at: now() });
   }
 
-  const up = () => dispatch({ type: 'up', at: now() });
+  // Letting go is the tap the answer is read after: the sound is unlocked here, the answer comes later.
+  const up = () => {
+    unlockAudio();
+    dispatch({ type: 'up', at: now() });
+  };
   const move = (isInside) => dispatch({ type: 'move', inside: isInside });
 
   function cancel() {
@@ -180,6 +187,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
    * on their own again until the person taps Listen.
    */
   function speak(msg, { auto = false } = {}) {
+    if (!auto) unlockAudio();
     const mod = voiceOut();
     if (!mod || !msg?.content) return;
     stopSpeaking();
@@ -213,6 +221,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       })
       .catch((e) => {
         if (e?.name === 'AbortError') return;
+        if (e?.name === 'AudioBlocked') return ui.toast(t('speak.blocked'), 4500);
         ui.toast(e?.code ? errorText({ code: e.code, message: e.message, charged: 0 }) : t('speak.failed'), 4000);
         refresh();
       })

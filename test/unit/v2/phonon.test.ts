@@ -250,6 +250,19 @@ describe('voice out with the natural voice', () => {
     expect(speaker.pushed.length).toBeLessThan(50);
   });
 
+  it('says the sound is blocked, rather than play into silence, when no tap unlocked it (iPhone Safari)', async () => {
+    const { ph } = engine();
+    await ph.init();
+    const speaker = fakeSpeaker();
+    speaker.ready = async () => false;
+    const m = MOD.create({ speaker, phonon: ph });
+    await expect(m.speak(['An answer.']).done).rejects.toMatchObject({ name: 'AudioBlocked' });
+    expect(speaker.pushed).toEqual([]);
+    speaker.ready = async () => true;
+    await expect(m.speak(['An answer.']).done).resolves.toEqual({ chargedMsub: 0 });
+    expect(speaker.pushed).toHaveLength(2);
+  });
+
   it('is handed only t, the speaker, and the parts of the Phonon engine it needs', () => {
     const fn = () => {};
     const all = { t: fn, engine: {}, wallet: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, speak: fn, transcribe: fn }, phonon: { available: fn, download: fn, load: fn, unload: fn, init: fn, index: fn } };
@@ -339,6 +352,58 @@ describe('the one-time download question', () => {
     await flush();
     expect(x.asked).toHaveLength(2);
     expect(x.spoken).toHaveLength(1);
+  });
+
+  it('unlocks the sound inside the tap itself: Listen, and pressing and letting go of the talk button', () => {
+    const calls: string[] = [];
+    const S: any = {};
+    const ctl = CTL.createTalk({
+      store: { S, set: (p: object) => Object.assign(S, p) },
+      t: (k: string) => k,
+      ui: { toast() {} },
+      nav() {},
+      haptics: { pulse() {} },
+      voiceIn: () => ({ maxSeconds: () => 60, start: () => new Promise(() => {}) }),
+      voiceOut: () => ({ id: 'phonon', pieceSize: () => 1500, download: async () => (calls.push('download'), { needed: false }), speak: () => ({ done: Promise.resolve({}), stop() {} }) }),
+      blocker: () => null,
+      ask: async () => {},
+      refresh() {},
+      errorText: () => 'error',
+      unlockAudio: () => calls.push('unlock'),
+    });
+    // Synchronously, before the first await (the download check).
+    ctl.speak(msg);
+    expect(calls).toEqual(['unlock', 'download']);
+    // An answer read on its own is not a tap: nothing to unlock there.
+    calls.length = 0;
+    ctl.speak(msg, { auto: true });
+    expect(calls).toEqual(['download']);
+    calls.length = 0;
+    ctl.down();
+    expect(calls).toEqual(['unlock']);
+    ctl.up();
+    expect(calls).toEqual(['unlock', 'unlock']);
+  });
+
+  it('a blocked sound asks for a tap on Listen', async () => {
+    const toasts: string[] = [];
+    const S: any = {};
+    const ctl = CTL.createTalk({
+      store: { S, set: (p: object) => Object.assign(S, p) },
+      t: (k: string) => k,
+      ui: { toast: (x: string) => toasts.push(x) },
+      nav() {},
+      haptics: { pulse() {} },
+      voiceIn: () => null,
+      voiceOut: () => ({ id: 'phonon', pieceSize: () => 1500, speak: () => ({ done: Promise.reject(Object.assign(new Error('x'), { name: 'AudioBlocked' })), stop() {} }) }),
+      blocker: () => null,
+      ask: async () => {},
+      refresh() {},
+      errorText: () => 'error',
+    });
+    ctl.speak(msg, { auto: true });
+    await flush();
+    expect(toasts).toEqual(['speak.blocked']);
   });
 
   it('a stop while the question is open means nothing is read', async () => {
