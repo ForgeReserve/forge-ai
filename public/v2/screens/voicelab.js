@@ -36,6 +36,16 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const yes = (b) => (b == null ? t('lab.unknown') : b ? t('lab.yes') : t('lab.no'));
   const envList = el('ul', { class: 'lab-env', id: 'labEnv' });
   const voiceSel = el('select', { id: 'labVoice', class: 'lab-select', 'aria-label': t('lab.voice') });
+  // Under the list: what an accent-test voice is, with its description from the voice catalog.
+  const voiceNote = el('p', { class: 'hint', id: 'labVoiceNote', hidden: true });
+  /** The lab voice picked (index.labVoices), or null for one of the app's voices. */
+  const labVoice = () => phonon.index()?.labVoices?.find((v) => v.name === voiceSel.value) ?? null;
+  const showVoiceNote = () => {
+    const v = labVoice();
+    voiceNote.hidden = !v;
+    voiceNote.textContent = v ? t('lab.accentNote', { locale: t(`lab.locale.${v.locale}`), description: v.description }) : '';
+  };
+  voiceSel.addEventListener('change', showVoiceNote);
   const boxes = Object.fromEntries(CANDIDATES.map((c) => [c.id, el('input', { type: 'checkbox', id: `lab-${c.id}`, checked: true })]));
   const play = el('input', { type: 'checkbox', id: 'labPlay' });
   // How many corpus lines a run reads: all of them by default, fewer for a quick look on a slow phone.
@@ -80,13 +90,22 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('li', { text: index ? t('lab.files', { size: Math.round(index.firstBytes / 1e6) }) : t('lab.none') }),
       el('li', { text: t('lab.kokoro') }),
     );
-    voiceSel.replaceChildren(...(index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice })));
+    // The app's voices, then the accent test: other locales' speakers read by the English model, which
+    // only this page offers.
+    const appVoices = (index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice }));
+    const accent = (index?.labVoices ?? []).filter((v) => v.use === 'accent-test');
+    voiceSel.replaceChildren(
+      el('optgroup', { label: t('lab.voicesApp') }, ...appVoices),
+      accent.length ? el('optgroup', { label: t('lab.voicesAccent'), 'data-group': 'accent' }, ...accent.map((v) => el('option', { value: v.name, text: t('lab.accentVoice', { name: v.name, locale: t(`lab.locale.${v.locale}`) }) }))) : null,
+    );
+    showVoiceNote();
     runBtn.disabled = !index && !(globalThis.speechSynthesis?.getVoices().length > 0);
   })().catch((e) => (status.textContent = t('lab.failed', { message: message(e) })));
 
   async function runPhonon(c, voice, signal, onRow) {
     const out = { id: c.id, device: c.device, threads: c.threads, rows: [] };
-    const opts = { device: c.device, threads: c.threads };
+    // An accent-test voice is only in the model the lab loads for itself (lab: true).
+    const opts = { device: c.device, threads: c.threads, lab: !!labVoice() };
     await phonon.unload(opts);
     let tts;
     let downloaded = false;
@@ -267,7 +286,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       }
     }
     if (errorLine.hidden) meter.hidden = true;
-    result = report({ env, voice, candidates: done });
+    const lv = labVoice();
+    result = report({ env, voice, voiceLocale: lv?.locale ?? phonon.index()?.voices?.find((v) => v.name === voice)?.locale ?? null, accentTest: !!lv, candidates: done });
     status.textContent = signal.aborted ? t('lab.stopped') : errorLine.hidden ? t('lab.done') : t('lab.notDone');
     ctrl = null;
     runBtn.hidden = false;
@@ -302,6 +322,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('p', { class: 'hint', text: t('lab.lead', { count: CORPUS.length }) }),
       envList,
       el('label', { class: 'lab-check', for: 'labVoice' }, el('span', { text: t('lab.voice') }), voiceSel),
+      voiceNote,
       el('label', { class: 'lab-check', for: 'labLines' }, el('span', { text: t('lab.lines') }), linesSel),
       el('h2', { class: 'caps', text: t('lab.candidates') }),
       ...CANDIDATES.map((c) => label(boxes[c.id], t(`lab.c.${c.id}`))),

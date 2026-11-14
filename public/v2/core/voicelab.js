@@ -133,7 +133,7 @@ export function summarize(rows) {
 }
 
 /** The file the owner sends back: what was run, on what, and every number. */
-export function report({ env, voice, candidates }) {
+export function report({ env, voice, voiceLocale = null, accentTest = false, candidates }) {
   return {
     kind: 'forge-voice-lab',
     version: 1,
@@ -141,6 +141,9 @@ export function report({ env, voice, candidates }) {
     at: new Date().toISOString(),
     env,
     voice,
+    voiceLocale,
+    // An accent-test voice: a speaker from another locale read by the English model (docs/VOICE.md).
+    accentTest,
     candidates: candidates.map((c) => ({ ...c, summary: c.rows ? summarize(c.rows) : null })),
   };
 }

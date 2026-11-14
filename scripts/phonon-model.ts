@@ -1,6 +1,7 @@
 /**
- * Puts the on-device voice's files in place (docs/VOICE.md): Phonon 31m English (Apache-2.0) and its
- * en-GB female voices from gradium/phonon-voices (Apache-2.0), pinned to commits in
+ * Puts the on-device voice's files in place (docs/VOICE.md): Phonon 31m English (Apache-2.0), its
+ * en-GB female voices from gradium/phonon-voices (Apache-2.0), and a few speakers from other locales the
+ * voice lab alone offers, to hear what accent the English model gives them (labVoices), pinned to commits in
  * scripts/phonon/lock.json with each file's size and SHA-256.
  *
  *   node scripts/phonon-model.ts            download what is missing or wrong, then check everything
@@ -34,12 +35,16 @@ export interface LockVoice {
   gender: string;
   age: string;
   description: string;
+  /** Lab voices only: what they are for. Only 'accent-test' is known. */
+  use?: string;
 }
 export interface Lock {
   model: { name: string; repo: string; revision: string; license: string; dir: string; weights: string; tokenizer: string; config: string };
   voiceRepo: { repo: string; revision: string; license: string; dir: string };
   defaultVoice: string;
   voices: LockVoice[];
+  /** Voices the voice lab offers and the app never does (docs/VOICE.md, accent test). */
+  labVoices?: LockVoice[];
   files: LockFile[];
 }
 
@@ -63,6 +68,16 @@ export function checkLock(lock: Lock): string[] {
   }
   for (const p of [lock.model.weights, lock.model.tokenizer, lock.model.config]) if (!seen.has(p)) errors.push(`${p}: model file not in files`);
   for (const v of lock.voices ?? []) if (!seen.has(v.file)) errors.push(`${v.name}: voice file not in files`);
+  const names = new Set<string>();
+  for (const v of [...(lock.voices ?? []), ...(lock.labVoices ?? [])]) {
+    if (names.has(v.name)) errors.push(`${v.name}: voice name listed twice`);
+    names.add(v.name);
+  }
+  for (const v of lock.labVoices ?? []) {
+    if (!seen.has(v.file)) errors.push(`${v.name}: lab voice file not in files`);
+    if (v.use !== 'accent-test') errors.push(`${v.name}: a lab voice must say what it is for (use: accent-test)`);
+    if (!v.file.startsWith(`${lock.voiceRepo.dir}/`)) errors.push(`${v.name}: a lab voice must come from the pinned voice repo`);
+  }
   if (!lock.voices?.some((v) => v.name === lock.defaultVoice)) errors.push(`default voice ${lock.defaultVoice} is not in voices`);
   if (!/Apache-2\.0/.test(lock.model.license) || !/Apache-2\.0/.test(lock.voiceRepo.license)) errors.push('only Apache-2.0 files may be bundled');
   if (!/^gradium\/phonon-31m-en$/.test(lock.model.repo)) errors.push('only Phonon 31m English is allowed (the 40m models are CC BY-NC)');
@@ -75,6 +90,9 @@ export function appIndex(lock: Lock) {
   return {
     model: { name: lock.model.name, revision: lock.model.revision, license: lock.model.license, weights: lock.model.weights, tokenizer: lock.model.tokenizer, config: lock.model.config },
     voices: lock.voices.map((v) => ({ name: v.name, file: v.file, locale: v.locale, size: size(v.file) })),
+    // The voice lab's accent test: other locales' speakers read by the English model. Not in voices, so
+    // the app never offers them (core/phonon.js modelSpec takes them only when asked for the lab).
+    labVoices: (lock.labVoices ?? []).map((v) => ({ name: v.name, file: v.file, locale: v.locale, size: size(v.file), use: v.use, description: v.description })),
     defaultVoice: lock.defaultVoice,
     // Bytes the phone fetches the first time: the model and the default voice (other voices load when used).
     firstBytes: size(lock.model.weights) + size(lock.model.tokenizer) + size(lock.model.config) + size(lock.voices.find((v) => v.name === lock.defaultVoice)!.file),

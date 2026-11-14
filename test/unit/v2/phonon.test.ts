@@ -32,6 +32,40 @@ describe('the pinned voice files', () => {
     expect(LOCK.files.find((f) => f.path === LOCK.model.weights)!.size).toBe(64_512_352);
   });
 
+  it('pins the accent-test speakers for the voice lab alone: female es-MX, es-ES, pt-BR and fr-FR, from the same voice commit', () => {
+    const lab = LOCK.labVoices ?? [];
+    expect(lab.map((v) => [v.name, v.locale])).toEqual([
+      ['Regina', 'es-mx'],
+      ['Ximena', 'es-mx'],
+      ['Alba', 'es-es'],
+      ['Isadora', 'pt-br'],
+      ['Maëlys', 'fr-fr'],
+    ]);
+    for (const v of lab) {
+      expect([v.gender, v.use]).toEqual(['female', 'accent-test']);
+      expect(v.description.length).toBeGreaterThan(20);
+      const f = LOCK.files.find((x) => x.path === v.file)!;
+      expect(f.url).toBe(`https://huggingface.co/gradium/phonon-voices/resolve/${LOCK.voiceRepo.revision}/voices/${v.id}.safetensors`);
+      expect(f.sha256).toMatch(/^[0-9a-f]{64}$/);
+    }
+    // The app's voices are what they were: the accent test is not among them.
+    expect(INDEX.voices.map((v) => v.name)).not.toContain('Regina');
+    expect(INDEX.labVoices.map((v) => v.name)).toEqual(lab.map((v) => v.name));
+    expect(INDEX.files.map((f) => f.path)).toEqual(expect.arrayContaining(lab.map((v) => v.file)));
+  });
+
+  it('refuses a lab voice that does not say what it is for, comes from elsewhere, or reuses a name', () => {
+    const bad = structuredClone(LOCK);
+    bad.labVoices![0]!.use = 'app';
+    bad.labVoices![1]!.name = 'Maeve';
+    bad.labVoices![2]!.file = '31m-en-92741c5/x.safetensors';
+    const errors = checkLock(bad).join('\n');
+    expect(errors).toMatch(/Regina: a lab voice must say what it is for/);
+    expect(errors).toMatch(/Maeve: voice name listed twice/);
+    expect(errors).toMatch(/Alba: lab voice file not in files/);
+    expect(errors).toMatch(/Alba: a lab voice must come from the pinned voice repo/);
+  });
+
   it('refuses a lock that would bundle a non-commercial model, an unpinned URL or a path outside the folder', () => {
     const bad = structuredClone(LOCK);
     bad.model.repo = 'gradium/phonon-40m-en';
@@ -96,6 +130,14 @@ describe('the model as phonon-tts takes it', () => {
     expect(P.sameOrigin(spec, 'https://other.test')).toBe(false);
     expect(P.modelSpec(INDEX, BASE, 'Bryony').defaultVoice).toBe('Bryony');
     expect(P.modelSpec(INDEX, BASE, 'Nobody').defaultVoice).toBe(LOCK.defaultVoice);
+  });
+
+  it('hands the accent-test voices to the voice lab only', () => {
+    expect(Object.keys(P.modelSpec(INDEX, BASE).voices)).not.toContain('Regina');
+    const lab = P.modelSpec(INDEX, BASE, null, { lab: true });
+    expect(Object.keys(lab.voices)).toEqual([...INDEX.voices.map((v: any) => v.name), ...INDEX.labVoices.map((v: any) => v.name)]);
+    expect(lab.defaultVoice).toBe(LOCK.defaultVoice);
+    expect(P.sameOrigin(lab, 'https://app.test')).toBe(true);
   });
 
   it('refuses a path that would leave the voice folder', () => {
@@ -222,6 +264,19 @@ describe('the phone Phonon engine', () => {
     const app = fakeLib();
     await engine({ native: true, lib: app.lib }).ph.load({ device: 'webgpu', threads: 1 });
     expect(app.loads[0]).toMatchObject({ cache: false, device: 'webgpu', threads: 1 });
+  });
+
+  it('loads the lab model with the accent-test voices apart from the app model, which never has them', async () => {
+    const f = fakeLib();
+    const a = engine({ lib: f.lib });
+    const app = await a.ph.load();
+    const lab = await a.ph.load({ lab: true });
+    expect(lab).not.toBe(app);
+    expect(Object.keys(f.loads[0].model.voices)).not.toContain('Regina');
+    expect(Object.keys(f.loads[1].model.voices)).toContain('Regina');
+    await a.ph.unload({ lab: true });
+    expect(lab.dispose).toHaveBeenCalled();
+    expect(app.dispose).not.toHaveBeenCalled();
   });
 
   it('frees a model when asked, and loads it again after', async () => {

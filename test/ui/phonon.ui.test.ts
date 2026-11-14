@@ -290,6 +290,42 @@ describe('the natural voice', () => {
   }, 180_000);
 });
 
+describe('the accent test in the voice lab', () => {
+  it('lists other locales\' speakers under their own group, reads English with one, and the app never offers them', async () => {
+    const { ctx, page, errors, requests } = await phone();
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    const groups = await page.$$eval('#labVoice optgroup', (gs) => gs.map((x) => ({ label: (x as HTMLOptGroupElement).label, options: [...x.querySelectorAll('option')].map((o) => o.textContent) })));
+    expect(groups.map((x) => x.label)).toEqual(['Voices in the app', 'Accent test (English model)']);
+    expect(groups[0]!.options).toHaveLength(7);
+    expect(groups[1]!.options).toEqual(['Regina, Mexican Spanish speaker', 'Ximena, Mexican Spanish speaker', 'Alba, Spanish from Spain speaker', 'Isadora, Brazilian Portuguese speaker', 'Maëlys, French speaker']);
+    expect(await page.isVisible('#labVoiceNote')).toBe(false);
+    await page.selectOption('#labVoice', 'Regina');
+    expect(await page.textContent('#labVoiceNote')).toBe('Accent test, lab only: the English model reading English with a Mexican Spanish speaker. Catalog: A confident, upbeat Mexican Spanish adult voice with the natural assurance of a closer. Ideal for proactive assistants and sales-led customer interactions.');
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.click('#labRun');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    const dl = page.waitForEvent('download');
+    await page.click('#labSave');
+    const json = JSON.parse(readFileSync(await (await dl).path(), 'utf8'));
+    expect(json).toMatchObject({ voice: 'Regina', voiceLocale: 'es-mx', accentTest: true });
+    const c = json.candidates[0];
+    expect(c.rows).toHaveLength(3);
+    expect(c.summary.failed + c.summary.nanRuns + c.summary.silentRuns).toBe(0);
+    expect(requests.some((u) => u.endsWith('/voices-0ee1720/s58clrg2fe0MO7Y-.safetensors'))).toBe(true);
+
+    // The app's own voice settings know nothing of them.
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('[data-screen=voice]');
+    expect(await page.textContent('[data-screen=voice]')).not.toMatch(/Regina|Accent/);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 200_000);
+});
+
 describe('sound that may only start inside a tap, as on iPhone Safari', () => {
   it('the voice lab plays what it measures: the sound is unlocked inside the Run tap', async () => {
     const { ctx, page, errors } = await phone();

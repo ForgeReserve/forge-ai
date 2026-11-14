@@ -18,14 +18,16 @@ export const PHONON_PIECE = 1500;
 
 /**
  * The model as phonon-tts takes it (a ModelSpec), from the index the build writes. Every URL is on
- * `base`, so the package never falls back to its default model on Hugging Face.
+ * `base`, so the package never falls back to its default model on Hugging Face. lab: also the voice lab's
+ * accent-test voices (index.labVoices), which the app itself never offers.
  */
-export function modelSpec(index, base = PHONON_BASE, voice = null) {
+export function modelSpec(index, base = PHONON_BASE, voice = null, { lab = false } = {}) {
   const url = (p) => {
     if (typeof p !== 'string' || !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(p)) throw new Error(`bad model path ${String(p)}`);
     return new URL(p, base).href;
   };
-  const voices = Object.fromEntries((index?.voices ?? []).map((v) => [v.name, url(v.file)]));
+  const list = [...(index?.voices ?? []), ...(lab ? (index?.labVoices ?? []) : [])];
+  const voices = Object.fromEntries(list.map((v) => [v.name, url(v.file)]));
   const pick = voice && voice in voices ? voice : index?.defaultVoice in voices ? index.defaultVoice : Object.keys(voices)[0];
   return { weights: { q8: url(index?.model?.weights) }, tokenizer: url(index?.model?.tokenizer), config: url(index?.model?.config), voices, defaultVoice: pick };
 }
@@ -36,7 +38,8 @@ export function modelSpec(index, base = PHONON_BASE, voice = null) {
  */
 export function loadFiles(index, voice = null) {
   const size = (p) => index?.files?.find((f) => f.path === p)?.size ?? 0;
-  const v = (index?.voices ?? []).find((x) => x.name === voice) ?? (index?.voices ?? []).find((x) => x.name === index?.defaultVoice) ?? index?.voices?.[0];
+  const all = [...(index?.voices ?? []), ...(index?.labVoices ?? [])];
+  const v = all.find((x) => x.name === voice) ?? all.find((x) => x.name === index?.defaultVoice) ?? index?.voices?.[0];
   const files = [
     { file: 'weights', bytes: size(index?.model?.weights) },
     { file: 'tokenizer', bytes: size(index?.model?.tokenizer) },
@@ -133,8 +136,9 @@ export function soundCheck(chunks) {
  * - base: the model folder; native: true in the Android app, where the files are in the APK (nothing
  *   to download, and nothing is copied into the browser's cache);
  * - importLib: loads phonon-tts (tests pass a fake); fetch, caches: the browser's.
- * load() takes {device: 'cpu' | 'webgpu', threads: 'auto' | n, voice, onProgress, onMeter} and gives the
- * PhononTTS. onProgress gets phonon-tts's own reports; onMeter gets them added up (createMeter).
+ * load() takes {device: 'cpu' | 'webgpu', threads: 'auto' | n, voice, lab, onProgress, onMeter} and gives
+ * the PhononTTS (lab: with the voice lab's accent-test voices too; unload() takes the same lab).
+ * onProgress gets phonon-tts's own reports; onMeter gets them added up (createMeter).
  */
 export function createPhonon({ base = PHONON_BASE, native = false, importLib = () => import('../vendor/phonon-tts/index.js'), fetch: f = (...a) => globalThis.fetch(...a), caches: cs = globalThis.caches, env = globalThis } = {}) {
   let index = null; // the build's index.json, once read
@@ -169,14 +173,14 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
       return { needed: !have, bytes: have ? 0 : index.firstBytes ?? 0 };
     },
     /** The model, loaded the first time (from the cache when it is there). */
-    load({ device = 'cpu', threads = 'auto', voice = null, onProgress, onMeter } = {}) {
-      const key = `${device}|${threads}`;
+    load({ device = 'cpu', threads = 'auto', voice = null, lab = false, onProgress, onMeter } = {}) {
+      const key = `${device}|${threads}|${lab ? 'lab' : 'app'}`;
       if (!loaded.has(key)) {
         const p = (async () => {
           await readIndex();
           if (!index) throw new Error('The voice files are not on this app.');
           const lib = await importLib();
-          const spec = modelSpec(index, base, voice);
+          const spec = modelSpec(index, base, voice, { lab });
           const meter = createMeter(index, spec.defaultVoice);
           const report = (p) => {
             onProgress?.(p);
@@ -192,9 +196,10 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
       return loaded.get(key);
     },
     /** Stops a loaded model's worker and frees its memory. */
-    async unload({ device = 'cpu', threads = 'auto' } = {}) {
-      const p = loaded.get(`${device}|${threads}`);
-      loaded.delete(`${device}|${threads}`);
+    async unload({ device = 'cpu', threads = 'auto', lab = false } = {}) {
+      const key = `${device}|${threads}|${lab ? 'lab' : 'app'}`;
+      const p = loaded.get(key);
+      loaded.delete(key);
       try {
         (await p)?.dispose();
       } catch {

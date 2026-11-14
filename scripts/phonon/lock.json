@@ -1,5 +1,5 @@
 {
-  "note": "Pinned files for the on-device voice (Phonon 31m English and its en-GB female voices). scripts/phonon-model.ts downloads them at build time into public/v2/voice/phonon and checks each against size and sha256. The app never fetches them from Hugging Face.",
+  "note": "Pinned files for the on-device voice (Phonon 31m English and its en-GB female voices). scripts/phonon-model.ts downloads them at build time into public/v2/voice/phonon and checks each against size and sha256. The app never fetches them from Hugging Face. labVoices are for the voice lab only (#/voice-lab): speakers from other locales read by the English model, to hear the accent it gives. The app never offers them.",
   "model": {
     "name": "Phonon 31m (English)",
     "repo": "gradium/phonon-31m-en",
@@ -84,6 +84,58 @@
       "description": "Full, rich mid-range tones, softly relaxed and spoken close to the mic, moving briskly with light pitch play."
     }
   ],
+  "labVoices": [
+    {
+      "name": "Regina",
+      "id": "s58clrg2fe0MO7Y-",
+      "file": "voices-0ee1720/s58clrg2fe0MO7Y-.safetensors",
+      "locale": "es-mx",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A confident, upbeat Mexican Spanish adult voice with the natural assurance of a closer. Ideal for proactive assistants and sales-led customer interactions.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Ximena",
+      "id": "VDwnGxAo68C8U8vC",
+      "file": "voices-0ee1720/VDwnGxAo68C8U8vC.safetensors",
+      "locale": "es-mx",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A playful, expressive Mexican Spanish adult voice that turns everyday moments into stories. Great for engaging assistants and personable conversational AI.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Alba",
+      "id": "u2UscyAnHilpiwmf",
+      "file": "voices-0ee1720/u2UscyAnHilpiwmf.safetensors",
+      "locale": "es-es",
+      "gender": "female",
+      "age": "Young",
+      "description": "A sweet, expressive young Castilian Spanish voice, soft and girly with lively emphasis, sparky and to the point for efficient support.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Isadora",
+      "id": "CtNvKUUMrx1h56ih",
+      "file": "voices-0ee1720/CtNvKUUMrx1h56ih.safetensors",
+      "locale": "pt-br",
+      "gender": "female",
+      "age": "Young",
+      "description": "An upbeat young voice with a light girlish tone and warm bounce, quick and to the point, ideal for efficient, caring customer service.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Maëlys",
+      "id": "s048cR1l2Jmu4k3B",
+      "file": "voices-0ee1720/s048cR1l2Jmu4k3B.safetensors",
+      "locale": "fr-fr",
+      "gender": "female",
+      "age": "Young",
+      "description": "A young French voice, energetic and enthusiastic with a welcoming, upbeat delivery, sparky and to the point for responsive support.",
+      "use": "accent-test"
+    }
+  ],
   "files": [
     {
       "path": "31m-en-92741c5/config.json",
@@ -144,6 +196,36 @@
       "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/gfP44RlHwr2kEwk7.safetensors",
       "size": 256136,
       "sha256": "bcc207a73b7885e45b49ab633d3377a10158292e3a7cef9cd6764ad107f1cb9b"
+    },
+    {
+      "path": "voices-0ee1720/s58clrg2fe0MO7Y-.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/s58clrg2fe0MO7Y-.safetensors",
+      "size": 256136,
+      "sha256": "ab923d4fd9ed09954e3a91c61780bcd536f5bb5787e1d0541cb6ff56dd7ff531"
+    },
+    {
+      "path": "voices-0ee1720/VDwnGxAo68C8U8vC.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/VDwnGxAo68C8U8vC.safetensors",
+      "size": 256136,
+      "sha256": "ccb1b88e3899db1cb7ba71007d08ed56dd743882214f0495b67feab89850ffe0"
+    },
+    {
+      "path": "voices-0ee1720/u2UscyAnHilpiwmf.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/u2UscyAnHilpiwmf.safetensors",
+      "size": 256136,
+      "sha256": "edd14cc89944ec7a9b1a87cc6be6f371f1a56791d344d921f850e2106e6dee9e"
+    },
+    {
+      "path": "voices-0ee1720/CtNvKUUMrx1h56ih.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/CtNvKUUMrx1h56ih.safetensors",
+      "size": 256136,
+      "sha256": "ad6f5ca7df38abbb15b85a09613b14ebd76d70108d5420e6f21486a6a10154c9"
+    },
+    {
+      "path": "voices-0ee1720/s048cR1l2Jmu4k3B.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/s048cR1l2Jmu4k3B.safetensors",
+      "size": 256136,
+      "sha256": "f7b80c03210e3fd736de6596586305e9b7eb0e615047dd1cbb1b58fc3f92985f"
     }
   ]
 }
