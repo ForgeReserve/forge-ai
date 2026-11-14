@@ -428,6 +428,148 @@ describe('taking eCash off a card (core/card/flow.js)', () => {
     expect(await s.flow.resume(async () => {})).toBe(0);
   });
 
+  it('a refused payment can be tried again: Try again sends the swap once more and the money arrives', async () => {
+    const s = setup();
+    await s.ready;
+    const swap = s.mint.relay.swap;
+    s.mint.relay.swap = async () => ({ ok: false, status: 400, body: { error: { code: 'mint_refused', message: 'Witness is missing or invalid' }, mint_code: 20008 } });
+    await take(s, 70).catch(() => {});
+    const [f] = s.flow.failed();
+    expect(f).toMatchObject({ state: 'failed', error: 'Witness is missing or invalid' });
+    expect(f.outputs.reduce((n: number, o: any) => n + o.amount, 0)).toBe(70);
+    s.mint.relay.swap = swap;
+    const job = await s.flow.retry(f.id);
+    expect(job.state).toBe('swapped');
+    expect(job.error).toBeUndefined();
+    expect(tokenAmount(job.token)).toBe(70);
+    expect(s.flow.failed()).toEqual([]);
+    // Refused again: failed again, and still listed.
+    const s2 = setup();
+    await s2.ready;
+    s2.mint.relay.swap = async () => ({ ok: false, status: 400, body: { error: { code: 'mint_refused', message: 'no' }, mint_code: 20008 } });
+    await take(s2).catch(() => {});
+    const e = await s2.flow.retry(s2.flow.failed()[0].id).catch((x: any) => x);
+    expect(e).toMatchObject({ code: 'mint_refused', kept: true });
+    expect(s2.flow.failed()).toHaveLength(1);
+  });
+
+  it.each([
+    ["the engine's live check of an unlisted mint failed once", { error: { code: 'mint_check_failed', message: "this mint did not pass Forge's checks (probe threw)" } }],
+    ['other-mint funding switched off meanwhile', { error: { code: 'method_unavailable', message: 'eCash from other mints is not accepted here' } }],
+    ['a mint answer with no mint code (a rate limit, say)', { error: { code: 'mint_refused', message: 'the card mint answered HTTP 429' }, mint_code: null }],
+    ['the outputs are being signed now (11004)', { error: { code: 'mint_refused', message: 'outputs are pending' }, mint_code: 11004 }],
+  ])('an answer that may pass later (%s): the payment stays signed and resume finishes it', async (_name, body) => {
+    const s = setup();
+    await s.ready;
+    const swap = s.mint.relay.swap;
+    let first = true;
+    s.mint.relay.swap = async (b: any) => {
+      if (!first) return swap(b);
+      first = false;
+      return { ok: false, status: 400, body };
+    };
+    const e = await take(s).catch((x: any) => x);
+    expect(e).toMatchObject({ code: 'mint_unavailable', kept: true });
+    expect(s.flow.pending()[0].state).toBe('signed');
+    expect(s.flow.failed()).toEqual([]);
+    const handed: string[] = [];
+    await s.flow.resume(async (j: any) => void handed.push(j.token));
+    expect(tokenAmount(handed[0]!)).toBe(100);
+    expect(s.flow.pending()).toEqual([]);
+  });
+
+  it.each(['empty', 'reloaded'])('the owner cleared the spent slots (%s) after a tap broke past the commit: the next tap with the PIN still gets the money', async (after) => {
+    const s = setup();
+    await s.ready;
+    s.card.breaks.push({ ins: 0x24, when: 'after' });
+    await take(s, 70).catch(() => {});
+    const [held] = s.flow.pending();
+    expect(held.state).toBe('ready');
+    const slots = held.inputs.map((i: any) => i.slot);
+    // CLEAR_SPENT, and maybe a top-up that lands new pieces in the same slots.
+    s.card.clearSpent();
+    if (after === 'reloaded') {
+      await provision(s.card, s.signer, [64, 32]);
+      expect(s.card.unspent().filter((p) => slots.includes(p.slot))).toHaveLength(slots.length);
+    } else expect(s.card.slots.filter((x, i) => slots.includes(i) && x)).toEqual([]);
+    s.card.tap();
+    const r1 = await s.flow.read(s.card.transceive);
+    // Not dropped: the slots say nothing about this payment. It waits for the PIN.
+    expect(r1.unfinished).toBe(true);
+    expect(s.flow.pending()[0].state).toBe('ready');
+    s.card.tap();
+    await s.flow.finish(s.card.transceive, { summary: r1, pin: '1234' });
+    const [job] = s.flow.pending();
+    expect(job.state).toBe('swapped');
+    expect(tokenAmount(job.token)).toBe(70);
+  });
+
+  it('every failure after the card signed says the payment is kept, never that nothing was taken', async () => {
+    const M: any = await import('../../../public/v2/modules/fund/card/index.js' as string);
+    const I18N: any = await import('../../../public/v2/core/i18n.js' as string);
+    const t = (k: string, v?: object) => I18N.t(k, v);
+    // The phone cannot store the signature it just got.
+    const s = setup();
+    await s.ready;
+    let full = false;
+    const storage = { getItem: (k: string) => s.storage.getItem(k), setItem: (k: string, v: string) => (full ? undefined : s.storage.setItem(k, v)) };
+    const flow = F.createCardFunding({ storage, relay: s.mint.relay });
+    const tx = async (apdu: number[]) => {
+      const r = await s.card.transceive(apdu);
+      if (apdu[1] === 0x24) full = true;
+      return r;
+    };
+    s.card.tap();
+    const summary = await flow.read(tx);
+    const info = await flow.mintInfo(summary);
+    const e = await flow.pay(tx, { summary, info, plan: flow.plan(summary, info, 100), pin: '1234' }).catch((x: any) => x);
+    expect(e).toMatchObject({ code: 'unfinished', kept: true });
+    expect(M.wordsFor(e, t)).not.toMatch(/Nothing was taken/);
+    expect(s.card.balance()).toBe(0);
+    // Room again: the next tap of the card finishes it.
+    full = false;
+    s.card.lift();
+    s.card.tap();
+    const r1 = await flow.read(s.card.transceive);
+    s.card.tap();
+    await flow.finish(s.card.transceive, { summary: r1, pin: '1234' });
+    expect(tokenAmount(flow.pending()[0].token)).toBe(100);
+
+    // The mint's answer cannot be unblinded: kept as signed, and resume finishes it from the mint.
+    const s2 = setup();
+    await s2.ready;
+    const swap = s2.mint.relay.swap;
+    let garble = true;
+    s2.mint.relay.swap = async (b: any) => {
+      const r = await swap(b);
+      if (!garble) return r;
+      garble = false;
+      return { ...r, body: { signatures: r.body.signatures.map((x: any) => ({ id: x.id, amount: x.amount, C_: 'zz' })) } };
+    };
+    const e2 = await take(s2).catch((x: any) => x);
+    expect(e2).toMatchObject({ code: 'mint_unavailable', kept: true });
+    expect(M.wordsFor(e2, t)).toBe(t('fund.card.kept'));
+    expect(s2.flow.pending()[0].state).toBe('signed');
+    const handed: string[] = [];
+    await s2.flow.resume(async (j: any) => void handed.push(j.token));
+    expect(tokenAmount(handed[0]!)).toBe(100);
+    // Any kept error, whatever its code, is worded as kept.
+    for (const code of ['not_stored', 'card_error', 'tap_lost', 'something new']) expect(M.wordsFor({ code, kept: true }, t)).toBe(t('fund.card.kept'));
+  });
+
+  it("another mint's cap: the plan never takes more off the card than the engine then accepts", async () => {
+    const s = setup();
+    await s.ready;
+    s.card.tap();
+    const summary = await s.flow.read(s.card.transceive);
+    const info = { ...(await s.flow.mintInfo(summary)), max: 40 };
+    expect(s.flow.plan(summary, info)).toMatchObject({ amount: 40 });
+    expect(s.flow.plan(summary, info, 40)).toMatchObject({ amount: 40, selected: 64 });
+    expect(() => s.flow.plan(summary, info, 41)).toThrow(expect.objectContaining({ code: 'over_max', max: 40 }));
+    // No cap (the engine's own mint): all of it.
+    expect(s.flow.plan(summary, { ...info, max: undefined })).toMatchObject({ amount: 100 });
+  });
+
   it('a phone that cannot store the payment asks the card for nothing', async () => {
     const s = setup();
     await s.ready;

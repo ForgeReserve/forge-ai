@@ -98,16 +98,20 @@ A Cashu card (the card protocol 2.0 from the cashu-javacard applet, as flash-pos
 5. Swap: `POST /v1/wallet/fund/card/swap {mint, inputs, outputs}`; the engine passes it to `<mint>/v1/swap` and the answer back. The phone checks each blind signature's amount, keyset and NUT-12 proof, unblinds its own outputs into a cashuB token (stored with the job before anything else), and loads the card's change back onto it (`GET_CHANGE` openings, `C = C_ - r·K`, `LOAD_PROOF`), in the same tap or the next one.
 6. Add: a token from the engine's own mint goes through `wallet.topup` (stored in the vault first). A token from another mint is kept in the vault, marked not added, and the Other mint screen opens with it (flow above).
 
-No money is lost on a broken tap:
+A broken tap is finished from what the phone holds:
 
 | The card leaves | What the phone holds | What finishes it |
 | - | - | - |
-| before `SPEND_ALL_SIGN` reaches it | the payment | The next read finds the pieces still there and drops the payment. Nothing moved |
-| after the commit, before the answer | the payment, without a signature | The next tap of that card: `SPEND_ALL_AGAIN` (with the PIN on a card that has one), checked against the stored payment, then the swap |
-| after the signature | the signed payment | The swap is sent again (now, on start, when the connection comes back, on Funds). If the mint already did it (`11001`, `11002`, `11003`), `POST /v1/wallet/fund/card/restore` (NUT-09) gets its signatures again |
+| before `SPEND_ALL_SIGN` reaches it | the payment | The next read finds the very same pieces (same `C`) still unspent in their slots and drops the payment. Nothing moved |
+| after the commit, before the answer | the payment, without a signature | The next tap of that card: `SPEND_ALL_AGAIN` (with the PIN on a card that has one), checked against the stored payment, then the swap. This works only if the card comes back before it pays anywhere else: any later `SPEND_ALL_SIGN`, at a till for example, replaces the card's last signature, and then this payment cannot be finished |
+| after the signature | the signed payment | The swap is sent again (now, on start, when the connection comes back, on Funds). If the mint already did it or is doing it (`11001`, `11002`, `11003`, `11004`), `POST /v1/wallet/fund/card/restore` (NUT-09) gets its signatures again |
 | after the swap, before the change is loaded | the token, and the mint's signatures for the card's change | The token goes to the vault at once; the change is loaded at the next tap of that card (the change grant, or the PIN) |
 
-A status word from `SPEND_ALL_SIGN` (`6A94` PIN needed, `6A8F` over the daily limit) is a refusal before the commit: nothing was burned and the payment is dropped. Any other failure there keeps it. A mint that refuses the swap outright marks the payment failed and keeps it on the phone for a person to look at; nothing retries it as if it might pass.
+A slot that is spent, empty, or holds another piece never drops a payment: the card's owner may have run `CLEAR_SPENT` and loaded new pieces into those slots. Then only `SPEND_ALL_AGAIN`, checked against the stored payment, decides.
+
+A status word from `SPEND_ALL_SIGN` (`6A94` PIN needed, `6A8F` over the daily limit) is a refusal before the commit: nothing was burned and the payment is dropped. Any other failure there keeps it, and so does every failure after it. Only the card's mint refusing the swap with its own code (other than those above) marks the payment failed. An engine answer without a mint code (its other-mint checks, a setting changed, a mint that rate-limits or times out, which the relay answers as `503 mint_unavailable`) leaves the payment signed, and it is sent again later. A failed payment is listed on the Tap a card screen with its amount, its mint and what was said, and Try again sends the swap once more (or, with no signature, asks the card again at its next tap). Erase everything warns about it until it goes through.
+
+For a card from another mint, `/v1/wallet/fund/card/mint` also answers `max`: the most other-mint funding takes from that mint in one token (`FORGE_FOREIGN_MAX_SAT` or `_USD`, and for an unlisted mint the lower unlisted cap). The phone never takes more than that off the card in one tap, and before the card signs it shows only what comes to the phone: Other mint shows its own price next.
 
 Not covered: the card's clock and limits (`SET_HEADER`, the no-PIN allowance), the owner's commands, a card's DLEQ store, the NFC tag application, and a 0.x or Foxy 1.x card, which is refused as needing an update before anything is asked of it.
 

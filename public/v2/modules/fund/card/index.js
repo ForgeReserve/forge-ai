@@ -30,6 +30,8 @@ export function routeFor(info, { unit, units = [], balanceUnit = null, otherMint
 
 /** The words for a card flow failure (core/card/flow.js CardFlowError codes). */
 export function wordsFor(e, t) {
+  // A kept failure came after the card burned its pieces: it never reaches a "Nothing was taken" line.
+  if (e?.kept && e.code !== 'unfinished' && e.code !== 'mint_refused') return t('fund.card.kept');
   switch (e?.code) {
     case 'pin_wrong':
       return t('fund.card.wrongPin', { tries: e.triesLeft === 1 ? t('fund.card.tryLeft') : t('fund.card.triesLeft', { count: e.triesLeft }) });
@@ -55,6 +57,8 @@ export function wordsFor(e, t) {
       return t('fund.card.tooSmall');
     case 'all_only':
       return t('fund.card.allOnly');
+    case 'over_max':
+      return t('fund.card.overMax');
     case 'unfinished':
       return t('fund.card.unfinished');
     case 'mint_unavailable':
@@ -123,8 +127,53 @@ export function create(inputs) {
       // ------------------------------------------------------------ the app
 
       const hold = (line = t('fund.card.keep')) => {
-        body.replaceChildren(...kids(art(), ui.el('p', { class: 'card-hold', id: 'cardHold', text: t('fund.card.hold') }), ui.el('p', { class: 'note', id: 'cardHoldLine', text: line }), msg));
+        body.replaceChildren(...kids(art(), ui.el('p', { class: 'card-hold', id: 'cardHold', text: t('fund.card.hold') }), ui.el('p', { class: 'note', id: 'cardHoldLine', text: line }), msg, failedList()));
         foot.replaceChildren();
+      };
+
+      /**
+       * Card payments the card's mint refused: the money is on this phone and nowhere else, so each is
+       * shown with what it is worth, its mint, what was said, and Try again.
+       */
+      const failedList = () => {
+        const jobs = cards?.flow?.failed?.() ?? [];
+        if (!jobs.length) return null;
+        return ui.el(
+          'section',
+          { class: 'notice', id: 'cardFailed', 'aria-labelledby': 'cardFailedHead' },
+          ui.el('b', { id: 'cardFailedHead', text: t('fund.card.failedHead') }),
+          ...jobs.map((j) =>
+            ui.el(
+              'div',
+              { class: 'card-failed', 'data-job': j.id },
+              ui.el('p', { text: t('fund.card.failedRow', { amount: format.units(j.outputs.reduce((s, o) => s + o.amount, 0), j.unit), mint: mintLabel(j.mint) }) }),
+              j.error ? ui.el('p', { class: 'note mono', text: t('fund.card.failedWhy', { error: String(j.error).slice(0, 200) }) }) : null,
+              btn({ class: 'btn block', onclick: () => retry(j.id) }, 'again', t('fund.card.tryAgain')),
+            ),
+          ),
+        );
+      };
+
+      /** Try a refused card payment again: the swap is sent now, or (no signature) at the card's next tap. */
+      const retry = async (id) => {
+        if (busy) return;
+        busy = true;
+        working(t('fund.card.moving'));
+        try {
+          const job = await cards.flow.retry(id);
+          if (job?.state === 'ready') {
+            next = 'read';
+            hold(t('fund.card.holdAgain'));
+            return;
+          }
+          await handFinished();
+          ui.toast(t('fund.card.retried'));
+          hold();
+        } catch (e) {
+          failed(e);
+        } finally {
+          busy = false;
+        }
       };
 
       const working = (text) => {
@@ -173,16 +222,26 @@ export function create(inputs) {
         foot.replaceChildren(...kids(btn({ class: 'btn block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
       };
 
-      /** The words for a failure; the card waits for the next tap where one can help. */
-      const failed = (e) => {
+      /**
+       * The words for a failure; the card waits for the next tap where one can help. from: 'finish' when
+       * the failure came from finishing an earlier payment, so its own form comes back.
+       */
+      const failed = (e, from = null) => {
         const words = wordsFor(e, t);
         if (e?.code === 'tap_lost' || e?.code === 'unfinished' || e?.code === 'other_card') {
           if (e.code === 'unfinished') next = 'read';
           hold(words);
           return;
         }
-        if (summary && ['pin_wrong', 'pin_needed', 'too_small', 'all_only'].includes(e?.code)) {
-          showForm();
+        if (['pin_wrong', 'pin_needed', 'pin_blocked'].includes(e?.code)) {
+          // A PIN the card refused is never sent again on its own: the next tap only reads the card,
+          // and the person types the PIN again.
+          next = 'read';
+          if (choice) choice.pin = '';
+        }
+        if (summary && ['pin_wrong', 'pin_needed', 'too_small', 'all_only', 'over_max'].includes(e?.code)) {
+          if (from === 'finish') showFinish();
+          else showForm();
           msg.set(words, 'err');
           return;
         }
@@ -203,12 +262,13 @@ export function create(inputs) {
           await handFinished().catch(() => {});
           if (summary.unfinished) {
             next = 'finish';
-            // The PIN was given for the payment this tap finishes: use it, the card is here.
-            if (choice?.pin || summary.pinState !== 'set') return finish();
+            // The PIN was given on this screen for this same card: use it, the card is here. A PIN typed
+            // for another card is never sent to this one.
+            if ((choice?.pin && choice.cardKey === summary.pubkey) || summary.pinState !== 'set') return finish();
             return showFinish();
           }
           if (!summary.balance) throw Object.assign(new Error('empty'), { code: 'empty' });
-          info = await cards.flow.mintInfo(summary, { acceptUnlisted });
+          takeInfo(await cards.flow.mintInfo(summary, { acceptUnlisted }));
         } catch (e) {
           if (e?.code === 'mint_unlisted') return showUnlisted(e);
           summary = e?.code === 'empty' ? summary : null;
@@ -220,6 +280,12 @@ export function create(inputs) {
         showForm();
         if (changeWaiting) msg.set(t('fund.card.changeBack'), 'ok');
         changeWaiting = false;
+      };
+
+      /** The relay's answer about the card's mint; another mint's cap limits what one tap moves. */
+      const takeInfo = (i) => {
+        info = i;
+        if (Number.isSafeInteger(i?.max) && i.max > 0 && summary.max > i.max) summary = { ...summary, max: i.max };
       };
 
       const showUnlisted = (e) => {
@@ -247,7 +313,7 @@ export function create(inputs) {
               id: 'cardFinish',
               onclick: () => {
                 if (summary.pinState === 'set' && !/^[0-9]{4,8}$/.test(pin.value())) return msg.set(t('fund.card.pinBad'), 'err');
-                choice = { pin: pin.value() };
+                choice = { pin: pin.value(), cardKey: summary.pubkey };
                 next = 'finish';
                 go();
               },
@@ -268,10 +334,10 @@ export function create(inputs) {
             toastAndDone(null);
             return;
           }
-          info = await cards.flow.mintInfo(summary, { acceptUnlisted });
+          takeInfo(await cards.flow.mintInfo(summary, { acceptUnlisted }));
           showForm();
         } catch (e) {
-          failed(e);
+          failed(e, 'finish');
         }
       };
 
@@ -304,7 +370,9 @@ export function create(inputs) {
           }
           const back = plan.selected - plan.amount;
           preview.replaceChildren(...kids(
-            ui.el('p', { class: 'card-get', id: 'cardGet', text: t('fund.card.youGet', { amount: format.units(plan.receive, unit) }) }),
+            // Another mint's eCash still goes through Other mint, which shows its own price: what is
+            // known here is only what reaches this phone.
+            ui.el('p', { class: 'card-get', id: 'cardGet', text: t(route === 'othermint' ? 'fund.card.toPhone' : 'fund.card.youGet', { amount: format.units(plan.receive, unit) }) }),
             plan.fee ? ui.el('p', { class: 'note', id: 'cardFee', text: t('fund.card.fee', { amount: format.units(plan.fee, unit) }) }) : null,
             back ? ui.el('p', { class: 'note', id: 'cardBack', text: t('fund.card.backToCard', { amount: format.units(back, unit) }) }) : null,
           ));
@@ -339,7 +407,7 @@ export function create(inputs) {
             msg.set(t('fund.card.pinBad'), 'err');
             return pin.input?.focus();
           }
-          choice = { plan, pin: pin.value() };
+          choice = { plan, pin: pin.value(), cardKey: summary.pubkey };
           next = 'pay';
           go();
         });

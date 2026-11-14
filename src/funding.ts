@@ -488,6 +488,16 @@ export class FundingService {
   }
 
   /**
+   * The largest token quoteForeign takes from another mint, in the token's unit: FORGE_FOREIGN_MAX_*,
+   * and for an unlisted mint the lower unlisted cap. null for a unit other-mint funding does not take.
+   */
+  foreignMax(unit: string, unlisted: boolean): number | null {
+    if (unit !== 'sat' && unit !== 'usd') return null;
+    if (unlisted) return this.unlistedMax()[unit];
+    return unit === 'sat' ? this.env.FORGE_FOREIGN_MAX_SAT : this.env.FORGE_FOREIGN_MAX_USD;
+  }
+
+  /**
    * Other mints whose eCash is accepted under the policy: the operator's (env list and admin-added),
    * then the discovered set (under 'discovered', and under 'any' with no env list, where they are
    * suggestions). Denied and Forge's own mints are never listed. Never waits on a relay.

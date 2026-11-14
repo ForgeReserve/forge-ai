@@ -128,6 +128,14 @@ export class CardSim {
     }
   }
 
+  /**
+   * The owner's CLEAR_SPENT (spec/APDU.md 0x31): spent slots are freed, so the next LOAD_PROOF reuses
+   * them. The last signature stays (SPEND_ALL_AGAIN still answers it).
+   */
+  clearSpent() {
+    this.slots = this.slots.map((s) => (s?.status === 2 ? null : s));
+  }
+
   unspent() {
     return this.slots.flatMap((s, slot) => (s?.status === 1 ? [{ slot, ...s }] : []));
   }

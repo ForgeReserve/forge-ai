@@ -17,8 +17,10 @@
 // tap that breaks after that is finished from storage: the swap is sent again, and if the mint already
 // did it (its answer was lost), the phone asks the mint for its signatures again (NUT-09 restore). A tap
 // that breaks while the card signs is finished at the next tap of the same card: the card either still
-// has its pieces (nothing happened) or gives its last signature again (SPEND_ALL_AGAIN), which is
-// checked against the stored payment before it is used. The token is kept with the job until the
+// has the very same pieces unspent (nothing happened) or gives its last signature again
+// (SPEND_ALL_AGAIN), which is checked against the stored payment before it is used. A payment made with
+// the card anywhere else before it comes back replaces that last signature, and then this one cannot be
+// finished. The token is kept with the job until the
 // caller has it in the vault (handed()). Storage is passed in (localStorage in the page, a Map in tests).
 import * as apdu from './apdu.js';
 import { blind, cardSecret, fromHex, randomBytes, schnorrVerify, sigAllMessage, splitAmount, toHex, unblind, verifyDleq, encodeToken } from '../cashu.js';
@@ -28,11 +30,14 @@ const STORE = 'forge2.cards';
 const MAX_OPENINGS = 8;
 /**
  * Mint codes (NUT-00, Nutshell 0.22.1 cashu/core/errors.py) that mean this swap may already have been
- * done: the inputs are spent (11001) or in a swap now (11002), or the outputs are signed (11003).
+ * done: the inputs are spent (11001) or in a swap now (11002), the outputs are signed (11003) or being
+ * signed now (11004).
  */
 const SPENT = 11001;
 const PENDING = 11002;
 const OUTPUTS_SIGNED = 11003;
+const OUTPUTS_PENDING = 11004;
+const DONE_OR_DOING = [SPENT, PENDING, OUTPUTS_SIGNED, OUTPUTS_PENDING];
 
 /** Units a card's record can name. Only sat is defined (0). */
 const UNITS = { 0: 'sat' };
@@ -40,7 +45,7 @@ const UNITS = { 0: 'sat' };
 export class CardFlowError extends Error {
   /**
    * code: not_ecash, needs_update, not_genuine, locked, empty, wrong_unit, pin_wrong (triesLeft),
-   * pin_blocked, pin_needed, over_limit, other_card, too_small, all_only, card_full, tap_lost,
+   * pin_blocked, pin_needed, over_limit, other_card, too_small, all_only, over_max, card_full, tap_lost,
    * mint_refused, mint_unavailable, mint_unlisted, not_taken, unfinished, card_error.
    * kept: true when a job holds the money on this phone and will be finished later.
    */
@@ -168,12 +173,17 @@ export function choosePieces(pieces, amount) {
  * The plan for taking amount off the card. info is the card's mint as the relay gives it: {keysets:
  * [{id, unit, active, input_fee_ppk}], keys: {id: {amount: K}}}. Returns {slots, pieces, selected,
  * amount, fee, receive, outputs (amounts to the phone), change (amounts back to the card), keyset (full
- * id of the outputs), inputKeysets}. Throws CardFlowError too_small or all_only.
+ * id of the outputs), inputKeysets}. info.max, when the relay gives one, is the most the engine takes
+ * from that mint in one go (another mint's caps): no more is ever taken off the card. Throws
+ * CardFlowError too_small, all_only or over_max.
  */
 export function planTake(summary, info, amount) {
   const group = pieceGroups(summary.pieces)[0];
   if (!group || !group.total) throw new CardFlowError('empty', 'This card is empty.');
-  const want = Math.min(Math.max(1, Math.floor(amount ?? group.total)), group.total);
+  const cap = Number.isSafeInteger(info?.max) && info.max > 0 ? info.max : null;
+  const want = Math.min(Math.max(1, Math.floor(amount ?? Math.min(group.total, cap ?? group.total))), group.total);
+  // Taking more than the engine then accepts would leave a token on the phone that nothing can add.
+  if (cap !== null && want > cap) throw new CardFlowError('over_max', `the engine takes at most ${cap} from this mint at a time`, { max: cap });
   const pieces = choosePieces(group.pieces, want);
   const selected = pieces.reduce((s, p) => s + p.amount, 0);
   const inputKeysets = pieces.map((p) => expandKeyset(p.keysetId, info.keysets));
@@ -319,10 +329,13 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
     const mine = store.jobs().filter((j) => j.cardKey === pubkey);
     for (const job of mine.filter((j) => j.state === 'ready')) {
       const named = await apdu.getPiecesNamed(tx, job.inputs.map((i) => i.slot));
-      const burned = named.every((n) => n.status === 'spent' && n.piece?.C === job.inputs.find((i) => i.slot === n.slot)?.C);
-      if (!burned) {
-        // The card never signed: its pieces are still there and nothing moved.
-        if (named.every((n) => n.status === 'unspent')) store.remove(job.id);
+      // The card never signed only when every one of the payment's own pieces (the same C) is still
+      // there unspent. A slot that is spent, empty, or holds another piece says nothing for sure: the
+      // card's owner may have cleared spent slots (CLEAR_SPENT) and loaded new pieces into them since.
+      // Then only the card's last signature, checked against this payment, decides.
+      const untouched = named.every((n) => n.status === 'unspent' && n.piece?.C === job.inputs.find((i) => i.slot === n.slot)?.C);
+      if (untouched) {
+        store.remove(job.id);
         continue;
       }
       if (!pinOk && job.pinSet) continue;
@@ -403,7 +416,11 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
     let sigs = r.ok ? r.body?.signatures : null;
     if (!r.ok) {
       const mintCode = r.body?.mint_code;
-      if (mintCode === SPENT || mintCode === PENDING || mintCode === OUTPUTS_SIGNED) {
+      // Only the card's mint saying no, with its own code, is a refusal. Anything the engine says (its
+      // other-mint checks, a setting changed, a mint that rate-limits, an answer without a code) may pass
+      // later: the payment stays signed and is sent again.
+      const byMint = r.body?.error?.code === 'mint_refused' && Number.isInteger(mintCode);
+      if (byMint && DONE_OR_DOING.includes(mintCode)) {
         // The mint has these pieces already: the swap went through and its answer was lost, or it is
         // going through now. Its signatures for our outputs are asked for again.
         let rr;
@@ -413,13 +430,13 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
           throw new CardFlowError('mint_unavailable', 'The engine could not be reached. The eCash is kept on this phone.', { kept: true });
         }
         const got = rr.ok ? matchRestored(outputs, rr.body) : null;
-        if (!got) throw new CardFlowError(mintCode === PENDING ? 'mint_unavailable' : 'mint_refused', 'The card mint has not finished this payment yet.', { kept: true });
+        if (!got) throw new CardFlowError(mintCode === PENDING || mintCode === OUTPUTS_PENDING ? 'mint_unavailable' : 'mint_refused', 'The card mint has not finished this payment yet.', { kept: true });
         sigs = got;
-      } else if (r.status >= 500 || r.status === 429 || r.status === 0 || r.body?.error?.code === 'mint_unavailable') {
-        throw new CardFlowError('mint_unavailable', r.body?.error?.message ?? `HTTP ${r.status}`, { kept: true });
-      } else {
+      } else if (byMint) {
         store.put({ ...job, state: 'failed', error: r.body?.error?.message ?? `HTTP ${r.status}` });
         throw new CardFlowError('mint_refused', r.body?.error?.message ?? `HTTP ${r.status}`, { kept: true });
+      } else {
+        throw new CardFlowError('mint_unavailable', r.body?.error?.message ?? `HTTP ${r.status}`, { kept: true });
       }
     }
     if (!Array.isArray(sigs) || sigs.length !== outputs.length) throw new CardFlowError('mint_unavailable', 'The card mint answered without its signatures.', { kept: true });
@@ -507,19 +524,66 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
       }
       throw new CardFlowError('unfinished', 'The card left before it finished. Tap the same card again.', { kept: true });
     }
-    if (!schnorrVerify(sig, message(job), summary.pubkey)) throw new CardFlowError('unfinished', "The card's answer did not check out. Tap the same card again.", { kept: true });
-    job = store.put({ ...job, sig, state: 'signed' });
-    job = await settle(job);
-    if (job.changeOwed) {
-      try {
-        await loadChange(tx, job);
-        job = store.get(job.id) ?? { ...job, changeOwed: false };
-      } catch {
-        // The card's change waits on this phone for its next tap; the eCash is already here.
-        job = store.get(job.id) ?? job;
+    // The card has burned its pieces: from here on, every failure says the payment is kept, never that
+    // nothing was taken.
+    try {
+      if (!schnorrVerify(sig, message(job), summary.pubkey)) throw new CardFlowError('unfinished', "The card's answer did not check out. Tap the same card again.", { kept: true });
+      job = store.put({ ...job, sig, state: 'signed' });
+      job = await settle(job);
+      if (job.changeOwed) {
+        try {
+          await loadChange(tx, job);
+          job = store.get(job.id) ?? { ...job, changeOwed: false };
+        } catch {
+          // The card's change waits on this phone for its next tap; the eCash is already here.
+          job = store.get(job.id) ?? job;
+        }
       }
+      return job;
+    } catch (e) {
+      if (e instanceof CardFlowError && e.kept) throw e;
+      throw keptAfterSign(job.id, e);
     }
-    return job;
+  }
+
+  /**
+   * A failure after the card signed that is not already worded as kept (the phone's storage, a garbled
+   * mint answer): what is stored decides what finishes it. Still 'ready' (the signature was not
+   * stored): the next tap of the card. Otherwise resume() sends the swap again.
+   */
+  function keptAfterSign(id, e) {
+    let state = null;
+    try {
+      state = store.get(id)?.state ?? null;
+    } catch {
+      /* storage unreadable: treat as not stored */
+    }
+    const detail = e?.message ?? String(e);
+    if (state === 'ready' || state === null) return new CardFlowError('unfinished', `The card signed but the phone could not finish (${detail}). Tap the same card again.`, { kept: true });
+    return new CardFlowError('mint_unavailable', `The payment could not be finished yet (${detail}). It is kept on this phone.`, { kept: true });
+  }
+
+  /**
+   * Card payments the card's mint refused (state 'failed'), newest first, for the card screen: the money
+   * stays on this phone until a person tries again or it goes through.
+   */
+  const failedJobs = () =>
+    store
+      .jobs()
+      .filter((j) => j.state === 'failed')
+      .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+
+  /**
+   * A person tries a failed payment again. With the card's signature: back to 'signed' and the swap is
+   * sent now (settle). Without it (the card could not give it again): back to 'ready', so the next tap
+   * of that card asks for it once more. Resolves to the job as it then stands.
+   */
+  async function retry(id) {
+    const job = store.get(id);
+    if (!job || job.state !== 'failed') return job;
+    const { error: _error, ...rest } = job;
+    if (!rest.sig) return store.put({ ...rest, state: 'ready' });
+    return settle(store.put({ ...rest, state: 'signed' }));
   }
 
   /** The caller has the job's token safe (in the vault). The job goes once nothing more is owed. */
@@ -568,6 +632,8 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
     loadChange,
     handed,
     resume,
+    failed: failedJobs,
+    retry,
     /** Jobs this phone still holds: payments not finished, tokens not handed over, change owed to a card. */
     pending: () => store.jobs(),
     owedTo,

@@ -52,7 +52,9 @@ describe('the Tap a card module', () => {
     expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 2 }, t)).toBe('Wrong PIN. 2 tries left.');
     expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 1 }, t)).toBe('Wrong PIN. 1 try left.');
     expect(M.wordsFor({ code: 'pin_blocked' }, t)).toMatch(/blocked\. Nothing was taken/);
-    expect(M.wordsFor({ code: 'unfinished', kept: true }, t)).toMatch(/Nothing is lost/);
+    // Only true while the card has not paid anywhere else since: the words say so.
+    expect(M.wordsFor({ code: 'unfinished', kept: true }, t)).toBe('The card left before it finished. Hold the same card to the phone again before you use it anywhere else.');
+    expect(M.wordsFor({ code: 'over_max' }, t)).toBe(en['fund.card.overMax']);
     expect(M.wordsFor({ code: 'mint_unavailable', kept: true }, t)).toMatch(/kept on this phone/);
     expect(M.wordsFor({ code: 'something new' }, t)).toBe(en['fund.card.failed']);
     for (const code of ['pin_needed', 'over_limit', 'other_card', 'not_ecash', 'needs_update', 'not_genuine', 'locked', 'empty', 'too_small', 'all_only', 'not_taken', 'not_stored', 'tap_lost']) expect(M.wordsFor({ code }, t)).not.toBe(en['fund.card.failed']);
@@ -173,6 +175,15 @@ describe('a signature that does not come back clean', () => {
     expect(r.balance).toBe(0);
     expect(r.unfinished).toBe(false);
     expect(s.flow.pending()[0]).toMatchObject({ state: 'failed' });
+    // Listed for a person, and Try again asks the card once more at its next tap.
+    const [f] = s.flow.failed();
+    expect(f.error).toMatch(/could not give its signature again/);
+    expect((await s.flow.retry(f.id)).state).toBe('ready');
+    s.card.lift();
+    s.card.tap();
+    const r2 = await s.flow.read(s.card.transceive);
+    expect(r2.unfinished).toBe(false);
+    expect(s.flow.pending()[0]).toMatchObject({ state: 'swapped', received: 24 });
   });
 
   it('change the card refuses to take (a full card) stays owed and the card is still read', async () => {

@@ -8,7 +8,8 @@ import type { FundingService } from './funding.ts';
  * card's mint (public/v2/core/card/flow.js). The phone talks only to its engine, so the engine carries
  * that swap to the card's mint and the answer back, and does nothing else with it:
  *
- *   POST /v1/wallet/fund/card/mint     {mint, unit, accept_unlisted?}  the mint's keysets and active keys
+ *   POST /v1/wallet/fund/card/mint     {mint, unit, accept_unlisted?}  the mint's keysets and active keys,
+ *                                      and for another mint `max`, the most other-mint funding then takes
  *   POST /v1/wallet/fund/card/swap     {mint, inputs, outputs, ...}     POST <mint>/v1/swap
  *   POST /v1/wallet/fund/card/restore  {mint, outputs, ...}             POST <mint>/v1/restore (NUT-09)
  *
@@ -55,13 +56,13 @@ function inputsOf(raw: unknown): Input[] {
 
 export function installCardRelay(app: Hono, { wallet, funding, readJson }: { wallet: GatewayWallet; funding: FundingService; readJson: (c: Context) => Promise<any> }) {
   /** The address to reach the card's mint at, after the same checks as other-mint funding. */
-  async function mintUrl(raw: unknown, acceptUnlisted: boolean): Promise<{ url: string; trusted: boolean }> {
+  async function mintUrl(raw: unknown, acceptUnlisted: boolean): Promise<{ url: string; trusted: boolean; unlisted: boolean }> {
     if (typeof raw !== 'string' || !raw.trim() || raw.length > 200) throw new PaymentError('invalid_request', 'send the card mint address');
     const m = normalizeMintUrl(raw.trim());
     if (wallet.isCredit?.(m)) throw new PaymentError('credits_not_money', 'free questions cannot come from a card');
-    if (wallet.isTrusted(m)) return { url: m, trusted: true };
+    if (wallet.isTrusted(m)) return { url: m, trusted: true, unlisted: false };
     const vetted = await funding.vetForeignMint(m, { acceptUnlisted });
-    return { url: vetted.url, trusted: false };
+    return { url: vetted.url, trusted: false, unlisted: vetted.unlisted };
   }
 
   async function ask(url: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
@@ -86,9 +87,12 @@ export function installCardRelay(app: Hono, { wallet, funding, readJson }: { wal
     return { status: res.status, body: json };
   }
 
-  /** A mint's own refusal, passed on with its code: the phone tells "already spent" from the rest. */
+  /**
+   * A mint's own refusal, passed on with its code: the phone tells "already spent" from the rest. A mint
+   * that fails, times out (408) or rate-limits (429) has not refused anything: try again later.
+   */
   const refusal = (c: Context, r: { status: number; body: any }) => {
-    if (r.status >= 500) return c.json({ error: { message: 'the card mint failed', type: 'mint_unavailable', code: 'mint_unavailable' } }, 503);
+    if (r.status >= 500 || r.status === 429 || r.status === 408) return c.json({ error: { message: 'the card mint failed', type: 'mint_unavailable', code: 'mint_unavailable' } }, 503);
     const detail = typeof r.body?.detail === 'string' ? r.body.detail.slice(0, 300) : `the card mint answered HTTP ${r.status}`;
     return c.json({ error: { message: detail, type: 'mint_refused', code: 'mint_refused' }, mint_code: Number.isInteger(r.body?.code) ? r.body.code : null }, 400);
   };
@@ -97,7 +101,7 @@ export function installCardRelay(app: Hono, { wallet, funding, readJson }: { wal
     const body = await readJson(c);
     const unit = String(body?.unit ?? '');
     if (!/^[a-z]{1,8}$/.test(unit)) throw new PaymentError('invalid_request', 'send the card unit');
-    const { url, trusted } = await mintUrl(body?.mint, body?.accept_unlisted === true);
+    const { url, trusted, unlisted } = await mintUrl(body?.mint, body?.accept_unlisted === true);
     const ks = await ask(url, '/v1/keysets');
     if (ks.status !== 200 || !Array.isArray(ks.body?.keysets)) return refusal(c, ks);
     const keysets = ks.body.keysets
@@ -110,7 +114,10 @@ export function installCardRelay(app: Hono, { wallet, funding, readJson }: { wal
       if (r.status !== 200 || !found?.keys) return refusal(c, r);
       keys[k.id] = Object.fromEntries(Object.entries(found.keys).filter(([a, K]) => /^\d+$/.test(a) && isHex(K, [66]))) as Record<string, string>;
     }
-    return c.json({ mint: url, trusted, unit, keysets, keys });
+    // Another mint's eCash goes on through other-mint funding, which takes no more than its caps: the
+    // phone never takes more than that off the card.
+    const max = trusted ? null : funding.foreignMax(unit, unlisted);
+    return c.json({ mint: url, trusted, unit, keysets, keys, ...(max !== null ? { max } : {}) });
   });
 
   app.post('/v1/wallet/fund/card/swap', async (c) => {

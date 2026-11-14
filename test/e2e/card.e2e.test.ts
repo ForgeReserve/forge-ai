@@ -122,6 +122,37 @@ describe('a Cashu card through the engine to its mint', () => {
     expect((await engine.funding(q.body.key, q.body.id)).body.state).toBe('done');
   }, 60_000);
 
+  it("at another mint, with a cap lower than the card: the card gives no more than Other mint then takes, and Other mint takes it", async () => {
+    const capped = await startGateway({ env: { FORGE_INVITE_ONLY: 'false', FORGE_FOREIGN_ALLOW_INSECURE: 'true', FORGE_FOREIGN_MAX_SAT: '40' } });
+    try {
+      const eng = E.createEngine({ base: capped.url, fetch: globalThis.fetch.bind(globalThis) });
+      const card = new CardSim({ pin: '1234', mint: MINT_C });
+      await provision(card, await mintSigner(MINT_C), [32, 16, 8]);
+      const flow = F.createCardFunding({ storage: memStorage(), relay: relayOf(eng) });
+      card.tap();
+      const summary = await flow.read(card.transceive);
+      const info = await flow.mintInfo(summary);
+      expect(info).toMatchObject({ trusted: false, max: 40 });
+      expect(() => flow.plan(summary, info, 56)).toThrow(expect.objectContaining({ code: 'over_max' }));
+      const plan = flow.plan(summary, info);
+      expect(plan.amount).toBe(40);
+      const job = await flow.pay(card.transceive, { summary, info, plan, pin: '1234' });
+      expect(card.balance()).toBe(16);
+      const q = await eng.foreignQuote(undefined, { token: job.token, unit: 'sat' });
+      expect(q.ok).toBe(true);
+      // Without the cap (through the uncapped engine), all 56 leave the card and this engine refuses the token.
+      const other = await cardAt(MINT_C, [32, 16, 8]);
+      other.card.tap();
+      const s2 = await other.flow.read(other.card.transceive);
+      const i2 = await other.flow.mintInfo(s2);
+      const all = await other.flow.pay(other.card.transceive, { summary: s2, info: i2, plan: other.flow.plan(s2, i2, 56), pin: '1234' });
+      const over = await eng.foreignQuote(undefined, { token: all.token, unit: 'sat' });
+      expect(over.body.error.code).toBe('amount_too_large');
+    } finally {
+      await capped.close();
+    }
+  }, 60_000);
+
   it('the relay refuses what it should: an unknown address, a private one, the wrong shapes', async () => {
     const strict = await startGateway({ env: { FORGE_INVITE_ONLY: 'false', FORGE_FOREIGN_POLICY: 'allowlist' } });
     try {
