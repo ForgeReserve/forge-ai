@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Unit } from './config.ts';
 import { type DB, now, tx } from './db.ts';
+import { log } from './log.ts';
 
 export const KEY_PREFIX = 'sk-forge-';
 
@@ -36,6 +37,11 @@ export class LedgerError extends Error {
 
 export class Ledger {
   readonly db: DB;
+  /**
+   * Reservations this process is still serving. Held in memory on purpose: after a restart nothing
+   * is live, so every reservation left active is abandoned and the sweep may release it.
+   */
+  private readonly live = new Set<string>();
   constructor(db: DB) {
     this.db = db;
   }
@@ -90,37 +96,79 @@ export class Ledger {
       }
       const id = 'res_' + randomUUID();
       this.db.prepare("INSERT INTO reservations (id, account_id, amount_msub, status, created_at) VALUES (?, ?, ?, 'active', ?)").run(id, accountId, msub, now());
+      this.live.add(id);
       return id;
     });
+  }
+
+  /** True while the request that made this reservation is still being served by this process. */
+  isLive(reservationId: string): boolean {
+    return this.live.has(reservationId);
+  }
+
+  /**
+   * The owning request ended without settling (an error escaped the handler): the reservation is
+   * abandoned and the stale sweep releases it. A later settle() still charges.
+   */
+  disown(reservationId: string) {
+    this.live.delete(reservationId);
   }
 
   /**
    * Settles a reservation: charges min(actual, reserved) and releases the rest.
    * Idempotent: a second call on a settled reservation returns the first result.
+   * A reservation the stale sweep already released is still charged min(actual, reserved), capped at
+   * what the balance now covers (balance less other active reservations); any shortfall is recorded
+   * on the reservation and logged.
    */
-  settle(reservationId: string, actualMsub: number, ref: string): { charged: number; balance: number } {
-    return tx(this.db, () => {
-      const r = this.db.prepare('SELECT * FROM reservations WHERE id = ?').get(reservationId) as any;
-      if (!r) throw new Error('unknown reservation');
-      if (r.status !== 'active') {
-        return { charged: r.charged_msub ?? 0, balance: this.get(r.account_id)!.balance_msub };
-      }
-      const charged = Math.max(0, Math.min(Math.ceil(actualMsub), r.amount_msub));
-      if (charged > 0) {
-        this.db.prepare('UPDATE accounts SET balance_msub = balance_msub - ? WHERE id = ?').run(charged, r.account_id);
-        this.db.prepare("INSERT INTO ledger (account_id, kind, amount_msub, ref, created_at) VALUES (?, 'charge', ?, ?, ?)").run(r.account_id, -charged, ref, now());
-      }
-      this.db.prepare("UPDATE reservations SET status = 'settled', charged_msub = ?, settled_at = ? WHERE id = ?").run(charged, now(), reservationId);
-      return { charged, balance: this.get(r.account_id)!.balance_msub };
-    });
+  settle(reservationId: string, actualMsub: number, ref: string): { charged: number; balance: number; shortfall: number } {
+    try {
+      return tx(this.db, () => {
+        const r = this.db.prepare('SELECT * FROM reservations WHERE id = ?').get(reservationId) as any;
+        if (!r) throw new Error('unknown reservation');
+        if (r.status !== 'active' && r.status !== 'released') {
+          return { charged: r.charged_msub ?? 0, balance: this.get(r.account_id)!.balance_msub, shortfall: r.shortfall_msub ?? 0 };
+        }
+        const owed = Math.max(0, Math.min(Math.ceil(actualMsub), r.amount_msub));
+        let charged = owed;
+        if (r.status === 'released') {
+          const a = this.get(r.account_id)!;
+          charged = Math.min(owed, Math.max(0, a.balance_msub - this.reservedMsub(r.account_id)));
+        }
+        const shortfall = owed - charged;
+        if (charged > 0) {
+          this.db.prepare('UPDATE accounts SET balance_msub = balance_msub - ? WHERE id = ?').run(charged, r.account_id);
+          this.db.prepare("INSERT INTO ledger (account_id, kind, amount_msub, ref, created_at) VALUES (?, 'charge', ?, ?, ?)").run(r.account_id, -charged, ref, now());
+        }
+        this.db
+          .prepare("UPDATE reservations SET status = 'settled', charged_msub = ?, shortfall_msub = ?, settled_at = ? WHERE id = ?")
+          .run(charged, shortfall, now(), reservationId);
+        if (r.status === 'released') {
+          log.warn('settled_after_release', { reservation_id: reservationId, ref, owed_msub: owed, charged_msub: charged, shortfall_msub: shortfall });
+        }
+        return { charged, balance: this.get(r.account_id)!.balance_msub, shortfall };
+      });
+    } finally {
+      this.live.delete(reservationId);
+    }
   }
 
-  /** On startup: reservations left active by a crash are released without charge. */
+  /**
+   * Releases, without charge, active reservations older than olderThanMs that no request in this
+   * process owns: those left by a crash or restart, or disowned by a request that ended without
+   * settling. A reservation still being served is never released, however old.
+   */
   releaseStale(olderThanMs: number): number {
-    const res = this.db
-      .prepare("UPDATE reservations SET status = 'released', charged_msub = 0, settled_at = ? WHERE status = 'active' AND created_at <= ?")
-      .run(now(), now() - olderThanMs);
-    return Number(res.changes);
+    return tx(this.db, () => {
+      const rows = this.db.prepare("SELECT id FROM reservations WHERE status = 'active' AND created_at <= ?").all(now() - olderThanMs) as Array<{ id: string }>;
+      const release = this.db.prepare("UPDATE reservations SET status = 'released', charged_msub = 0, settled_at = ? WHERE id = ? AND status = 'active'");
+      let n = 0;
+      for (const { id } of rows) {
+        if (this.live.has(id)) continue;
+        n += Number(release.run(now(), id).changes);
+      }
+      return n;
+    });
   }
 
   /** Debits whole units for a refund; caller provides the transaction. Returns msub debited. */

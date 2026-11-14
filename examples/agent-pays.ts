@@ -13,7 +13,8 @@
  * key pair for this run (it is printed so the change is not lost).
  *
  * Steps: call with no credentials -> 402 + X-Cashu payment request (NUT-18 creqA) -> build a token
- * for the requested amount at an accepted mint -> retry with X-Cashu: cashuB... -> answer + change.
+ * for the requested amount at an accepted mint -> retry with X-Cashu: cashuB... and the 402's
+ * X-Forge-Request-Id -> answer + change (also at /v1/change/{that id}).
  */
 import { randomBytes } from 'node:crypto';
 import { getEncodedToken, getPubKeyFromPrivKey, getTokenMetadata, PaymentRequest, type Proof, Wallet } from '@cashu/cashu-ts';
@@ -75,8 +76,10 @@ if (process.env.LEFTOVER_FILE) {
 const { send, keep } = await wallet.send(amount, proofs, { includeFees: true });
 const payment = getEncodedToken({ mint: wallet.mint.mintUrl, unit: pr.unit, proofs: send });
 
-// 3. Retry with the payment.
-const paid = await fetch(`${FORGE}/v1/chat/completions`, { method: 'POST', headers: { ...headers, 'X-Cashu': payment }, body });
+// 3. Retry with the payment, under the request id from the 402: if this response is lost, the change
+//    is still at /v1/change/{that id}.
+const requestId = first.headers.get('x-forge-request-id')!;
+const paid = await fetch(`${FORGE}/v1/chat/completions`, { method: 'POST', headers: { ...headers, 'X-Cashu': payment, 'X-Forge-Request-Id': requestId }, body });
 const json = await paid.json();
 if (!paid.ok) throw new Error(`payment rejected: ${paid.status} ${JSON.stringify(json)}`);
 console.log(`\nAnswer: ${json.choices[0].message.content}`);

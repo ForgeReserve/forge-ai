@@ -19,7 +19,7 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { OPEN_FUNDING_STATES } from './accounts.ts';
 import type { Deps } from './app.ts';
-import { BetaWaitlist } from './beta.ts';
+import { BetaWaitlist, mailtoLink } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { PaymentError } from './cashu/wallet.ts';
 import type { Config, Unit } from './config.ts';
@@ -505,7 +505,7 @@ export function createAdminRouter(d: Deps): Hono {
       contact: s.contact,
       link: BETA_LINK,
       message,
-      mailto: s.kind === 'email' ? `mailto:${s.contact}?subject=${encodeURIComponent('Your Forge AI beta invite')}&body=${encodeURIComponent(message)}` : null,
+      mailto: s.kind === 'email' ? mailtoLink(s.contact, 'Your Forge AI beta invite', message) : null,
     });
   });
 

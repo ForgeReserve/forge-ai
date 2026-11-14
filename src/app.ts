@@ -56,6 +56,7 @@ const ALLOW = [
   'X-Cashu',
   'X-Cashu-Pubkey',
   'X-Forge-Invite',
+  'X-Forge-Request-Id',
   'X-Forge-Unit',
   'Ehbp-Encapsulated-Key',
   'X-Tinfoil-Enclave-Url',
@@ -69,12 +70,17 @@ function apiError(c: Context, status: number, code: string, message: string, hea
   return c.json({ error: { message, type: code, code }, ...extra }, status as any);
 }
 
+/** The shape of a request id this gateway issues; a paid retry may echo one back (see the chat route). */
+const REQUEST_ID = /^req_[0-9a-f]{32}$/;
+
 function bearer(c: Context): string | undefined {
   const h = c.req.header('authorization');
   const m = h ? /^Bearer\s+(.+)$/i.exec(h) : null;
   return m?.[1]?.trim();
 }
 
+/** The balance reservation a chat request holds, if any (see the chat route). */
+type ChatOwnership = { reservationId?: string };
 type Payment = { kind: 'balance'; account: Account; reservationId: string } | { kind: 'nut24'; mint: string; unit: Unit; paid: number };
 
 interface SettleResult {
@@ -120,9 +126,15 @@ export function createApp(d: Deps) {
   );
   app.use('/v1/*', async (c, next) => {
     if (c.req.method === 'OPTIONS' || c.req.method === 'GET') return next();
-    const key = bearer(c);
-    const id = key ? 'k:' + key.slice(-12) : 'ip:' + clientIp(c);
-    const wait = limiter.take(id);
+    // Every request pays from its client IP's bucket, whatever bearer it carries: a made-up key
+    // must not buy a fresh burst or a new bucket. A key that verifies also pays from its account's
+    // bucket, so one balance spread over many addresses stays limited too.
+    let wait = limiter.take('ip:' + clientIp(c));
+    if (wait === 0) {
+      const key = bearer(c);
+      const account = key ? ledger.findByKey(key) : undefined;
+      if (account) wait = limiter.take('acct:' + account.id);
+    }
     if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many requests', { 'Retry-After': String(wait) });
     return next();
   });
@@ -416,10 +428,25 @@ export function createApp(d: Deps) {
   app.get('/v1/change/:id', async (c) => {
     const id = c.req.param('id');
     // Other-mint funding change shares purpose 'change' but is delivered with the funding, behind its key.
-    const isRequest = !!db.prepare('SELECT 1 FROM requests WHERE id = ?').get(id);
-    const rows = isRequest ? wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change') : [];
+    const readReq = () => db.prepare('SELECT payment, status FROM requests WHERE id = ?').get(id) as { payment: string; status: string } | undefined;
+    const changeRows = () => wallet.listOutgoing({ requestId: id }).filter((r) => r.purpose === 'change');
+    const swapUnsettled = () => !!db.prepare("SELECT 1 FROM incoming WHERE request_id = ? AND status = 'prepared'").get(id);
+    let req = readReq();
+    let rows = req ? changeRows() : [];
+    // A paid attempt whose swap outcome is unknown (the mint timed out, or failed after swapping) failed
+    // with its token held at the mint. Settle that swap now, so the whole payment is owed back under this id;
+    // while the mint stays silent the answer is "not yet", never "nothing".
+    if (!rows.length && req?.payment === 'nut24' && req.status === 'failed' && swapUnsettled()) {
+      try {
+        await wallet.recoverIncomingFor(id);
+      } catch (e) {
+        log.warn('change_recovery_deferred', { request_id: id, err: errText(e) });
+      }
+      if (swapUnsettled()) return apiError(c, 409, 'not_settled', 'payment outcome not known yet; the mint has not answered', { 'Retry-After': '5' });
+      req = readReq();
+      rows = changeRows();
+    }
     if (!rows.length) {
-      const req = db.prepare('SELECT status FROM requests WHERE id = ?').get(id) as { status: string } | undefined;
       if (req && !['settled', 'failed', 'aborted'].includes(req.status)) return apiError(c, 409, 'not_settled', 'request still running', { 'Retry-After': '2' });
       return apiError(c, 404, 'not_found', 'no change for this request');
     }
@@ -447,9 +474,26 @@ export function createApp(d: Deps) {
 
   // ------------------------------------------------------------------ chat
 
+  // A request owns its balance reservation until it settles (src/ledger.ts). An error that escapes
+  // before settlement gives the reservation up, so the abandoned-request sweep can release it.
   app.post('/v1/chat/completions', async (c) => {
+    const own: ChatOwnership = {};
+    try {
+      return await chatCompletion(c, own);
+    } catch (e) {
+      if (own.reservationId) ledger.disown(own.reservationId);
+      throw e;
+    }
+  });
+  const chatCompletion = async (c: Context, own: ChatOwnership) => {
     const t0 = Date.now();
-    const requestId = 'req_' + randomUUID().replaceAll('-', '');
+    // A NUT-24 payment may echo the id from its 402 in X-Forge-Request-Id, so the request, its change
+    // and any recovery run under the id the payer already holds. Every other request gets a fresh one.
+    const echoedId = !bearer(c) && c.req.header('x-cashu') ? c.req.header('x-forge-request-id') : undefined;
+    if (echoedId !== undefined && !REQUEST_ID.test(echoedId)) {
+      return apiError(c, 400, 'invalid_request', 'X-Forge-Request-Id must be the request id from the 402 (req_ and 32 hex digits)');
+    }
+    const requestId = echoedId ?? 'req_' + randomUUID().replaceAll('-', '');
     c.header('X-Forge-Request-Id', requestId);
     const raw = Buffer.from(await c.req.arrayBuffer());
     const encrypted = !!c.req.header('ehbp-encapsulated-key');
@@ -544,11 +588,13 @@ export function createApp(d: Deps) {
     let pay: Payment;
     if (account) {
       const reservationId = ledger.reserve(account.id, reserveMsub);
+      own.reservationId = reservationId;
       pay = { kind: 'balance', account, reservationId };
     } else if (!cashu) {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code, or use a balance key');
       const quoted = unit === 'sat' ? Math.ceil(requiredUnits * env.FORGE_SAT_PRICE_BUFFER) : requiredUnits;
-      const pr = new PaymentRequest(undefined, requestId.slice(4, 20), quoted, unit, wallet.trustedMints, `Forge AI: ${model.id}`, true);
+      // The NUT-18 id is the full request id, the same value as X-Forge-Request-Id.
+      const pr = new PaymentRequest(undefined, requestId, quoted, unit, wallet.trustedMints, `Forge AI: ${model.id}`, true);
       const creq = pr.toEncodedRequest();
       return apiError(c, 402, 'payment_required', `pay ${quoted} ${unit} in eCash: retry with X-Cashu: cashuB... Unused value is returned as change.`, { 'X-Cashu': creq }, {
         payment_request: creq,
@@ -558,9 +604,20 @@ export function createApp(d: Deps) {
       });
     } else {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code');
-      db.prepare(
-        "INSERT INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, lock_pubkey, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?, ?)",
-      ).run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, lockPubkey, now());
+      // One id, one payment: an echoed id that already has a request is refused before the token is touched.
+      const created = db
+        .prepare(
+          "INSERT OR IGNORE INTO requests (id, payment, unit, model, supplier, encrypted, status, reserved_msub, lock_pubkey, created_at) VALUES (?, 'nut24', ?, ?, ?, ?, 'new', ?, ?, ?)",
+        )
+        .run(requestId, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, lockPubkey, now());
+      if (Number(created.changes) === 0) {
+        return apiError(
+          c,
+          409,
+          'request_id_used',
+          `request ${requestId} already exists. This attempt did not touch the token it carried. If you are retrying a request that already reached us, its token was spent there and its outcome and any change are at /v1/change/${requestId}. Otherwise ask for a new 402, or send the token without X-Forge-Request-Id.`,
+        );
+      }
       try {
         const r = await wallet.receive(cashu, {
           purpose: 'nut24',
@@ -714,8 +771,10 @@ export function createApp(d: Deps) {
         try {
           for await (const ch of up.body) chunks.push(ch as Buffer);
         } catch (e) {
-          await finish(false);
-          throw new UpstreamError(`enclave stream failed: ${errText(e)}`);
+          // Same as the plaintext non-stream read: no response reached the client, so this settles as an
+          // upstream failure (nothing charged, flat schedule included; reservation released; change owed).
+          const r = await settle(undefined, 'none', 'upstream_error');
+          return apiError(c, 502, 'upstream_error', `enclave response failed: ${errText(e)}. You were not charged.`, resultHeaders(r));
         }
         const r = await finish(true);
         return new Response(Buffer.concat(chunks), { status: up.status, headers: { ...passHeaders, ...resultHeaders(r), 'X-Forge-Request-Id': requestId, 'X-Forge-Privacy': privacy } });
@@ -771,7 +830,15 @@ export function createApp(d: Deps) {
     }
 
     if (!stream) {
-      const text = await res.text();
+      // The body read belongs to settlement: a failure here settles as an upstream failure (nothing charged,
+      // reservation released, change owed) before the error reaches the client, never left running.
+      let text: string;
+      try {
+        text = await res.text();
+      } catch (e) {
+        const r = await settle(undefined, 'none', 'upstream_error');
+        return apiError(c, 502, 'upstream_error', `upstream response failed: ${errText(e)}. You were not charged.`, resultHeaders(r));
+      }
       let usage: Usage | undefined;
       let source = 'upstream';
       try {
@@ -860,7 +927,7 @@ export function createApp(d: Deps) {
         ...(pay.kind === 'nut24' ? { 'X-Forge-Change-Url': `/v1/change/${requestId}` } : {}),
       },
     });
-  });
+  };
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
@@ -910,7 +977,13 @@ function installRecoveryHooks(d: Deps) {
     if (row.purpose === 'topup' && row.account_id) {
       d.ledger.creditRaw(row.account_id, row.amount * MSUB_PER_UNIT, 'topup', 'recovered');
     } else if (row.purpose === 'nut24' && row.request_id) {
-      d.db.prepare("UPDATE requests SET status = 'paid', paid_units = ? WHERE id = ?").run(row.amount, row.request_id);
+      // The attempt that paid is gone, so nothing will run or settle it: owe the whole payment back as change
+      // under its id now, as the startup sweep would. That sweep picks only paid or running requests, and the
+      // hook fires once per receive, so nothing is owed twice.
+      const req = d.db.prepare('SELECT status, lock_pubkey FROM requests WHERE id = ?').get(row.request_id) as { status: string; lock_pubkey: string | null } | undefined;
+      if (req?.status === 'settled' || req?.status === 'aborted') return;
+      if (row.amount > 0) d.wallet.oweRaw({ mint: row.mint, unit: row.unit, amount: row.amount, purpose: 'change', requestId: row.request_id, lockPubkey: req?.lock_pubkey ?? null });
+      d.db.prepare("UPDATE requests SET status = 'aborted', paid_units = ?, change_units = ? WHERE id = ?").run(row.amount, row.amount, row.request_id);
     }
   };
 }
@@ -924,6 +997,12 @@ export async function startupRecovery(d: Deps, olderThanMs = 0): Promise<void> {
   // At process start nothing is in flight, so every active reservation and running request is orphaned.
   installRecoveryHooks(d);
   const w = await d.wallet.recover();
+  // A NUT-24 request still 'new' was in its receive when the process died; recovery has run, so either it
+  // finalized the swap (and the hook aborted the request with its change owed), or the swap is still
+  // 'prepared' because the mint did not answer, or nothing reached the mint and the token is the payer's.
+  // Mark the rest failed, as a live receive that throws would: GET /v1/change/{id} then settles a
+  // 'prepared' swap in-process once the mint answers, and answers 404 when there is nothing to owe.
+  d.db.prepare("UPDATE requests SET status = 'failed' WHERE payment = 'nut24' AND status = 'new' AND created_at <= ?").run(Date.now() - olderThanMs);
   const released = d.ledger.releaseStale(olderThanMs);
   const stuck = d.db
     .prepare("SELECT id, unit, paid_units, lock_pubkey FROM requests WHERE payment = 'nut24' AND status IN ('paid', 'running') AND created_at <= ?")

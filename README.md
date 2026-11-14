@@ -79,10 +79,10 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_RATE_TTL_SECONDS` / `FORGE_RATE_MAX_STALE_SECONDS` | `60` / `900` | Cache time; after max staleness sat pricing returns 503 instead of guessing |
 | `FORGE_SAT_PRICE_BUFFER` | `1.02` | Headroom on sat 402 amounts so a rate move between quote and payment does not reject the token |
 | `FORGE_BYTES_PER_TOKEN` | `2` | Conservative bytes per input token used to size the reservation |
-| `FORGE_RATE_LIMIT_RPM` | `60` | Requests per minute per key or IP |
+| `FORGE_RATE_LIMIT_RPM` | `60` | POST requests under `/v1` per minute per client IP, whatever key a request carries; a key that verifies is also held to the same rate across all its addresses |
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
-| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries on connection errors, 408, 429 and 5xx |
+| `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries only failures before the request was sent (refused, DNS, connect timeout, certificate), plus 408, 425, 429, 5xx and resets for a supplier with `idempotencyHeader` |
 | `FORGE_FUND_MINT` | first trusted mint | Mint used for Lightning, on-chain and other-mint funding |
 | `FORGE_LIGHTNING_ENABLED` | `true` | Lightning funding (NUT-04 bolt11 quotes) |
 | `FORGE_FUND_MAX_SAT` / `FORGE_FUND_MAX_USD` | `1000000` / `50000` | Largest Lightning funding, in sat / cents (the mint's own limit also applies) |
@@ -109,7 +109,7 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 
 ### Other mints (NIP-87 discovery)
 
-Under `FORGE_FOREIGN_POLICY=discovered` the gateway accepts eCash from the mints the operator lists plus the mints Cashu wallets recommend, found the way wallet.cashu.me finds them: kind 38172 mint announcements and kind 38000 reviews (`#k=38172`) from `FORGE_FOREIGN_DISCOVERY_RELAYS`. Event ids and BIP-340 signatures are checked, reviews older than 24 months are ignored, and a reviewer counts once per mint. A mint is accepted when it has at least `FORGE_FOREIGN_MIN_REVIEWERS` distinct reviewers (plus a verified mainnet announcement when `FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT=true`) and passes a probe: `GET /v1/info` and `GET /v1/keysets` answer, an active keyset exists in a Forge unit, and NUT-05 bolt11 melt is enabled in that unit (the gateway melts the eCash there). The list is kept in the database, served at once after a restart, and refreshed in the background; a request never waits on a relay. The URL safety check still runs on every accepted mint. The code is ported from cashucard/cashucard `ops/src/discovery.ts`.
+Under `FORGE_FOREIGN_POLICY=discovered` the gateway accepts eCash from the mints the operator lists plus the mints Cashu wallets recommend, found the way wallet.cashu.me finds them: kind 38172 mint announcements and kind 38000 reviews (`#k=38172`) from `FORGE_FOREIGN_DISCOVERY_RELAYS`. Event ids and BIP-340 signatures are checked, reviews older than 24 months are ignored, and a reviewer counts once per mint. A mint is accepted when it has at least `FORGE_FOREIGN_MIN_REVIEWERS` distinct reviewers (plus a verified mainnet announcement when `FORGE_FOREIGN_REQUIRE_ANNOUNCEMENT=true`) and passes a probe: `GET /v1/info` and `GET /v1/keysets` answer, an active keyset exists in a Forge unit, and NUT-05 bolt11 melt is enabled in that unit (the gateway melts the eCash there). The list is kept in the database, served at once after a restart, and refreshed in the background; a request never waits on a relay. The URL safety check still runs on every accepted mint, and again whenever the gateway loads that mint's wallet; no Cashu request follows a redirect. The code is ported from cashucard/cashucard `ops/src/discovery.ts`.
 
 The operator can add mints from the admin page (Settings, Other mints). An added mint goes through the URL safety check and the same probe, keeps the name from its `/v1/info`, is stored in the `operator_mints` table and is accepted like `FORGE_FOREIGN_ALLOW` under every policy (under `any` it never limits the policy). Forge's own mints and denied mints cannot be added. Both kinds are listed with `source: "operator"`.
 
@@ -120,6 +120,8 @@ A customer can still use a mint that is not on the list (`FORGE_FOREIGN_UNLISTED
 `config/models.json` lists suppliers and models. Each model has a public `id`, its `supplier`, the `upstream` model name, the supplier's cost in USD per million input and output tokens, `max_output_tokens`, and `uncensored` (the chat page hides those behind an explicit toggle). Token Factory prices in the shipped catalog are placeholders marked `price_verified: false`; set them from your rate card. Tinfoil prices were read from `https://inference.tinfoil.sh/v1/models` on 2026-11-09.
 
 A supplier sets `pricing: "metered"` (charge on reported usage) or `pricing: "flat"` (charge a schedule by request body size plus declared max output). A metered supplier may also carry a `flat` schedule, used only when no usage signal arrives.
+
+A resent request can run, and bill, a second time upstream, so a request that may have reached the supplier is never resent blindly. A supplier that documents de-duplication by an idempotency key can set `idempotencyHeader` (for example `"Idempotency-Key"`): every plaintext request then carries a fresh key, the same on each of its attempts, and retryable statuses and resets are retried. No shipped supplier sets it.
 
 ### Suppliers
 
@@ -144,7 +146,8 @@ Payment headers:
 - `Authorization: Bearer sk-forge-...` spends from a balance.
 - `X-Cashu: cashuB...` pays this request (NUT-24). Add `X-Forge-Invite` while invite-only.
 - `X-Cashu-Pubkey: 02...` (optional) locks this request's change to your wallet key (NUT-11 P2PK). See [Locking tokens to your wallet key](#locking-tokens-to-your-wallet-key).
-- Neither: `402 Payment Required` with `X-Cashu: creqA...` (NUT-18: amount, unit, accepted mints). The amount is the request's maximum cost. `X-Forge-Unit: sat` asks for a sat quote.
+- Neither: `402 Payment Required` with `X-Cashu: creqA...` (NUT-18: amount, unit, accepted mints, and the request id). The amount is the request's maximum cost. `X-Forge-Unit: sat` asks for a sat quote.
+- `X-Forge-Request-Id: req_...` (optional, with `X-Cashu`) pays under the id from the 402, so the request and its change at `GET /v1/change/{request_id}` use the id you already hold, even if the paid response never reaches you. Each id can be used for one paid attempt, even one that fails: reusing one is `409 request_id_used` and the token is left untouched. Without the header the paid request gets a new id.
 
 Response headers: `X-Forge-Request-Id`, `X-Forge-Unit`, `X-Forge-Charged-Msub`, `X-Forge-Balance-Msub` (balance payments), `X-Forge-Privacy` (`standard`, `enclave-plaintext`, `enclave-encrypted`), and for NUT-24 `X-Cashu-Change` plus `X-Forge-Change-Url`.
 
@@ -169,7 +172,7 @@ OpenAI model list plus `tier` (`enclave` or `standard`), `uncensored`, `max_outp
 | `GET /v1/wallet` | bearer key | `{unit, balance_msub, available_msub, refundable}` |
 | `POST /v1/wallet/refund` | bearer key; optional `{"amount": N, "pubkey": "02..."}`, amount in whole units | `{token, amount, unit, status, locked_to}`. Sub-unit remainders stay on the balance. With `pubkey` the token is P2PK-locked to it |
 | `GET /v1/wallet/refunds` | bearer key | Every withdrawal with its token and `locked_to`, for re-delivery |
-| `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request |
+| `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request, under the id from the 402 when the paid request echoed it |
 
 A balance has one unit, set by its first topup. Topping up with another unit is rejected.
 
@@ -263,7 +266,7 @@ pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env
 
 The admin tests (`test/unit/admin.test.ts`, `test/e2e/admin.e2e.test.ts`) cover access control (404 when off, 401 on a missing or wrong token, failed-login limit, Origin and JSON checks, no CORS), invites and revoke, the waitlist invite and delete, freeze (spending blocked, refunds allowed), revenue export (never above sweepable, locked export redeemable only with the key, history with token hash and no token, crash after the swap finished once by recovery) and overview numbers against the ledger.
 
-The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), P2PK-locked change and refunds (locked to the key: a plain wallet and the gateway's own wallet cannot redeem them, the key holder can; invalid keys 400; crash after a locked swap recovered by replay, by NUT-09 restore of the stored blinded messages, and left owed when neither answers), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer).
+The e2e suite covers the 402 flow with change, sat pricing, topup, spend, refund, wrong mint, wrong unit, double spend, client disconnect mid-stream, upstream failure and retries, a non-stream body that fails after `200` headers (settled at once, nothing charged, change returned), flat pricing, invite gating, crash recovery (both NUT-19 replay and NUT-09 restore), P2PK-locked change and refunds (locked to the key: a plain wallet and the gateway's own wallet cannot redeem them, the key holder can; invalid keys 400; crash after a locked swap recovered by replay, by NUT-09 restore of the stored blinded messages, and left owed when neither answers), funding by Lightning (quote, paid, minted, credited; restart mid-quote; crash after the mint with replay and with restore; concurrent polls credit once), by other-mint eCash (fees shown, credit exact, change returned, cross-unit, crash after the swap and after the melt, refund when the melt no longer fits, quote expiry frees the invite, deny list, plain-http mints refused) and on-chain against the mock (NUT-20 locked quotes, repeated deposits, crash after the mint), and EHBP pass-through against a fake enclave (usage from header and from HTTP trailer; a non-stream body that fails after `200` headers charges nothing, flat pricing included, and returns the full change).
 
 ## License
 
