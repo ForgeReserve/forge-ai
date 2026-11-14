@@ -75,6 +75,8 @@ function bearer(c: Context): string | undefined {
   return m?.[1]?.trim();
 }
 
+/** The balance reservation a chat request holds, if any (see the chat route). */
+type ChatOwnership = { reservationId?: string };
 type Payment = { kind: 'balance'; account: Account; reservationId: string } | { kind: 'nut24'; mint: string; unit: Unit; paid: number };
 
 interface SettleResult {
@@ -447,7 +449,18 @@ export function createApp(d: Deps) {
 
   // ------------------------------------------------------------------ chat
 
+  // A request owns its balance reservation until it settles (src/ledger.ts). An error that escapes
+  // before settlement gives the reservation up, so the abandoned-request sweep can release it.
   app.post('/v1/chat/completions', async (c) => {
+    const own: ChatOwnership = {};
+    try {
+      return await chatCompletion(c, own);
+    } catch (e) {
+      if (own.reservationId) ledger.disown(own.reservationId);
+      throw e;
+    }
+  });
+  const chatCompletion = async (c: Context, own: ChatOwnership) => {
     const t0 = Date.now();
     const requestId = 'req_' + randomUUID().replaceAll('-', '');
     c.header('X-Forge-Request-Id', requestId);
@@ -544,6 +557,7 @@ export function createApp(d: Deps) {
     let pay: Payment;
     if (account) {
       const reservationId = ledger.reserve(account.id, reserveMsub);
+      own.reservationId = reservationId;
       pay = { kind: 'balance', account, reservationId };
     } else if (!cashu) {
       if (!inviteOk()) return apiError(c, 403, 'invite_required', 'send X-Forge-Invite with a valid invite code, or use a balance key');
@@ -860,7 +874,7 @@ export function createApp(d: Deps) {
         ...(pay.kind === 'nut24' ? { 'X-Forge-Change-Url': `/v1/change/${requestId}` } : {}),
       },
     });
-  });
+  };
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
