@@ -30,7 +30,7 @@ echo 'FORGE_ADMIN_ORIGIN=https://ai.forge-reserve.com' >> .env
 unset TOKEN
 
 # 2. Basic auth password: also in your password manager. Caddy prompts for it twice.
-HASH=$(docker run --rm -it caddy:2 caddy hash-password | tr -d '\r')
+HASH=$(docker run --rm -it caddy:2.11.9@sha256:4e2425f6009577e7c651010f16679c28f7d12df3e7b1914f941a7a3370746b3c caddy hash-password | tr -d '\r')
 echo 'FORGE_ADMIN_BASIC_AUTH_USER=forge' >> .env
 # Single quotes: a bcrypt hash contains "$", which compose would otherwise expand.
 printf "FORGE_ADMIN_BASIC_AUTH_HASH='%s'\n" "$HASH" >> .env
