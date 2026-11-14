@@ -153,7 +153,13 @@ Restoring by counter range (the unlocked path) is never used for a locked row: i
 
 ### Reservations
 
-At startup every active reservation is released without charge (nothing is in flight in a fresh process), and a periodic sweep releases any older than `FORGE_STALE_RESERVATION_SECONDS`. A crash mid-request therefore costs the gateway the upstream bill for that request, never the user.
+The gateway tracks in memory which reservations belong to requests it is still serving. A request owns its reservation from `reserve` until it settles; an error that escapes the request before settlement gives it up.
+
+- At startup every active reservation is released without charge: a fresh process serves nothing, so each one is abandoned. A crash mid-request therefore costs the gateway the upstream bill for that request, never the user.
+- A periodic sweep (every minute) releases, without charge, active reservations older than `FORGE_STALE_RESERVATION_SECONDS` that no request owns, and logs `stale_reservations_released`. A request still being served, such as a long stream, keeps its reservation however old it is.
+- If a request settles after its reservation was released anyway, it is still charged what it used (capped at the reservation), up to what the balance covers after other active reservations. Any part the balance cannot cover is recorded as `shortfall_msub` on the reservation and logged as `settled_after_release`. It is never a silent zero charge.
+
+`test/unit/ledger.test.ts` and `test/e2e/stale-reservation.e2e.test.ts` cover the sweep against a live stream, a late charge after release, the shortfall cap and abandoned-request cleanup.
 
 ### What these tests prove
 
