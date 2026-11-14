@@ -997,6 +997,12 @@ export async function startupRecovery(d: Deps, olderThanMs = 0): Promise<void> {
   // At process start nothing is in flight, so every active reservation and running request is orphaned.
   installRecoveryHooks(d);
   const w = await d.wallet.recover();
+  // A NUT-24 request still 'new' was in its receive when the process died; recovery has run, so either it
+  // finalized the swap (and the hook aborted the request with its change owed), or the swap is still
+  // 'prepared' because the mint did not answer, or nothing reached the mint and the token is the payer's.
+  // Mark the rest failed, as a live receive that throws would: GET /v1/change/{id} then settles a
+  // 'prepared' swap in-process once the mint answers, and answers 404 when there is nothing to owe.
+  d.db.prepare("UPDATE requests SET status = 'failed' WHERE payment = 'nut24' AND status = 'new' AND created_at <= ?").run(Date.now() - olderThanMs);
   const released = d.ledger.releaseStale(olderThanMs);
   const stuck = d.db
     .prepare("SELECT id, unit, paid_units, lock_pubkey FROM requests WHERE payment = 'nut24' AND status IN ('paid', 'running') AND created_at <= ?")

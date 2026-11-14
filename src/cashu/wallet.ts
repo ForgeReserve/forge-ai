@@ -127,8 +127,21 @@ export interface WalletOptions {
    * wallet, cached or not, so the mint actually contacted passes it each time. Throws to refuse.
    */
   vetMint?: (mint: string) => Promise<unknown>;
-  /** Test-only fault injection: throw after the mint swap, before the DB write. */
-  faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
+  /** Test-only fault injection; see WalletFaults. */
+  faults?: WalletFaults;
+}
+
+/**
+ * Test-only fault injection. afterReceiveSwap / afterSendSwap throw after the mint swap, before the DB write.
+ * mintDownOnRecovery makes recovery of an interrupted receive fail as if the mint did not answer; the
+ * object is read on every use, so a test can clear the flag to bring the mint back.
+ */
+export interface WalletFaults {
+  afterReceiveSwap?: boolean;
+  afterSendSwap?: boolean;
+  noReplayOnRecovery?: boolean;
+  noRestoreOnRecovery?: boolean;
+  mintDownOnRecovery?: boolean;
 }
 
 class SqliteCounterSource implements CounterSource {
@@ -402,6 +415,7 @@ export class GatewayWallet {
       this.markRejected(row.id, 'no preview');
       return;
     }
+    if (this.opts.faults?.mintDownOnRecovery) throw new Error('fault injected: mint did not answer during recovery');
     const w = await this.wallet(row.mint, row.unit);
     const preview = deserializeSwapPreview(JSON.parse(row.preview));
     const finalize = (proofs: Proof[]) => this.finalizeIncoming(row.id, proofs, () => this.onRecoveredIncoming?.(row));

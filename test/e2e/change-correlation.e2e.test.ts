@@ -229,3 +229,88 @@ describe.skipIf(!up)('change after startup recovery', () => {
     }
   });
 });
+
+/**
+ * Makes the gateway's next receive stop forever at `stage`, the way a process that dies there leaves it:
+ * the request row stays 'new' and nothing after the stage runs, so neither finalize nor the failure path
+ * touches the database again. 'beforeSwap' stops after the incoming row is written, before the mint is
+ * contacted; 'afterSwap' stops once the mint has swapped the token.
+ */
+function dieDuringReceive(g: Gateway, stage: 'beforeSwap' | 'afterSwap', requestId: string): void {
+  const w = g.deps.wallet;
+  const load = w.wallet.bind(w);
+  const never = () => new Promise<never>(() => {});
+  w.wallet = async (mint, unit) => {
+    // The token is inspected (which loads the wallet too) before the incoming row is written.
+    if (stage === 'beforeSwap' && g.deps.db.prepare('SELECT 1 FROM incoming WHERE request_id = ?').get(requestId)) return never();
+    const real = await load(mint, unit);
+    return new Proxy(real, {
+      get(t, k) {
+        if (stage === 'afterSwap' && k === 'completeSwap') return async (...a: Parameters<typeof real.completeSwap>) => (await t.completeSwap(...a), never());
+        const v = Reflect.get(t, k);
+        return typeof v === 'function' ? v.bind(t) : v;
+      },
+    });
+  };
+}
+
+// Review of H4: a request whose process died mid-receive stayed 'new' after a restart that found the mint
+// down, and the startup sweep picks only paid or running requests. /v1/change/{id} then answered
+// "request still running" forever (or until a restart found the mint up), and a payer whose token never
+// reached the mint was told the same instead of 404.
+describe.skipIf(!up)('a request the process died in mid-receive', () => {
+  async function diedAt(stage: 'beforeSwap' | 'afterSwap'): Promise<{ dbPath: string; id: string; amount: number; token: string }> {
+    const g = await startGateway();
+    const invite = createInvite(g);
+    const { id, amount } = await ask402(g, invite);
+    const token = await mintToken(MINT_A, 'usd', amount + 4);
+    const incoming = () => g.deps.db.prepare('SELECT status FROM incoming WHERE request_id = ?').get(id) as { status: string } | undefined;
+    dieDuringReceive(g, stage, id);
+    const want = stage === 'afterSwap' ? 'prepared' : 'new';
+    void post(g, chatBody('mock-echo'), { 'X-Forge-Invite': invite, 'X-Cashu': token, 'X-Forge-Request-Id': id }).catch(() => undefined);
+    for (let i = 0; i < 100 && incoming()?.status !== want; i++) await new Promise((r) => setTimeout(r, 50));
+    expect(incoming()?.status).toBe(want);
+    expect((g.deps.db.prepare('SELECT status FROM requests WHERE id = ?').get(id) as { status: string }).status).toBe('new');
+    await g.close();
+    return { dbPath: g.dbPath, id, amount, token };
+  }
+
+  it('after the swap, with the mint down at restart: 409 not_settled, then the full change once the mint answers, with no restart', async () => {
+    const { dbPath, id, amount } = await diedAt('afterSwap');
+    const faults = { mintDownOnRecovery: true };
+    const g = await startGateway({ dbPath, faults });
+    try {
+      const inc: any = g.deps.db.prepare('SELECT status FROM incoming WHERE request_id = ?').get(id);
+      expect(inc.status).toBe('prepared');
+      for (let i = 0; i < 2; i++) {
+        const res = await fetch(`${g.url}/v1/change/${id}`);
+        expect(res.status).toBe(409);
+        expect(res.headers.get('retry-after')).toBeTruthy();
+        const err = (await res.json()).error;
+        expect(err.code).toBe('not_settled');
+        expect(err.message).not.toBe('request still running');
+      }
+      faults.mintDownOnRecovery = false;
+      const ch = await changeFor(g, id);
+      expect(ch.status).toBe(200);
+      expect(await redeem((await ch.json()).token)).toBe(amount + 4);
+      const row: any = g.deps.db.prepare('SELECT status, paid_units, change_units FROM requests WHERE id = ?').get(id);
+      expect(row).toEqual({ status: 'aborted', paid_units: amount + 4, change_units: amount + 4 });
+    } finally {
+      await g.close();
+    }
+  });
+
+  it('before the mint was contacted: 404 after a restart, and the token is still the payer\'s', async () => {
+    const { dbPath, id, amount, token } = await diedAt('beforeSwap');
+    const g = await startGateway({ dbPath });
+    try {
+      const res = await fetch(`${g.url}/v1/change/${id}`);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error.code).toBe('not_found');
+      expect(await redeem(token)).toBe(amount + 4);
+    } finally {
+      await g.close();
+    }
+  });
+});

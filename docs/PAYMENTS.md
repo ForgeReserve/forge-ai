@@ -130,7 +130,7 @@ Recovery of a `prepared` row: (a) replay the stored swap; (b) else restore the c
 
 A second submission of the same token never reaches the mint twice: it finds the row. For a topup to the same key it returns `replay: true` with the current balance; anything else is `token_spent`. When a topup's outcome is unknown (mint timeout), the gateway keeps the new balance and returns its key with HTTP 503 `topup_pending`; retrying with that key and the same token completes it.
 
-A NUT-24 request interrupted after payment (process died during the upstream call) is marked aborted at startup, and its full payment is owed back as change at `GET /v1/change/{request_id}`, the id from the 402 when the paid request echoed it.
+A NUT-24 request interrupted after payment (process died during the upstream call) is marked aborted at startup, and its full payment is owed back as change at `GET /v1/change/{request_id}`, the id from the 402 when the paid request echoed it. A NUT-24 request interrupted during its receive is marked failed at startup, after mint recovery has run: if its token never reached the mint, the token is still the payer's and the id answers `404`; if the swap's outcome is still unknown because the mint did not answer, the rule below applies.
 
 A NUT-24 payment whose swap outcome was unknown when its request failed (a mint timeout, `mint_unavailable`, or a failure after the swap) is settled by whichever comes first: a retry with the same token, `GET /v1/change/{request_id}`, or the next startup. Recovery that finalizes the swap marks the request aborted and owes the whole payment back as change under that id at once. Until the mint answers, `GET /v1/change/{request_id}` returns `409 not_settled` with `Retry-After`, never `404`.
 

@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { GatewayWallet } from './cashu/wallet.ts';
+import { GatewayWallet, type WalletFaults } from './cashu/wallet.ts';
 import { type Config, normalizeMintUrl } from './config.ts';
 import { openDb } from './db.ts';
 import { Invites, Ledger } from './ledger.ts';
@@ -16,7 +16,7 @@ export function buildDeps(
   opts: {
     rateSources?: RateSource[];
     env?: NodeJS.ProcessEnv;
-    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
+    faults?: WalletFaults;
     fundingFaults?: FundingFaults;
     /** Tests: stand-ins for the Nostr relays and the mint probe used by other-mint discovery. */
     discovery?: { query?: RelayQuery; probe?: (url: string) => Promise<MintProbe>; now?: () => number };
