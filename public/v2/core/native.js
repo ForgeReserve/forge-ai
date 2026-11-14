@@ -1,9 +1,10 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
-// photo files the app wrote), ForgeShareIn (a photo shared in from another app) and ForgeNfc (card taps:
-// the bytes of each card command and the card's answer). The balance key and chats never pass through
-// it; a card's answers carry its pieces, which only the page reads.
+// photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
+// the bytes of each card command and the card's answer) and ForgeTill (the till a Fedimint card pays
+// through: its pay requests and card link, with its token kept by the app). The balance key and chats
+// never pass through it; a card's answers carry its pieces, which only the page reads.
 
 /** The engine the app talks to until the person sets another one in More. */
 export const DEFAULT_ENGINE = 'https://ai.forge-reserve.com';
@@ -82,6 +83,72 @@ export function createNative(win = globalThis) {
     },
     forget: () => call('ForgeShare', 'forget').catch(() => {}),
     nfc: nativeNfc(call, on),
+    till: nativeTill(call, on),
+  };
+}
+
+/**
+ * The paired till through ForgeTill (slice A14, core/till.js). The app keeps the till's address and its
+ * pay token in the Android Keystore and adds the token to every request itself: the page never holds
+ * it after pairing. The plugin sends only the pay routes (POST /v1/pay, GET /v1/pay/{id}, POST
+ * /v1/pay/{id}/refund, GET /v1/health) and opens the card link; the page answers the card commands that
+ * come down the link (core/till.js cardRelay) and the plugin writes the answers back.
+ */
+export function nativeTill(call, on) {
+  const links = new Map(); // sock -> {onApdu}
+  let wired = null;
+  const wire = () =>
+    (wired ??= Promise.all([
+      on('ForgeTill', 'apdu', async (ev) => {
+        const l = links.get(ev?.sock);
+        if (!l) return;
+        const frame = await l.onApdu({ id: ev.id, apdu: ev.apdu });
+        call('ForgeTill', 'linkSend', { sock: ev.sock, ...frame }).catch(() => {});
+      }),
+      on('ForgeTill', 'closed', (ev) => links.delete(ev?.sock)),
+    ]));
+  let next = 0;
+  return {
+    supported: () => true,
+    async status() {
+      const r = await call('ForgeTill', 'status').catch(() => null);
+      return { paired: r?.paired === true, url: typeof r?.url === 'string' ? r.url : null };
+    },
+    /** Pairs with the till in a scanned pay code. Resolves {url}; rejects with {code} when it is not one. */
+    async pair(text) {
+      const r = await call('ForgeTill', 'pair', { text });
+      return { url: r?.url ?? null };
+    },
+    forget: () => call('ForgeTill', 'forget').catch(() => {}),
+    async request({ method, path, link = null, body, timeoutMs }) {
+      const r = await call('ForgeTill', 'request', { method, path, link, body: body === undefined ? null : JSON.stringify(body), timeoutMs });
+      let parsed = null;
+      try {
+        parsed = JSON.parse(r?.body ?? '');
+      } catch {
+        /* not JSON */
+      }
+      return { status: r?.status ?? 0, body: parsed };
+    },
+    async openLink({ onApdu }) {
+      await wire();
+      next += 1;
+      const sock = next;
+      links.set(sock, { onApdu });
+      try {
+        const r = await call('ForgeTill', 'linkOpen', { sock });
+        return {
+          id: r.link,
+          close: () => {
+            links.delete(sock);
+            call('ForgeTill', 'linkClose', { sock }).catch(() => {});
+          },
+        };
+      } catch (e) {
+        links.delete(sock);
+        throw e;
+      }
+    },
   };
 }
 

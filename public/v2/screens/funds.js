@@ -173,7 +173,7 @@ export function addFundsScreen({ t, state, nav, back, registry }) {
     for (const { instance } of registry.list('fund')) {
       if (!instance.available(S.methods)) continue;
       groups[instance.group === 'unlinked' ? 'unlinked' : 'depends'].push(
-        listRow({ ico: instance.icon, tint: 'gold', title: t(`fund.${instance.id}.name`), sub: t(`fund.${instance.id}.sub`), id: `fund-${instance.id}`, cls: instance.group === 'unlinked' ? 'teal-border' : '', onclick: () => nav('fund', { id: instance.id }) }),
+        listRow({ ico: instance.icon, tint: 'gold', title: t(`fund.${instance.id}.name`), sub: t(instance.sub?.() ?? `fund.${instance.id}.sub`), id: `fund-${instance.id}`, cls: instance.group === 'unlinked' ? 'teal-border' : '', onclick: () => nav('fund', { id: instance.id }) }),
       );
     }
     list.replaceChildren(

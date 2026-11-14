@@ -181,6 +181,26 @@ const defaults = {
     start: () => ({ started: Promise.resolve(false), stop() {} }),
   },
 
+  /**
+   * The paired till, for Fedimint cards (core/till.js). Only the Android app has one (core/native.js
+   * nativeTill): a page cannot read the card, and the till's token stays with the app. On the website
+   * supported() is false and nothing here reaches a till.
+   */
+  till: {
+    supported: () => false,
+    status: async () => ({ paired: false, url: null }),
+    pair: async () => {
+      throw Object.assign(new Error('Only the Forge app for Android pairs with a till.'), { code: 'app_only' });
+    },
+    forget: async () => {},
+    request: async () => {
+      throw Object.assign(new Error('No till.'), { code: 'app_only' });
+    },
+    openLink: async () => {
+      throw Object.assign(new Error('No till.'), { code: 'app_only' });
+    },
+  },
+
   /** A short vibration, where the phone has one. */
   haptics: {
     pulse(pattern) {

@@ -5,7 +5,7 @@ import { backHeader, el, icon, msgLine } from '../core/ui.js';
 
 export const HOLD_MS = 2000;
 
-export function eraseScreen({ t, state, nav, back, actions, format, vault, native = null, cardJobs = () => 0 }) {
+export function eraseScreen({ t, state, nav, back, actions, format, vault, native = null, cardJobs = () => 0, tillJobs = () => 0 }) {
   const S = state.S;
   const money = el('section', { class: 'warn-box', id: 'eraseMoney', 'aria-labelledby': 'eraseMoneyHead' });
   const unsaved = el('section', { class: 'warn-box', id: 'eraseUnsaved', 'aria-labelledby': 'eraseUnsavedHead' });
@@ -36,13 +36,16 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, nativ
     const ins = vault.incoming().length;
     // A card payment not finished, or change owed to a card: only this phone can finish it.
     const cards = cardJobs();
-    if (outs || ins || cards) {
+    // A Fedimint card payment the till has not settled, or money the till holds for a card.
+    const tills = tillJobs();
+    if (outs || ins || cards || tills) {
       unsaved.replaceChildren(
         ...[
           el('b', { id: 'eraseUnsavedHead', text: t('erase.unsaved') }),
           outs || ins ? el('p', { text: t('erase.unsavedSub') }) : null,
           cards ? el('p', { id: 'eraseCards', text: t('erase.cardsSub') }) : null,
-          el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseSaveFirst', onclick: () => (outs ? nav('takeOut') : ins ? nav('funds') : nav('fund', { id: 'card' })) }, el('span', { text: t('erase.unsavedBtn') })),
+          tills ? el('p', { id: 'eraseTill', text: t('erase.tillSub') }) : null,
+          el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseSaveFirst', onclick: () => (outs ? nav('takeOut') : ins ? nav('funds') : cards ? nav('fund', { id: 'card' }) : nav('fund', { id: 'fedimint' })) }, el('span', { text: t('erase.unsavedBtn') })),
         ].filter(Boolean),
       );
       unsaved.hidden = false;

@@ -199,6 +199,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .card-preview { display: flex; flex-direction: column; gap: 4px; }
 .card-preview p { margin: 0; }
 .card-get { font-size: 18px; font-weight: 700; color: var(--gold-ink); }
+/* Tap a Fedimint card: the price before the tap, and the till it pays through */
+.till-most { font-size: 16px; font-weight: 600; }
+.till-box { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+.till-box p { margin: 0; overflow-wrap: anywhere; }
+.card-view .till-box .note { text-align: left; }
+.till-box .row-btns { flex-wrap: wrap; }
+.till-margin { display: flex; flex-direction: column; gap: 8px; }
+.till-margin summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; cursor: pointer; }
+.fedimint-view .card-failed { display: flex; flex-direction: column; gap: 8px; }
 .token-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--gold-callout); }
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form p { margin: 0; }

@@ -1,0 +1,643 @@
+// Fund module: Tap a Fedimint card (slice A14). A Fedimint card's notes can only be redeemed by a
+// till, so the card pays the engine's Lightning invoice through one (fedimintcard-pay docs/PAY.md):
+// the engine makes the invoice, the price is shown, the person holds the card to the phone, the phone
+// passes the till's card commands to the card over the card link, the till charges the card and pays
+// the invoice, and the engine credits the funds. The work is core/till.js; this file is the screen.
+//
+// Only the Android app can do this: a web page cannot talk to the card, and the till's pay token is
+// kept by the app (ForgeTill). The till is paired once, by scanning the pay code the till shows.
+//
+// Every payment is stored on the phone before the till hears of it, and stays until the engine
+// credited it or the till gave the card its money back. A failed payment is listed with Get it back.
+import { inviteField, poll } from '../kit.js';
+import { tillLabel } from '../../../core/till.js';
+
+const kids = (...list) => list.filter((x) => x != null && x !== '' && x !== false);
+const sats = (msat) => Math.ceil(msat / 1000);
+
+/** The words for a till's refusal of a pay (core/till.js readPay), or null for one handled elsewhere. */
+export function wordsFor(out, t) {
+  switch (out?.code) {
+    case 'wrong_pin':
+      return t('fund.fedimint.wrongPin', { tries: out.triesLeft === 1 ? t('fund.fedimint.tryLeft') : out.triesLeft == null ? '' : t('fund.fedimint.triesLeft', { count: out.triesLeft }) }).trim();
+    case 'pin_blocked':
+      return t('fund.fedimint.pinBlocked');
+    case 'pin_required':
+      return t('fund.fedimint.pinNeeded');
+    case 'insufficient':
+    case 'no_exact_plan':
+      return t('fund.fedimint.insufficient');
+    case 'no_card':
+    case 'card_link_gone':
+      return t('fund.fedimint.tapLost');
+    case 'busy':
+    case 'recovering':
+      return t('fund.fedimint.busy');
+    case 'unknown_card':
+      return t('fund.fedimint.unknownCard');
+    case 'fee_reserve_too_low':
+      return t('fund.fedimint.requote');
+    case 'invoice_expired':
+      return t('fund.fedimint.expired');
+    case 'wrong_network':
+      return t('fund.fedimint.wrongNetwork');
+    case 'daily_cap':
+      return t('fund.fedimint.dailyCap');
+    case 'pay_disabled':
+      return t('fund.fedimint.payDisabled');
+    case 'lightning_unavailable':
+    case 'lightning_error':
+      return t('fund.fedimint.lnDown');
+    case 'over_limit':
+      return t('fund.fedimint.overLimit');
+    case 'invoice_in_use':
+      return t('fund.fedimint.inUse');
+    case 'unauthorized':
+    case 'forbidden':
+      return t('fund.fedimint.auth');
+    default:
+      return out?.kind === 'card' ? t('fund.fedimint.cardRefused') : t('fund.fedimint.tillRefused');
+  }
+}
+
+/** Refusals after which this invoice cannot be paid: a new one is needed. */
+const NEW_INVOICE = new Set(['invoice_expired', 'invoice_in_use', 'over_limit', 'bad_invoice']);
+
+export function create(inputs) {
+  const { t, ui, engine, wallet, format, scan, nfc, till } = inputs;
+  const ready = () => !!nfc?.supported?.() && !!till?.supported?.();
+  return {
+    id: 'fedimint',
+    group: 'unlinked',
+    icon: 'card',
+    // The till pays the engine's Lightning invoice, so the row needs Lightning at the engine.
+    available: (methods) => !!methods?.lightning?.enabled,
+    usable: () => ready(),
+    /** The row's line: what is needed while no till is set. */
+    sub: () => (ready() && !till.settings.get() ? 'fund.fedimint.subNoTill' : 'fund.fedimint.sub'),
+    view({ done }) {
+      const msg = ui.msgLine();
+      const body = ui.el('div', { class: 'scroll fund-body' });
+      const foot = ui.el('div', { class: 'foot' });
+      const node = ui.el('div', { class: 'fund-view card-view fedimint-view' }, body, foot);
+      const btn = (attrs, ico, label) => ui.el('button', { type: 'button', ...attrs }, ico ? ui.icon(ico, 20) : null, ui.el('span', { text: label }));
+      const pays = till?.pays;
+      let gone = false;
+      let reader = null;
+      let pollers = [];
+      // What a card coming into the field is for: {mode: 'pay' | 'refund', id, pin}, or null.
+      let want = null;
+      let busy = false;
+
+      const art = (amountText) =>
+        ui.el(
+          'div',
+          { class: 'card-art', role: 'img', 'aria-label': t('fund.fedimint.picture') },
+          ui.el('span', { class: 'card-art-word', text: t('fund.fedimint.artWord') }),
+          ui.el('span', { class: 'card-art-waves' }, ui.icon('nfc', 28)),
+          amountText ? ui.el('span', { class: 'card-art-amount', text: amountText }) : null,
+        );
+      const amountOf = (rec) => format.units(rec.amount, rec.unit);
+      const stopPolls = () => {
+        for (const p of pollers) p.stop();
+        pollers = [];
+      };
+
+      // ------------------------------------------------------------ the website: no reader, no till
+
+      if (!ready()) {
+        body.replaceChildren(...kids(art(), ui.el('p', { id: 'fedAppOnly', text: t('fund.fedimint.appOnly') }), ui.el('p', { class: 'note', text: t('fund.fedimint.what') })));
+        foot.replaceChildren(ui.el('a', { class: 'btn primary block', id: 'fedGetApp', href: '/download' }, ui.icon('download', 20), ui.el('span', { text: t('fund.card.getApp') })));
+        return { node, destroy() {} };
+      }
+
+      // ------------------------------------------------------------ pairing with a till
+
+      const pairView = (why = '') => {
+        stopPolls();
+        want = null;
+        const paste = ui.el('textarea', { id: 'fedPairText', rows: '3', class: 'field-input mono', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
+        const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
+        const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.el('p', { class: 'note', text: t('fund.scanHint') }));
+        let job = null;
+        const stopScan = () => {
+          job?.stop();
+          job = null;
+          box.hidden = true;
+        };
+        const use = async (text) => {
+          stopScan();
+          msg.set('');
+          try {
+            const r = await till.pair(text);
+            till.settings.paired(r.url);
+            ui.toast(t('fund.fedimint.tillSet'));
+            home();
+          } catch (e) {
+            msg.set(t(e?.code === 'pos' ? 'fund.fedimint.posCode' : e?.code === 'insecure' ? 'fund.fedimint.insecure' : 'fund.fedimint.notPayCode'), 'err');
+          }
+        };
+        const scanBtn = scan?.available()
+          ? btn(
+              {
+                class: 'btn primary block',
+                id: 'fedScan',
+                onclick: async () => {
+                  box.hidden = false;
+                  try {
+                    job = await scan.open(video);
+                    const text = await job.promise;
+                    await use(text);
+                  } catch {
+                    stopScan();
+                  }
+                },
+              },
+              'qr',
+              t('fund.fedimint.scanTill'),
+            )
+          : null;
+        body.replaceChildren(
+          ...kids(
+            art(),
+            ui.el('p', { id: 'fedNeedTill', text: t('fund.fedimint.needTill') }),
+            why ? ui.el('p', { class: 'msg err', text: why }) : null,
+            scanBtn,
+            box,
+            ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPairText', class: 'label', text: t('fund.fedimint.pasteLabel') }), paste),
+            msg,
+          ),
+        );
+        foot.replaceChildren(btn({ class: 'btn block', id: 'fedUseTill', onclick: () => use(paste.value) }, 'check', t('fund.fedimint.useTill')));
+        return { stop: stopScan };
+      };
+
+      // ------------------------------------------------------------ the till's settings
+
+      const tillBox = () => {
+        const s = till.settings.get();
+        if (!s) return null;
+        const fixed = ui.el('input', { id: 'fedMarginSats', class: 'field-input', inputmode: 'numeric', autocomplete: 'off', value: String(Math.floor(s.margin.msat / 1000)) });
+        const share = ui.el('input', { id: 'fedMarginPercent', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', value: String(s.margin.bps / 100) });
+        const note = ui.msgLine();
+        return ui.el(
+          'section',
+          { class: 'till-box', id: 'fedTill', 'aria-labelledby': 'fedTillHead' },
+          ui.el('p', { class: 'label', id: 'fedTillHead', text: t('fund.fedimint.tillLabel') }),
+          ui.el('p', { class: 'mono', id: 'fedTillUrl', text: tillLabel(s.url) }),
+          ui.el(
+            'details',
+            { class: 'till-margin' },
+            ui.el('summary', { text: t('fund.fedimint.marginHead') }),
+            ui.el('p', { class: 'note', text: t('fund.fedimint.marginNote') }),
+            ui.el('label', { for: 'fedMarginSats', class: 'label', text: t('fund.fedimint.marginSats') }),
+            fixed,
+            ui.el('label', { for: 'fedMarginPercent', class: 'label', text: t('fund.fedimint.marginPercent') }),
+            share,
+            btn(
+              {
+                class: 'btn small',
+                id: 'fedMarginSave',
+                onclick: () => {
+                  const a = fixed.value.trim();
+                  const b = share.value.trim().replace(',', '.');
+                  if (!/^\d{1,9}$/.test(a) || !/^\d{1,2}(\.\d{1,2})?$/.test(b)) return note.set(t('fund.fedimint.marginBad'), 'err');
+                  till.settings.setMargin({ msat: Number(a) * 1000, bps: Math.round(Number(b) * 100) });
+                  note.set(t('fund.fedimint.marginSaved'), 'ok');
+                },
+              },
+              null,
+              t('fund.fedimint.marginSave'),
+            ),
+            note,
+          ),
+          ui.el(
+            'div',
+            { class: 'row-btns' },
+            btn({ class: 'btn small', id: 'fedChangeTill', onclick: () => pairView() }, 'qr', t('fund.fedimint.changeTill')),
+            btn(
+              {
+                class: 'btn small',
+                id: 'fedForgetTill',
+                onclick: async () => {
+                  await till.forget();
+                  till.settings.forget();
+                  ui.toast(t('fund.fedimint.tillForgotten'));
+                  pairView();
+                },
+              },
+              'trash',
+              t('fund.fedimint.forgetTill'),
+            ),
+          ),
+        );
+      };
+
+      // ------------------------------------------------------------ payments not finished
+
+      const waitingList = () => {
+        const list = pays.waiting().filter((p) => (p.engine ?? '') === (engine.base ?? ''));
+        if (!list.length) return null;
+        const row = (p) => {
+          const words = { sent: 'fund.fedimint.rowSent', undecided: 'fund.fedimint.rowUndecided', paid: 'fund.fedimint.rowPaid', pay_failed: 'fund.fedimint.rowFailed' }[p.state] ?? 'fund.fedimint.rowSent';
+          const amount = p.state === 'pay_failed' ? format.units(sats(p.refundOwedMsat ?? p.receivedMsat ?? p.priceMsat), 'sat') : amountOf(p);
+          const action =
+            p.state === 'pay_failed'
+              ? btn({ class: 'btn block', 'data-get-back': p.id, onclick: () => holdFor({ mode: 'refund', id: p.id }) }, 'again', t('fund.fedimint.getBack'))
+              : p.state === 'sent' && !p.payId
+                ? btn({ class: 'btn block', 'data-finish': p.id, onclick: () => priceView(p) }, 'card', t('fund.fedimint.finish'))
+                : btn({ class: 'btn block', 'data-check': p.id, onclick: () => settle(p.id).then(() => home()) }, 'again', t('fund.fedimint.checkNow'));
+          return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state }, ui.el('p', { text: t(words, { amount }) }), action);
+        };
+        return ui.el('section', { class: 'notice', id: 'fedWaiting', 'aria-labelledby': 'fedWaitingHead' }, ui.el('b', { id: 'fedWaitingHead', text: t('fund.fedimint.waitingHead') }), ...list.map(row));
+      };
+
+      /**
+       * Settles one payment without the card: the engine first (its funds are the end of the story),
+       * then the till. Returns the record as it is now, or null once it is done.
+       */
+      const settle = async (id) => {
+        let rec = pays.get(id);
+        if (!rec) return null;
+        const key = wallet.key();
+        if (key && rec.fundingId && rec.state !== 'ready') {
+          const f = await engine.funding(key, rec.fundingId).catch(() => null);
+          if (f?.ok && f.body?.state === 'done') {
+            rec = pays.credited(id);
+            await wallet.refresh();
+            if (!rec) {
+              ui.toast(t('fund.fedimint.added', { amount: format.units(f.body.credited ?? f.body.amount, f.body.unit) }));
+              return null;
+            }
+          }
+        }
+        if (rec.payId && (rec.state === 'undecided' || rec.state === 'sent')) await pays.check(id);
+        return pays.get(id);
+      };
+
+      // ------------------------------------------------------------ the amount and the price
+
+      const home = () => {
+        stopPolls();
+        want = null;
+        msg.set('');
+        const L = wallet.methods()?.lightning ?? {};
+        const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (L.units ?? ['usd']);
+        let unit = wallet.unit() ?? (units.includes('usd') ? 'usd' : units[0]);
+        const invite = inviteField(inputs);
+        const input = ui.el('input', { id: 'fedAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('fund.fedimint.amountLabel') });
+        const seg = ui.el('div', { class: 'seg', role: 'group', 'aria-label': t('fund.fedimint.amountLabel') });
+        const setUnit = (u) => {
+          unit = u;
+          input.value = format.plain(u === 'usd' ? 500 : 5000, u);
+          input.inputMode = u === 'usd' ? 'decimal' : 'numeric';
+          for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.unit === u));
+        };
+        if (units.length > 1) for (const u of units) seg.append(ui.el('button', { type: 'button', 'data-unit': u, text: u === 'usd' ? 'USD' : 'sat', onclick: () => setUnit(u) }));
+        setUnit(unit);
+        const go = btn({ class: 'btn primary block', id: 'fedGetPrice' }, 'card', t('fund.fedimint.getPrice'));
+        go.addEventListener('click', async () => {
+          const amount = format.parse(input.value, unit);
+          if (!Number.isInteger(amount) || amount < 1) return msg.set(unit === 'usd' ? t('fund.lightning.badAmount') : t('fund.lightning.badSats'), 'err');
+          if (L.min?.[unit] && amount < L.min[unit]) return msg.set(t('fund.lightning.min', { amount: format.units(L.min[unit], unit) }), 'err');
+          if (L.max?.[unit] && amount > L.max[unit]) return msg.set(t('fund.lightning.max', { amount: format.units(L.max[unit], unit) }), 'err');
+          if (invite.missing(msg)) return;
+          go.disabled = true;
+          msg.set(t('fund.fedimint.pricing'));
+          try {
+            await newInvoice({ amount, unit, invite: invite.value() });
+          } finally {
+            go.disabled = false;
+          }
+        });
+        body.replaceChildren(
+          ...kids(
+            art(),
+            waitingList(),
+            invite.node,
+            ui.el('label', { for: 'fedAmount', class: 'label', text: t('fund.fedimint.amount') }),
+            input,
+            units.length > 1 ? seg : null,
+            msg,
+            tillBox(),
+          ),
+        );
+        foot.replaceChildren(go);
+        // Payments the till is still settling are asked about while this screen is open.
+        if (pays.waiting().some((p) => p.state === 'undecided' || p.state === 'paid')) {
+          pollers.push(
+            poll(async () => {
+              for (const p of pays.waiting().filter((x) => x.state === 'undecided' || x.state === 'paid')) await settle(p.id);
+              // Only the list is drawn again, so an amount being typed stays.
+              const box = body.querySelector('#fedWaiting');
+              if (box && !gone && !want && !busy) {
+                const now = waitingList();
+                if (now) box.replaceWith(now);
+                else box.remove();
+              }
+              return !pays.waiting().some((p) => p.state === 'undecided' || p.state === 'paid');
+            }, 3000),
+          );
+        }
+      };
+
+      /** Asks the engine for an invoice for the amount, stores the payment, and shows its price. */
+      const newInvoice = async ({ amount, unit, invite }) => {
+        let r;
+        try {
+          r = await engine.fundLightning(wallet.key(), { amount, unit, invite });
+        } catch (e) {
+          return msg.set(t('fund.failed', { message: e?.message ?? String(e) }), 'err');
+        }
+        if (r.body?.key) wallet.setKey(r.body.key);
+        if (!r.ok || !r.body?.request) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
+        const f = r.body;
+        let rec;
+        try {
+          // An earlier price nobody paid with: nothing was sent with it, so it goes.
+          for (const p of pays.all()) if (p.state === 'ready') pays.drop(p.id);
+          rec = pays.start({ engine: engine.base ?? '', fundingId: f.id, bolt11: f.request, expiresAt: f.expires_at ?? null, amount: f.amount, unit: f.unit, tillUrl: till.settings.get()?.url ?? null });
+        } catch (e) {
+          return msg.set(e?.code === 'not_stored' ? t('fund.fedimint.notStored') : t('fund.failed', { message: e?.message ?? String(e) }), 'err');
+        }
+        priceView(rec);
+      };
+
+      /** The price before the tap, and the PIN. */
+      const priceView = (rec, line = '', kind = 'err') => {
+        stopPolls();
+        want = null;
+        rec = pays.reprice(rec.id) ?? rec;
+        const pin = ui.el('input', { id: 'fedPin', class: 'field-input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '8', pattern: '[0-9]*' });
+        const most = format.units(sats(rec.mostMsat), 'sat');
+        body.replaceChildren(
+          ...kids(
+            art(amountOf(rec)),
+            ui.el(
+              'div',
+              { class: 'card-preview', id: 'fedPrice' },
+              ui.el('p', { class: 'card-get', id: 'fedYouGet', text: t('fund.fedimint.youGet', { amount: amountOf(rec) }) }),
+              ui.el('p', { class: 'till-most', id: 'fedCardPays', text: t('fund.fedimint.cardPays', { amount: most }) }),
+              ui.el('p', { class: 'note', id: 'fedSplit', text: t('fund.fedimint.split', { invoice: format.units(sats(rec.invoiceMsat), 'sat'), fee: format.units(sats(rec.tillMsat), 'sat') }) }),
+              ui.el('p', { class: 'note', text: t('fund.fedimint.feeKept') }),
+            ),
+            ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPin', class: 'label', text: t('fund.fedimint.pinLabel') }), pin),
+            msg,
+          ),
+        );
+        msg.set(line, line ? kind : undefined);
+        const payBtn = btn(
+          {
+            class: 'btn primary block',
+            id: 'fedPay',
+            onclick: () => {
+              const p = pin.value.trim();
+              if (p && !/^[0-9]{4,8}$/.test(p)) {
+                msg.set(t('fund.fedimint.pinBad'), 'err');
+                return pin.focus();
+              }
+              holdFor({ mode: 'pay', id: rec.id, pin: p });
+            },
+          },
+          'card',
+          t('fund.fedimint.pay', { amount: most }),
+        );
+        const back = rec.state === 'ready'
+          ? btn(
+              {
+                class: 'btn block',
+                id: 'fedChangeAmount',
+                onclick: () => {
+                  pays.drop(rec.id);
+                  home();
+                },
+              },
+              null,
+              t('fund.fedimint.changeAmount'),
+            )
+          : null;
+        foot.replaceChildren(...kids(payBtn, back));
+      };
+
+      // ------------------------------------------------------------ the tap
+
+      const working = (text, amountText = null) => {
+        msg.set('');
+        body.replaceChildren(...kids(art(amountText), ui.el('p', { class: 'status-line', id: 'fedStatus', role: 'status', text })));
+        foot.replaceChildren();
+      };
+
+      /** Waits for the card, or goes on with the one already on the phone. */
+      const holdFor = (w) => {
+        want = w;
+        body.replaceChildren(...kids(art(), ui.el('p', { class: 'card-hold', id: 'fedHold', text: t('fund.fedimint.hold') }), ui.el('p', { class: 'note', text: t('fund.fedimint.keep') }), msg));
+        foot.replaceChildren();
+        if (current) run();
+      };
+
+      // The card in the field now. A card held to the phone before Pay is used; one that has left
+      // fails its first command, and the till answers that nothing was taken.
+      let current = null;
+      const onCard = (card) => {
+        if (gone || !card) return;
+        current = card;
+        run();
+      };
+
+      const run = async () => {
+        if (gone || busy || !want || !current) return;
+        const w = want;
+        const card = current;
+        want = null;
+        busy = true;
+        try {
+          if (w.mode === 'refund') await refund(w.id, card);
+          else await pay(w.id, card, w.pin);
+        } finally {
+          busy = false;
+        }
+      };
+
+      const pay = async (id, card, pin) => {
+        const rec0 = pays.get(id);
+        if (!rec0) return home();
+        working(t('fund.fedimint.paying'), amountOf(rec0));
+        let out;
+        try {
+          out = await pays.pay(id, { card, pin });
+        } catch (e) {
+          if (e?.code === 'auth') return pairView(t('fund.fedimint.auth'));
+          if (e?.code === 'not_stored') return priceView(rec0, t('fund.fedimint.notStored'));
+          return priceView(pays.get(id) ?? rec0, t('fund.fedimint.unreachable'));
+        }
+        const rec = out.rec;
+        // The till's margin was more than the phone knew: said plainly; the next price includes it.
+        if (Number.isSafeInteger(rec.tillPriceMsat) && rec.tillPriceMsat > rec.priceMsat) ui.toast(t('fund.fedimint.charged', { amount: format.units(sats(rec.tillPriceMsat), 'sat') }), 5000);
+        switch (out.kind) {
+          case 'paid':
+            return credit(rec);
+          case 'undecided':
+            return undecided(rec);
+          case 'pay_failed':
+            return failedView(rec);
+          case 'refunded':
+            ui.toast(t('fund.fedimint.refunded', { amount: format.units(sats(rec.refundMsat ?? rec.receivedMsat ?? 0), 'sat') }));
+            return home();
+          case 'auth':
+            return pairView(t('fund.fedimint.auth'));
+          case 'requote':
+            return priceView(rec, t('fund.fedimint.requote'), 'ok');
+          case 'expired':
+            pays.drop(rec.id);
+            home();
+            return msg.set(t('fund.fedimint.expired'), 'err');
+          case 'before':
+            if (NEW_INVOICE.has(out.code)) {
+              pays.drop(rec.id);
+              home();
+              return msg.set(wordsFor(out, t), 'err');
+            }
+            return priceView(rec, wordsFor(out, t));
+          case 'card':
+            if (out.code === 'no_card' || out.code === 'card_link_gone') {
+              current = null;
+              msg.set(wordsFor(out, t), 'err');
+              return holdFor({ mode: 'pay', id, pin });
+            }
+            return priceView(rec, wordsFor(out, t));
+          default:
+            // No answer: the card may have paid. The payment is kept; the same request goes again.
+            home();
+            return msg.set(t('fund.fedimint.noAnswer'), 'err');
+        }
+      };
+
+      /** The till is settling a pay the card paid for: asked again until it is paid or failed. */
+      const undecided = (rec) => {
+        working(t('fund.fedimint.undecided'), amountOf(rec));
+        pollers.push(
+          poll(async () => {
+            const now = await settle(rec.id);
+            if (!now) {
+              done();
+              return true;
+            }
+            if (now.state === 'paid') {
+              credit(now);
+              return true;
+            }
+            if (now.state === 'pay_failed') {
+              failedView(now);
+              return true;
+            }
+            return false;
+          }, 3000),
+        );
+      };
+
+      /** The till paid the invoice: the engine credits it once it sees the payment. */
+      const credit = (rec) => {
+        working(t('fund.fedimint.adding'), amountOf(rec));
+        pollers.push(
+          poll(async () => {
+            const now = await settle(rec.id);
+            if (!now) {
+              done();
+              return true;
+            }
+            return false;
+          }, 2000),
+        );
+      };
+
+      const failedView = (rec, line = '') => {
+        stopPolls();
+        const owed = format.units(sats(rec.refundOwedMsat ?? rec.receivedMsat ?? rec.priceMsat), 'sat');
+        body.replaceChildren(
+          ...kids(
+            art(owed),
+            ui.el('section', { class: 'notice', id: 'fedFailed' }, ui.el('b', { text: t('fund.fedimint.failedHead') }), ui.el('p', { id: 'fedFailedLine', text: t('fund.fedimint.failed', { amount: owed }) })),
+            msg,
+          ),
+        );
+        msg.set(line, line ? 'err' : undefined);
+        foot.replaceChildren(btn({ class: 'btn primary block', id: 'fedGetBack', onclick: () => holdFor({ mode: 'refund', id: rec.id }) }, 'again', t('fund.fedimint.getBack')));
+      };
+
+      const refund = async (id, card) => {
+        const rec0 = pays.get(id);
+        if (!rec0) return home();
+        working(t('fund.fedimint.giving'));
+        let out;
+        try {
+          out = await pays.refund(id, { card });
+        } catch (e) {
+          if (e?.code === 'auth') return pairView(t('fund.fedimint.auth'));
+          return failedView(pays.get(id) ?? rec0, t('fund.fedimint.unreachable'));
+        }
+        const rec = out.rec;
+        switch (out.kind) {
+          case 'refunded':
+            ui.toast(t('fund.fedimint.refunded', { amount: format.units(sats(rec.refundMsat ?? rec.receivedMsat ?? 0), 'sat') }), 4000);
+            return home();
+          case 'partial':
+            return failedView(rec, t('fund.fedimint.partial'));
+          case 'wrong_card':
+            return failedView(rec, t('fund.fedimint.wrongCard'));
+          case 'card_full':
+            return failedView(rec, t('fund.fedimint.cardFull'));
+          case 'card':
+            current = null;
+            return failedView(rec, t('fund.fedimint.holdAgain'));
+          case 'later':
+            return failedView(rec, t('fund.fedimint.later'));
+          case 'stuck':
+            return failedView(rec, t('fund.fedimint.stuck', { id: rec.payId }));
+          case 'auth':
+            return pairView(t('fund.fedimint.auth'));
+          case 'settled':
+            return home();
+          default:
+            return failedView(rec, t('fund.fedimint.giveNoAnswer'));
+        }
+      };
+
+      // ------------------------------------------------------------ start
+
+      const start = async () => {
+        const s = await nfc.status();
+        if (gone) return;
+        if (!s.available) {
+          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'fedNoNfc', text: t('fund.card.noNfc') })));
+          return;
+        }
+        if (!s.enabled) {
+          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'fedNfcOff', text: t('fund.card.nfcOff') })));
+          foot.replaceChildren(btn({ class: 'btn primary block', id: 'fedRetry', onclick: start }, 'again', t('fund.card.tryAgain')));
+          return;
+        }
+        // The app holds the pairing; the page's copy of the address follows it.
+        const st = await till.status();
+        if (gone) return;
+        if (st.paired && st.url) till.settings.paired(st.url);
+        else if (till.settings.get()) till.settings.forget();
+        reader?.stop();
+        reader = nfc.start((c) => onCard(c));
+        if (!st.paired) return pairView();
+        // Payments the till may have settled since: asked about once, then the screen.
+        for (const p of pays.waiting()) await settle(p.id).catch(() => {});
+        if (!gone) home();
+      };
+
+      start().catch(() => pairView());
+      return {
+        node,
+        destroy() {
+          gone = true;
+          stopPolls();
+          reader?.stop();
+        },
+      };
+    },
+  };
+}

@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.fedimint",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Tap a Fedimint card"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

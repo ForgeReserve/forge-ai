@@ -15,6 +15,7 @@ import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { createNative, defaultEngine } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
+import { createTillPays, createTillSettings } from './core/till.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
@@ -1123,7 +1124,7 @@ function backTo(name) {
 
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
-  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount };
+  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
   switch (name) {
     case 'add':
       return mode.home({ sheet: addSheet(ctx), open: 'add' });
@@ -1210,6 +1211,7 @@ function render() {
     collectRefunds();
     settleOtherMint();
     resumeCards();
+    resumeTillPays();
   }
 }
 
@@ -1224,9 +1226,9 @@ async function eraseAll() {
   if (erased) return;
   halt();
   await workerSettled();
-  // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, and the web
-  // view's own cache.
-  if (native) await Promise.all([native.shareIn.clear(), native.forget()]);
+  // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, the web
+  // view's own cache, and the till a Fedimint card pays through (its address and token).
+  if (native) await Promise.all([native.shareIn.clear(), native.forget(), native.till.forget()]);
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
@@ -1311,7 +1313,7 @@ async function start() {
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
   });
   await registry.loadAll(BUNDLED);
   if (registry.refused.length) console.warn('modules refused', registry.refused);
@@ -1325,6 +1327,7 @@ async function start() {
     retryAll().then((n) => n && refreshBalance());
     settleOtherMint();
     resumeCards();
+    resumeTillPays();
   });
   addEventListener('offline', () => store.set({ online: false }));
   // Auto-delete while open: the sweeper's timer, and a check whenever the app comes back to the front
@@ -1342,6 +1345,7 @@ async function start() {
   if (n) await refreshBalance();
   await settleOtherMint();
   await resumeCards();
+  await resumeTillPays();
   registerWorker();
 }
 
@@ -1370,6 +1374,50 @@ function cardJobCount() {
 }
 const cardJobsWaiting = () => cardJobCount() > 0;
 const cards = { load: loadCards };
+
+/**
+ * Fedimint cards (core/till.js): the till they pay through is the Android app's (ForgeTill, which keeps
+ * its token); on the website a stand-in that has none. Payments are kept under forge2.tillpays.
+ */
+const tillTransport = native?.till ?? adapters.till;
+const tillSettings = createTillSettings(storage);
+const tillPays = createTillPays({ storage, transport: tillTransport, settings: tillSettings });
+const till = {
+  supported: () => tillTransport.supported(),
+  status: () => tillTransport.status(),
+  pair: (text) => tillTransport.pair(text),
+  forget: () => tillTransport.forget(),
+  pays: tillPays,
+  settings: tillSettings,
+};
+
+/**
+ * Fedimint card payments this phone holds that wait on the engine or the till (the person left the
+ * screen): the engine is asked whether its invoice was paid, then the till where its pay stands. A
+ * payment the till owes the card for waits for that card's tap in Tap a Fedimint card.
+ */
+async function resumeTillPays() {
+  const list = tillPays.waiting().filter((p) => (p.engine ?? '') === (engine.base ?? ''));
+  if (!list.length || !S.key) return;
+  let credited = 0;
+  for (const p of list) {
+    try {
+      if (p.fundingId && p.state !== 'pay_failed') {
+        const f = await engine.funding(S.key, p.fundingId);
+        if (f.ok && f.body?.state === 'done') {
+          tillPays.credited(p.id);
+          credited++;
+          continue;
+        }
+      }
+      if (p.payId && (p.state === 'undecided' || p.state === 'sent')) await tillPays.check(p.id);
+    } catch {
+      /* offline: next time */
+    }
+  }
+  if (credited) await refreshBalance();
+  store.set({});
+}
 
 let workerReg = null;
 function registerWorker() {
