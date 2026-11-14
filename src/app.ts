@@ -16,6 +16,7 @@ import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import { type Config, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
+import { apkSource, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
@@ -954,6 +955,9 @@ export function createApp(d: Deps) {
     return c.json({ token: r.token, questions: r.questions, mint: d.free?.mint, unit: d.free?.unit });
   });
 
+  // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH));
+
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
   const waitlist = new BetaWaitlist(d.db);
@@ -1003,6 +1007,10 @@ export function createApp(d: Deps) {
     app.get('/free', freePage);
     app.get('/free/', freePage);
     app.use('/v2/free/*', async (c, next) => (faucet ? next() : c.notFound()));
+    // The Android app's download page (public/v2/download/), at /download. It reads /download/info.
+    const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    app.get('/download', downloadPage);
+    app.get('/download/', downloadPage);
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
 

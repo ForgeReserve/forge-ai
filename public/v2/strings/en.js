@@ -482,6 +482,22 @@ export default {
   'fund.free.notMoney': 'Free questions are not money. They pay for questions on the free model and nothing else.',
 
   // The daily faucet: the Free questions module and the /free page
+  // The /download page (the Android app)
+  'download.title': 'Forge for Android',
+  'download.lead': 'The Forge app for Android 9 and up. It has the same screens as Forge in the browser, and it takes photos shared from other apps.',
+  'download.get': 'Download the app, {mb} MB',
+  'download.noGoogle': 'Made without Google services. No account or app store needed.',
+  'download.hash': 'SHA-256',
+  'download.hashSub': 'The file\'s fingerprint. A copy from anywhere else must show the same one.',
+  'download.steps': 'How to install',
+  'download.step1': 'Tap Download the app.',
+  'download.step2': 'Open the file when it has downloaded.',
+  'download.step3': 'If the phone asks, let this browser install apps.',
+  'download.step4': 'Open Forge.',
+  'download.update': 'To update, download the app again here and install it over the old one. Your balance and chats stay.',
+  'download.coming': 'The Android app is coming soon. Forge works in this browser now.',
+  'download.web': 'Open Forge in the browser',
+
   'faucet.title': 'Free questions',
   'faucet.sub': 'Free questions for Forge AI. No name and no email: your phone works a short puzzle instead.',
   'faucet.left': 'Free questions today: {count} left.',

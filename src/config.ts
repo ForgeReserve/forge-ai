@@ -159,6 +159,13 @@ export const EnvSchema = z.object({
   FORGE_FAUCET_PER_ADDRESS: z.coerce.number().int().min(0).default(3),
   /** How long a challenge may be worked on at the base difficulty. Doubled for each bit over the base, up to an hour. */
   FORGE_FAUCET_CHALLENGE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
+
+  // ---------------------------------------------------------------- the Android app (docs/ANDROID.md)
+  /**
+   * The release APK that /download offers, with its SHA-256 shown on the page. Unset (or no file there):
+   * the page says the app is coming.
+   */
+  FORGE_APK_PATH: z.string().optional().or(z.literal('').transform(() => undefined)),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

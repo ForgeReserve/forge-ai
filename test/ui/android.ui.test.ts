@@ -1,4 +1,5 @@
-import { createReadStream, existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -247,5 +248,43 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await page.waitForSelector('#photoAlert');
     expect(await page.textContent('#photoAlert')).toContain('No photo came with that share.');
     await ctx.close();
+  }, 60_000);
+});
+
+describe('the /download page', () => {
+  it('offers the APK with its size and SHA-256, and says the app is coming when there is none', async () => {
+    const bytes = Buffer.from('PK\u0003\u0004'.padEnd(300_000, 'x'));
+    const file = join(mkdtempSync(join(tmpdir(), 'forge-apk-')), 'forge.apk');
+    writeFileSync(file, bytes);
+    const withApk = await startGateway({ env: { FORGE_APK_PATH: file } });
+    const ctx = await browser.newContext(PHONE);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    try {
+      await page.goto(`${withApk.url}/download`);
+      await page.waitForSelector('#downloadHash');
+      expect(await page.textContent('h1')).toBe('Forge for Android');
+      expect((await page.textContent('#downloadHash'))!.replaceAll(' ', '')).toBe(createHash('sha256').update(bytes).digest('hex'));
+      expect(await page.textContent('#downloadApk')).toBe('Download the app, 0.3 MB');
+      expect(await page.getAttribute('#downloadApk', 'href')).toBe('/download/forge.apk');
+      expect(await page.locator('#downloadSteps li').count()).toBe(4);
+      const got = await page.evaluate(async () => {
+        const r = await fetch('/download/forge.apk');
+        return { type: r.headers.get('content-type'), size: (await r.arrayBuffer()).byteLength };
+      });
+      expect(got).toEqual({ type: 'application/vnd.android.package-archive', size: bytes.length });
+
+      // This gateway has no APK set.
+      await page.goto(`${g.url}/download`);
+      await page.waitForSelector('#downloadComing');
+      expect(await page.textContent('#downloadComing')).toBe('The Android app is coming soon. Forge works in this browser now.');
+      expect(await page.getAttribute('#openWeb', 'href')).toBe('/v2/');
+      expect(await page.locator('#downloadApk').count()).toBe(0);
+      expect(errors).toEqual([]);
+    } finally {
+      await ctx.close();
+      await withApk.close();
+    }
   }, 60_000);
 });
