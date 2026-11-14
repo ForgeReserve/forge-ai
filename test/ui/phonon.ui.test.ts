@@ -47,9 +47,13 @@ async function fundedKey(): Promise<string> {
   return b.key;
 }
 
-/** A phone with a funded balance and the microphone allowed; Private only off, the mock-echo model. */
-async function phone(): Promise<Phone> {
-  const ctx = await browser.newContext({ ...PHONE });
+/**
+ * A phone with a funded balance and the microphone allowed; Private only off, the mock-echo model.
+ * context: more context options; before: runs on the context before its first page opens.
+ */
+async function phone({ context = {}, before }: { context?: object; before?: (ctx: BrowserContext) => Promise<void> } = {}): Promise<Phone> {
+  const ctx = await browser.newContext({ ...PHONE, ...context });
+  await before?.(ctx);
   await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
   // Counts the pieces of sound handed to Web Audio, the way the app's speaker plays them.
@@ -285,6 +289,61 @@ describe('the natural voice', () => {
     expect(c.rows).toHaveLength(3); // the quick run; the corpus itself has 60 lines (core/voicelab.js)
     expect(c.summary.failed + c.summary.nanRuns + c.summary.silentRuns).toBe(0);
     expect(c.summary.rtf.median).toBeLessThan(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
+});
+
+/**
+ * An iPhone's WebGPU as the page sees it: an Apple adapter (the worker inside, where the model runs,
+ * keeps Chrome's own). Records the device each model load asks phonon-tts for (its worker's init).
+ */
+async function appleGpu(ctx: BrowserContext) {
+  await ctx.addInitScript(() => {
+    const w = window as any;
+    w.__inits = [];
+    const adapter = { info: { vendor: 'apple', architecture: 'metal-3', isFallbackAdapter: false }, features: new Set(), limits: {}, requestDevice: async () => Promise.reject(new Error('fake adapter')) };
+    Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => ({ requestAdapter: async () => adapter, getPreferredCanvasFormat: () => 'bgra8unorm' }) });
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (m: any, ...rest: any[]) {
+      if (m?.type === 'init') w.__inits.push({ device: m.options.device, threads: m.options.threads });
+      return (post as any).call(this, m, ...rest);
+    };
+  });
+  // The package's WebGPU engine fails to start, whatever GPU this machine has.
+  await ctx.route('**/v2/vendor/phonon-tts/gpu/engine.js', (r) =>
+    r.fulfill({ contentType: 'text/javascript', body: "export class GpuEngine { static async create() { throw new Error('fake: WebGPU rejected the engine'); } }" }),
+  );
+}
+const inits = (page: Page) => page.evaluate(() => (window as any).__inits as { device: string; threads: string | number }[]);
+
+describe('where the natural voice runs', () => {
+  it("tries WebGPU on Apple's chip; when it fails, reads on the processor and remembers it for the next start", async () => {
+    // No service worker, so the routed engine is what the worker loads.
+    const { ctx, page, errors } = await phone({ context: { serviceWorkers: 'block' }, before: appleGpu });
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await expect.poll(() => page.textContent('#labEnv')).toContain('The app reads with: the graphics chip');
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('#voiceDownload', { timeout: 20_000 });
+    await page.click('#voiceDlYes');
+    // Read aloud all the same, on the processor phonon-tts fell back to.
+    await expect.poll(() => played(page), { timeout: 60_000 }).toBeGreaterThan(5);
+    expect(await inits(page)).toEqual([{ device: 'auto', threads: 'auto' }]);
+    await page.waitForSelector('#speakBtn', { timeout: 60_000 });
+
+    // The next start goes straight to the processor, with threads.
+    await page.reload();
+    await page.waitForSelector('[data-screen]');
+    await page.goto(`${g.url}/v2/#/answer`);
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    const before = await played(page);
+    await page.click('#speakBtn');
+    await expect.poll(() => played(page), { timeout: 60_000 }).toBeGreaterThan(before);
+    expect(await inits(page)).toEqual([{ device: 'cpu', threads: 'auto' }]);
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await expect.poll(() => page.textContent('#labEnv')).toContain('The app reads with: the processor, several threads');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 180_000);

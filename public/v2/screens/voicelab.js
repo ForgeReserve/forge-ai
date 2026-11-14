@@ -3,7 +3,7 @@
 // sound, the real-time factor, gaps a listener would hear, and broken sound (NaN or silence), plus the
 // model's load time and the memory the browser reports. The results are saved as a JSON file the owner
 // sends on. Nothing here is sent anywhere.
-import { meterNumbers, soundCheck } from '../core/phonon.js';
+import { gpuInfo, meterNumbers, soundCheck } from '../core/phonon.js';
 import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
 import { CANDIDATES, CORPUS, report, summarize, virtualUnderruns } from '../core/voicelab.js';
 
@@ -19,17 +19,6 @@ async function pageMemory() {
     total = await Promise.race([performance.measureUserAgentSpecificMemory().then((m) => m.bytes), new Promise((res) => setTimeout(() => res(null), 20_000))]).catch(() => null);
   }
   return { jsHeapBytes: heap, pageBytes: total };
-}
-
-async function gpuInfo() {
-  try {
-    const a = await navigator.gpu?.requestAdapter();
-    if (!a) return null;
-    const i = a.info ?? {};
-    return { vendor: i.vendor ?? '', architecture: i.architecture ?? '', fallback: !!(i.isFallbackAdapter ?? a.isFallbackAdapter) };
-  } catch {
-    return null;
-  }
 }
 
 export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
@@ -72,6 +61,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   (async () => {
     const index = await phonon.init().catch(() => null);
     const gpu = await gpuInfo();
+    // Where the app itself reads with the natural voice on this phone (core/phonon.js chooseVoiceDevice).
+    const appDevice = await phonon.device?.().catch(() => null);
     env = {
       userAgent: navigator.userAgent,
       app: native ? 'android' : 'web',
@@ -79,6 +70,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       cores: navigator.hardwareConcurrency ?? null,
       deviceMemoryGb: navigator.deviceMemory ?? null,
       webgpu: gpu,
+      appDevice: appDevice ?? null,
       phononFiles: index ? { revision: index.model.revision, firstBytes: index.firstBytes } : null,
       kokoro: 'not in this build',
     };
@@ -87,6 +79,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('li', { text: t('lab.cores', { value: env.cores ?? t('lab.unknown') }) }),
       el('li', { text: t('lab.memory', { value: env.deviceMemoryGb ?? t('lab.unknown') }) }),
       el('li', { text: t('lab.webgpu', { value: yes(!!gpu && !gpu.fallback) }) }),
+      appDevice ? el('li', { id: 'labAppDevice', text: t('lab.appDevice', { value: t(appDevice.device === 'webgpu' ? 'lab.dev.webgpu' : appDevice.threads === 1 ? 'lab.dev.single' : 'lab.dev.threads') }) }) : null,
       el('li', { text: index ? t('lab.files', { size: Math.round(index.firstBytes / 1e6) }) : t('lab.none') }),
       el('li', { text: t('lab.kokoro') }),
     );

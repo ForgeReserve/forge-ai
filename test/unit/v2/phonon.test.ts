@@ -163,19 +163,39 @@ describe('the model as phonon-tts takes it', () => {
   });
 });
 
-/** A fake phonon-tts: records how it was loaded and streams the chunks given. */
-function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new Float32Array(1920).fill(0.2)]) {
+/**
+ * A fake phonon-tts: records how it was loaded and streams the chunks given. gpu: what a load asking for
+ * WebGPU ('webgpu' or 'auto') ends up on, and how its streams go: 'ok', 'start' (WebGPU fails to start,
+ * so 'auto' runs on the processor), 'error' (the first stream throws), 'silent' (it ends with no sound)
+ * or 'hang' (no sound ever comes).
+ */
+function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new Float32Array(1920).fill(0.2)], { gpu = 'ok' }: { gpu?: string } = {}) {
   const loads: any[] = [];
+  const made: any[] = [];
   const lib = {
     PhononTTS: {
       load: async (opts: any) => {
         loads.push(opts);
         opts.onProgress?.({ file: 'weights', loaded: 50, total: 100, cached: false });
-        return {
+        const wantsGpu = opts.device === 'webgpu' || opts.device === 'auto';
+        const device = wantsGpu && !(gpu === 'start' && opts.device === 'auto') ? 'webgpu' : 'cpu';
+        const onGpu = device === 'webgpu';
+        let disposed = false;
+        const tts = {
           sampleRate: 24000,
-          dispose: vi.fn(),
-          stream: (text: string, { signal }: any = {}) => ({
+          device,
+          deviceReason: device === 'cpu' && wantsGpu ? 'WebGPU failed to start: fake' : 'requested',
+          streams: [] as string[],
+          dispose: vi.fn(() => (disposed = true)),
+          stream: (text: string, { signal, voice }: any = {}) => ({
             async *[Symbol.asyncIterator]() {
+              tts.streams.push(`${voice ?? ''}:${text}`);
+              if (onGpu && gpu === 'error') throw new Error('fake GPU error');
+              if (onGpu && gpu === 'silent') return;
+              if (onGpu && gpu === 'hang') {
+                while (!disposed) await new Promise((r) => setTimeout(r, 2));
+                throw new Error('this PhononTTS has been disposed');
+              }
               for (const c of chunks) {
                 if (signal?.aborted) return;
                 await new Promise((r) => setTimeout(r, 1));
@@ -184,22 +204,41 @@ function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new
             },
           }),
         };
+        made.push(tts);
+        return tts;
       },
     },
   };
-  return { lib, loads };
+  return { lib, loads, made };
 }
 
-function engine({ index = INDEX as any, native = false, cached = false, lib = fakeLib().lib } = {}) {
+/** A browser's global object as the engine reads it: WebGPU's adapter, if any, and isolation. */
+function browserEnv({ vendor = null as string | null, fallback = false, isolated = true } = {}) {
+  const adapter = vendor == null ? null : { info: { vendor, architecture: vendor === 'arm' ? 'valhall' : 'metal-3', isFallbackAdapter: fallback }, features: new Set() };
+  return { Worker: function () {}, WebAssembly, crossOriginIsolated: isolated, navigator: { gpu: { requestAdapter: async () => adapter } } };
+}
+
+function engine({ index = INDEX as any, native = false, cached = false, lib = fakeLib().lib, env = { Worker: function () {}, WebAssembly } as any, memory = undefined as any, voice = undefined as any, firstSoundMs = undefined as any } = {}) {
   const fetched: string[] = [];
   const fetch = async (url: string) => {
     fetched.push(url);
     return index ? new Response(JSON.stringify(index)) : new Response('', { status: 404 });
   };
   const caches = { open: async () => ({ match: async (u: string) => (cached && u.endsWith('model.q8.gguf') ? new Response('x') : undefined) }) };
-  const env = { Worker: function () {}, WebAssembly };
-  return { ph: P.createPhonon({ base: BASE, native, importLib: async () => lib, fetch, caches, env }), fetched };
+  return { ph: P.createPhonon({ base: BASE, native, importLib: async () => lib, fetch, caches, env, memory, voice, firstSoundMs }), fetched };
 }
+
+/** Settings kept the way the app keeps them: a value per key. */
+function memoryStore(initial: string | null = null) {
+  const m = { value: initial, writes: 0, get: () => m.value, set: (v: string) => ((m.value = v), m.writes++) };
+  return m;
+}
+
+const readAll = async (tts: any, text: string, opts: any = {}) => {
+  const got: Float32Array[] = [];
+  for await (const pcm of tts.stream(text, opts)) got.push(pcm);
+  return got;
+};
 
 describe('the download meter', () => {
   const size = (p: string) => LOCK.files.find((f) => f.path === p)!.size;
@@ -253,7 +292,7 @@ describe('the phone Phonon engine', () => {
 
   it('loads the model from this app only, kept in the cache on the website and read from the APK in the app', async () => {
     const web = fakeLib();
-    const a = engine({ lib: web.lib });
+    const a = engine({ lib: web.lib, env: browserEnv() });
     const tts = await a.ph.load();
     expect(await a.ph.load()).toBe(tts); // loaded once
     expect(web.loads).toHaveLength(1);
@@ -266,27 +305,152 @@ describe('the phone Phonon engine', () => {
     expect(app.loads[0]).toMatchObject({ cache: false, device: 'webgpu', threads: 1 });
   });
 
-  it('loads the lab model with the accent-test voices apart from the app model, which never has them', async () => {
+  it('loads the lab model with the lab voices apart from the app model, which never has them', async () => {
     const f = fakeLib();
     const a = engine({ lib: f.lib });
-    const app = await a.ph.load();
-    const lab = await a.ph.load({ lab: true });
-    expect(lab).not.toBe(app);
+    await a.ph.load();
+    const lab = await a.ph.load({ device: 'cpu', lab: true });
+    expect(lab).toBe(f.made[1]);
     expect(Object.keys(f.loads[0].model.voices)).not.toContain('Regina');
     expect(Object.keys(f.loads[1].model.voices)).toContain('Regina');
-    await a.ph.unload({ lab: true });
+    await a.ph.unload({ device: 'cpu', lab: true });
     expect(lab.dispose).toHaveBeenCalled();
-    expect(app.dispose).not.toHaveBeenCalled();
+    expect(f.made[0].dispose).not.toHaveBeenCalled();
   });
 
   it('frees a model when asked, and loads it again after', async () => {
     const f = fakeLib();
     const a = engine({ lib: f.lib });
-    const first = await a.ph.load();
+    await a.ph.load();
     await a.ph.unload();
-    expect(first.dispose).toHaveBeenCalled();
-    expect(await a.ph.load()).not.toBe(first);
+    expect(f.made[0].dispose).toHaveBeenCalled();
+    await a.ph.load();
     expect(f.loads).toHaveLength(2);
+    await a.ph.load({ device: 'webgpu' });
+    await a.ph.unload({ device: 'webgpu' });
+    expect(f.made[2].dispose).toHaveBeenCalled();
+  });
+});
+
+describe('where the natural voice runs (measured on phones, docs/VOICE.md)', () => {
+  const apple = { vendor: 'apple', architecture: 'metal-3', fallback: false };
+  it("uses the graphics chip when WebGPU's adapter is Apple's (iPhone: RTF 0.045 against 0.147 on the processor)", () => {
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true })).toMatchObject({ device: 'webgpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: { ...apple, vendor: 'Apple' }, isolated: false })).toMatchObject({ device: 'webgpu' });
+  });
+  it('uses the processor with threads on an Arm Mali (valhall), where WebGPU was 5 times slower (Pixel 8 Pro)', () => {
+    expect(P.chooseVoiceDevice({ gpu: { vendor: 'arm', architecture: 'valhall', fallback: false }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: { vendor: 'nvidia', architecture: '', fallback: false }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+  });
+  it('never uses a software fallback adapter, even one that says Apple', () => {
+    expect(P.chooseVoiceDevice({ gpu: { ...apple, fallback: true }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+  });
+  it('uses the processor with no WebGPU', () => {
+    expect(P.chooseVoiceDevice({ gpu: null, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice()).toMatchObject({ device: 'cpu', threads: 1 });
+  });
+  it('uses one thread on a page that is not cross-origin isolated', () => {
+    const c = P.chooseVoiceDevice({ gpu: { vendor: 'arm', fallback: false }, isolated: false });
+    expect(c).toMatchObject({ device: 'cpu', threads: 1 });
+    expect(c.reason).toMatch(/not cross-origin isolated/);
+  });
+  it('goes straight to the processor once WebGPU failed on this phone', () => {
+    expect(P.GPU_FAILED).toBe('cpu');
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true, remembered: 'cpu' })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: false, remembered: 'cpu' })).toMatchObject({ device: 'cpu', threads: 1 });
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true, remembered: '' })).toMatchObject({ device: 'webgpu' });
+  });
+  it("reads the adapter's vendor, architecture, fallback flag and subgroups", async () => {
+    expect(await P.gpuInfo(browserEnv({ vendor: 'apple' }))).toMatchObject({ vendor: 'apple', architecture: 'metal-3', fallback: false, subgroups: false });
+    expect(await P.gpuInfo(browserEnv())).toBeNull();
+    expect(await P.gpuInfo({ navigator: { gpu: { requestAdapter: async () => { throw new Error('off'); } } } })).toBeNull();
+    expect(await P.gpuInfo({})).toBeNull();
+  });
+});
+
+describe("the app's natural voice on the graphics chip, and its fallback to the processor", () => {
+  it("asks phonon-tts for WebGPU on Apple's chip, and keeps it when it makes sound", async () => {
+    const f = fakeLib();
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    expect(f.loads[0]).toMatchObject({ device: 'auto', threads: 'auto' });
+    expect(tts.device).toBe('webgpu');
+    expect(await readAll(tts, 'One.')).toHaveLength(2);
+    expect(await readAll(tts, 'Two.')).toHaveLength(2);
+    expect(f.loads).toHaveLength(1);
+    expect(mem.writes).toBe(0);
+    expect(await ph.device()).toMatchObject({ device: 'webgpu' });
+  });
+
+  it('runs on the processor on an Arm Mali, and on one thread on a page that is not isolated', async () => {
+    const a = fakeLib();
+    await engine({ lib: a.lib, env: browserEnv({ vendor: 'arm' }) }).ph.load();
+    expect(a.loads[0]).toMatchObject({ device: 'cpu', threads: 'auto' });
+    const b = fakeLib();
+    await engine({ lib: b.lib, env: browserEnv({ vendor: 'apple', isolated: false, fallback: true }) }).ph.load();
+    expect(b.loads[0]).toMatchObject({ device: 'cpu', threads: 1 });
+  });
+
+  it('when WebGPU fails to start, reads on the processor phonon-tts fell back to, and remembers it', async () => {
+    const f = fakeLib(undefined, { gpu: 'start' });
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    expect(tts.device).toBe('cpu');
+    expect(tts.deviceReason).toMatch(/WebGPU failed to start/);
+    expect(mem.value).toBe('cpu');
+    expect(await readAll(tts, 'One.')).toHaveLength(2);
+    expect(f.loads).toHaveLength(1);
+  });
+
+  for (const [how, what] of [
+    ['error', 'errors'],
+    ['silent', 'ends with no sound'],
+    ['hang', 'makes no sound in time'],
+  ] as const) {
+    it(`when WebGPU ${what} on first use, reads the line again on the processor, for the rest of the session, and remembers it`, async () => {
+      const f = fakeLib(undefined, { gpu: how });
+      const mem = memoryStore();
+      const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem, firstSoundMs: 30 });
+      const tts = await ph.load();
+      expect(tts.device).toBe('webgpu');
+      expect(await readAll(tts, 'First line.')).toHaveLength(2);
+      expect(f.made[0].dispose).toHaveBeenCalled();
+      expect(f.loads.map((l) => l.device)).toEqual(['auto', 'cpu']);
+      expect(f.made[1].streams).toEqual([`${LOCK.defaultVoice}:First line.`]);
+      expect(mem.value).toBe('cpu');
+      expect(tts.device).toBe('cpu');
+      expect(tts.deviceReason).toMatch(/WebGPU failed on first use/);
+      // The rest of the session stays on the processor.
+      expect(await readAll(tts, 'Second line.')).toHaveLength(2);
+      expect(f.loads).toHaveLength(2);
+    });
+  }
+
+  it('the next start remembers the failure and goes straight to the processor, without asking for an adapter', async () => {
+    const f = fakeLib();
+    let asked = 0;
+    const env: any = browserEnv({ vendor: 'apple' });
+    const real = env.navigator.gpu.requestAdapter;
+    env.navigator.gpu.requestAdapter = () => (asked++, real());
+    const { ph } = engine({ lib: f.lib, env, memory: memoryStore('cpu') });
+    const tts = await ph.load();
+    expect(f.loads[0]).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(tts.device).toBe('cpu');
+    expect(asked).toBe(0);
+  });
+
+  it('a stop while WebGPU starts its first line is not taken for a failure', async () => {
+    const f = fakeLib(Array.from({ length: 20 }, () => new Float32Array(1920)));
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    expect(await readAll(tts, 'Stopped.', { signal: ctrl.signal })).toEqual([]);
+    expect(mem.writes).toBe(0);
+    expect(f.loads).toHaveLength(1);
   });
 });
 

@@ -109,8 +109,19 @@ if (native) setAdapter('share', native.share);
 const engineBase = () => S.settings.engine || defaultEngine(native);
 
 // The natural voice made on the phone (core/phonon.js). Its files are on this app's own address, or in
-// the APK in the Android app, where there is nothing to download.
-const phonon = createPhonon({ native: !!native });
+// the APK in the Android app, where there is nothing to download. It runs on the graphics chip or the
+// processor (core/phonon.js chooseVoiceDevice); a WebGPU failure is remembered in the settings
+// (voiceDevice), so the next start goes straight to the processor.
+const phonon = createPhonon({
+  native: !!native,
+  memory: {
+    get: () => S.settings.voiceDevice || null,
+    set: (v) => {
+      S.settings.voiceDevice = v;
+      saveSettings();
+    },
+  },
+});
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);

@@ -1,6 +1,6 @@
 # The natural voice (on-device text to speech)
 
-Status: built on branch `v2-voice` (plan: the voice bake-off). Measured in desktop Chrome only. First tried on an iPhone (Safari, 2026-11-14): the voice lab played nothing, the cause is fixed (see Sound on iPhone) but not yet tried on a phone again.
+Status: built on branch `v2-voice` (plan: the voice bake-off). Measured with the voice lab on an iPhone, a Pixel 8 Pro and a Mac (2026-11-14, below); the device the app picks follows from those numbers.
 
 The v2 app reads answers aloud with **Phonon 31m English** (Gradium, Apache-2.0), a 31M-parameter streaming text to speech model, through Gradium's browser package **phonon-tts 0.7.0** (MIT OR Apache-2.0). The model runs in a worker in the page. The answer text is not sent anywhere, and there is no charge.
 
@@ -30,6 +30,24 @@ The Docker image runs the script during the build, and so does every Android bui
 - **Offline:** the voice package lives under `/v2/` so the v2 service worker controls its worker too (a service worker only controls a worker whose script is inside its scope). The package files are kept by the service worker; the model files are left to phonon-tts's own cache, so they are not kept twice. Tested: after one use, the app reloads and reads aloud with the network off.
 - **Threads:** the gateway serves `/v2/` and `/vendor/` with `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Resource-Policy: same-origin` (`src/app.ts`), so the page is cross-origin isolated and the model runs on 3 threads. `/vendor/` needs them because pdf.js starts a worker from there, and an isolated page cannot start a worker without them. Without isolation, phonon-tts runs on one thread.
 - **Android:** the APK carries the model and voices (stored uncompressed, `noCompress 'gguf', 'safetensors'`), read straight from the APK, never copied into Cache Storage, so the first open reads aloud with no download. `MainActivity` adds the same isolation headers to the app's own files (`IsolationRules.kt`). If the very first page load came up without them, the page reloads once (`reloadForIsolation`).
+
+## Where it runs (measured)
+
+The voice lab on real phones, 2026-11-14, voice Maeve, 3 short lines each (first sound is the median; RTF is time per second of sound, under 1 keeps up):
+
+| Phone | Browser | Processor, threads | Processor, one thread | Graphics chip (WebGPU) |
+|---|---|---|---|---|
+| iPhone, iOS 18.7, 4 cores, WebGPU vendor `apple` | Safari 26.6.1 | 38 ms, RTF 0.147 | 53 ms, RTF 0.203 | **27 ms, RTF 0.045** (load 8.0 s first, 3.2 s again) |
+| Pixel 8 Pro, GrapheneOS, 9 cores, WebGPU vendor `arm`, architecture `valhall` | Chrome 155 | **36 ms, RTF 0.220** (load 21.4 s first with the download, 4.1 s again) | 46 ms, RTF 0.294 | 179 ms, RTF 0.461 (load 11.4 s again) |
+| Mac, 8 cores, WebGPU vendor `apple` | Safari 26.5 | **26 ms, RTF 0.084** | 32 ms, RTF 0.171 | loaded (3.3 s) but read no line and said no error: a lab bug, see The voice lab |
+
+So the app picks (`chooseVoiceDevice` in `core/phonon.js`, a pure function with a unit test per case):
+
+1. **WebGPU** when the adapter's vendor is `apple` and it is not a software fallback adapter (on Apple's chips WebGPU is 3 times faster than threads).
+2. Otherwise the **processor with threads** (`threads: 'auto'`) on a cross-origin isolated page (on the Pixel's Mali, WebGPU is 2 times slower than threads; every other vendor is unmeasured, so it gets the processor too).
+3. Otherwise the **processor on one thread**.
+
+On WebGPU the app asks phonon-tts for `device: 'auto'`, so a WebGPU that fails to start falls back to the processor inside the same worker, with the files it already downloaded. If WebGPU fails to start, or on its first use errors, ends with no sound, or makes no sound within 20 s (`GPU_FIRST_SOUND_MS`), the app frees it, reads the same line again on the processor (threads where the page is isolated), stays there for the rest of the session, and remembers it in the settings (`voiceDevice: 'cpu'`), so the next start goes straight to the processor without asking for an adapter. Erase everything clears that, like every setting. The voice lab shows which the app would pick ("The app reads with") and saves it in its results (`env.appDevice`); the lab itself still runs each way exactly as asked, with no fallback.
 
 ## What cross-origin isolation changes
 
@@ -64,4 +82,4 @@ The UI tests (`test/ui/phonon.ui.test.ts`, Chrome only) hold Chrome to Safari's 
 
 ## Not verified
 
-Real iPhone Safari: the tests run in Chrome with Safari's rule imitated, not in WebKit. Not checked on an iPhone: that the unlock in each tap is enough there (including after the microphone has been on), that `navigator.audioSession` set to `playback` plays with the ring switch on silent and does not upset the microphone, threads (cross-origin isolation, workers inside a worker), WebGPU, Cache Storage keeping a 65 MB entry, and the memory a phone allows. Real phones (the Pixel 8 Pro on GrapheneOS, a low-end phone): speed, memory, threads and WebGPU there, and whether the Android web view grants cross-origin isolation (`crossOriginIsolated`, shown in the voice lab). Which voice sounds best: the default (Maeve) was not chosen by ear. The licence of the Mimi codec weights inside Phonon (the model card puts the whole file under Apache-2.0 and credits Kyutai's Pocket TTS and Mimi).
+Real iPhone Safari: the tests run in Chrome with Safari's rule imitated, not in WebKit. Not checked on an iPhone: that the unlock in each tap is enough there (including after the microphone has been on), that `navigator.audioSession` set to `playback` plays with the ring switch on silent and does not upset the microphone, threads (cross-origin isolation, workers inside a worker), WebGPU, Cache Storage keeping a 65 MB entry, and the memory a phone allows. Measured on the iPhone, the Pixel 8 Pro (in Chrome) and a Mac with 3 short lines each (above), not with the full corpus or on a low-end phone; memory on phones; whether the Android web view grants cross-origin isolation (`crossOriginIsolated`, shown in the voice lab). The fallback from WebGPU to the processor is tested in Chrome with a faked Apple adapter and a WebGPU engine made to fail to start (`test/ui/phonon.ui.test.ts`), and its first-use cases (an error, no sound, no sound in time) with a fake phonon-tts in Node; not on an iPhone, where WebGPU has not failed yet. Which voice sounds best: the default (Maeve) was not chosen by ear. The licence of the Mimi codec weights inside Phonon (the model card puts the whole file under Apache-2.0 and credits Kyutai's Pocket TTS and Mimi).

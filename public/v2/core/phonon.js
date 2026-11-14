@@ -110,6 +110,51 @@ export function canRun(env = globalThis) {
   }
 }
 
+/**
+ * What the browser's WebGPU adapter says it is, or null when there is none: {vendor, architecture,
+ * fallback, subgroups, subgroupMinSize, subgroupMaxSize}. env is the global object (tests pass a fake).
+ */
+export async function gpuInfo(env = globalThis) {
+  try {
+    const a = await env.navigator?.gpu?.requestAdapter();
+    if (!a) return null;
+    const i = a.info ?? {};
+    return {
+      vendor: i.vendor ?? '',
+      architecture: i.architecture ?? '',
+      fallback: !!(i.isFallbackAdapter ?? a.isFallbackAdapter),
+      subgroups: !!a.features?.has?.('subgroups'),
+      subgroupMinSize: i.subgroupMinSize ?? null,
+      subgroupMaxSize: i.subgroupMaxSize ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The setting (settings.voiceDevice) a WebGPU failure leaves on this phone: start on the processor. */
+export const GPU_FAILED = 'cpu';
+
+/**
+ * Where the app's natural voice runs, from the voice lab's numbers on real phones (docs/VOICE.md): on
+ * the graphics chip (WebGPU) when the adapter is Apple's and not a software fallback (iPhone: 27 ms to
+ * the first sound, RTF 0.045, against 0.147 on the processor); else on the processor with threads where
+ * the page is cross-origin isolated (Pixel 8 Pro: WebGPU on its Mali was 5 times slower than threads);
+ * else on one thread. remembered is settings.voiceDevice: GPU_FAILED skips WebGPU, because it failed on
+ * this phone before. Returns {device: 'webgpu' | 'cpu', threads: 'auto' | 1, reason}.
+ */
+export function chooseVoiceDevice({ gpu = null, isolated = false, remembered = null } = {}) {
+  const cpu = (why) => (isolated ? { device: 'cpu', threads: 'auto', reason: why } : { device: 'cpu', threads: 1, reason: `${why}; one thread, as the page is not cross-origin isolated` });
+  if (remembered === GPU_FAILED) return cpu('WebGPU failed on this phone before');
+  if (!gpu) return cpu('no WebGPU adapter');
+  if (gpu.fallback) return cpu('the WebGPU adapter is a software fallback');
+  if (String(gpu.vendor ?? '').toLowerCase() === 'apple') return { device: 'webgpu', threads: 'auto', reason: "WebGPU on Apple's graphics chip" };
+  return cpu(`WebGPU on ${gpu.vendor || 'this graphics chip'} is slower than the processor`);
+}
+
+/** How long the app waits for the first sound from WebGPU before it gives up on it for the processor. */
+export const GPU_FIRST_SOUND_MS = 20_000;
+
 /** Checks of a run's sound: samples, NaN, all silent, peak and clipped samples (|x| >= 0.99). */
 export function soundCheck(chunks) {
   let samples = 0;
@@ -132,15 +177,64 @@ export function soundCheck(chunks) {
 }
 
 /**
+ * A stream that fails when its first piece of sound takes longer than ms (a WebGPU run that hangs).
+ * Later pieces may take as long as they like.
+ */
+async function* firstWithin(stream, ms) {
+  const it = stream[Symbol.asyncIterator]();
+  let timer;
+  try {
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no sound from WebGPU in ${Math.round(ms / 1000)} s`)), ms);
+    });
+    const first = await Promise.race([it.next(), late]);
+    clearTimeout(timer);
+    if (first.done) return;
+    yield first.value;
+    for (;;) {
+      const r = await it.next();
+      if (r.done) return;
+      yield r.value;
+    }
+  } finally {
+    clearTimeout(timer);
+    // Not awaited: after a timeout the stream may never answer (the model is freed, which ends it).
+    it.return?.()?.catch?.(() => {});
+  }
+}
+
+const reasonOf = (e) => String(e?.message ?? e).slice(0, 200);
+
+/**
  * The phone's Phonon engine, loaded once and kept. Options:
  * - base: the model folder; native: true in the Android app, where the files are in the APK (nothing
  *   to download, and nothing is copied into the browser's cache);
- * - importLib: loads phonon-tts (tests pass a fake); fetch, caches: the browser's.
- * load() takes {device: 'cpu' | 'webgpu', threads: 'auto' | n, voice, lab, onProgress, onMeter} and gives
- * the PhononTTS (lab: with the voice lab's accent-test voices too; unload() takes the same lab).
- * onProgress gets phonon-tts's own reports; onMeter gets them added up (createMeter).
+ * - importLib: loads phonon-tts (tests pass a fake); fetch, caches: the browser's; env: the global
+ *   object (its navigator.gpu and crossOriginIsolated decide the app's device);
+ * - voice(): the voice the person picked for the app (settings.naturalVoice), or null for the default;
+ * - memory: {get(), set(value)}, the app's settings.voiceDevice, where a WebGPU failure is remembered.
+ *
+ * load() without a device is the app's natural voice: it runs where chooseVoiceDevice says, and when
+ * WebGPU fails to start, errors, stays silent or makes no sound in GPU_FIRST_SOUND_MS on its first
+ * use, the processor takes over for the rest of the session (the line is read again there) and the
+ * failure is remembered, so the next start goes straight to the processor. It gives a voice with
+ * {sampleRate, device, deviceReason, stream(text, {voice, signal}), dispose()}.
+ *
+ * load({device: 'cpu' | 'webgpu', threads: 'auto' | n, voice, lab}) is the voice lab's: exactly that
+ * device, no fallback, the PhononTTS itself (lab: with the lab's other voices too; unload() takes the
+ * same options). onProgress gets phonon-tts's own reports; onMeter gets them added up (createMeter).
  */
-export function createPhonon({ base = PHONON_BASE, native = false, importLib = () => import('../vendor/phonon-tts/index.js'), fetch: f = (...a) => globalThis.fetch(...a), caches: cs = globalThis.caches, env = globalThis } = {}) {
+export function createPhonon({
+  base = PHONON_BASE,
+  native = false,
+  importLib = () => import('../vendor/phonon-tts/index.js'),
+  fetch: f = (...a) => globalThis.fetch(...a),
+  caches: cs = globalThis.caches,
+  env = globalThis,
+  voice: picked = () => null,
+  memory = { get: () => null, set: () => {} },
+  firstSoundMs = GPU_FIRST_SOUND_MS,
+} = {}) {
   let index = null; // the build's index.json, once read
   let indexP = null;
   const loaded = new Map(); // options key -> Promise<PhononTTS>
@@ -153,12 +247,155 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
     return indexP;
   };
 
+  /** phonon-tts loaded with exactly these options. */
+  const loadLib = async ({ device, threads, voice, lab, onProgress, onMeter }) => {
+    await readIndex();
+    if (!index) throw new Error('The voice files are not on this app.');
+    const lib = await importLib();
+    const spec = modelSpec(index, base, voice, { lab });
+    const meter = createMeter(index, spec.defaultVoice);
+    const report = (p) => {
+      onProgress?.(p);
+      onMeter?.(meter.update(p));
+    };
+    // Files inside the Android app are read straight from the APK: a copy in the cache would only
+    // take the same space twice.
+    return lib.PhononTTS.load({ lang: 'en', model: spec, cache: !native, device, threads, onProgress: report });
+  };
+
+  // ---- the app's natural voice: the device it runs on, and the fallback to the processor
+  let app = null; // Promise<{tts, gpu}>, the app's model once asked for
+  let current = null; // what app resolved to
+  let choice = null; // {device, threads, reason}: where it runs
+  let gpuFailed = false; // WebGPU failed this session
+  let failedWhy = null; // and why
+  let gpuSounded = false; // WebGPU made sound once this session: no more first-use checks
+
+  /** The app's voice by name: the one picked when the app offers it, else the default. */
+  const appVoice = () => {
+    const n = picked?.();
+    return index?.voices?.some((v) => v.name === n) ? n : index?.defaultVoice ?? null;
+  };
+  const choose = async () => {
+    const remembered = gpuFailed ? GPU_FAILED : memory.get?.() ?? null;
+    let gpu = null;
+    if (remembered !== GPU_FAILED) gpu = await gpuInfo(env);
+    return chooseVoiceDevice({ gpu, isolated: env.crossOriginIsolated === true, remembered });
+  };
+  const remember = () => {
+    gpuFailed = true;
+    try {
+      memory.set?.(GPU_FAILED);
+    } catch {
+      /* not kept: the next start tries WebGPU again */
+    }
+  };
+  const onCpu = (why) => ({ ...chooseVoiceDevice({ isolated: env.crossOriginIsolated === true, remembered: GPU_FAILED }), reason: why });
+
+  const loadApp = (opts) => {
+    if (!app) {
+      const p = (async () => {
+        const c = await choose();
+        if (c.device !== 'webgpu') {
+          const tts = await loadLib({ ...opts, device: 'cpu', threads: c.threads });
+          choice = failedWhy ? { ...c, reason: failedWhy } : c;
+          return { tts, gpu: false };
+        }
+        let tts;
+        try {
+          // 'auto' to phonon-tts: WebGPU, and the processor in the same worker when WebGPU fails to
+          // start, with the files it already downloaded.
+          tts = await loadLib({ ...opts, device: 'auto', threads: c.threads });
+        } catch (e) {
+          // Tried again on the processor; when that fails too, it was not WebGPU's fault.
+          tts = await loadLib({ ...opts, device: 'cpu', threads: onCpu('').threads });
+          remember();
+          choice = onCpu(`WebGPU failed to load: ${reasonOf(e)}`);
+          return { tts, gpu: false };
+        }
+        if (tts.device === 'webgpu') {
+          choice = c;
+          return { tts, gpu: true };
+        }
+        remember();
+        choice = onCpu(`WebGPU failed to start: ${tts.deviceReason ?? 'unknown'}`);
+        return { tts, gpu: false };
+      })();
+      app = p;
+      p.then(
+        (m) => app === p && (current = m),
+        () => app === p && (app = null),
+      );
+    }
+    return app;
+  };
+
+  /** WebGPU failed on its first use: free it, remember, and run on the processor from now on. */
+  const giveUpGpu = (m, e) => {
+    remember();
+    failedWhy = `WebGPU failed on first use: ${reasonOf(e)}`;
+    choice = onCpu(failedWhy);
+    if (current === m) current = null;
+    app = null;
+    try {
+      m.tts.dispose();
+    } catch {
+      /* already gone */
+    }
+  };
+
+  async function* appStream(text, { voice = appVoice(), signal, ...rest } = {}) {
+    let m = await loadApp({ voice });
+    if (m.gpu && !gpuSounded) {
+      let got = 0;
+      try {
+        for await (const pcm of firstWithin(m.tts.stream(text, { ...rest, voice, signal }), firstSoundMs)) {
+          got++;
+          yield pcm;
+        }
+        if (signal?.aborted) return;
+        if (!got) throw new Error('WebGPU made no sound');
+        gpuSounded = true;
+        return;
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        giveUpGpu(m, e);
+        // Some of this line was heard already: say it failed rather than read it twice.
+        if (got) throw e;
+        m = await loadApp({ voice });
+      }
+    }
+    yield* m.tts.stream(text, { ...rest, voice, signal });
+  }
+
+  const appHandle = {
+    get sampleRate() {
+      return current?.tts.sampleRate ?? 24000;
+    },
+    get device() {
+      return choice?.device ?? null;
+    },
+    get deviceReason() {
+      return choice?.reason ?? null;
+    },
+    stream: (text, opts) => appStream(text, opts),
+    dispose() {
+      const m = current;
+      app = current = null;
+      m?.tts.dispose();
+    },
+  };
+
   const api = {
     /** Reads which model files this app has. Resolves to the index, or null when there is none. */
     init: readIndex,
     /** True once the files are known to be here and the browser can run the model. */
     available: () => !!index && canRun(env),
     index: () => index,
+    /** Where the app's natural voice runs on this phone ({device, threads, reason}), without loading it. */
+    device: () => (choice ? Promise.resolve(choice) : choose()),
+    /** The voice the app reads with: the one picked, or the default. */
+    voice: () => appVoice(),
     /** The bytes a first use fetches (the model and the default voice), or 0 when nothing is fetched. */
     async download() {
       await readIndex();
@@ -173,31 +410,30 @@ export function createPhonon({ base = PHONON_BASE, native = false, importLib = (
       return { needed: !have, bytes: have ? 0 : index.firstBytes ?? 0 };
     },
     /** The model, loaded the first time (from the cache when it is there). */
-    load({ device = 'cpu', threads = 'auto', voice = null, lab = false, onProgress, onMeter } = {}) {
-      const key = `${device}|${threads}|${lab ? 'lab' : 'app'}`;
+    load({ device = null, threads = 'auto', voice = null, lab = false, onProgress, onMeter } = {}) {
+      if (device == null && !lab) return loadApp({ voice: voice ?? appVoice(), onProgress, onMeter }).then(() => appHandle);
+      const dev = device ?? 'cpu';
+      const key = `${dev}|${threads}|${lab ? 'lab' : 'app'}`;
       if (!loaded.has(key)) {
-        const p = (async () => {
-          await readIndex();
-          if (!index) throw new Error('The voice files are not on this app.');
-          const lib = await importLib();
-          const spec = modelSpec(index, base, voice, { lab });
-          const meter = createMeter(index, spec.defaultVoice);
-          const report = (p) => {
-            onProgress?.(p);
-            onMeter?.(meter.update(p));
-          };
-          // Files inside the Android app are read straight from the APK: a copy in the cache would only
-          // take the same space twice.
-          return lib.PhononTTS.load({ lang: 'en', model: spec, cache: !native, device, threads, onProgress: report });
-        })();
+        const p = loadLib({ device: dev, threads, voice, lab, onProgress, onMeter });
         loaded.set(key, p);
         p.catch(() => loaded.delete(key));
       }
       return loaded.get(key);
     },
-    /** Stops a loaded model's worker and frees its memory. */
-    async unload({ device = 'cpu', threads = 'auto', lab = false } = {}) {
-      const key = `${device}|${threads}|${lab ? 'lab' : 'app'}`;
+    /** Stops a loaded model's worker and frees its memory (without a device or lab: the app's). */
+    async unload({ device = null, threads = 'auto', lab = false } = {}) {
+      if (device == null && !lab) {
+        const p = app;
+        app = current = null;
+        try {
+          (await p)?.tts.dispose();
+        } catch {
+          /* it never loaded */
+        }
+        return;
+      }
+      const key = `${device ?? 'cpu'}|${threads}|${lab ? 'lab' : 'app'}`;
       const p = loaded.get(key);
       loaded.delete(key);
       try {
