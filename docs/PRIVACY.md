@@ -42,6 +42,7 @@ The v2 app at `/v2/` keeps, on the phone only:
 - **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
 - **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved) in `localStorage`, plus the last model list and look.
 - **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
+- **A photo shared in from another app**, for a moment: the service worker keeps it in its own cache (`forge2-share`) until the Share unseen screen opens and takes it, then deletes that cache. Opened any other way, the app deletes an old one it finds. A photo picked or taken inside the app is never stored.
 
 Ways to remove things, each tested in Chrome against every IndexedDB store, every Cache Storage entry, `localStorage` and `sessionStorage` (`test/ui/history.ui.test.ts`):
 
@@ -56,6 +57,14 @@ What these do not do:
 - They cannot reach a copy made elsewhere: a screenshot, a copied answer, a shared file.
 - The engine keeps no copy of conversations: content is never logged or stored by the gateway, and questions to private models are encrypted to the enclave. A standard model's provider may keep what it was sent.
 - Erase everything does not close the balance on the engine. Without the key nobody can spend it, and it cannot be recovered, which is why the app offers Take funds out first.
+
+### Share unseen (photos)
+
+- Everything runs in the page on the phone: reading the file's hidden details, finding faces (face-api's tiny face detector on TensorFlow.js, loaded with its model from this app's own address) and finding writing. The photo is not sent anywhere to be checked, and Share and Save make no request at all (tested in Chrome).
+- What leaves the app is a new file, never the original: the picture drawn again at up to 2048 px, with solid black blocks (not a blur, which can be undone), saved as a new JPEG named `photo.jpg`. Every place a JPEG can carry notes (Exif with GPS, make, model, serial and dates, XMP, IPTC, colour profile, extra images, thumbnails, comments, data after the end) is taken out, and the file is checked; one that still holds any is not shared. Blocks are widened to the encoder's 16 px grid, so the file is the same, byte for byte, whatever was under a block.
+- What it cannot do: the automatic checks miss things (a face turned away or in shadow, small, blurred or slanted writing, a tattoo, a reflection). The screen says so and shows every block. It does not change the picture outside the blocks: a place, a building, clothes or a skyline can still say where and who. It does not stop the app you share to from keeping its copy.
+- Ask about it sends the new file, made smaller, with the question to the engine, like any added photo.
+- A photo shared into Forge while its service worker is not running (just installed, or after Erase everything) is posted by the phone to the gateway at `/v2/share`. The gateway does not read it, keeps nothing and opens the page saying the photo did not arrive.
 
 ## Encrypted pass-through (Tinfoil EHBP)
 
