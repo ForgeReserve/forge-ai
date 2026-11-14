@@ -21,6 +21,8 @@ import type { DB } from './db.ts';
 const DAY_MS = 86_400_000;
 const TICKET_MS = 120_000;
 const MAX_NONCE = 64;
+/** The longest a challenge lives, however hard it is. */
+const MAX_CHALLENGE_MS = 3_600_000;
 
 export class FaucetError extends Error {
   readonly code: string;
@@ -106,6 +108,11 @@ export class Faucet {
   /** Per address: claims today. Keys are HMACs with a key that lives only in this process. */
   private readonly addresses = new Map<string, { day: string; count: number }>();
   private readonly addressKey = randomBytes(32);
+  /**
+   * Per address: claims that have passed the limit and are being minted now. They count against the
+   * limit, so claims sent all at once cannot each pass it before any of them is counted.
+   */
+  private readonly addrInFlight = new Map<string, number>();
   /** Times of recent claims, for the difficulty. No address. */
   private recent: number[] = [];
   private inFlight = 0;
@@ -134,9 +141,20 @@ export class Faucet {
     return createHmac('sha256', this.addressKey).update(address).digest('base64url');
   }
 
+  /** Claims today from this address, those being minted now included. */
   private addressCount(address: string, t: number): number {
-    const a = this.addresses.get(this.addressId(address));
-    return a && a.day === dayKey(t) ? a.count : 0;
+    const id = this.addressId(address);
+    const a = this.addresses.get(id);
+    return (a && a.day === dayKey(t) ? a.count : 0) + (this.addrInFlight.get(id) ?? 0);
+  }
+
+  /**
+   * How long a challenge of this difficulty may be worked on: the base time, doubled for each bit over
+   * the base, since each bit doubles the expected work. At most an hour.
+   */
+  challengeLifetime(bits: number): number {
+    const extra = Math.max(0, bits - this.o.powBits);
+    return Math.max(this.o.challengeMs, Math.min(MAX_CHALLENGE_MS, this.o.challengeMs * 2 ** extra));
   }
 
   /** Drops what has run out, so the maps stay small. */
@@ -189,7 +207,7 @@ export class Faucet {
     this.refuseIfLimited(address, t);
     const challenge = randomBytes(16).toString('hex');
     const bits = this.bitsNow(t);
-    const expiresAt = t + this.o.challengeMs;
+    const expiresAt = t + this.challengeLifetime(bits);
     this.challenges.set(challenge, { bits, expiresAt });
     return { challenge, bits, expires_at: expiresAt };
   }
@@ -229,6 +247,8 @@ export class Faucet {
     this.tickets.delete(id);
     this.claiming.add(id);
     this.inFlight++;
+    // Hold this address's place before the wait, so parallel claims count against the limit.
+    this.addrInFlight.set(addr, (this.addrInFlight.get(addr) ?? 0) + 1);
     let token: string;
     try {
       token = await this.o.issue(this.o.questions);
@@ -239,6 +259,9 @@ export class Faucet {
     } finally {
       this.inFlight--;
       this.claiming.delete(id);
+      const left = (this.addrInFlight.get(addr) ?? 1) - 1;
+      if (left > 0) this.addrInFlight.set(addr, left);
+      else this.addrInFlight.delete(addr);
     }
     const day = dayKey(t);
     this.o.db.prepare('INSERT INTO faucet_days (day, claimed) VALUES (?, 1) ON CONFLICT (day) DO UPDATE SET claimed = claimed + 1').run(day);

@@ -196,6 +196,39 @@ describe('vouchers in the vault', () => {
     // The paid token waits for the paid balance; only the voucher went.
     expect(vault.incoming().map((x: any) => x.token)).toEqual(['cashuBpaid']);
   });
+
+  it('puts a free balance key in the free slot even when the voucher went the paid way', async () => {
+    // The app had not read the credit mint yet (no /v1/models), so a voucher was sent as eCash.
+    const vault = V.createVault(memStorage());
+    const engine = E.createEngine({ fetch: async () => json({ key: 'sk-forge-free', credited: 3, unit: 'usd', free: true }) });
+    const setKey = vi.fn();
+    const setFreeKey = vi.fn();
+    const r = await V.topupWithVault({ engine, vault, token: 'cashuBvoucher', key: null, setKey, setFreeKey });
+    expect(setFreeKey).toHaveBeenCalledWith('sk-forge-free');
+    expect(setKey).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ credited: 3, free: true });
+    expect(vault.incoming()).toEqual([]);
+
+    // The same on a retry from the vault.
+    vault.hold('cashuBvoucher2', 'topup');
+    vault.pending(vault.incoming()[0].id, 'offline');
+    const setKey2 = vi.fn();
+    const setFreeKey2 = vi.fn();
+    expect(await V.retryPending({ engine, vault, getKey: () => null, setKey: setKey2, setFreeKey: setFreeKey2 })).toBe(1);
+    expect(setFreeKey2).toHaveBeenCalledWith('sk-forge-free');
+    expect(setKey2).not.toHaveBeenCalled();
+  });
+
+  it('still puts a paid balance key in the paid slot', async () => {
+    const vault = V.createVault(memStorage());
+    const engine = E.createEngine({ fetch: async () => json({ key: 'sk-forge-paid', credited: 50, unit: 'usd', free: false }) });
+    const setKey = vi.fn();
+    const setFreeKey = vi.fn();
+    const r = await V.topupWithVault({ engine, vault, token: 'cashuBmoney', key: null, setKey, setFreeKey });
+    expect(setKey).toHaveBeenCalledWith('sk-forge-paid');
+    expect(setFreeKey).not.toHaveBeenCalled();
+    expect(r.free).toBeUndefined();
+  });
 });
 
 describe('free question words', () => {

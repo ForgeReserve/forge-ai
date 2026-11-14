@@ -410,7 +410,7 @@ async function topupFree(token) {
 let retrying = null;
 function retryAll() {
   retrying ??= (async () => {
-    const paid = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey });
+    const paid = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey, setFreeKey });
     const free = await retryPending({ engine, vault, getKey: () => S.freeKey, setKey: setFreeKey, via: 'free' });
     return paid + free;
   })().finally(() => (retrying = null));
@@ -435,11 +435,20 @@ const wallet = {
    * Adds eCash through the vault: stored on the phone first, removed only once credited. A voucher of
    * free questions (from the engine's credit mint) goes on the free balance; the result says free: true.
    */
-  topup: (token, invite) => {
+  topup: async (token, invite) => {
     const note = readNote(token);
     if (note.ok && isCreditMint(S.free, note.mint)) return topupFree(token);
-    return topupWithVault({ engine, vault, token, key: S.key, invite, setKey });
+    // The engine may still find a voucher here (the credit mint was not known yet): its free balance
+    // key then goes to the free slot, never the paid one.
+    const r = await topupWithVault({ engine, vault, token, key: S.key, invite, setKey, setFreeKey });
+    if (r.free) {
+      await refreshFree();
+      store.set({});
+    }
+    return r;
   },
+  /** Adds a voucher of free questions, known to be one (the Free questions module), to the free balance. */
+  topupFree,
   /** True for the engine's credit mint: its eCash is free questions, not money. */
   isCredit: (mint) => isCreditMint(S.free, mint),
 };

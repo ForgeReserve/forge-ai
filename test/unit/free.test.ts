@@ -264,4 +264,54 @@ describe('the faucet', () => {
     for (let i = 0; i < 11; i++) await claimOne();
     expect(f.status().bits).toBe(8);
   });
+
+  it('counts claims still being minted against the address limit, so parallel claims cannot pass it', async () => {
+    const { f } = make({ perAddress: 3, issue: (q) => new Promise((r) => setTimeout(() => r(`cashuBslow${q}`), 30)) });
+    const tickets = [];
+    for (let i = 0; i < 5; i++) {
+      const c = f.challenge('1.2.3.4');
+      tickets.push(f.verify(solve(c.challenge, c.bits)).ticket);
+    }
+    const results = await Promise.allSettled(tickets.map((tk) => f.claim('1.2.3.4', tk)));
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
+    const refused = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(refused.map((r) => (r.reason as FaucetError).code)).toEqual(['faucet_limit', 'faucet_limit']);
+    expect(await code(() => f.challenge('1.2.3.4'))).toBe('faucet_limit');
+    // Nothing is left held in memory once the claims are done.
+    expect(((f as any).addrInFlight as Map<string, number>).size).toBe(0);
+  });
+
+  it('gives the address its place back when the voucher cannot be made', async () => {
+    let fail = true;
+    const { f } = make({ perAddress: 1, issue: async () => (fail ? Promise.reject(new Error('mint down')) : 'cashuBok') });
+    const c = f.challenge('a');
+    const v = f.verify(solve(c.challenge, c.bits));
+    expect(await code(f.claim('a', v.ticket))).toBe('faucet_unavailable');
+    fail = false;
+    expect(await f.claim('a', v.ticket)).toEqual({ token: 'cashuBok', questions: 3 });
+    expect(await code(() => f.challenge('a'))).toBe('faucet_limit');
+  });
+
+  it('gives a harder puzzle more time, in step with the expected work, up to an hour', async () => {
+    const { f, claimOne, tick, set } = make({ perAddress: 0, daily: 480 });
+    const t0 = Date.UTC(2026, 11, 2, 10);
+    set(t0);
+    for (let i = 0; i < 41; i++) await claimOne();
+    const c = f.challenge('a');
+    expect(c.bits).toBe(8);
+    // Two bits over the base is four times the expected work, so four times the base minute.
+    expect(c.expires_at - t0).toBe(4 * 60_000);
+    // Still good after the base minute has passed.
+    tick(3 * 60_000);
+    expect(await code(() => f.verify(solve(c.challenge, c.bits)))).toBe('ok');
+
+    // At the defaults (22 to 28 bits, 300 s), 28 bits is about 1,280 s of work at the 22 bit pace of
+    // about 20 s, which the old flat 300 s could never fit.
+    const d = make({ powBits: 22, powMaxBits: 28, challengeMs: 300_000 }).f;
+    const pace = 20_000 / 2 ** 22;
+    for (let bits = 22; bits <= 28; bits++) expect(d.challengeLifetime(bits)).toBeGreaterThanOrEqual(Math.min(3_600_000, 2 * pace * 2 ** bits));
+    expect(d.challengeLifetime(22)).toBe(300_000);
+    expect(d.challengeLifetime(28)).toBe(3_600_000);
+    expect(d.challengeLifetime(32)).toBe(3_600_000);
+  });
 });

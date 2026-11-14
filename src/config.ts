@@ -157,7 +157,7 @@ export const EnvSchema = z.object({
   FORGE_FAUCET_POW_MAX_BITS: z.coerce.number().int().min(0).max(32).default(28),
   /** Claims per address per day, counted in memory only. 0 turns the limit off. */
   FORGE_FAUCET_PER_ADDRESS: z.coerce.number().int().min(0).default(3),
-  /** How long a challenge may be worked on. */
+  /** How long a challenge may be worked on at the base difficulty. Doubled for each bit over the base, up to an hour. */
   FORGE_FAUCET_CHALLENGE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
 });
 export type Env = z.infer<typeof EnvSchema>;

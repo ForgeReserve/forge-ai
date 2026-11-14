@@ -1,6 +1,6 @@
 // Fund module: Free questions (docs/FREE-TIER.md). Opens the engine's daily faucet in the app: the phone
 // works a short puzzle (proof of work, no name, no email), the engine hands out a voucher of free
-// questions, and it is added at once through wallet.topup, which keeps it on the phone until the engine
+// questions, and it is added at once through wallet.topupFree, which keeps it on the phone until the engine
 // confirms it (core/vault.js) and puts it on the free balance, apart from any money.
 // Listed only while the engine gives out free questions.
 import { faucetLine, faucetRefusal, faucetStatus, getVoucher } from '../../../core/faucet.js';
@@ -66,7 +66,9 @@ export function create(inputs) {
         ctrl = null;
         msg.set(t('fund.free.adding'));
         try {
-          const r = await wallet.topup(voucher.token);
+          // A faucet voucher is always free questions: it goes to the free balance even when the
+          // engine's credit mint has not been read yet.
+          const r = await (wallet.topupFree ?? wallet.topup)(voucher.token);
           const words = t('fund.free.added', { count: r.credited ?? voucher.questions ?? questions });
           ui.toast(words);
           msg.set(words, 'ok');

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const dir = resolve(import.meta.dirname, '../../deploy/credit-mint');
 const nginx = readFileSync(resolve(dir, 'nginx-credit-mint.conf'), 'utf8');
 const compose = readFileSync(resolve(dir, 'docker-compose.yml'), 'utf8');
+const readme = readFileSync(resolve(dir, 'README.md'), 'utf8');
 
 describe('credit mint deployment files', () => {
   it('make only info, keys, keysets, swap and checkstate public', () => {
@@ -22,5 +23,12 @@ describe('credit mint deployment files', () => {
     expect(compose).toContain('MINT_BACKEND_BOLT11_SAT: ""');
     expect(compose).not.toMatch(/MINT_MNEMONIC:/);
     expect(compose).not.toMatch(/MINT_PRIVATE_KEY/);
+  });
+
+  it('say to trust the proxy when the faucet is turned on, or every visitor shares one limit', () => {
+    const step7 = readme.split('\n').find((l) => l.startsWith('7. '))!;
+    expect(step7).toContain('FORGE_FAUCET_ENABLED=true');
+    expect(step7).toContain('FORGE_TRUST_PROXY=true');
+    expect(step7).toContain('X-Forwarded-For');
   });
 });

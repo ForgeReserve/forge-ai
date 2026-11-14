@@ -13,6 +13,7 @@ import { chatBody, createInvite, creditMintUp, type Gateway, MINT_A, MINT_C, MIN
 let g: Gateway;
 let off: Gateway;
 let clock = Date.UTC(2026, 11, 2, 10);
+const ADMIN_TOKEN = 'e2e-free-admin-' + createHash('sha256').update(String(Math.random())).digest('hex').slice(0, 16);
 
 const FREE_ENV = {
   FORGE_INVITE_ONLY: 'true',
@@ -31,6 +32,9 @@ const FREE_ENV = {
   FORGE_TRUST_PROXY: 'true',
   // The local test mints are on http, as in the other-mint funding tests.
   FORGE_FOREIGN_ALLOW_INSECURE: 'true',
+  // The admin overview, to check that free questions are not counted as revenue.
+  FORGE_ADMIN_TOKEN_HASH: createHash('sha256').update(ADMIN_TOKEN).digest('hex'),
+  FORGE_ADMIN_RATE_LIMIT_RPM: '100000',
 };
 
 beforeAll(async () => {
@@ -199,6 +203,32 @@ describe('credits never become money, and money never becomes credits', () => {
     expect(r.holdings.some((h) => h.mint === MINT_CREDIT)).toBe(false);
     const paidMsub = (g.deps.db.prepare('SELECT COALESCE(SUM(balance_msub), 0) AS s FROM accounts WHERE free = 0').get() as { s: number }).s;
     expect(r.liabilities_msub).toBe(paidMsub);
+  });
+
+  it('leaves free questions out of the admin revenue and credits owed out of the money owed', async () => {
+    const overview = async () => (await (await fetch(`${g.url}/admin/api/overview`, { headers: { 'x-forge-admin-token': ADMIN_TOKEN } })).json()) as any;
+    const usd = (o: any) => o.units.find((u: any) => u.unit === 'usd');
+    const before = await overview();
+    const key = await freeBalance(2);
+    const answered = await post('/v1/chat/completions', chatBody('mock-echo'), auth(key));
+    expect(answered.status).toBe(200);
+    expect(answered.headers.get('x-forge-charged-msub')).toBe('1000');
+    // A refund owed at the credit mint is credits, not a payout of money.
+    const owedId = 'out_test_owed_credit';
+    g.deps.db
+      .prepare("INSERT INTO outgoing (id, mint, unit, amount, purpose, status, created_at, updated_at) VALUES (?, ?, 'usd', 2, 'refund', 'owed', ?, ?)")
+      .run(owedId, MINT_CREDIT, Date.now(), Date.now());
+    try {
+      const after = await overview();
+      expect(usd(after).collected_msub).toBe(usd(before).collected_msub);
+      expect(after.windows.today.total.revenue_msub.usd ?? 0).toBe(before.windows.today.total.revenue_msub.usd ?? 0);
+      expect(after.windows.d30.total.revenue_msub.usd ?? 0).toBe(before.windows.d30.total.revenue_msub.usd ?? 0);
+      // The free question is still counted as a request.
+      expect(after.windows.today.total.requests).toBe(before.windows.today.total.requests + 1);
+      expect(usd(after).owed_by_purpose).toEqual(usd(before).owed_by_purpose);
+    } finally {
+      g.deps.db.prepare('DELETE FROM outgoing WHERE id = ?').run(owedId);
+    }
   });
 });
 
