@@ -1,7 +1,13 @@
 {
-  "voice": "bf_emma",
-  "model": "onnx-community/Kokoro-82M-v1.0-ONNX@1939ad2a8e416c0acfeecc08a694d14ef25f2231",
-  "speed": 0.9,
+  "engine": "phonon",
+  "voice": "Maeve",
+  "voice_file": "voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors",
+  "voices": "gradium/phonon-voices@0ee17205f254b5abc43b266c8a0f215565c352f7",
+  "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+  "package": "phonon-tts 0.7.0",
+  "device": "cpu, one thread",
+  "seed": 4242424242424242,
+  "temperature": 0.3,
   "format": "audio/ogg; codecs=opus",
   "regenerate": ".tmp/voice/venv/bin/python scripts/record-voice/record.py",
   "clips": {
@@ -16,9 +22,11 @@
         "No account. No name. You pay like cash."
       ],
       "text_sha256": "4215425c01b252c6ebc77faa6295028760db77493291906808b9a469800b7387",
-      "bytes": 22103,
-      "sha256": "34f2f49a51a006753c83f727eec39b1bb067366e1aaae4be56b4b0937bc284b2",
-      "seconds": 5.45
+      "voice": "Maeve",
+      "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+      "bytes": 26915,
+      "sha256": "2c67d115c5e26e104c79b4396c723e9a4646e23372ca054e6419e5dc43c00010",
+      "seconds": 6.43
     },
     "pay": {
       "file": "pay.ogg",
@@ -31,9 +39,11 @@
         "You see the price before you send."
       ],
       "text_sha256": "0145bb9cf3737de03bc9f56da423037be37c72014038cb135b12228e38997ecc",
-      "bytes": 19062,
-      "sha256": "bb86f2ba9b66b92e318f12a4c3464c2fcd781ef29500d2ce0af6228a41705380",
-      "seconds": 4.75
+      "voice": "Maeve",
+      "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+      "bytes": 19338,
+      "sha256": "0166595443d324e42317998b03d54bda5ff7570f251dffe73a899685f068d9ab",
+      "seconds": 4.51
     },
     "limits": {
       "file": "limits.ogg",
@@ -46,9 +56,11 @@
         "Only the AI can read what you type. Your connection shows, unless you use Tor."
       ],
       "text_sha256": "e782f5914652a4049f372ca98c9cd4ee994d18e18f56da7670614c4ae8797789",
-      "bytes": 29729,
-      "sha256": "7ef65b31b78282f083b5353f1f6fb38b69acc0a565eb62076254fe4270929ff7",
-      "seconds": 7.2
+      "voice": "Maeve",
+      "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+      "bytes": 30149,
+      "sha256": "91e4c9fc5e33057bb4da9ea8d4897714ee8ff10c76f471aecc07c6b3f5409d4b",
+      "seconds": 6.99
     },
     "private": {
       "file": "private.ogg",
@@ -61,9 +73,11 @@
         "Only private models. Forge cannot read what you type."
       ],
       "text_sha256": "7d6c9f39d833755a20eaa70202a6cdb8c2a068bbc205f6b7c567ace3cbb5136f",
-      "bytes": 24146,
-      "sha256": "76cc7a8914fb808e54fb7f09bb4bf9b010c45e67b24edfd082cf615d186ab41f",
-      "seconds": 5.9
+      "voice": "Maeve",
+      "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+      "bytes": 25658,
+      "sha256": "7c5dc3179338f1e5767dd39842d92b79251ef17d331b42f2c78c6f7d83c5c6b4",
+      "seconds": 6.03
     },
     "private-off": {
       "file": "private-off.ogg",
@@ -76,9 +90,11 @@
         "Standard models are shown too. They can read what you type."
       ],
       "text_sha256": "049fde05304e284026101b995c95579a01b4a86dcc803430a5d66c265fd55e96",
-      "bytes": 23540,
-      "sha256": "9e6d845ddcb1aa1fb2f2bfba884a0ff376c6a45a08e0b1d3e3e2a41475298d17",
-      "seconds": 5.78
+      "voice": "Maeve",
+      "model": "gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+      "bytes": 25249,
+      "sha256": "b82a07fcbca4f56cfff71d8370238e834e308f25758e4cfbbfd8e054d52e8e3d",
+      "seconds": 5.87
     }
   }
 }
