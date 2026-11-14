@@ -7,7 +7,10 @@ import { type EncryptedCall, type EncryptedResponse, type ReportedUsage, Upstrea
 export const USAGE_REQUEST_HEADER = 'x-tinfoil-request-usage-metrics';
 export const USAGE_HEADER = 'x-tinfoil-usage-metrics';
 
-/** Parses `prompt=67,completion=42,total=109,model=gpt-oss-120b,cost_usd=0.000042`. */
+/**
+ * Parses `prompt=67,completion=42,total=109,model=gpt-oss-120b,cost_usd=0.000042`, with the optional
+ * `web_search_calls` and `other_cost_usd` (docs.tinfoil.sh/guides/proxy-server, usage metrics).
+ */
 export function parseUsageMetrics(v: string | string[] | undefined): ReportedUsage | undefined {
   const s = Array.isArray(v) ? v[0] : v;
   if (!s) return undefined;
@@ -19,8 +22,16 @@ export function parseUsageMetrics(v: string | string[] | undefined): ReportedUsa
   const prompt = Number(map.get('prompt'));
   const completion = Number(map.get('completion'));
   if (!Number.isFinite(prompt) || !Number.isFinite(completion) || prompt < 0 || completion < 0) return undefined;
-  const cost = map.has('cost_usd') ? Number(map.get('cost_usd')) : undefined;
-  return { inputTokens: prompt, outputTokens: completion, costUsd: Number.isFinite(cost) ? cost : undefined };
+  const num = (k: string) => {
+    const n = map.has(k) ? Number(map.get(k)) : NaN;
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+  const out: ReportedUsage = { inputTokens: prompt, outputTokens: completion, costUsd: num('cost_usd') };
+  const calls = num('web_search_calls');
+  if (calls !== undefined && calls > 0) out.webSearchCalls = calls;
+  const other = num('other_cost_usd');
+  if (other !== undefined) out.otherCostUsd = other;
+  return out;
 }
 
 /**

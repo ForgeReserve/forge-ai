@@ -18,7 +18,12 @@
       "enclaveHosts": [
         "tinfoil.sh"
       ],
-      "attestationUrl": "https://atc.tinfoil.sh/attestation"
+      "attestationUrl": "https://atc.tinfoil.sh/attestation",
+      "web_search": {
+        "request_usd": 0.05,
+        "extra_input_tokens": 16000,
+        "output_factor": 2
+      }
     },
     "mock": {
       "type": "mock",
@@ -246,7 +251,8 @@
         "low",
         "high",
         "max"
-      ]
+      ],
+      "web_search": true
     },
     {
       "id": "tinfoil/glm-5-3",
@@ -264,7 +270,8 @@
         "low",
         "high",
         "max"
-      ]
+      ],
+      "web_search": true
     },
     {
       "id": "tinfoil/deepseek-v4-1-flash",
@@ -283,7 +290,8 @@
         "high",
         "max"
       ],
-      "speed": "fast"
+      "speed": "fast",
+      "web_search": true
     },
     {
       "id": "tinfoil/gemma4-31b",
@@ -302,7 +310,8 @@
         "medium",
         "high"
       ],
-      "speed": "fast"
+      "speed": "fast",
+      "web_search": true
     },
     {
       "id": "tinfoil/gpt-oss-120b",
@@ -321,7 +330,8 @@
         "medium",
         "high"
       ],
-      "speed": "fast"
+      "speed": "fast",
+      "web_search": true
     },
     {
       "id": "tinfoil/llama3-3-70b",
@@ -334,7 +344,8 @@
       "context_length": 131072,
       "uncensored": false,
       "vision": false,
-      "reasoning": false
+      "reasoning": false,
+      "web_search": true
     }
   ],
   "audio": [

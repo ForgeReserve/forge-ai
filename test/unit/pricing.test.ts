@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, msubToUnitsCeil, nanoUsdPerToken, nanoUsdToMsub } from '../../src/pricing.ts';
+import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, msubToUnitsCeil, nanoUsdPerToken, nanoUsdToMsub, searchNanoUsd, usageNanoUsd } from '../../src/pricing.ts';
 
 const model = { input_usd_per_mtok: 0.6, output_usd_per_mtok: 1.45 };
 
@@ -87,6 +87,36 @@ describe('the funds hold (owner decision, 2026-11-14)', () => {
         }
       }
     }
+  });
+
+  it("with web search on, the app's hold equals the gateway's: tokens, the search allowance and the fee", () => {
+    const search = { request_usd: 0.05, extra_input_tokens: 16000, output_factor: 2 };
+    const supplier = { ...tinfoil, web_search: search };
+    for (const m of [gptOss, { input_usd_per_mtok: 4, output_usd_per_mtok: 20 }]) {
+      for (const markup of [1, 1.25]) {
+        const info = { pricing: { hold: JSON.parse(JSON.stringify(holdInfo(supplier, { ...m, web_search: true }, markup, 2))) } };
+        expect(info.pricing.hold.web_search.nano_usd).toBe(Math.ceil(0.05 * markup * 1e9 - 1e-6));
+        for (const bytes of [100, 9000]) {
+          for (const maxOut of [512, 4096]) {
+            const nano = holdNanoUsd(supplier, m, bytes, maxOut, markup, 2, search);
+            expect(nano).toBe(costNanoUsd(m, { inputTokens: Math.ceil(bytes / 2) + 16000, outputTokens: maxOut * 2 }, markup) + searchNanoUsd(search, markup));
+            expect(CLIENT.holdMsub(info, 'usd', { bodyBytes: bytes, maxOut, search: true })).toBe(Math.max(1, nanoUsdToMsub(nano, 'usd')));
+            expect(CLIENT.holdMsub(info, 'sat', { bodyBytes: bytes, maxOut, search: true, btcUsd: 98_765.4 })).toBe(Math.max(1, nanoUsdToMsub(nano, 'sat', 98_765.4)));
+          }
+        }
+      }
+    }
+    // A model that cannot search lists no search figures, and the app prices no search for it.
+    const none = { pricing: { hold: holdInfo(supplier, gptOss, 1, 2) } };
+    expect(none.pricing.hold.web_search).toBeNull();
+    expect(CLIENT.holdMsub(none, 'usd', { bodyBytes: 10, maxOut: 10, search: true })).toBeNull();
+  });
+
+  it('charges the search fee once when the usage shows a search, plus auxiliary fees', () => {
+    const search = { request_usd: 0.05 };
+    expect(usageNanoUsd(gptOss, { inputTokens: 10, outputTokens: 10 }, 1, search)).toBe(costNanoUsd(gptOss, { inputTokens: 10, outputTokens: 10 }, 1));
+    expect(usageNanoUsd(gptOss, { inputTokens: 10, outputTokens: 10, webSearchCalls: 3 }, 1, search)).toBe(costNanoUsd(gptOss, { inputTokens: 10, outputTokens: 10 }, 1) + 5e7);
+    expect(usageNanoUsd(gptOss, { inputTokens: 0, outputTokens: 0, otherCostUsd: 0.0002 }, 1.25)).toBe(250_000);
   });
 
   it('an encrypted body is the plaintext plus 20 bytes for each 64 KiB chunk', () => {

@@ -416,3 +416,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .learn > summary::-webkit-details-marker { display: none; }
 .learn[open] > summary .ico { transform: rotate(45deg); }
 .learn-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+
+/* Search the web: a switch for the next question, with one line while it is on. */
+.search-box { display: flex; flex-direction: column; gap: 4px; }
+.search-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); font-size: 15px; font-weight: 600; }
+.search-row > span { flex: 1; }
+.search-row .ico { color: var(--teal); }
+.search-note { margin: 0; padding: 0 4px; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+.home .search-box { width: min(336px, 100%); }

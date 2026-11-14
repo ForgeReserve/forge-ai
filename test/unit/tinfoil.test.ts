@@ -8,6 +8,15 @@ describe('tinfoil', () => {
   it('parses X-Tinfoil-Usage-Metrics', () => {
     expect(parseUsageMetrics('prompt=67,completion=42,total=109,model=gpt-oss-120b,cost_usd=0.000042')).toEqual({ inputTokens: 67, outputTokens: 42, costUsd: 0.000042 });
     expect(parseUsageMetrics('prompt=1,completion=2')).toEqual({ inputTokens: 1, outputTokens: 2, costUsd: undefined });
+    // Web search (docs.tinfoil.sh/guides/web-search, usage reporting) and auxiliary fees.
+    expect(parseUsageMetrics('prompt=1000,completion=500,total=1500,model=gpt-oss-120b,web_search_calls=2,other_cost_usd=0.0002,cost_usd=0.052')).toEqual({
+      inputTokens: 1000,
+      outputTokens: 500,
+      costUsd: 0.052,
+      webSearchCalls: 2,
+      otherCostUsd: 0.0002,
+    });
+    expect(parseUsageMetrics('prompt=1,completion=2,web_search_calls=0')!.webSearchCalls).toBeUndefined();
     expect(parseUsageMetrics('garbage')).toBeUndefined();
     expect(parseUsageMetrics(undefined)).toBeUndefined();
   });

@@ -13,6 +13,33 @@ export interface Usage {
   outputTokens: number;
   /** What the supplier says this request cost us, in USD, when it reports it. */
   costUsd?: number;
+  /** Web searches the model made; the supplier's web search fee applies once when above zero. */
+  webSearchCalls?: number;
+  /** Auxiliary fees the supplier reports (privacy filter), in USD, passed on with the markup. */
+  otherCostUsd?: number;
+}
+
+/** A supplier's web search terms (config.ts SupplierSchema web_search). */
+export interface WebSearchTerms {
+  request_usd: number;
+  extra_input_tokens: number;
+  output_factor: number;
+}
+
+/** The web search fee for one request in nano-USD, with markup, rounded up. */
+export function searchNanoUsd(ws: Pick<WebSearchTerms, 'request_usd'>, markup: number): number {
+  return Math.ceil(ws.request_usd * markup * 1e9 - 1e-6);
+}
+
+/**
+ * What a chat request is charged in nano-USD for its usage: the tokens at the model's prices, plus the
+ * web search fee when the model searched, plus any auxiliary fees the supplier reported, all with markup.
+ */
+export function usageNanoUsd(model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>, usage: Usage, markup: number, search?: Pick<WebSearchTerms, 'request_usd'>): number {
+  let nano = costNanoUsd(model, usage, markup);
+  if (search && (usage.webSearchCalls ?? 0) > 0) nano += searchNanoUsd(search, markup);
+  if (usage.otherCostUsd) nano += Math.ceil(usage.otherCostUsd * markup * 1e9 - 1e-6);
+  return nano;
 }
 
 /** Sale price per token in nano-USD, after markup. Rounded up so we never undercharge. */
@@ -48,9 +75,10 @@ export function holdNanoUsd(
   maxOut: number,
   markup: number,
   bytesPerToken: number,
+  search?: WebSearchTerms,
 ): number {
   if (supplier.pricing === 'flat') return flatCostNanoUsd(supplier.flat!, bodyBytes, maxOut, markup);
-  return costNanoUsd(model, worstUsage(bodyBytes, maxOut, bytesPerToken), markup);
+  return usageNanoUsd(model, worstUsage(bodyBytes, maxOut, bytesPerToken, search), markup, search);
 }
 
 /**
@@ -58,8 +86,8 @@ export function holdNanoUsd(
  * (public/v2/core/price.js holdMsub). Integers in nano-USD, markup applied, rounded as the gateway rounds.
  */
 export function holdInfo(
-  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing },
-  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>,
+  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing; web_search?: WebSearchTerms },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'> & { web_search?: boolean },
   markup: number,
   bytesPerToken: number,
 ) {
@@ -75,12 +103,22 @@ export function holdInfo(
     bytes_per_token: bytesPerToken,
     input_nano_usd_per_token: nanoUsdPerToken(model.input_usd_per_mtok, markup),
     output_nano_usd_per_token: nanoUsdPerToken(model.output_usd_per_mtok, markup),
+    // With the Search the web switch on (X-Forge-Web-Search: 1, or web_search_options in a plaintext body).
+    web_search:
+      model.web_search && supplier.web_search
+        ? { nano_usd: searchNanoUsd(supplier.web_search, markup), extra_input_tokens: supplier.web_search.extra_input_tokens, output_factor: supplier.web_search.output_factor }
+        : null,
   };
 }
 
-/** The usage a metered hold assumes: the whole body as input at bytesPerToken, and the whole output limit. */
-export function worstUsage(bodyBytes: number, maxOut: number, bytesPerToken: number): Usage {
-  return { inputTokens: estimateTokensFromBytes(bodyBytes, bytesPerToken), outputTokens: maxOut };
+/**
+ * The usage a metered hold assumes: the whole body as input at bytesPerToken, and the whole output limit.
+ * With web search on, the search allowance too (more input, more output) and one search.
+ */
+export function worstUsage(bodyBytes: number, maxOut: number, bytesPerToken: number, search?: WebSearchTerms): Usage {
+  const u: Usage = { inputTokens: estimateTokensFromBytes(bodyBytes, bytesPerToken), outputTokens: maxOut };
+  if (!search) return u;
+  return { inputTokens: u.inputTokens + search.extra_input_tokens, outputTokens: maxOut * search.output_factor, webSearchCalls: 1 };
 }
 
 /**

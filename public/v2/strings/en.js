@@ -76,6 +76,8 @@ export default {
   'type.noFunds': 'Add funds to ask a question.',
   'type.addFunds': 'Add funds',
   'type.short': 'Not enough funds for this question.',
+  'search.label': 'Search the web',
+  'search.note': 'The sealed machine sends the search to a search service, which sees the search but not who asked.',
   'type.noModel': 'No private model is available right now.',
   'type.chooseModel': 'Choose a model',
   'type.reading': 'Wait until the file is read.',

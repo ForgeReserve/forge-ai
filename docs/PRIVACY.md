@@ -38,6 +38,12 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - The puzzle is worked on the phone. No name, email or CAPTCHA is asked for.
 - The `/free` page's Add to Forge keeps the voucher in this site's `localStorage` (the v2 vault) until the app adds it. Copy and Print put it wherever the person chooses.
 
+## Web search
+
+- Off by default in the v2 app, for the next question only, and only on a private (Tinfoil) model. With it on, the model searches from its enclave: the searches go from the enclave to Tinfoil's search provider (Exa, under a zero data retention agreement, per Tinfoil), which sees the search and the enclave's address, not the person's. The app asks for both safety filters: personal details detected in a search are taken out before it leaves the enclave (detection can miss things), and pages carrying planted instructions are dropped before the model reads them.
+- The gateway sees only that search was asked for (`X-Forge-Web-Search: 1`, kept in the request's hold, not logged with any content) and, from Tinfoil's usage metrics, how many searches ran. It never sees the searches or the results: they are inside the encrypted request and answer.
+- The app's line while it is on: the sealed machine sends the search to a search service, which sees the search but not who asked.
+
 ## Audio (speech to text, text to speech)
 
 - `POST /v1/audio/transcriptions` and `POST /v1/audio/speech` are not encrypted end to end. The gateway receives the recording or the text in plain form, holds it in memory while it relays it to the supplier, and drops it when the request ends. It is never logged or stored: the log line and the `requests` row carry the model, seconds or characters, price and status.

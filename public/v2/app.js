@@ -77,6 +77,8 @@ const store = createStore({
   peakMsub: null,
   models: [],
   audioModels: [],
+  // Search the web, for the next question only: off by default, and off again once a question is sent.
+  search: false,
   inviteOnly: false,
   units: [],
   mints: [],
@@ -173,6 +175,8 @@ function view() {
     streaming: S.streaming,
     hiddenCount: hiddenCount(S.models, S.settings),
     talk: talkView(model, unit),
+    // Search the web: offered when the model can search; on for the next question only.
+    search: { available: canSearch(model), on: searchOn(model) },
     speak: speakView(),
     // The most Ask again can cost, shown on the button before it is pressed.
     againMsub: againNow(model),
@@ -504,13 +508,25 @@ async function savePending() {
  * sending it on (core/price.js holdMsub), from the body generate() sends, encrypted for a private model.
  * Falls back to the per-token estimate when the engine lists no hold figures. null when unpriced.
  */
-function questionHold(model, api, maxOut, inputTokens) {
+function questionHold(model, api, maxOut, inputTokens, search = false) {
   const unit = S.unit ?? 'usd';
   const enc = isPrivate(model) ? { upstream: model.upstream_model } : null;
-  const plain = new TextEncoder().encode(chatPayload({ model: model.id, messages: api, max_tokens: maxOut }, enc)).length;
-  const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd });
-  return held ?? estimate(model, unit, inputTokens, maxOut)?.max ?? null;
+  const plain = new TextEncoder().encode(chatPayload(chatBody(model, api, maxOut, search), enc)).length;
+  const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd, search });
+  if (held != null || search) return held;
+  return estimate(model, unit, inputTokens, maxOut)?.max ?? null;
 }
+
+/**
+ * Search the web (docs/PAYMENTS.md, Web search): the model searches from its sealed machine, through
+ * Tinfoil's search service, with both of its safety filters on (personal details taken out of the search,
+ * and instructions planted in pages dropped). Only on a model that offers it.
+ */
+const SEARCH_FIELDS = { web_search_options: {}, pii_check_options: {}, prompt_injection_check_options: {} };
+const canSearch = (model) => !!model?.capabilities?.web_search;
+const searchOn = (model) => !!S.search && canSearch(model);
+/** The chat request body generate() sends, also used to price it. */
+const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: api, max_tokens: maxOut, ...(search ? SEARCH_FIELDS : {}) });
 
 function estimateFor(text) {
   const model = pickModel(S.models, S.settings);
@@ -522,10 +538,13 @@ function estimateFor(text) {
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
   const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const costMsub = questionHold(model, api, maxOut, tokens);
-  const fr = freeNow(model, bodyTokens(bytes));
+  const search = searchOn(model);
+  const costMsub = questionHold(model, api, maxOut, tokens, search);
+  // A search is never a free question: it is paid from the balance.
+  const fr = search ? { ...freeNow(model, bodyTokens(bytes)), use: false } : freeNow(model, bodyTokens(bytes));
   return {
     costMsub,
+    search,
     // The engine refuses a question whose hold is more than the funds not already held: say so first.
     short: !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
     unit,
@@ -568,7 +587,7 @@ function estimateAgain(model) {
   const vision = !!model.capabilities?.vision;
   const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const chat = questionHold(model, apiMessages(history, { systemPrompt: t('system.prompt'), vision }), maxOut, tokens);
+  const chat = questionHold(model, apiMessages(history, { systemPrompt: t('system.prompt'), vision }), maxOut, tokens, searchOn(model));
   const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
   if (chat == null || reading == null) return null;
   return chat + reading;
@@ -601,9 +620,13 @@ async function generate() {
   const api = apiMessages(history, { systemPrompt: t('system.prompt'), vision });
   // A free question is used first, when the model is on the free list and the question fits its caps.
   const fr = freeNow(model, bodyTokens(new TextEncoder().encode(JSON.stringify(api)).length));
-  const useF = fr.use && !!S.freeKey;
+  // Search the web applies to this question only, and is never a free question.
+  const search = searchOn(model);
+  if (S.search) S.search = false;
+  const useF = fr.use && !!S.freeKey && !search;
   const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: S.unit } };
   if (useF) reply.meta.free = true;
+  if (search) reply.meta.search = true;
   conv.messages.push(reply);
   const controller = new AbortController();
   gen = { controller };
@@ -614,8 +637,9 @@ async function generate() {
   try {
     await engine.chat({
       key: useF ? S.freeKey : S.key,
-      body: { model: model.id, messages: api, max_tokens: maxTokens },
+      body: chatBody(model, api, maxTokens, search),
       encrypted: isPrivate(model) ? { upstream: model.upstream_model } : null,
+      search,
       signal: controller.signal,
       onText: (d) => {
         reply.content += d;
@@ -983,6 +1007,11 @@ const actions = {
   attachPhoto,
   removePending,
   estimate: estimateFor,
+  /** Search the web for the next question (off again once it is sent). */
+  setSearch: (on) => {
+    S.search = !!on;
+    store.set({});
+  },
   saveDraft: (v) => {
     S.draft = v;
     kv.put('draft', v).catch(() => {});

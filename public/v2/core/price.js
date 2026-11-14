@@ -59,9 +59,10 @@ export function ehbpBytes(bytes) {
  * The funds hold for one question, in msub: exactly what the engine holds before it sends the question
  * on (src/pricing.ts holdNanoUsd), from the model's `pricing.hold` in GET /v1/models. bodyBytes is the
  * request body as the engine receives it (ehbpBytes of the JSON for a private model). null when the
- * model has no hold figures, or a sat price has no rate.
+ * model has no hold figures, or a sat price has no rate. search: the Search the web switch is on (null
+ * when the model cannot search).
  */
-export function holdMsub(model, unit, { bodyBytes, maxOut, btcUsd = null }) {
+export function holdMsub(model, unit, { bodyBytes, maxOut, btcUsd = null, search = false }) {
   const h = model?.pricing?.hold;
   if (!h) return null;
   let nano;
@@ -69,7 +70,12 @@ export function holdMsub(model, unit, { bodyBytes, maxOut, btcUsd = null }) {
     const b = h.buckets.find((x) => x.max_bytes >= bodyBytes) ?? h.buckets.at(-1);
     nano = b.nano_usd + maxOut * h.output_nano_usd_per_token;
   } else {
-    nano = Math.ceil(bodyBytes / h.bytes_per_token) * h.input_nano_usd_per_token + maxOut * h.output_nano_usd_per_token;
+    // With Search the web on: the search allowance (more input, more output) and the search fee.
+    const ws = search ? h.web_search : null;
+    if (search && !ws) return null;
+    const input = Math.ceil(bodyBytes / h.bytes_per_token) + (ws ? ws.extra_input_tokens : 0);
+    const output = maxOut * (ws ? ws.output_factor : 1);
+    nano = input * h.input_nano_usd_per_token + output * h.output_nano_usd_per_token + (ws ? ws.nano_usd : 0);
   }
   let msub;
   if (nano <= 0) msub = 0;

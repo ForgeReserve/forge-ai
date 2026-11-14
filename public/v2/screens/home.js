@@ -7,7 +7,7 @@
 // the bottom row, whose button turns dark and reads Close. The sheet covers the whole home, the talk
 // button included, and the bottom row stays fixed in view, so Close never needs a scroll.
 import { el, icon } from '../core/ui.js';
-import { bottomRow, rings, statusBar } from './parts.js';
+import { bottomRow, rings, searchSwitch, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
 export function home({ t, state, nav, actions }, { sheet = null, open = null } = {}) {
@@ -25,8 +25,10 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const waysLabel = el('span', { text: t('home.otherWays') });
   const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav(state.view().fundsBlock === 'freeOut' ? 'freeOut' : 'addFunds') }, icon('plus', 18), waysLabel);
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
+  // Search the web for the next question, asked by voice or typed (screens/parts.js).
+  const search = searchSwitch({ t, state, actions, id: 'searchHome' });
   const ringBox = el('div', { class: 'rings home-rings' }, r.node, ringBtn, talk);
-  const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, chip, held, hint);
+  const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, search.node, chip, held, hint);
   const main = el('main', { class: `screen home${sheet ? ' with-sheet' : ''}`, 'data-screen': 'home' }, bar.node, stage);
   // The sheet is a layer over the whole home (the talk button included), with the bottom row above it so
   // Close is always in view. A tap on the layer outside the card closes it, as Close does.
@@ -46,6 +48,9 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     waysLabel.textContent = v.fundsBlock === 'freeOut' ? t('home.freeOut') : t('home.otherWays');
     chip.hidden = !v.memory.low || recording;
     held.hidden = !v.pendingCount || recording;
+    search.update();
+    // A search is paid from the balance (never a free question): with no funds the home keeps its empty state.
+    if (recording || v.noFunds || v.fundsBlock) search.node.hidden = true;
     held.textContent = v.pendingCount ? t('home.attached', { count: v.pendingCount }) : '';
   };
   update();

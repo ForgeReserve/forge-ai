@@ -33,7 +33,7 @@ export const INPUTS = {
 export const PROJECTIONS = {
   mode: {
     state: ['view', 'subscribe'],
-    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'] },
   'voice-out': { audio: ['model', 'price', 'speak'] },

@@ -181,10 +181,13 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
      * Streams a chat completion. body is the OpenAI request (stream is forced on). Handlers receive the
      * answer as it arrives. Throws EngineError for a refused request; an AbortError when stopped.
      */
-    async chat({ key, body, encrypted = null, signal, onText, onReasoning, onUsage, onForge }) {
+    async chat({ key, body, encrypted = null, search = false, signal, onText, onReasoning, onUsage, onForge }) {
       const text = chatPayload(body, encrypted);
       const payload = JSON.parse(text);
       const headers = { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+      // Search the web: the engine cannot read an encrypted body, so the hold for the search fee is asked
+      // for in a header (docs/PAYMENTS.md, Web search). The search options themselves are in the body.
+      if (search) headers['X-Forge-Web-Search'] = '1';
       let doFetch = plain;
       let path = '/v1/chat/completions';
       if (encrypted) {
