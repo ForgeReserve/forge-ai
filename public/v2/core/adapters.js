@@ -99,8 +99,68 @@ const defaults = {
     },
   },
 
-  /** Plays a sound file. play(blob) returns {done: Promise, stop()}. */
+  /**
+   * Plays a sound file: play(blob) returns {done: Promise, stop()}. Or plays sound as it is made:
+   * stream({sampleRate}) returns {push(samples), end(), done, stop(), underruns()}. Each pushed piece
+   * (a Float32Array) is queued right after the one before; a piece that arrives after the one before
+   * has finished playing is an underrun (a gap the listener hears).
+   */
   speaker: {
+    stream({ sampleRate }) {
+      const Ctx = window.AudioContext ?? window.webkitAudioContext;
+      const ctx = new Ctx();
+      ctx.resume().catch(() => {});
+      let at = 0; // when the queued sound ends, in the context's time
+      let started = false;
+      let ended = false;
+      let gaps = 0;
+      let live = 0;
+      let finish;
+      const done = new Promise((res) => (finish = res));
+      const close = () => {
+        ctx.close().catch(() => {});
+        finish();
+      };
+      const settle = () => {
+        if (ended && live === 0) close();
+      };
+      return {
+        push(samples) {
+          if (ended || !samples?.length) return;
+          const buf = ctx.createBuffer(1, samples.length, sampleRate);
+          buf.getChannelData(0).set(samples);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          // A little lead on the first piece, so the next has time to arrive.
+          if (!started) at = ctx.currentTime + 0.05;
+          else if (at < ctx.currentTime) {
+            gaps++;
+            at = ctx.currentTime + 0.02;
+          }
+          started = true;
+          live++;
+          src.onended = () => {
+            live--;
+            settle();
+          };
+          src.start(at);
+          at += buf.duration;
+        },
+        end() {
+          ended = true;
+          settle();
+        },
+        done,
+        stop() {
+          ended = true;
+          live = 0;
+          close();
+        },
+        underruns: () => gaps,
+      };
+    },
+
     play(blob) {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);

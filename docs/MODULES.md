@@ -40,7 +40,7 @@ Each app module is a **plugin**: a folder with a manifest and code, loaded from 
 |---|---|---|---|
 | `fund` | A way to put money in | a tap, scan or paste to eCash or a paid invoice for the engine | Paper note (scan), Cashu card (tap), Fedimint card (tap), Lightning, on-chain |
 | `voice-in` | Speech to text | audio to text | On-device recogniser; enclave transcription as an option |
-| `voice-out` | Text to speech | text to audio | On-device Kokoro voices (from flash-speech) |
+| `voice-out` | Text to speech | text to audio | The natural voice on the phone (Phonon 31m, docs/VOICE.md), the phone's own voice, the engine's voice |
 | `filter` | Share unseen: removes identity from anything sent on | file to file plus a report of what changed | Faces covered, numbers covered, location and metadata stripped, voice changed |
 | `cover` | The disguise game | a game screen plus a hidden way in | One puzzle under several names and icons |
 | `guides` | Trusted knowledge to answer from | a signed package of documents plus an index | A short starting list |
@@ -94,6 +94,8 @@ Built in slice A3: `voice-in` and `voice-out`, each with two modules.
 - A voice-in module has `available()`, `private()`, `price(seconds)`, `maxSeconds()` and `start({onLevel, onText})`, which gives a session with `finish({signal})` (resolves to the text and what it cost) and `cancel()`. A voice-out module has `available()`, `private()`, `pieceSize()`, `cached(key)`, `price(pieces, key)` and `speak(pieces, {key, onState})`, which gives `{done, stop()}`.
 - The mode gets the talk actions (`talkDown`, `talkMove`, `talkUp`, `talkCancel`) and `speak`, `stopSpeaking`, and draws the button from `view().talk` and `view().speak`.
 
+Built on branch v2-voice (docs/VOICE.md): `voice-out/phonon`, the natural voice made on the phone (Phonon 31m through the vendored phonon-tts). A voice-out module now also gets `phonon`, the phone's Phonon engine with only `available()`, `download()` (whether a first use downloads the model, and its size) and `load()`. The module is private and free, streams the sound to the speaker adapter's `stream()` as it is made, and may have `download()`, which the app uses to ask once before the first download. Automatic reading uses it first where the phone can run it.
+
 Built in slice A4: the mode's answer actions gain `burn` (remove the open conversation from the phone). Burn all, auto-delete and Erase everything stay with the app and are never handed to a module. A `voice-out` module may have `forget(key)`, which drops the sound it keeps in memory for one answer (or for all, with no key); the app calls it when a conversation is burned.
 
 Built in slice A5: three `filter` modules for Share unseen, run in this order on the phone: `strip-details`, `cover-faces` and `cover-numbers` (`public/v2/modules/filter/`). A filter gets only `t`, and per photo the photo itself (`{width, height, canvas, pixels, bytes}`), never chats, the wallet or the engine. It has `id`, `what` (`details`, `faces` or `writing`) and `analyse(photo)`, which resolves to `{found}` (hidden details in the file) and, or, `{covers}` (blocks to paint); it may have `finish(bytes)`, which gets the new JPEG and returns it cleaned, and `prepare()`, which starts loading a model early. The chain (`public/v2/core/filters.js`) reports each step, carries on past a filter that fails or takes longer than 45 seconds (listed as not checked), and builds the list of changes. Whatever the filters do, the app draws the photo again, paints the blocks and checks the new file (`public/v2/core/photo.js`). The face filter loads the vendored face-api library and its model from this app's own address; it fetches nothing else.
@@ -111,7 +113,7 @@ Not built yet, and not claimed: the `publisher` and `sig` fields are not checked
 1. Split `src/funding.ts` into one module per funding method behind a shared interface.
 2. Add the plugin loader, manifest checks and sandbox to the web app, then the native shell.
 3. Move filters, covers, guides and protection lists into plugins from the start, since none are built yet.
-4. Add an on-device `voice-in` and `voice-out` module when flash-speech comes over from flash-mobile (C2). The module kinds exist since slice A3.
+4. Add an on-device `voice-in` module (C2). On-device `voice-out` is the natural voice (docs/VOICE.md); the module kinds exist since slice A3.
 5. Publish the Bellows operator announcement and the guide package format as short written specs, so others can implement them without reading Forge's code.
 
 ## Open questions

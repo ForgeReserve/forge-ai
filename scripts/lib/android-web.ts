@@ -48,17 +48,23 @@ export interface CapacitorConfig {
  * its index.html), <assets>/capacitor.config.json and <assets>/capacitor.plugins.json. What was in
  * <assets>/public before is removed first, so a file deleted from public/ leaves the app too.
  */
-export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig): { files: number; bytes: number } {
+/** The natural voice's files (public/v2/voice/phonon), which the APK carries uncompressed (build.gradle noCompress). */
+export const isVoiceFile = (rel: string) => rel.split(sep).join('/').startsWith('v2/voice/phonon/');
+
+export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig): { files: number; bytes: number; voiceBytes: number } {
   const out = join(assetsDir, 'public');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   let bytes = 0;
+  let voiceBytes = 0;
   const files = bundleFiles(publicDir);
   for (const rel of files) {
     const to = join(out, rel);
     mkdirSync(dirname(to), { recursive: true });
     cpSync(join(publicDir, rel), to);
-    bytes += statSync(to).size;
+    const n = statSync(to).size;
+    bytes += n;
+    if (isVoiceFile(rel)) voiceBytes += n;
   }
   const page = readFileSync(join(publicDir, 'v2', 'index.html'));
   writeFileSync(join(out, 'index.html'), page);
@@ -68,7 +74,7 @@ export function writeBundle(publicDir: string, assetsDir: string, config: Capaci
   writeFileSync(join(assetsDir, 'capacitor.config.json'), JSON.stringify(runtime, null, 2) + '\n');
   // The app's own plugins (ForgeShare, ForgeShareIn) are registered in MainActivity, none from npm.
   writeFileSync(join(assetsDir, 'capacitor.plugins.json'), '[]\n');
-  return { files: files.length + 1, bytes };
+  return { files: files.length + 1, bytes, voiceBytes };
 }
 
 export function readConfig(file: string): CapacitorConfig {

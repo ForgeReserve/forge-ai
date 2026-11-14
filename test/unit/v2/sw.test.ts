@@ -35,4 +35,11 @@ describe('service workers', () => {
     expect(v2).toMatch(/\(await caches\.has\(CACHE\)\)\) await \(await caches\.open\(CACHE\)\)\.put\(/);
     expect(v2).not.toMatch(/cache\.match\(/);
   });
+
+  it('v2 leaves the natural voice files to the voice package, which keeps its own copy, but keeps their index', () => {
+    const voice = regex(v2, 'VOICE_FILES');
+    for (const p of ['/v2/voice/phonon/31m-en-92741c5/model.q8.gguf', '/v2/voice/phonon/voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors']) expect(voice.test(p), p).toBe(true);
+    for (const p of ['/v2/voice/phonon/index.json', '/v2/voice/en/welcome.ogg', '/v2/vendor/phonon-tts/worker.js', '/v2/app.js']) expect(voice.test(p), p).toBe(false);
+    expect(v2).toMatch(/NEVER\.test\(url\.pathname\) \|\| VOICE_FILES\.test\(url\.pathname\)\) return;/);
+  });
 });

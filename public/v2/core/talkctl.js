@@ -11,9 +11,10 @@ const TICK_MS = 100;
 /**
  * deps: store ({S, set}), t, ui, nav, haptics, voiceIn() and voiceOut() (the chosen module instance or
  * null), blocker() (null, or {key, go} when a question cannot be asked now), ask(text, meta),
- * refresh() (the balance), errorText(err, unit), now().
+ * refresh() (the balance), errorText(err, unit), now(), and askDownload(bytes) (resolves true when the
+ * person agrees to the one-time download a voice needs before its first use).
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now() }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -22,6 +23,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   let timer = 0;
   let sending = null; // AbortController while the recording is being turned into text
   let speech = null; // {key, ctl}
+  let asking = null; // the read waiting for the answer to the download question
+  let declined = false; // the download was refused: answers are not read on their own until Listen
 
   const set = (patch) => store.set({ talk: { ...S.talk, ...patch } });
 
@@ -171,12 +174,37 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     return mod.price(pieces(msg, mod), msg.id);
   }
 
-  function speak(msg) {
+  /**
+   * Reads an answer aloud. auto: the app reads the answer to a voice question on its own. A voice that
+   * needs a download first (the natural voice, the first time) asks once; refused, answers are not read
+   * on their own again until the person taps Listen.
+   */
+  function speak(msg, { auto = false } = {}) {
     const mod = voiceOut();
     if (!mod || !msg?.content) return;
     stopSpeaking();
+    if (!mod.download) return play(mod, msg);
+    const ticket = {};
+    asking = ticket;
+    (async () => {
+      const d = await mod.download().catch(() => ({ needed: false }));
+      if (asking !== ticket) return;
+      if (d.needed) {
+        if (auto && declined) return;
+        const ok = await askDownload(d.bytes);
+        if (asking !== ticket) return;
+        declined = !ok;
+        if (!ok) return;
+      }
+      asking = null;
+      play(mod, msg);
+    })();
+  }
+
+  function play(mod, msg) {
     const key = msg.id;
-    const ctl = mod.speak(pieces(msg, mod), { key, onState: (state) => store.set({ speaking: { key, state } }) });
+    const onProgress = (f) => speech?.ctl === ctl && store.set({ speaking: { key, state: 'loading', progress: Math.min(99, Math.floor(f * 100)) } });
+    const ctl = mod.speak(pieces(msg, mod), { key, onState: (state) => store.set({ speaking: { key, state } }), onProgress });
     speech = { key, ctl };
     store.set({ speaking: { key, state: 'loading' } });
     ctl.done
@@ -197,6 +225,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   }
 
   function stopSpeaking() {
+    asking = null;
     if (!speech) return;
     const s = speech;
     speech = null;

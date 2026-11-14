@@ -25,6 +25,7 @@ import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
+import { createPhonon } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
@@ -106,6 +107,10 @@ const native = createNative();
 if (native) setAdapter('share', native.share);
 
 const engineBase = () => S.settings.engine || defaultEngine(native);
+
+// The natural voice made on the phone (core/phonon.js). Its files are on this app's own address, or in
+// the APK in the Android app, where there is nothing to download.
+const phonon = createPhonon({ native: !!native });
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
@@ -280,10 +285,13 @@ function talkView(model, unit) {
 function speakView() {
   const out = voiceOut();
   const ex = lastExchange(S.conv.messages);
+  const progress = S.speaking?.progress;
   const answerMsg = S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
   return {
     available: !!out && !!ex?.answer?.content,
     state: S.speaking?.state ?? 'idle',
+    // How much of the natural voice's one-time download is here (0 to 99), while it downloads.
+    progress: Number.isInteger(progress) ? progress : null,
     current: !!answerMsg && S.speaking?.key === answerMsg.id,
     // The engine's voice reads the answer in plain form on its way to the model: the line says so.
     viaEngine: out?.id === 'engine',
@@ -683,7 +691,7 @@ async function generate() {
   await refreshBalance();
   // A question asked by voice is answered by voice, unless reading aloud is off.
   const asked = history.at(-1);
-  if (asked?.meta?.voice && reply.content && !reply.meta.error && !reply.meta.stopped && S.conv === conv) talk.speak(reply);
+  if (asked?.meta?.voice && reply.content && !reply.meta.error && !reply.meta.stopped && S.conv === conv) talk.speak(reply, { auto: true });
 }
 
 /** The plain words for a failed answer, with what it cost when the engine charged for it. */
@@ -976,7 +984,36 @@ const talk = createTalk({
   ask,
   refresh: () => refreshBalance(),
   errorText: (err) => errorText(err, S.unit),
+  askDownload: (bytes) => askVoiceDownload(bytes),
 });
+
+/**
+ * Asks once before the natural voice is downloaded, with its size. Resolves true for Download. While
+ * the question is open, nothing is fetched.
+ */
+function askVoiceDownload(bytes) {
+  return new Promise((resolve) => {
+    const size = Math.max(1, Math.round(bytes / 1e6));
+    const close = (ok) => {
+      dlg.close();
+      dlg.remove();
+      resolve(ok);
+    };
+    const dlg = ui.el(
+      'dialog',
+      { class: 'float-card voice-dl', id: 'voiceDownload', 'aria-labelledby': 'voiceDlTitle' },
+      ui.el('h2', { id: 'voiceDlTitle', text: t('voiceDl.title') }),
+      ui.el('p', { text: t('voiceDl.body', { size }) }),
+      ui.el('div', { class: 'row-btns' }, ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlNo', text: t('voiceDl.no'), onclick: () => close(false) }), ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlYes', text: t('voiceDl.yes'), onclick: () => close(true) })),
+    );
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
 
 const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
 
@@ -1208,7 +1245,7 @@ function screenFor(name, params) {
     case 'model':
       return modelScreen(ctx);
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), audio } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio } });
     case 'history':
       return historyScreen(ctx);
     case 'intro':
@@ -1386,10 +1423,12 @@ async function start() {
   // An answer that was streaming when the tab was killed is kept as stopped.
   for (const m of S.conv.messages) if (m.role === 'assistant' && !m.content && !m.meta?.error && !m.meta?.stopped) m.meta = { ...m.meta, stopped: true };
 
+  // Which natural-voice files this app has (a small index, read once); the voice is offered once it is in.
+  phonon.init().then((x) => x && store.set({}));
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
   });
   // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
   // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
