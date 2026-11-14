@@ -915,6 +915,10 @@ export function createApp(d: Deps) {
     });
     // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js).
     app.get('/v2', (c) => c.redirect('/v2/', 301));
+    // A photo shared into the v2 app is caught by its service worker (public/v2/sw.js) and never sent.
+    // When that worker is not running, the phone posts it here instead: it is dropped unread and the
+    // page opens saying the photo did not arrive.
+    app.post('/v2/share', (c) => c.redirect('/v2/#/photo/missed', 303));
     app.use('/*', serveStatic({ root: d.publicDir }));
   }
 
