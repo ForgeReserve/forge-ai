@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, MINT_C, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { startOnchainMock } from '../e2e/onchain-mock.ts';
+import { pastFirstRun } from './firstrun-seen.ts';
 
 // The v2 app driven in a phone-sized browser: the installed Chrome (channel 'chrome', no browser
 // download), a local gateway with the mock supplier, and the local test mints (pnpm mint:up).
@@ -25,6 +26,7 @@ afterAll(async () => {
 
 async function phone(opts: object = {}): Promise<{ ctx: BrowserContext; page: Page; errors: string[] }> {
   const ctx = await browser.newContext({ ...PHONE, ...opts });
+  await pastFirstRun(ctx);
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: g.url });
   const page = await ctx.newPage();
   const errors: string[] = [];

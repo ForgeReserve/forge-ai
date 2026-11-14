@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { pastFirstRun } from './firstrun-seen.ts';
 
 // Hold to talk in a phone-sized Chrome. The microphone is Chrome's fake capture device (a steady beep),
 // reached through the app's own microphone adapter; the engine is a local gateway whose mock audio
@@ -44,6 +45,7 @@ interface Phone {
 /** A phone with a funded balance, the microphone allowed, Private only off and the mock-echo model. */
 async function phone(): Promise<Phone> {
   const ctx = await browser.newContext({ ...PHONE });
+  await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -207,6 +209,7 @@ describe('hold to talk', () => {
 
   it('with Private only on and no private voice model, the button opens Type', async () => {
     const ctx = await browser.newContext({ ...PHONE });
+    await pastFirstRun(ctx);
     const page = await ctx.newPage();
     // An engine whose only speech to text model is a standard one.
     await page.route('**/v1/models', async (route) => {

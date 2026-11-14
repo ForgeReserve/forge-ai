@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { pastFirstRun } from './firstrun-seen.ts';
 
 // Share unseen in a phone-sized Chrome: a real photo with faces and a real phone photo with GPS, through
 // the photo picker, the filters on the page, the before and after view, blocks added and taken away by
@@ -50,6 +51,7 @@ interface Phone {
 /** A phone with no balance. With `sheet`, navigator.share is a stand-in that keeps what it is given. */
 async function phone({ sheet = true, workers = 'allow' as 'allow' | 'block' } = {}): Promise<Phone> {
   const ctx = await browser.newContext({ ...PHONE, acceptDownloads: true, serviceWorkers: workers });
+  await pastFirstRun(ctx);
   if (sheet)
     await ctx.addInitScript(() => {
       const w = window as any;

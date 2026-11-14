@@ -3,6 +3,7 @@ import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInvite, type Gateway, MINT_A, MINT_B, mintProofs, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
+import { pastFirstRun } from './firstrun-seen.ts';
 
 // Paper notes in a phone-sized browser. The camera is Chrome's fake camera playing a video of the
 // note's QR code, so the app's own camera adapter and v1's scanner read it as they would on a phone.
@@ -35,6 +36,7 @@ async function phoneWithCamera(codes: string[], viewport = PHONE.viewport) {
   const b = await chromium.launch({ channel: 'chrome', headless: true, args: cameraArgs(cameraFile(codes)) });
   open.push(b);
   const ctx = await b.newContext({ ...PHONE, viewport });
+  await pastFirstRun(ctx);
   await ctx.grantPermissions(['camera'], { origin: g.url });
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -204,6 +206,7 @@ describe('paper notes in a phone-sized browser', () => {
 
   it('without a camera: paste only, no stray text; a note in msat shows no amount; a note under an alias of the engine mint is added', async () => {
     const ctx = await plain.newContext(PHONE);
+    await pastFirstRun(ctx);
     // A phone or laptop with no camera at all.
     await ctx.addInitScript(() => Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true }));
     const page = await ctx.newPage();

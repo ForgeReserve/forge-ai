@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { pastFirstRun } from './firstrun-seen.ts';
 
 // Slice A4 in a phone-sized Chrome: History, Burn on the answer screen, Burn all, auto-delete and Erase
 // everything. Every deletion path is checked against what the browser really keeps for the site: each
@@ -23,6 +24,7 @@ afterAll(async () => {
 
 async function phone(opts: object = {}): Promise<{ ctx: BrowserContext; page: Page; errors: string[] }> {
   const ctx = await browser.newContext({ ...PHONE, ...opts });
+  await pastFirstRun(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
