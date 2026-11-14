@@ -11,6 +11,7 @@ import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
 import { audioModelList, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
+import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import { type Config, mintAliasList, type ModelConfig, type Unit } from './config.ts';
@@ -448,6 +449,9 @@ export function createApp(d: Deps) {
     const out = await funding.confirmForeign(row.id, String(body?.token ?? '').trim(), lockPubkey);
     return fundingResponse(c, out);
   });
+
+  // A Cashu card's swap, carried to the card's mint for the phone (src/cardrelay.ts).
+  installCardRelay(app, { wallet, funding, readJson });
 
   app.get('/v1/wallet/fund', (c) => {
     const a = requireAccount(c);

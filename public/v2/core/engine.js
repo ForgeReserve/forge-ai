@@ -116,6 +116,10 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
     foreignQuote: (key, body) => call('/v1/wallet/fund/foreign/quote', { key, json: body }),
     foreignConfirm: (key, body) => call('/v1/wallet/fund/foreign/confirm', { key, json: body }),
     foreignMints: (path = '/v1/wallet/fund/mints') => must(path),
+    // A Cashu card's mint, reached through the engine (src/cardrelay.ts). No balance key goes with these.
+    cardMint: (body) => call('/v1/wallet/fund/card/mint', { json: body }),
+    cardSwap: (body) => call('/v1/wallet/fund/card/swap', { json: body }),
+    cardRestore: (body) => call('/v1/wallet/fund/card/restore', { json: body }),
     funding: (key, id) => call(`/v1/wallet/fund/${encodeURIComponent(id)}`, { key }),
 
     /**
