@@ -3,7 +3,8 @@
 # running instead of starting a second set on the same ports.
 name: forge-ai
 x-mint: &mint
-  image: cashubtc/nutshell:0.22.1
+  # Nutshell 0.22.1, pinned by digest (multi-arch index, checked 2026-11-13).
+  image: cashubtc/nutshell:0.22.1@sha256:05b536e0e3d6beee75417ece319a3f89a687d34cfb3cc12c6b19d253104b450e
   command: ["poetry", "run", "mint"]
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3338/v1/info')"]

@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { getEncodedToken } from '@cashu/cashu-ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { GatewayWallet, PaymentError } from '../../src/cashu/wallet.ts';
 import { openDb } from '../../src/db.ts';
 import { sqliteStore } from '../../src/mint-discovery.ts';
-import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
+import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintProofs, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
 import { type OnchainMock, startOnchainMock } from './onchain-mock.ts';
 
 const up = (await mintsUp()) && (await fetch(`${MINT_C}/v1/info`).then((r) => r.ok).catch(() => false));
@@ -272,6 +276,113 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     expect(mismatch.body.error.code).toBe('token_mismatch');
   });
 
+  // Report finding 2: confirmation compared only the proof-secret hash, so a token relabelled with
+  // another mint URL or unit sent the gateway to that mint. It must be refused before any contact.
+  it('confirm is bound to the quoted mint and unit: a relabelled token is refused before any mint is contacted', async () => {
+    const hits: string[] = [];
+    const listener = createServer((req, res) => {
+      hits.push(req.url ?? '');
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((r) => listener.listen(0, '127.0.0.1', () => r()));
+    const elsewhere = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`;
+    try {
+      const proofs = await mintProofs(MINT_C, 'sat', 400);
+      const token = getEncodedToken({ mint: MINT_C, unit: 'sat', proofs });
+      const q = await post(g, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite: createInvite(g) });
+      expect(q.status).toBe(200);
+      const key = q.body.key as string;
+
+      const otherMint = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: elsewhere, unit: 'sat', proofs }) }, key);
+      expect(otherMint.status).toBe(400);
+      expect(otherMint.body.error.code).toBe('token_mismatch');
+      expect(hits).toEqual([]);
+
+      const otherUnit = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: MINT_C, unit: 'usd', proofs }) }, key);
+      expect(otherUnit.status).toBe(400);
+      expect(otherUnit.body.error.code).toBe('token_mismatch');
+      expect(g.deps.funding.get(q.body.id)!.state).toBe('quoted');
+
+      // The quoted mint spelled with a trailing slash is the same mint: the funding still completes.
+      const c = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: `${MINT_C}/`, unit: 'sat', proofs }) }, key);
+      expect(c.status).toBe(200);
+      const done = c.body.state === 'done' ? c.body : await waitFor(g, q.body.id, key);
+      expect(done.credited).toBe(q.body.foreign.credit);
+      expect(hits).toEqual([]);
+    } finally {
+      listener.close();
+    }
+  });
+
+  // Report finding 3: the mint actually contacted passes the same safety check as the quoted one,
+  // on every load, not only the first.
+  it('every untrusted mint the wallet loads is vetted, cached or not; a plain-http mint is refused by default', async () => {
+    let calls = 0;
+    let allow = true;
+    const w = new GatewayWallet(openDb(':memory:'), {
+      trustedMints: [MINT_A],
+      units: ['sat'],
+      maxTokenBytes: 4000,
+      vetMint: async () => {
+        calls++;
+        if (!allow) throw new PaymentError('mint_not_allowed', 'this mint address is not allowed');
+      },
+    });
+    await w.wallet(MINT_C, 'sat');
+    await w.wallet(MINT_C, 'sat');
+    expect(calls).toBe(2);
+    allow = false;
+    await expect(w.wallet(MINT_C, 'sat')).rejects.toMatchObject({ code: 'mint_not_allowed' });
+    await w.wallet(MINT_A, 'sat');
+    expect(calls).toBe(3);
+
+    // FORGE_FUND_MINT is operator configuration: like the trusted mints, it is not a foreign mint.
+    const plain = await startGateway({ env: { FORGE_FUND_MINT: `${MINT_B}/` } });
+    try {
+      await expect(plain.deps.wallet.wallet(MINT_C, 'sat')).rejects.toMatchObject({ code: 'mint_not_allowed' });
+      await expect(plain.deps.wallet.wallet(MINT_A, 'usd')).resolves.toBeDefined();
+      await expect(plain.deps.wallet.wallet(MINT_B, 'sat')).resolves.toBeDefined();
+    } finally {
+      await plain.close();
+    }
+  });
+
+  // Review of finding 3: the per-load vet can fail after the token is already swapped and held.
+  // Confirm must then answer with the in-progress state for the client to poll, never an error.
+  it('a vet failure after the swap leaves the held eCash with the poller and confirm answers melting', async () => {
+    const token = await mintToken(MINT_C, 'sat', 500);
+    const q = await post(g, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite: createInvite(g) });
+    expect(q.status).toBe(200);
+    const id = q.body.id as string;
+    const key = q.body.key as string;
+    const w = g.deps.wallet as any;
+    const orig = w.opts.vetMint;
+    w.opts.vetMint = async (m: string) => {
+      if (g.deps.funding.get(id)?.state === 'melting') throw new PaymentError('mint_not_allowed', 'this mint address is not allowed');
+      return orig(m);
+    };
+    try {
+      const c = await post(g, '/v1/wallet/fund/foreign/confirm', { id, token }, key);
+      expect(c.status).toBe(200);
+      expect(c.body.state).toBe('melting');
+      const row = g.deps.funding.get(id)!;
+      expect(row.state).toBe('melting');
+      expect(row.error).toMatch(/not allowed/);
+      expect(row.f_melt_op).toBeNull();
+      expect(g.deps.wallet.heldProofs(id).length).toBeGreaterThan(0);
+    } finally {
+      w.opts.vetMint = orig;
+    }
+    let r = g.deps.funding.get(id)!;
+    for (let i = 0; i < 50 && r.state !== 'done'; i++) {
+      r = (await g.deps.funding.advance(id))!;
+      if (r.state !== 'done') await new Promise((res) => setTimeout(res, 200));
+    }
+    expect(r.state).toBe('done');
+    expect(r.credited).toBe(q.body.foreign.credit);
+    expect(topupRows(g, r.account_id)).toBe(1);
+  });
+
   it('a melt that no longer fits is refunded to the user as eCash from their mint', async () => {
     const invite = createInvite(g);
     const token = await mintToken(MINT_C, 'sat', 600);
@@ -440,7 +551,9 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     const q = await post(g1, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite });
     const key = q.body.key as string;
     const c = await post(g1, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token }, key);
-    expect(c.status).toBe(500);
+    // The swap already holds the eCash: confirm answers the in-progress state, not an error.
+    expect(c.status).toBe(200);
+    expect(c.body.state).toBe('melting');
     expect(g1.deps.funding.get(q.body.id)!.state).toBe('melting');
     await g1.close();
 

@@ -17,7 +17,8 @@ services:
       - "8787"
 
   caddy:
-    image: caddy:2
+    # Caddy 2.11.9, pinned by digest (the multi-arch index caddy:2 pointed at on 2026-11-13).
+    image: caddy:2.11.9@sha256:4e2425f6009577e7c651010f16679c28f7d12df3e7b1914f941a7a3370746b3c
     restart: unless-stopped
     depends_on: [gateway]
     ports:

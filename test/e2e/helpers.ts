@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { serve, type ServerType } from '@hono/node-server';
 import { getEncodedToken, type Proof, Wallet } from '@cashu/cashu-ts';
 import { createApp, type Deps, startupRecovery } from '../../src/app.ts';
+import type { WalletFaults } from '../../src/cashu/wallet.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
 import type { FundingFaults } from '../../src/funding.ts';
@@ -167,7 +168,7 @@ export async function startGateway(
     env?: Record<string, string>;
     enclavePort?: number;
     dbPath?: string;
-    faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
+    faults?: WalletFaults;
     fundingFaults?: FundingFaults;
     recover?: boolean;
     /** Adds the audio models (testAudio) and their private mock supplier. */

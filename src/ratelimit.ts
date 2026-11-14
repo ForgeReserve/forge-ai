@@ -1,4 +1,4 @@
-/** Token bucket per key (balance key hash or client IP). In-memory: one gateway process. */
+/** Token bucket per key (client IP, or a verified account id). In-memory: one gateway process. */
 export class RateLimiter {
   private readonly buckets = new Map<string, { tokens: number; at: number }>();
   private readonly perMinute: number;

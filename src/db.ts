@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   amount_msub INTEGER NOT NULL,
   status TEXT NOT NULL,             -- active | settled | released
   charged_msub INTEGER,
+  shortfall_msub INTEGER,           -- settled after the sweep released it: owed but not covered by the balance
   created_at INTEGER NOT NULL,
   settled_at INTEGER
 );
@@ -239,6 +240,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['requests', 'cost_source', 'TEXT'],
   ['fundings', 'f_unlisted', 'INTEGER NOT NULL DEFAULT 0'],
   ['accounts', 'free', 'INTEGER NOT NULL DEFAULT 0'],
+  ['reservations', 'shortfall_msub', 'INTEGER'],
 ];
 
 export type DB = DatabaseSync;

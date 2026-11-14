@@ -710,6 +710,17 @@ export class FundingService {
     // A key given at confirm replaces the one given at quote; neither is required.
     if (lockPubkey) this.set(id, { f_lock_pubkey: lockPubkey });
     if (row.expires_at && now() > row.expires_at - 15_000) throw new PaymentError('quote_expired', 'this quote expired; ask for a new one', 409);
+    // The token must name the quoted mint and unit before any mint is loaded or contacted: the
+    // proof-secret hash alone does not bind it, since the same secrets can be relabelled.
+    let meta: { mint: string; unit?: string };
+    try {
+      meta = getTokenMetadata(token);
+    } catch {
+      throw new PaymentError('invalid_token', 'could not decode token');
+    }
+    if (normalizeMintUrl(meta.mint) !== row.f_mint || (meta.unit ?? 'sat') !== row.f_unit) {
+      throw new PaymentError('token_mismatch', 'this is not the token that was quoted', 400);
+    }
     const t = await this.wallet.inspect(token, undefined, { foreign: true });
     if (t.hash !== row.f_token_hash) throw new PaymentError('token_mismatch', 'this is not the token that was quoted', 400);
     if (this.inflight.has(id)) throw new PaymentError('in_flight', 'this funding is being processed', 409);
@@ -727,11 +738,19 @@ export class FundingService {
         this.set(id, { next_check: now() + 5000, error: errText(e) });
         return this.get(id)!;
       }
-      this.set(id, { state: 'melting', error: null });
-      await this.melt(this.get(id)!);
-      const after = this.get(id)!;
-      if (after.state === 'pending') await this.checkQuote(after);
-      await this.deliverPayouts(id);
+      // From here the gateway holds the user's eCash: any failure (a mint vet refusal, a resolver
+      // error, a mint that does not answer) leaves the funding where it is for the poller, and the
+      // client gets the in-progress state to poll instead of an error.
+      try {
+        this.set(id, { state: 'melting', error: null });
+        await this.melt(this.get(id)!);
+        const after = this.get(id)!;
+        if (after.state === 'pending') await this.checkQuote(after);
+        await this.deliverPayouts(id);
+      } catch (e) {
+        log.warn('fund_step_failed', { id, state: this.get(id)!.state, err: errText(e) });
+        this.set(id, { error: errText(e), next_check: now() + 5000 });
+      }
       return this.get(id)!;
     } finally {
       this.inflight.delete(id);

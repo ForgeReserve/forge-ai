@@ -20,8 +20,8 @@ The token is then swapped at the mint into new proofs that only the gateway know
 ## Flow 1: NUT-24 per request
 
 1. Client sends the request with no credentials.
-2. The gateway prices the worst case: input tokens estimated as `body bytes / FORGE_BYTES_PER_TOKEN` (default 2, deliberately high) plus `max_tokens` at the output price. It answers `402` with `X-Cashu: creqA...`, a NUT-18 request with `a` (amount), `u` (unit), `m` (trusted mints), `s: true` and an id. Sat quotes carry `FORGE_SAT_PRICE_BUFFER` headroom.
-3. Client retries with `X-Cashu: cashuB...` (and `X-Forge-Invite` while invite-only).
+2. The gateway prices the worst case: input tokens estimated as `body bytes / FORGE_BYTES_PER_TOKEN` (default 2, deliberately high) plus `max_tokens` at the output price. It answers `402` with `X-Cashu: creqA...`, a NUT-18 request with `a` (amount), `u` (unit), `m` (trusted mints), `s: true` and `i`, the request id, which is also in the `X-Forge-Request-Id` header. Sat quotes carry `FORGE_SAT_PRICE_BUFFER` headroom.
+3. Client retries with `X-Cashu: cashuB...` and `X-Forge-Request-Id` set to that id (and `X-Forge-Invite` while invite-only). The paid request then runs under the id the client already holds, so its change stays findable at `GET /v1/change/{request_id}` even when the paid response is lost and error or startup recovery owes the change. Each id can be used for one paid attempt, even one that fails: an id that already has a request is `409 request_id_used`, before the token is touched; a malformed id is `400`. A retry without the header gets a new id, returned in `X-Forge-Request-Id`.
 4. The gateway re-prices, checks the token covers it, swaps it, calls the supplier, and charges `ceil(actual cost)` capped at what was paid.
 5. Change, if any, is issued as a new token from the same mint: in the `X-Cashu-Change` response header for non-streaming responses, in the final `event: forge` of a stream, and always at `GET /v1/change/{request_id}`.
 
@@ -39,6 +39,7 @@ Only a SHA-256 of each key is stored.
 
 - Plaintext requests: the gateway asks the supplier for usage (`stream_options.include_usage` on streams) and settles on it. If the client did not ask for usage, the usage-only chunk is removed from the stream it sees.
 - No usage reported: input is estimated as `body bytes / 4` and output from the stream (at least one token per content chunk, or characters / 4 if larger). Non-streaming responses without usage are charged at `max_tokens`.
+- A non-streaming response, plaintext or encrypted, whose body fails to arrive after `200` headers is an upstream failure, settled before the error is returned: `502`, nothing charged, the reservation released and, for NUT-24, the full change in `X-Cashu-Change` and at `GET /v1/change/{request_id}` at once.
 - Client disconnects mid-stream: the gateway aborts the upstream call and settles on what was produced so far, using upstream usage if it arrived, else the estimate above.
 - Encrypted pass-through: see PRIVACY.md. Usage comes from Tinfoil's `X-Tinfoil-Usage-Metrics` header or trailer; without it the supplier's flat schedule (if configured) or the reservation is charged.
 - `pricing: "flat"` suppliers always charge the flat schedule: a request-size bucket plus declared max output tokens.
@@ -69,7 +70,8 @@ The Forge mint advertises `onchain` (sat) in NUT-04 on its Nutshell on-chain bra
 
 1. `POST /v1/wallet/fund/foreign/quote {token, unit}`. Policy first: foreign funding enabled, the mint is not one of ours (`use_topup`), is accepted by `FORGE_FOREIGN_POLICY` (`discovered`: the operator list, meaning `FORGE_FOREIGN_ALLOW` and mints added on the admin page, or the NIP-87 discovered list; `allowlist`: the operator list only; `any`: every mint, or `FORGE_FOREIGN_ALLOW` when set) and is not in `FORGE_FOREIGN_DENY` (`mint_not_allowed`, with a pointer to `GET /v1/wallet/fund/mints`), is `https` and resolves to public addresses only (SSRF guard), and the token is at most `FORGE_FOREIGN_MAX_SAT` / `_USD`. Then pricing: the gateway creates a Forge bolt11 mint quote for a credit and a melt quote for that invoice at the token's mint, shrinking the credit until the melt amount, its fee reserve and both input fees fit the token. Nothing is spent. The response shows the token amount, the exact credit and the most the token's mint can keep (`fee_max`).
    - **Unlisted mints.** Under `discovered` and `allowlist` with `FORGE_FOREIGN_UNLISTED=true`, a mint that is not accepted (and not denied, and not Forge's) passes the URL safety check and then answers 409 `mint_unlisted` with `{unlisted: {mint, max: {sat, usd}}}`. The same request with `accept_unlisted: true` goes ahead once the mint passes the live probe discovery uses (cached 10 minutes, a failure 1 minute; a failure answers `mint_check_failed`). The token is then capped at `FORGE_FOREIGN_UNLISTED_MAX_SAT` / `_USD` (cents) as well as the other-mint cap (`amount_too_large`), and the funding row records `f_unlisted = 1`. With `FORGE_FOREIGN_UNLISTED=false` such a mint gets `mint_not_allowed`. Policy `any` never asks. `GET /v1/wallet/fund/methods` shows `foreign.unlisted: {enabled, max: {sat, usd}}`.
-2. `POST /v1/wallet/fund/foreign/confirm {id, token}`: the token (checked to be the quoted one by the hash of its secrets) is received at its own mint through the normal receive path (`incoming` row, NUT-19/NUT-09 recoverable). The new proofs are stored `reserved` for this funding and never used for payouts.
+2. `POST /v1/wallet/fund/foreign/confirm {id, token}`: before any mint is loaded or contacted, the token must name the quoted mint (normalised) and unit; otherwise 400 `token_mismatch` and the funding stays `quoted`. It must then be the quoted token by the hash of its secrets (also `token_mismatch`). It is received at its own mint through the normal receive path (`incoming` row, NUT-19/NUT-09 recoverable). The new proofs are stored `reserved` for this funding and never used for payouts.
+   - **Every contact with another mint is vetted.** The wallet runs the URL safety check (https, public addresses only, unless `FORGE_FOREIGN_ALLOW_INSECURE`) each time it loads the wallet of a mint outside `FORGE_TRUSTED_MINTS`, cached or not: quote, confirm, melt, refunds, change and recovery. A refusal answers `mint_not_allowed`; a step that already holds the eCash stays where it is and is retried by the poller. Confirm then answers 200 with the in-progress state (`melting`) for the client to poll, never an error, since the token is already taken. No Cashu request follows a redirect (cashu-ts `redirect: "error"` for the whole process, set in `src/cashu/wallet.ts`), so discovery, keysets, keys, swap, melt and the checks only ever reach the vetted address.
 3. Melt: deterministic NUT-08 blank outputs and the counter range are stored before `POST /v1/melt/bolt11`. If the melt quote expired meanwhile, a new one is made for the same invoice; if it no longer fits, the held eCash goes back to the user as a token from their mint (`refund_token`, `state=refunded`).
 4. Melt paid: the unused fee reserve comes back as change signatures, which are returned to the user as `change_token`. The funding then continues as a Lightning funding whose invoice is already paid: mint at Forge, credit `credit`.
 
@@ -176,7 +178,9 @@ Recovery of a `prepared` row: (a) replay the stored swap; (b) else restore the c
 
 A second submission of the same token never reaches the mint twice: it finds the row. For a topup to the same key it returns `replay: true` with the current balance; anything else is `token_spent`. When a topup's outcome is unknown (mint timeout), the gateway keeps the new balance and returns its key with HTTP 503 `topup_pending`; retrying with that key and the same token completes it.
 
-A NUT-24 request interrupted after payment (process died during the upstream call) is marked aborted at startup, and its full payment is owed back as change at `GET /v1/change/{request_id}`.
+A NUT-24 request interrupted after payment (process died during the upstream call) is marked aborted at startup, and its full payment is owed back as change at `GET /v1/change/{request_id}`, the id from the 402 when the paid request echoed it. A NUT-24 request interrupted during its receive is marked failed at startup, after mint recovery has run: if its token never reached the mint, the token is still the payer's and the id answers `404`; if the swap's outcome is still unknown because the mint did not answer, the rule below applies.
+
+A NUT-24 payment whose swap outcome was unknown when its request failed (a mint timeout, `mint_unavailable`, or a failure after the swap) is settled by whichever comes first: a retry with the same token, `GET /v1/change/{request_id}`, or the next startup. Recovery that finalizes the swap marks the request aborted and owes the whole payment back as change under that id at once. Until the mint answers, `GET /v1/change/{request_id}` returns `409 not_settled` with `Retry-After`, never `404`.
 
 ### Paying out (change, refund, export)
 
@@ -201,7 +205,13 @@ Restoring by counter range (the unlocked path) is never used for a locked row: i
 
 ### Reservations
 
-At startup every active reservation is released without charge (nothing is in flight in a fresh process), and a periodic sweep releases any older than `FORGE_STALE_RESERVATION_SECONDS`. A crash mid-request therefore costs the gateway the upstream bill for that request, never the user.
+The gateway tracks in memory which reservations belong to requests it is still serving. A request owns its reservation from `reserve` until it settles; an error that escapes the request before settlement gives it up.
+
+- At startup every active reservation is released without charge: a fresh process serves nothing, so each one is abandoned. A crash mid-request therefore costs the gateway the upstream bill for that request, never the user.
+- A periodic sweep (every minute) releases, without charge, active reservations older than `FORGE_STALE_RESERVATION_SECONDS` that no request owns, and logs `stale_reservations_released`. A request still being served, such as a long stream, keeps its reservation however old it is.
+- If a request settles after its reservation was released anyway, it is still charged what it used (capped at the reservation), up to what the balance covers after other active reservations. Any part the balance cannot cover is recorded as `shortfall_msub` on the reservation and logged as `settled_after_release`. It is never a silent zero charge.
+
+`test/unit/ledger.test.ts` and `test/e2e/stale-reservation.e2e.test.ts` cover the sweep against a live stream, a late charge after release, the shortfall cap and abandoned-request cleanup.
 
 ### What these tests prove
 

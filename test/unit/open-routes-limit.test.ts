@@ -1,13 +1,15 @@
-// The faucet and the card relay need no balance, so the rate limit counts them by the client's address:
-// a made-up bearer on each request must not open a fresh bucket. Routes that take a balance still
-// count by the balance key, as before.
+// The faucet and the card relay need no balance, so the rate limit counts them by the client's address
+// only: a made-up bearer on each request must not open a fresh bucket, and no bearer is looked up there.
+// Every route pays its address bucket (test/unit/ratelimit.test.ts); a route that takes a balance also
+// pays the account bucket of a key that verifies.
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
 import { newApiKey } from '../../src/ledger.ts';
 import { setLogSilent } from '../../src/log.ts';
+import { RateLimiter } from '../../src/ratelimit.ts';
 import { fixedRateSource } from '../../src/rates.ts';
 import { testCatalog } from '../e2e/helpers.ts';
 
@@ -45,12 +47,30 @@ describe('the rate limit on routes that need no balance', () => {
     });
   }
 
-  it('shares one bucket across the faucet and the card relay, and leaves a balance its own bucket', async () => {
+  it('shares one address bucket across the faucet, the card relay and the balance routes', async () => {
     const { app, key } = gateway();
     const codes: number[] = [];
     for (let i = 0; i < 61; i++) codes.push((await post(app, i % 2 ? '/v1/free/challenge' : '/v1/wallet/fund/card/mint', '198.51.100.9', randomBytes(24).toString('hex'))).status);
     expect(codes.at(-1)).toBe(429);
-    // A route that takes a balance still counts by its key, from the same address.
-    expect((await post(app, '/v1/wallet/refund', '198.51.100.9', key)).status).not.toBe(429);
+    // Every request pays its client address first, whatever key it carries: from the same address a
+    // balance route is limited too. From another address the same key is not.
+    expect((await post(app, '/v1/wallet/refund', '198.51.100.9', key)).status).toBe(429);
+    expect((await post(app, '/v1/wallet/refund', '198.51.100.10', key)).status).not.toBe(429);
+  });
+
+  it('charges only the address bucket on these routes, even for a key that verifies', async () => {
+    const { app, key } = gateway();
+    const keys: string[] = [];
+    const real = RateLimiter.prototype.take;
+    const spy = vi.spyOn(RateLimiter.prototype, 'take').mockImplementation(function (this: RateLimiter, k: string, now?: number) {
+      keys.push(k);
+      return real.call(this, k, now);
+    });
+    try {
+      for (const path of ['/v1/free/challenge', '/v1/wallet/fund/card/mint']) await post(app, path, '198.51.100.11', key);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(keys).toEqual(['ip:198.51.100.11', 'ip:198.51.100.11']);
   });
 });
