@@ -145,20 +145,48 @@ export function makeNotes(mint: string, unit: Unit, amount: number, groups: Proo
   });
 }
 
+/** Notes for tokens that are already made (free question vouchers): one fresh serial each. */
+export function makeNoteRecords(tokens: string[], amount: number): Note[] {
+  const seen = new Set<string>();
+  return tokens.map((token) => {
+    let s = serial();
+    while (seen.has(s)) s = serial();
+    seen.add(s);
+    return { token, amount, serial: s };
+  });
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+interface SheetWords {
+  title: string;
+  help: string;
+  qr: string;
+  howTo: string;
+  keep: string;
+  amount?: string;
+}
+const NOTE_WORDS: SheetWords = { title: 'note.print.title', help: 'note.print.help', qr: 'note.print.qr', howTo: 'note.print.howTo', keep: 'note.print.keep' };
+const CREDIT_WORDS: SheetWords = { title: 'credit.print.title', help: 'credit.print.help', qr: 'credit.print.qr', howTo: 'credit.print.howTo', keep: 'credit.print.keep', amount: 'credit.print.amount' };
+const CREDIT_WORDS_ONE: SheetWords = { ...CREDIT_WORDS, qr: 'credit.print.qrOne', howTo: 'credit.print.howToOne', amount: 'credit.print.amountOne' };
 
 /**
  * The printable sheet: one card per note with its QR code, amount, a short how-to line and its serial.
  * Self-contained (no script, no font, nothing fetched), and its Content-Security-Policy forbids loading
  * anything. Each card carries its token in data-token too, so the sheet can be checked by a program.
+ * kind 'credits': the notes are free question vouchers (scripts/issue-credits.ts): each amount is a
+ * number of free questions, and the words say they are not money.
  */
-export function sheetHtml(notes: Note[], unit: Unit): string {
+export function sheetHtml(notes: Note[], unit: Unit, kind: 'money' | 'credits' = 'money'): string {
+  const w0 = kind === 'credits' ? CREDIT_WORDS : NOTE_WORDS;
   const cards = notes
     .map((n) => {
-      const amount = fmtUnits(n.amount, unit);
+      // One free question reads as one, not "1 free questions".
+      const w = kind === 'credits' && n.amount === 1 ? CREDIT_WORDS_ONE : w0;
+      const amount = kind === 'credits' ? t(w.amount!, { count: n.amount }) : fmtUnits(n.amount, unit);
       return `<section class="note" data-token="${esc(n.token)}" data-serial="${esc(n.serial)}">
-<div class="qr">${qrSvg(n.token, 'L', t('note.print.qr', { amount }))}</div>
-<div class="text"><p class="amount">${esc(amount)}</p><p class="how">${esc(t('note.print.howTo', { amount }))}</p><p class="keep">${esc(t('note.print.keep'))}</p><p class="serial">${esc(t('note.print.serial', { serial: n.serial }))}</p></div>
+<div class="qr">${qrSvg(n.token, 'L', t(w.qr, { amount, count: n.amount }))}</div>
+<div class="text"><p class="amount">${esc(amount)}</p><p class="how">${esc(t(w.howTo, { amount, count: n.amount }))}</p><p class="keep">${esc(t(w.keep))}</p><p class="serial">${esc(t('note.print.serial', { serial: n.serial }))}</p></div>
 </section>`;
     })
     .join('\n');
@@ -169,7 +197,7 @@ export function sheetHtml(notes: Note[], unit: Unit): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
 <meta name="referrer" content="no-referrer">
-<title>${esc(t('note.print.title'))}</title>
+<title>${esc(t(w0.title))}</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; padding: 16px; font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #14161A; background: #fff; }
@@ -189,7 +217,7 @@ export function sheetHtml(notes: Note[], unit: Unit): string {
 </style>
 </head>
 <body>
-<div class="help"><p>${esc(t('note.print.help', { count: notes.length }))}</p></div>
+<div class="help"><p>${esc(t(w0.help, { count: notes.length }))}</p></div>
 <main class="sheet">
 ${cards}
 </main>

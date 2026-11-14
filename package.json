@@ -21,7 +21,8 @@
     "admin": "node src/admin.ts",
     "demo:agent": "tsx examples/agent-pays.ts",
     "test-token": "tsx scripts/test-token.ts",
-    "print-notes": "node scripts/print-notes.ts"
+    "print-notes": "node scripts/print-notes.ts",
+    "issue-credits": "node scripts/issue-credits.ts"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^4.13.0",

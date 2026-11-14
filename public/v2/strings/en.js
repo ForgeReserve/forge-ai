@@ -516,6 +516,17 @@ export default {
   'note.print.keep': 'Whoever holds this note can spend it. Keep it like cash.',
   'note.print.serial': 'No. {serial}',
 
+  // A printed sheet of free question vouchers (scripts/issue-credits.ts)
+  'credit.print.title': 'Forge AI free questions',
+  'credit.print.help': '{count} vouchers. Print this page, cut along the dashed lines, then delete this file. Each voucher holds free questions, not money.',
+  'credit.print.qr': 'Voucher for {count} free questions',
+  'credit.print.amount': '{count} free questions',
+  'credit.print.howTo': 'Scan this code in Forge AI to add {count} free questions.',
+  'credit.print.keep': 'Free questions only. It cannot be turned into money.',
+  'credit.print.qrOne': 'Voucher for 1 free question',
+  'credit.print.amountOne': '1 free question',
+  'credit.print.howToOne': 'Scan this code in Forge AI to add 1 free question.',
+
   // Shared
   'common.back': 'Back',
 
