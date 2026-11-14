@@ -140,7 +140,7 @@ describe('paying through a till', () => {
   let pays: any;
   let card: FakeFedimintCard;
   beforeEach(async () => {
-    Object.assign(till, { next: [], requirePin: true, marginMsat: 0, marginBps: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false, onPaid: null, payEnabled: true });
+    Object.assign(till, { next: [], requirePin: true, marginMsat: 0, marginBps: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false, onPaid: null, payEnabled: true, maxFeeCapMsat: 1_000_000 });
     till.log = [];
     storage = memStorage();
     transport = nodeTill();
@@ -278,6 +278,111 @@ describe('paying through a till', () => {
     const replay = await again.pay(rec.id, { card, pin: '1234' });
     expect(replay.kind).toBe('paid');
     expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
+  });
+
+  it('an unanswered pay stays sent through refusals the till gives before it looks up the client_ref', async () => {
+    till.dropNextAnswer = true;
+    const rec = start();
+    const first = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(first.kind).toBe('unknown');
+    // The card was charged; the phone never heard.
+    expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
+    // The next tap: the card link drops before the POST lands, and the till answers card_link_gone.
+    const deadLink = {
+      ...transport,
+      openLink: async (o: any) => {
+        (await transport.openLink(o)).close();
+        return { id: 'deadbeefdeadbeef', close() {} };
+      },
+    };
+    const gone = await T.createTillPays({ storage, transport: deadLink, settings }).pay(rec.id, { card, pin: '1234' });
+    expect(gone).toMatchObject({ kind: 'card', code: 'card_link_gone' });
+    expect(gone.rec).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
+    expect(pays.get(rec.id)).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
+    expect(() => pays.drop(rec.id)).toThrow(/kept/);
+    // And pay switched off at the till: still sent, the same client_ref (no new one).
+    till.payEnabled = false;
+    const off = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(off).toMatchObject({ kind: 'before', code: 'pay_disabled' });
+    expect(off.rec).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
+    expect(() => pays.drop(rec.id)).toThrow(/kept/);
+    // The third tap replays the pay the till holds: paid, with the one charge.
+    till.payEnabled = true;
+    const third = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(third.kind).toBe('paid');
+    expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
+    expect(new Set(till.log.filter((l) => l.path === '/v1/pay').map((l) => l.body.client_ref))).toEqual(new Set([rec.clientRef]));
+    expect(till.pays.filter((p) => p.client_ref === rec.clientRef)).toHaveLength(1);
+  });
+
+  it('a till whose fee cap is below the gateway fee: one new price, then no endless requote', async () => {
+    till.maxFeeCapMsat = 30_000;
+    till.gatewayFeeMsat = 40_500;
+    const rec = start();
+    const first = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(first).toMatchObject({ kind: 'requote', code: 'fee_reserve_too_low' });
+    expect(first.rec.maxFeeMsat).toBe(41_000);
+    // The till caps 41,000 at 30,000 and asks the same fee again: nothing new to ask for.
+    const second = await pays.pay(rec.id, { card, pin: '1234' });
+    expect(second).toMatchObject({ kind: 'before', code: 'fee_reserve_too_low' });
+    expect(second.rec).toMatchObject({ state: 'ready', maxFeeMsat: 41_000, priceMsat: first.rec.priceMsat });
+    expect(card.balanceMsat).toBe(20_000_000);
+  });
+
+  it('a payment made through one till is never sent to another', async () => {
+    till.next = ['pay_failed'];
+    const failed = pays.start({ engine: '', fundingId: 'fund_1', bolt11: invoice(5000), expiresAt: Date.now() + 600_000, amount: 5000, unit: 'sat', tillUrl: till.url });
+    expect((await pays.pay(failed.id, { card, pin: '1234' })).kind).toBe('pay_failed');
+    const fresh = pays.start({ engine: '', fundingId: 'fund_2', bolt11: invoice(100), expiresAt: Date.now() + 600_000, amount: 100, unit: 'sat', tillUrl: till.url });
+    settings.paired('https://other.example.org');
+    const before = till.log.length;
+    await expect(pays.pay(fresh.id, { card, pin: '1234' })).rejects.toMatchObject({ code: 'other_till' });
+    await expect(pays.check(failed.id)).rejects.toMatchObject({ code: 'other_till' });
+    await expect(pays.refund(failed.id, { card })).rejects.toMatchObject({ code: 'other_till' });
+    expect(till.log.length).toBe(before);
+    // Forgotten: no till at all.
+    settings.forget();
+    await expect(pays.check(failed.id)).rejects.toMatchObject({ code: 'other_till' });
+    // Back with its own till, the refund goes through.
+    settings.paired(till.url);
+    expect((await pays.refund(failed.id, { card })).kind).toBe('refunded');
+  });
+
+  it('an answer that cannot be stored after the request: not_stored_after, kept as sent, and the next tap finishes it', async () => {
+    // Storage fills up once the 'sent' write is done and the POST is on its way (the first one only).
+    let full = false;
+    let posts = 0;
+    const flaky = { getItem: storage.getItem, setItem: (k: string, v: string) => { if (full) throw new Error('full'); storage.setItem(k, v); } };
+    const tx = { ...transport, request: (r: any) => { if (r.path === '/v1/pay' && ++posts === 1) full = true; return transport.request(r); } };
+    const p5 = T.createTillPays({ storage: flaky, transport: tx, settings });
+    const rec = start();
+    await expect(p5.pay(rec.id, { card, pin: '1234' })).rejects.toMatchObject({ code: 'not_stored_after' });
+    expect(till.log.filter((l) => l.path === '/v1/pay')).toHaveLength(1);
+    expect(pays.get(rec.id).state).toBe('sent');
+    expect(() => pays.drop(rec.id)).toThrow(/kept/);
+    full = false;
+    expect((await p5.pay(rec.id, { card, pin: '1234' })).kind).toBe('paid');
+    expect(card.balanceMsat).toBe(20_000_000 - 5_027_000);
+  });
+
+  it('says whether the till margin is known: saved here, or seen in an answer', async () => {
+    const rec = start();
+    expect(rec.marginKnown).toBe(false);
+    settings.setMargin({ msat: 0, bps: 0 });
+    expect(pays.reprice(rec.id).marginKnown).toBe(true);
+    // The saved flag stays with the stored settings, and get() shows the margin alone.
+    expect(settings.get().margin).toEqual({ msat: 0, bps: 0 });
+    settings.paired(till.url);
+    expect(settings.marginKnown()).toBe(true);
+    // A new till starts unknown, and learns it from the till's first answer.
+    settings.paired('https://other.example.org');
+    settings.paired(till.url);
+    expect(settings.marginKnown()).toBe(false);
+    const next = start();
+    expect(next.marginKnown).toBe(false);
+    await pays.pay(next.id, { card, pin: '1234' });
+    expect(settings.marginKnown()).toBe(true);
+    expect(start().marginKnown).toBe(true);
   });
 
   it('learns the till margin from its answers, so the next price includes it', async () => {

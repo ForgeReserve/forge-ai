@@ -52,6 +52,20 @@ describe('the Tap a Fedimint card module', () => {
     for (const code of ['pin_required', 'no_card', 'busy', 'unknown_card', 'fee_reserve_too_low', 'invoice_expired', 'wrong_network', 'daily_cap', 'pay_disabled', 'lightning_unavailable', 'over_limit', 'invoice_in_use', 'unauthorized'])
       expect(M.wordsFor({ kind: 'before', code }, t), code).not.toBe(en['fund.fedimint.tillRefused']);
   });
+
+  it('a fee the till asks again, above its own cap, is said as such, never as a new price', () => {
+    expect(M.wordsFor({ kind: 'before', code: 'fee_reserve_too_low' }, t)).toBe('This till cannot pay this invoice now. Its Lightning fee is above its limit. Try again later.');
+  });
+
+  it('says what an error while paying means, and never that nothing was sent once it was', () => {
+    expect(M.thrownWords('not_stored', t)).toBe(en['fund.fedimint.notStored']);
+    // The request reached the till: the card may have paid.
+    expect(M.thrownWords('not_stored_after', t)).toBe(en['fund.fedimint.noAnswer']);
+    expect(M.thrownWords('not_stored_after', t)).not.toMatch(/Nothing was sent/);
+    expect(M.thrownWords('other_till', t, { till: 'https://till.example.org' })).toBe("This payment went through the till till.example.org. Scan that till's pay code again to finish it.");
+    expect(M.thrownWords('link', t)).toBe(en['fund.fedimint.unreachable']);
+    for (const k of ['cardPaysPlusMargin', 'splitPlusMargin', 'feeTooHigh', 'tillBusy', 'otherTill']) expect(en[`fund.fedimint.${k}`], k).toBeTruthy();
+  });
 });
 
 describe('the ForgeTill bridge', () => {

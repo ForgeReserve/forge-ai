@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  Object.assign(till, { next: [], requirePin: true, marginMsat: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true });
+  Object.assign(till, { next: [], requirePin: true, marginMsat: 0, gatewayFeeMsat: 1000, overpayMsat: 0, onOps: true, dropNextAnswer: false });
   till.log = [];
 });
 
@@ -217,8 +217,9 @@ describe('Tap a Fedimint card', () => {
     // The price: what reaches the funds, the most the card pays, and the till's part, before the tap.
     expect(await page.textContent('#fedYouGet')).toBe('You get $5.00.');
     const most = Math.ceil(rec.mostMsat / 1000).toLocaleString('en-US');
-    expect(await page.textContent('#fedCardPays')).toBe(`The card pays up to ${most} sat.`);
-    expect(await page.textContent('#fedSplit')).toBe(`${Math.ceil(rec.invoiceMsat / 1000).toLocaleString('en-US')} sat pays your funds. Up to ${Math.ceil(rec.tillMsat / 1000).toLocaleString('en-US')} sat goes to the till, for Lightning fees and its margin.`);
+    // A fresh pairing: the till's margin is not known yet, so the price says it may come on top.
+    expect(await page.textContent('#fedCardPays')).toBe(`The card pays ${most} sat, plus the till's margin if its owner set one.`);
+    expect(await page.textContent('#fedSplit')).toBe(`${Math.ceil(rec.invoiceMsat / 1000).toLocaleString('en-US')} sat pays your funds. Up to ${Math.ceil(rec.tillMsat / 1000).toLocaleString('en-US')} sat goes to the till for Lightning fees. Its margin is added if it has one.`);
     expect(await page.textContent('#fedPay')).toBe(`Pay ${most} sat with the card`);
     expect(await page.textContent('.fedimint-view')).not.toMatch(/null|undefined|NaN/);
 
@@ -281,6 +282,39 @@ describe('Tap a Fedimint card', () => {
     expect(till.log.filter((l) => l.method === 'GET').every((l) => l.path === `/v1/pay/${held.payId}?client_ref=${rec.clientRef}`)).toBe(true);
     expect(card.balanceMsat).toBe(50_000_000 - (rec.invoiceMsat + rec.maxFeeMsat));
     expect(await tillPays(page)).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('in the app: the price says "up to" only once the till margin is saved, and an unfinished payment holds the till', async () => {
+    till.dropNextAnswer = true;
+    const card = new FakeFedimintCard({ balanceMsat: 50_000_000 });
+    const { ctx, page, errors } = await appWithCard(card);
+    await pairAndPrice(page);
+    expect(await page.textContent('#fedCardPays')).toMatch(/plus the till's margin if its owner set one\.$/);
+    // Back to the amount, the margin as the till's owner set it, and the price again.
+    await page.click('#fedChangeAmount');
+    await page.waitForSelector('#fedTill');
+    await page.click('.till-margin summary');
+    await page.fill('#fedMarginSats', '0');
+    await page.fill('#fedMarginPercent', '0');
+    await page.click('#fedMarginSave');
+    await page.click('#fedGetPrice');
+    await page.waitForSelector('#fedPrice', { timeout: 20_000 });
+    const [rec] = await tillPays(page);
+    const most = Math.ceil(rec.mostMsat / 1000).toLocaleString('en-US');
+    expect(await page.textContent('#fedCardPays')).toBe(`The card pays up to ${most} sat.`);
+    expect(await page.textContent('#fedSplit')).toMatch(/goes to the till, for Lightning fees and its margin\.$/);
+    // The answer is lost on the way: the payment is kept as sent, and the till cannot be changed or forgotten.
+    await page.fill('#fedPin', '1234');
+    await page.click('#fedPay');
+    await page.waitForSelector('#fedHold');
+    await tap(page);
+    await page.waitForSelector('#fedTillBusy', { timeout: 20_000 });
+    expect(await page.textContent('#fedTillBusy')).toBe('A card payment through this till is not finished. Finish it first.');
+    expect(await page.isDisabled('#fedChangeTill')).toBe(true);
+    expect(await page.isDisabled('#fedForgetTill')).toBe(true);
+    expect((await tillPays(page))[0]).toMatchObject({ state: 'sent', till: till.url });
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

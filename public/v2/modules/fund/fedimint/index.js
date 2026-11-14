@@ -36,7 +36,9 @@ export function wordsFor(out, t) {
     case 'unknown_card':
       return t('fund.fedimint.unknownCard');
     case 'fee_reserve_too_low':
-      return t('fund.fedimint.requote');
+      // A larger fee the phone can ask comes back as a new price (kind 'requote'); this is the till
+      // asking the same fee again, above its own cap.
+      return t('fund.fedimint.feeTooHigh');
     case 'invoice_expired':
       return t('fund.fedimint.expired');
     case 'wrong_network':
@@ -57,6 +59,24 @@ export function wordsFor(out, t) {
       return t('fund.fedimint.auth');
     default:
       return out?.kind === 'card' ? t('fund.fedimint.cardRefused') : t('fund.fedimint.tillRefused');
+  }
+}
+
+/**
+ * The words for an error core/till.js threw while paying or giving back (TillError codes), for a
+ * payment rec. 'auth' is handled by pairing again.
+ */
+export function thrownWords(code, t, rec = null) {
+  switch (code) {
+    case 'not_stored':
+      return t('fund.fedimint.notStored');
+    case 'not_stored_after':
+      // The till has the request, and the card may have paid: the payment is kept as sent.
+      return t('fund.fedimint.noAnswer');
+    case 'other_till':
+      return t('fund.fedimint.otherTill', { till: tillLabel(rec?.till ?? '') });
+    default:
+      return t('fund.fedimint.unreachable');
   }
 }
 
@@ -177,6 +197,9 @@ export function create(inputs) {
       const tillBox = () => {
         const s = till.settings.get();
         if (!s) return null;
+        // A payment through this till that is not finished needs this till: its pay_id and client_ref
+        // mean nothing to another one.
+        const tied = pays.waiting().some((p) => p.till === s.url);
         const fixed = ui.el('input', { id: 'fedMarginSats', class: 'field-input', inputmode: 'numeric', autocomplete: 'off', value: String(Math.floor(s.margin.msat / 1000)) });
         const share = ui.el('input', { id: 'fedMarginPercent', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', value: String(s.margin.bps / 100) });
         const note = ui.msgLine();
@@ -211,14 +234,16 @@ export function create(inputs) {
             ),
             note,
           ),
+          tied ? ui.el('p', { class: 'note', id: 'fedTillBusy', text: t('fund.fedimint.tillBusy') }) : null,
           ui.el(
             'div',
             { class: 'row-btns' },
-            btn({ class: 'btn small', id: 'fedChangeTill', onclick: () => pairView() }, 'qr', t('fund.fedimint.changeTill')),
+            btn({ class: 'btn small', id: 'fedChangeTill', disabled: tied, onclick: () => pairView() }, 'qr', t('fund.fedimint.changeTill')),
             btn(
               {
                 class: 'btn small',
                 id: 'fedForgetTill',
+                disabled: tied,
                 onclick: async () => {
                   await till.forget();
                   till.settings.forget();
@@ -238,7 +263,11 @@ export function create(inputs) {
       const waitingList = () => {
         const list = pays.waiting().filter((p) => (p.engine ?? '') === (engine.base ?? ''));
         if (!list.length) return null;
+        const paired = till.settings.get()?.url ?? null;
         const row = (p) => {
+          // Made through another till than the paired one: only that till can finish it.
+          if (p.till && p.till !== paired)
+            return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state, 'data-other-till': '' }, ui.el('p', { text: thrownWords('other_till', t, p) }));
           const words = { sent: 'fund.fedimint.rowSent', undecided: 'fund.fedimint.rowUndecided', paid: 'fund.fedimint.rowPaid', pay_failed: 'fund.fedimint.rowFailed' }[p.state] ?? 'fund.fedimint.rowSent';
           const amount = p.state === 'pay_failed' ? format.units(sats(p.refundOwedMsat ?? p.receivedMsat ?? p.priceMsat), 'sat') : amountOf(p);
           const action =
@@ -271,7 +300,14 @@ export function create(inputs) {
             }
           }
         }
-        if (rec.payId && (rec.state === 'undecided' || rec.state === 'sent')) await pays.check(id);
+        if (rec.payId && (rec.state === 'undecided' || rec.state === 'sent')) {
+          try {
+            await pays.check(id);
+          } catch (e) {
+            // Another till is paired now: the row says which one the payment needs.
+            if (e?.code !== 'other_till') throw e;
+          }
+        }
         return pays.get(id);
       };
 
@@ -370,6 +406,9 @@ export function create(inputs) {
         rec = pays.reprice(rec.id) ?? rec;
         const pin = ui.el('input', { id: 'fedPin', class: 'field-input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '8', pattern: '[0-9]*' });
         const most = format.units(sats(rec.mostMsat), 'sat');
+        // Until the till's margin is known (saved here, or seen in its answers), the most shown may be
+        // below what the till charges: said so, never claimed as the most.
+        const known = rec.marginKnown === true;
         body.replaceChildren(
           ...kids(
             art(amountOf(rec)),
@@ -377,8 +416,8 @@ export function create(inputs) {
               'div',
               { class: 'card-preview', id: 'fedPrice' },
               ui.el('p', { class: 'card-get', id: 'fedYouGet', text: t('fund.fedimint.youGet', { amount: amountOf(rec) }) }),
-              ui.el('p', { class: 'till-most', id: 'fedCardPays', text: t('fund.fedimint.cardPays', { amount: most }) }),
-              ui.el('p', { class: 'note', id: 'fedSplit', text: t('fund.fedimint.split', { invoice: format.units(sats(rec.invoiceMsat), 'sat'), fee: format.units(sats(rec.tillMsat), 'sat') }) }),
+              ui.el('p', { class: 'till-most', id: 'fedCardPays', text: t(known ? 'fund.fedimint.cardPays' : 'fund.fedimint.cardPaysPlusMargin', { amount: most }) }),
+              ui.el('p', { class: 'note', id: 'fedSplit', text: t(known ? 'fund.fedimint.split' : 'fund.fedimint.splitPlusMargin', { invoice: format.units(sats(rec.invoiceMsat), 'sat'), fee: format.units(sats(rec.tillMsat), 'sat') }) }),
               ui.el('p', { class: 'note', text: t('fund.fedimint.feeKept') }),
             ),
             ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPin', class: 'label', text: t('fund.fedimint.pinLabel') }), pin),
@@ -467,8 +506,13 @@ export function create(inputs) {
           out = await pays.pay(id, { card, pin });
         } catch (e) {
           if (e?.code === 'auth') return pairView(t('fund.fedimint.auth'));
-          if (e?.code === 'not_stored') return priceView(rec0, t('fund.fedimint.notStored'));
-          return priceView(pays.get(id) ?? rec0, t('fund.fedimint.unreachable'));
+          if (e?.code === 'not_stored') return priceView(rec0, thrownWords(e.code, t, rec0));
+          if (e?.code === 'not_stored_after' || e?.code === 'other_till') {
+            // Kept on the phone (as sent, or for its own till): listed with the payments not finished.
+            home();
+            return msg.set(thrownWords(e.code, t, rec0), 'err');
+          }
+          return priceView(pays.get(id) ?? rec0, thrownWords(e?.code, t, rec0));
         }
         const rec = out.rec;
         // The till's margin was more than the phone knew: said plainly; the next price includes it.
@@ -492,7 +536,8 @@ export function create(inputs) {
             home();
             return msg.set(t('fund.fedimint.expired'), 'err');
           case 'before':
-            if (NEW_INVOICE.has(out.code)) {
+            // A payment kept as sent (an earlier request got no answer) is never dropped here.
+            if (NEW_INVOICE.has(out.code) && rec.state === 'ready') {
               pays.drop(rec.id);
               home();
               return msg.set(wordsFor(out, t), 'err');
@@ -573,7 +618,7 @@ export function create(inputs) {
           out = await pays.refund(id, { card });
         } catch (e) {
           if (e?.code === 'auth') return pairView(t('fund.fedimint.auth'));
-          return failedView(pays.get(id) ?? rec0, t('fund.fedimint.unreachable'));
+          return failedView(pays.get(id) ?? rec0, thrownWords(e?.code, t, rec0));
         }
         const rec = out.rec;
         switch (out.kind) {

@@ -185,6 +185,9 @@ const BEFORE = new Set(['bad_request', 'bad_invoice', 'wrong_network', 'invoice_
 const CARD = new Set(['wrong_pin', 'pin_blocked', 'insufficient', 'no_card', 'card_link_gone', 'not_charged', 'card_error', 'card_limit', 'declined', 'busy', 'recovering', 'card_changed', 'unknown_card', 'no_exact_plan', 'ops_unreachable', 'ops_refused', 'ops_not_connected']);
 // A card that cannot pay at this till, whatever is tried.
 const CARD_FINAL = new Set(['pin_blocked', 'unknown_card']);
+// Answered before the till looks up the client_ref (fedimintcard-pay pay.rs, pay and pay_on): such an
+// answer says nothing about a pay an earlier, unanswered POST may have started.
+const PRE_LOOKUP = new Set(['card_link_required', 'card_link_gone', 'pay_disabled', 'bad_request', 'bad_invoice', 'lightning_unavailable']);
 
 const UNSETTLED = new Set(['charging', 'charged', 'paying']);
 
@@ -301,35 +304,47 @@ export function cardRelay(card) {
 /**
  * The paired till as the web app keeps it: its address (the token is with the app), its margin as
  * the till's owner set it (0 unless told otherwise, the till's own default), and the margins the till
- * took before, so the price shown is never below what it charges.
+ * took before, so the price shown is never below what it charges. Whether the margin is known (the
+ * person entered it, or the till's answers showed it) is kept beside it: until then the price shown
+ * says the till's margin may come on top.
  */
 export function createTillSettings(storage) {
-  const read = () => {
+  // The stored form: the margin carries set: true once the person saved it.
+  const raw = () => {
     try {
       const v = JSON.parse(storage.getItem(SETTINGS) ?? 'null');
-      return v && typeof v.url === 'string' ? { url: v.url, margin: { msat: v.margin?.msat ?? 0, bps: v.margin?.bps ?? 0 }, seen: Array.isArray(v.seen) ? v.seen : [] } : null;
+      return v && typeof v.url === 'string' ? { url: v.url, margin: { msat: v.margin?.msat ?? 0, bps: v.margin?.bps ?? 0, ...(v.margin?.set === true ? { set: true } : {}) }, seen: Array.isArray(v.seen) ? v.seen : [] } : null;
     } catch {
       return null;
     }
   };
+  const read = () => {
+    const v = raw();
+    return v ? { url: v.url, margin: { msat: v.margin.msat, bps: v.margin.bps }, seen: v.seen } : null;
+  };
   const write = (v) => storage.setItem(SETTINGS, JSON.stringify(v));
   return {
     get: read,
+    /** True once the margin was saved here, or the till's answers showed one (even 0). */
+    marginKnown() {
+      const v = raw();
+      return !!v && (v.margin.set === true || v.seen.length > 0);
+    },
     /** A new pairing: the address only; a new till starts with no margin seen. */
     paired(url) {
-      const old = read();
+      const old = raw();
       write(old?.url === url ? old : { url, margin: { msat: 0, bps: 0 }, seen: [] });
     },
     forget: () => storage.setItem(SETTINGS, 'null'),
     setMargin(margin) {
-      const v = read();
+      const v = raw();
       if (!v) return;
-      v.margin = { msat: Math.max(0, Math.floor(Number(margin?.msat) || 0)), bps: Math.max(0, Math.floor(Number(margin?.bps) || 0)) };
+      v.margin = { msat: Math.max(0, Math.floor(Number(margin?.msat) || 0)), bps: Math.max(0, Math.floor(Number(margin?.bps) || 0)), set: true };
       write(v);
     },
     /** Remembers the margin the till took on an invoice (the five largest by share are kept). */
     learn(invoiceMsat, marginMsat) {
-      const v = read();
+      const v = raw();
       if (!v || !(invoiceMsat > 0) || !(marginMsat >= 0)) return;
       const seen = [...v.seen.filter((s) => s.invoiceMsat !== invoiceMsat || s.marginMsat !== marginMsat), { invoiceMsat, marginMsat }];
       seen.sort((a, b) => b.marginMsat / b.invoiceMsat - a.marginMsat / a.invoiceMsat || b.marginMsat - a.marginMsat);
@@ -401,7 +416,14 @@ export function createTillPays({ storage, transport, settings = null, now = () =
       ['refundDustMsat', 'refund_dust_msat'],
     ])
       if (Number.isSafeInteger(b[f])) rec[k] = b[f];
-    if (Number.isSafeInteger(b.margin_msat) && Number.isSafeInteger(b.invoice_msat)) settings?.learn(b.invoice_msat, b.margin_msat);
+    if (Number.isSafeInteger(b.margin_msat) && Number.isSafeInteger(b.invoice_msat)) {
+      // Best effort: a margin that cannot be stored never stands in the way of the payment's own record.
+      try {
+        settings?.learn(b.invoice_msat, b.margin_msat);
+      } catch {
+        /* learned next time */
+      }
+    }
     rec.detail = typeof b.detail === 'string' ? b.detail.slice(0, 300) : null;
   };
 
@@ -416,11 +438,29 @@ export function createTillPays({ storage, transport, settings = null, now = () =
     }
   }
 
-  /** Applies an answer about the pay (POST /v1/pay or GET /v1/pay/{id}). Returns {kind, code, ...}. */
-  function applyPay(rec, r) {
+  /**
+   * Applies an answer about the pay (POST /v1/pay or GET /v1/pay/{id}). Returns {kind, code, ...}.
+   * wasSent: an earlier POST for this payment got no answer, so the card may have paid with it.
+   */
+  function applyPay(rec, r, { wasSent = false } = {}) {
     const out = readPay(r);
     if (r) take(rec, r.body);
     rec.code = out.code;
+    // A refusal after an unanswered POST proves nothing moved only when it carries the till's record
+    // of this client_ref (its pay_id, or not_charged). One the till gives before it looks the
+    // client_ref up (a closed card link, pay switched off, ...) does not: the payment stays sent,
+    // with the same client_ref, and the next tap sends the very same request.
+    if (wasSent && (out.kind === 'card' || out.kind === 'before')) {
+      const b = r?.body && typeof r.body === 'object' ? r.body : {};
+      const known = Number.isSafeInteger(b.pay_id) || b.state === 'not_charged';
+      // A conflict names a pay the till holds for this client_ref: never let go of that client_ref.
+      if (PRE_LOOKUP.has(out.code) || !known || out.code === 'conflict') {
+        rec.state = 'sent';
+        if (out.kind === 'card') out.triesLeft = out.code === 'wrong_pin' ? triesLeft(rec.detail) : null;
+        save(rec);
+        return { ...out, rec };
+      }
+    }
     switch (out.kind) {
       case 'paid':
       case 'undecided':
@@ -438,10 +478,15 @@ export function createTillPays({ storage, transport, settings = null, now = () =
       case 'before':
         rec.state = 'ready';
         rec.clientRef = newRef();
+        // A new price only when the till asks more than was sent. The same fee again means the till's
+        // own cap is below the gateway's fee: this till cannot pay the invoice now (PAY.md).
         if (out.code === 'fee_reserve_too_low' && Number.isSafeInteger(r.body?.gateway_fee_msat)) {
-          rec.maxFeeMsat = ceilSat(r.body.gateway_fee_msat);
-          Object.assign(rec, priceOf(rec));
-          out.kind = 'requote';
+          const want = ceilSat(r.body.gateway_fee_msat);
+          if (want > rec.maxFeeMsat) {
+            rec.maxFeeMsat = want;
+            Object.assign(rec, priceOf(rec));
+            out.kind = 'requote';
+          }
         }
         break;
       case 'auth':
@@ -458,7 +503,12 @@ export function createTillPays({ storage, transport, settings = null, now = () =
 
   const priceOf = (rec) => {
     const q = quote({ invoiceMsat: rec.invoiceMsat, maxFeeMsat: rec.maxFeeMsat, settings: settings?.get() ?? undefined });
-    return { priceMsat: q.priceMsat, mostMsat: q.mostMsat, tillMsat: q.tillMsat, marginMsat: q.marginMsat };
+    return { priceMsat: q.priceMsat, mostMsat: q.mostMsat, tillMsat: q.tillMsat, marginMsat: q.marginMsat, marginKnown: !!settings?.marginKnown?.() };
+  };
+
+  /** A payment made through another till than the one paired now is never sent to this one. */
+  const sameTill = (rec) => {
+    if (rec.till && settings?.get()?.url !== rec.till) throw new TillError('other_till', 'This payment went through another till.');
   };
 
   return {
@@ -491,14 +541,19 @@ export function createTillPays({ storage, transport, settings = null, now = () =
      * Pays with the card in the field: opens the card link, then POST /v1/pay with it. pin is the
      * holder's, for this tap only. Returns {kind, code, triesLeft?, rec} (readPay's kinds, plus
      * 'requote' when the till asks a larger fee reserve: the new price is shown before the next tap,
-     * and 'expired' when the invoice has too little time left: a new one is needed).
+     * and 'expired' when the invoice has too little time left: a new one is needed). Throws
+     * TillError 'not_stored' when the payment could not be stored before the request (nothing was
+     * sent), 'not_stored_after' when the till's answer could not be stored (the request was sent: the
+     * payment stays 'sent'), and 'other_till' for a payment made through another till.
      */
     async pay(id, { card, pin = '' }) {
       const rec = get(id);
       if (!rec) throw new TillError('unknown', 'No such payment.');
       if (rec.state !== 'ready' && rec.state !== 'sent') throw new TillError('not_ready', `This payment is ${rec.state}.`);
+      sameTill(rec);
       if (rec.state === 'ready' && rec.expiresAt && rec.expiresAt - now() < MIN_LEFT_MS) return { kind: 'expired', code: 'invoice_expired', rec };
       const link = await openLink(card);
+      const wasSent = rec.state === 'sent';
       let r;
       try {
         // Saved before the till hears of it: from here the card may pay, so the payment stays.
@@ -511,12 +566,23 @@ export function createTillPays({ storage, transport, settings = null, now = () =
       } finally {
         link.close();
       }
-      return applyPay(rec, r);
+      try {
+        return applyPay(rec, r, { wasSent });
+      } catch (e) {
+        // The till has the request and may have charged the card; the payment on the phone is still
+        // 'sent', so the next tap sends it again.
+        if (e?.code === 'not_stored') throw new TillError('not_stored_after', 'This phone could not store the till answer.');
+        throw e;
+      }
     },
 
-    /** Asks the till where the pay stands (no card needed). Only once the till has given its id. */
+    /**
+     * Asks the till where the pay stands (no card needed). Only once the till has given its id.
+     * Throws TillError('other_till') when the payment went through another till than the paired one.
+     */
     async check(id) {
       const rec = get(id);
+      if (rec) sameTill(rec);
       if (!rec?.payId || rec.state === 'ready') return { kind: 'unknown', code: 'no_pay_id', rec };
       const r = await ask('GET', `/v1/pay/${rec.payId}?client_ref=${encodeURIComponent(rec.clientRef)}`);
       if (!r || r.status === 404) return { kind: 'unknown', code: r ? 'unknown_pay' : 'no_answer', rec };
@@ -532,6 +598,7 @@ export function createTillPays({ storage, transport, settings = null, now = () =
     async refund(id, { card }) {
       const rec = get(id);
       if (!rec || rec.state !== 'pay_failed' || !rec.payId) throw new TillError('not_failed', 'This payment has nothing to give back.');
+      sameTill(rec);
       const link = await openLink(card);
       let r;
       try {
