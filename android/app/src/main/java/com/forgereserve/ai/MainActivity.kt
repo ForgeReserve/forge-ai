@@ -9,6 +9,7 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(ShareInPlugin::class.java)
         registerPlugin(SharePlugin::class.java)
+        registerPlugin(NfcPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The back button walks back through the app's screens (they are web history), then leaves.
         onBackPressedDispatcher.addCallback(
