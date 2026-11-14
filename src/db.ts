@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   balance_msub INTEGER NOT NULL DEFAULT 0 CHECK (balance_msub >= 0),
   invite_id TEXT,
   created_at INTEGER NOT NULL,
-  frozen_at INTEGER                 -- set by the operator: spending blocked, refunds allowed
+  frozen_at INTEGER,                -- set by the operator: spending blocked, refunds allowed
+  free INTEGER NOT NULL DEFAULT 0   -- 1: a free balance, funded with credits (docs/FREE-TIER.md); never money
 );
 
 CREATE TABLE IF NOT EXISTS reservations (
@@ -185,6 +186,19 @@ CREATE TABLE IF NOT EXISTS revenue_exports (
 
 CREATE INDEX IF NOT EXISTS ledger_account ON ledger(account_id);
 
+-- Credit mint keysets and when the gateway first saw each one: a keyset is taken for
+-- FORGE_CREDIT_KEYSET_DAYS from then (or until the mint's own final_expiry, if sooner).
+CREATE TABLE IF NOT EXISTS credit_keysets (
+  keyset_id TEXT PRIMARY KEY,
+  first_seen INTEGER NOT NULL
+);
+
+-- The faucet's count of vouchers given out per UTC day. Only the count: no address, no time of a claim.
+CREATE TABLE IF NOT EXISTS faucet_days (
+  day TEXT PRIMARY KEY,
+  claimed INTEGER NOT NULL DEFAULT 0
+);
+
 -- Metering log. No prompt or completion content, ever.
 CREATE TABLE IF NOT EXISTS requests (
   id TEXT PRIMARY KEY,
@@ -224,6 +238,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['requests', 'supplier_cost_nusd', 'INTEGER'],
   ['requests', 'cost_source', 'TEXT'],
   ['fundings', 'f_unlisted', 'INTEGER NOT NULL DEFAULT 0'],
+  ['accounts', 'free', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 export type DB = DatabaseSync;

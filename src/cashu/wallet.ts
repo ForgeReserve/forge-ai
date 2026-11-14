@@ -17,6 +17,7 @@ import {
   Wallet,
 } from '@cashu/cashu-ts';
 import { normalizeMintUrl, type Unit } from '../config.ts';
+import type { CreditKeysets } from '../credits.ts';
 import { type DB, now, tx } from '../db.ts';
 import { sha256 } from '../ledger.ts';
 import { errText, log } from '../log.ts';
@@ -43,6 +44,8 @@ export interface InspectedToken {
   amount: number;
   hash: string;
   proofs: Proof[];
+  /** From the credit mint: free questions, never money (docs/FREE-TIER.md). */
+  credit: boolean;
 }
 
 export interface ReceiveOptions {
@@ -106,6 +109,10 @@ export interface WalletOptions {
   units: Unit[];
   maxTokenBytes: number;
   seed?: Uint8Array;
+  /** The credit mint (free tier): its eCash is taken as credits, in creditUnit, while its keyset has not expired. */
+  creditMint?: string;
+  creditUnit?: Unit;
+  creditKeysets?: CreditKeysets;
   /** Test-only fault injection: throw after the mint swap, before the DB write. */
   faults?: { afterReceiveSwap?: boolean; afterSendSwap?: boolean; noReplayOnRecovery?: boolean; noRestoreOnRecovery?: boolean };
 }
@@ -172,7 +179,7 @@ export class GatewayWallet {
 
   constructor(db: DB, opts: WalletOptions) {
     this.db = db;
-    this.opts = { ...opts, trustedMints: opts.trustedMints.map(normalizeMintUrl) };
+    this.opts = { ...opts, trustedMints: opts.trustedMints.map(normalizeMintUrl), creditMint: opts.creditMint ? normalizeMintUrl(opts.creditMint) : undefined };
     this.seed = opts.seed ?? this.loadOrCreateSeed();
   }
 
@@ -192,6 +199,15 @@ export class GatewayWallet {
     return this.opts.trustedMints;
   }
 
+  /** True for the credit mint: its eCash is credits, which pay free questions and nothing else. */
+  isCredit(mint: string): boolean {
+    return !!this.opts.creditMint && normalizeMintUrl(mint) === this.opts.creditMint;
+  }
+
+  get creditMint(): string | undefined {
+    return this.opts.creditMint;
+  }
+
   async wallet(mint: string, unit: Unit): Promise<Wallet> {
     const m = normalizeMintUrl(mint);
     const key = `${m}|${unit}`;
@@ -200,6 +216,8 @@ export class GatewayWallet {
       p = (async () => {
         const w = new Wallet(m, { unit, bip39seed: this.seed, counterSource: new SqliteCounterSource(this.db, m) });
         await w.loadMint();
+        // Every credit keyset is dated from the first time the gateway sees the mint list it.
+        if (this.isCredit(m)) this.opts.creditKeysets?.note(w.keyChain.getKeysets().map((k) => k.id));
         return w;
       })();
       p.catch(() => this.wallets.delete(key));
@@ -222,9 +240,10 @@ export class GatewayWallet {
       throw new PaymentError('invalid_token', 'could not decode token');
     }
     const mint = normalizeMintUrl(meta.mint);
-    if (!opts.foreign && !this.isTrusted(mint)) throw new PaymentError('untrusted_mint', `mint not accepted: ${mint}. Accepted: ${this.trustedMints.join(', ')}`);
+    const credit = !opts.foreign && this.isCredit(mint);
+    if (!opts.foreign && !credit && !this.isTrusted(mint)) throw new PaymentError('untrusted_mint', `mint not accepted: ${mint}. Accepted: ${this.trustedMints.join(', ')}`);
     const unit = (meta.unit ?? 'sat') as Unit;
-    if (opts.foreign ? unit !== 'sat' && unit !== 'usd' : !this.opts.units.includes(unit)) throw new PaymentError('wrong_unit', `unit not accepted: ${unit}`);
+    if (credit ? unit !== this.opts.creditUnit : opts.foreign ? unit !== 'sat' && unit !== 'usd' : !this.opts.units.includes(unit)) throw new PaymentError('wrong_unit', `unit not accepted: ${unit}`);
     if (expectUnit && unit !== expectUnit) throw new PaymentError('wrong_unit', `expected unit ${expectUnit}, got ${unit}`);
     let w: Wallet;
     try {
@@ -240,12 +259,15 @@ export class GatewayWallet {
     }
     if (!proofs.length) throw new PaymentError('invalid_token', 'empty token');
     for (const p of proofs) {
+      let ks;
       try {
-        const ks = w.getKeyset(p.id);
+        ks = w.getKeyset(p.id);
         if (ks.unit !== unit) throw new Error('unit');
       } catch {
         throw new PaymentError('wrong_unit', 'token proofs are not from this mint/unit keyset');
       }
+      // Credits from a keyset past its expiry are not taken (the keyset was retired by rotation).
+      if (credit && this.opts.creditKeysets?.expired(p.id, ks.expiry)) throw new PaymentError('credits_expired', 'these free questions have expired');
     }
     const hash = sha256(
       proofs
@@ -254,7 +276,7 @@ export class GatewayWallet {
         .join('|'),
     );
     const fees = w.getFeesForProofs(proofs).toNumber();
-    return { mint, unit, amount: sumProofs(proofs) - fees, hash, proofs };
+    return { mint, unit, amount: sumProofs(proofs) - fees, hash, proofs, credit };
   }
 
   /**

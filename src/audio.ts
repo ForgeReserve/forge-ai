@@ -123,6 +123,8 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
     const key = bearer(c);
     const a = key ? ledger.findByKey(key) : undefined;
     if (!a) throw new LedgerError('invalid_key', 'audio is paid from a balance: send Authorization: Bearer sk-forge-...', 401);
+    // Free questions (credits) pay for typed questions on the free model list only (docs/FREE-TIER.md).
+    if (a.free) throw new LedgerError('not_free_model', 'free questions do not cover speech; use a paid balance', 403);
     return a;
   };
 

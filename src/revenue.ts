@@ -6,6 +6,8 @@
  *
  * Owed payouts include every unfinished change, refund and export, so an export in flight is
  * never counted twice. Other-mint eCash (held aside for other-mint fundings) is never sweepable.
+ * Credits (the credit mint's eCash, docs/FREE-TIER.md) are not money: they are left out of every
+ * figure here, and free balances are not customer balances.
  */
 import { randomUUID } from 'node:crypto';
 import type { GatewayWallet } from './cashu/wallet.ts';
@@ -57,10 +59,15 @@ export class ExportError extends Error {
 }
 
 export function holdings(d: RevenueDeps): Holding[] {
-  const owedRows = d.db
-    .prepare("SELECT mint, unit, SUM(amount) AS owed FROM outgoing WHERE status IN ('owed', 'reserved', 'prepared') GROUP BY mint, unit")
-    .all() as Array<{ mint: string; unit: string; owed: number }>;
-  const rows: Holding[] = d.wallet.holdings().map((h) => ({ ...h, trusted: d.wallet.isTrusted(h.mint) }));
+  const owedRows = (
+    d.db
+      .prepare("SELECT mint, unit, SUM(amount) AS owed FROM outgoing WHERE status IN ('owed', 'reserved', 'prepared') GROUP BY mint, unit")
+      .all() as Array<{ mint: string; unit: string; owed: number }>
+  ).filter((o) => !d.wallet.isCredit(o.mint));
+  const rows: Holding[] = d.wallet
+    .holdings()
+    .filter((h) => !d.wallet.isCredit(h.mint))
+    .map((h) => ({ ...h, trusted: d.wallet.isTrusted(h.mint) }));
   // A payout owed at a mint where no proof row exists yet still counts.
   for (const o of owedRows) {
     if (!rows.some((r) => r.mint === o.mint && r.unit === o.unit)) {
@@ -78,7 +85,7 @@ export function revenue(d: RevenueDeps, unit: Unit): Revenue {
   const liabilitiesMsub = d.ledger.liabilities()[unit] ?? 0;
   const liabilities = msubToUnitsCeil(liabilitiesMsub);
   const reserved = d.db
-    .prepare("SELECT COALESCE(SUM(r.amount_msub), 0) AS s FROM reservations r JOIN accounts a ON a.id = r.account_id WHERE r.status = 'active' AND a.unit = ?")
+    .prepare("SELECT COALESCE(SUM(r.amount_msub), 0) AS s FROM reservations r JOIN accounts a ON a.id = r.account_id WHERE r.status = 'active' AND a.unit = ? AND a.free = 0")
     .get(unit) as { s: number };
   return {
     unit,

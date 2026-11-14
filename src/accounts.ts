@@ -17,21 +17,33 @@ export interface OpenedAccount {
  * Finds the balance for a bearer key, or opens a new one. Shared by every funding method so the
  * invite rule is the same everywhere: a new balance needs an open invite while invite-only, and
  * redeeming it binds the invite to the balance. Only a SHA-256 of the key is stored.
+ *
+ * free: the funding is credits (docs/FREE-TIER.md). A balance is free or paid for life: credits never
+ * go onto a paid balance and money never goes onto a free one, so neither can turn into the other.
+ * A free balance needs no invite: it can only ever hold free questions.
  */
 export function openAccount(
   d: { db: DB; ledger: Ledger; invites: Invites; inviteOnly: boolean },
-  p: { key?: string; invite?: string; unit: Unit },
+  p: { key?: string; invite?: string; unit: Unit; free?: boolean },
 ): OpenedAccount {
   const { db, ledger, invites } = d;
+  const free = !!p.free;
   if (p.key) {
     const a = ledger.findByKey(p.key);
     if (a) {
+      if (!!a.free !== free) {
+        throw new LedgerError(
+          'wrong_balance',
+          a.free ? 'this is a free balance: it takes only free questions (credits), never money' : 'free questions (credits) go on a free balance of their own, never on a paid one',
+          409,
+        );
+      }
       if (a.unit !== p.unit) throw new LedgerError('wrong_unit', `this balance is in ${a.unit}; this funding is in ${p.unit}`);
       return { account: a, created: false };
     }
     if (!isApiKeyShape(p.key)) throw new LedgerError('invalid_key', 'unknown balance key', 401);
   }
-  if (d.inviteOnly) {
+  if (d.inviteOnly && !free) {
     const inv = p.invite ? invites.lookup(p.invite) : undefined;
     if (!inv) throw new LedgerError('invite_required', 'an invite code is required to open a balance', 403);
     if (inv.status === 'redeemed') throw new LedgerError('invite_used', 'invite code was already redeemed', 403);
@@ -39,8 +51,8 @@ export function openAccount(
   }
   const key = p.key ?? newApiKey();
   const account = tx(db, () => {
-    const a = ledger.createAccountRaw(key, p.unit, null);
-    if (d.inviteOnly) {
+    const a = ledger.createAccountRaw(key, p.unit, null, free);
+    if (d.inviteOnly && !free) {
       const inviteId = invites.redeemRaw(p.invite!, a.id);
       db.prepare('UPDATE accounts SET invite_id = ? WHERE id = ?').run(inviteId, a.id);
     }
