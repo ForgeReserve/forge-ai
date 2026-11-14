@@ -31,6 +31,13 @@ describe('the Tap a card module', () => {
     expect(en['fund.card.name']).toBe('Tap a card');
   });
 
+  it('is listed everywhere, but usable (and so in How you pay) only where there is a reader', () => {
+    const web = M.create({ t, nfc: ADAPTERS.adapters.nfc });
+    expect(web.available()).toBe(true);
+    expect(web.usable()).toBe(false);
+    expect(M.create({ t, nfc: { supported: () => true } }).usable()).toBe(true);
+  });
+
   it('decides where the eCash goes before the card signs', () => {
     expect(M.routeFor({ trusted: true }, { unit: 'sat', units: ['usd', 'sat'] })).toBe('topup');
     // A dollar balance cannot hold sats from the engine's own mint.

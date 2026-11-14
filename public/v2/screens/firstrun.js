@@ -113,8 +113,9 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     );
     let drawn = '';
     const update = () => {
-      // The fund modules usable on this engine: the engine's methods load after the first paint.
-      const ways = payWays(registry.list('fund').filter((x) => x.instance.available(S.methods)).map((x) => x.instance.id));
+      // The fund modules usable on this engine: the engine's methods load after the first paint. A module
+      // whose row is listed but cannot be used on this phone (a card on the website) says so with usable().
+      const ways = payWays(registry.list('fund').filter((x) => x.instance.available(S.methods) && x.instance.usable?.() !== false).map((x) => x.instance.id));
       const k = ways.map((w) => w.id).join(',');
       if (k === drawn && grid.childElementCount) return;
       drawn = k;

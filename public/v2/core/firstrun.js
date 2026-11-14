@@ -43,8 +43,8 @@ export const shouldShow = ({ seen, route }) => !seen && route === 'home';
 /**
  * The ways to pay that How you pay shows, as icons, in this order. A way is shown only when a fund
  * module for it is loaded and usable on this engine, so the screen never promises what is not there.
- * `free` and `card` come with later slices (the free questions faucet, the card taps); their rows
- * appear here once a fund module with that id is loaded.
+ * `card` shows only where a card can be read (the Android app): its module says usable() false on
+ * the website.
  */
 export const PAY_WAYS = [
   { id: 'note', icon: 'qr', key: 'intro.pay.note' },

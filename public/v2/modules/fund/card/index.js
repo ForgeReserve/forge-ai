@@ -78,7 +78,10 @@ export function create(inputs) {
     id: 'card',
     group: 'unlinked',
     icon: 'card',
+    // Listed everywhere: on the website the row says cards need the app. Usable only where there is a
+    // reader, so How you pay shows a card only in the app.
     available: () => true,
+    usable: () => !!nfc?.supported?.(),
     view({ done, open }) {
       const msg = ui.msgLine();
       const body = ui.el('div', { class: 'scroll fund-body' });
