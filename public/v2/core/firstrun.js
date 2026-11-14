@@ -16,15 +16,23 @@ export const SEEN_KEY = 'forge2.firstRun';
 export const SEEN_VALUE = 'done';
 
 /**
- * What Listen reads on each step: its heading and its one sentence, the same words on every phone. The
+ * What Listen reads: each step's heading and its lead, the same words on every phone, one recorded clip
+ * each. Private only's lead says what the switch is set to, so it has a clip for Off as well. The
  * recorded clips (public/v2/voice/en/, scripts/record-voice) are made from exactly these strings.
  */
 export const SPOKEN = {
   welcome: ['intro.welcome.title', 'intro.welcome.lead'],
   pay: ['intro.pay.title', 'intro.pay.lead'],
   limits: ['intro.limits.title', 'intro.limits.lead'],
-  private: ['intro.private.title', 'intro.private.lead'],
+  private: ['intro.private.title', 'intro.private.leadOn'],
+  'private-off': ['intro.private.title', 'intro.private.leadOff'],
 };
+
+/** The clip a step reads, given whether Private only is on: {clip, keys}. */
+export function spokenFor(step, privateOn = true) {
+  const clip = stepOf(step) === 'private' && !privateOn ? 'private-off' : stepOf(step);
+  return { clip, keys: SPOKEN[clip] };
+}
 
 /** The step for an id: an unknown one is the first step. */
 export const stepOf = (id) => (STEPS.includes(id) ? id : STEPS[0]);

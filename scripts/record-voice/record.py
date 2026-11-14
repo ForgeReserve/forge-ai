@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Records the first run's Listen clips with Kokoro (voice Emma, bf_emma, British English), offline.
 
-One clip per first-run step: the step's heading and its one sentence, exactly the strings Listen reads
-(public/v2/core/firstrun.js SPOKEN, text from public/v2/strings/en.js, read through node so the words are
-the app's own). Writes public/v2/voice/en/<step>.ogg (Opus) and manifest.json with a SHA-256 of each
-clip's source text, which test/unit/v2/voice-clips.test.ts checks, so a copy edit cannot ship a stale
-clip. No API key and no network service: the model runs on this computer. The model, the voice and the
-config are downloaded once from Hugging Face at pinned revisions and checked against SHA-256 hashes.
+One clip per entry of public/v2/core/firstrun.js SPOKEN (each first-run step's heading and lead, and
+Private only's lead when it is Off): exactly the strings Listen reads, text from public/v2/strings/en.js,
+read through node so the words are the app's own. Writes public/v2/voice/en/<clip>.ogg (Opus) and
+manifest.json with a SHA-256 of each clip's source text, which test/unit/v2/voice-clips.test.ts checks,
+so a copy edit cannot ship a stale clip. No API key and no network service: the model runs on this
+computer. The model, the voice and the config are downloaded once from Hugging Face at pinned
+revisions and checked against SHA-256 hashes.
 
 Modelled on flash-mobile's scripts/voice-audition/generate.py (same model export, revision and hashes).
 Setup and run, from the repo root (the venv and the model cache sit in .tmp/, which git ignores):
@@ -45,8 +46,8 @@ SPEED = 0.9
 # The first run's spoken strings, read from the app's own modules.
 READ_STRINGS = """
 const strings = (await import(process.argv[1] + '/public/v2/strings/en.js')).default;
-const { SPOKEN, STEPS } = await import(process.argv[1] + '/public/v2/core/firstrun.js');
-console.log(JSON.stringify(STEPS.map((step) => ({ step, keys: SPOKEN[step], pieces: SPOKEN[step].map((k) => strings[k]) }))));
+const { SPOKEN } = await import(process.argv[1] + '/public/v2/core/firstrun.js');
+console.log(JSON.stringify(Object.keys(SPOKEN).map((step) => ({ step, keys: SPOKEN[step], pieces: SPOKEN[step].map((k) => strings[k]) }))));
 """
 
 

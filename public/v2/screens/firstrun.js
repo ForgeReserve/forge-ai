@@ -1,39 +1,62 @@
-// The first run (DWelcome, DHowPay, DLimits, DPrivateOnly), one step per screen: Welcome, How you pay,
-// What it can and cannot hide, Private only, then the home. Every step can be skipped, and the whole
-// guide is under More. Built from the canvas tokens: the Listen chip top right, a plain Back top left
-// from step 2, the primary button and "Step n of 4" at the foot.
-// The pure rules (steps, when it shows, which ways to pay) are in core/firstrun.js.
-import { nextStep, payWays, prevStep, SPOKEN, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
+// The first run (C-Welcome, C-Pay, C-Limits, C-Private, approved 2026-11-14), one step per screen:
+// Welcome, How you pay, What it hides, Private only, then the home. Every step can be skipped, and the
+// whole guide is under More. Always on the dark Night ground, whatever the look: it is its own screen.
+// Each step is the same frame: Listen, the step dots and Skip at the top; a 300 px hero whose two rings
+// light a quarter more each step; a heading and its lead; the round Next button; one secondary link.
+// The detail behind Learn more and See the full list opens in a sheet over the step.
+// The pure rules (steps, when it shows, which ways to pay, what Listen reads) are in core/firstrun.js.
+import { nextStep, payWays, spokenFor, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
 import { el, icon } from '../core/ui.js';
+import { ART, LIT, PRIVATE_ART, RING } from './firstrun-art.js';
+
+const NIGHT = '#0B0D10';
+
+// The design's own icons (24 px grid), static markup from this file only.
+const SVG = {
+  listen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>',
+  next: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
+  start: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>',
+  ticket: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V7a1 1 0 0 1 1-1z"></path><path d="M14.5 7.5v1.5M14.5 11.25v1.5M14.5 15v1.5"></path></svg>',
+  info: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5"></path><circle cx="12" cy="7.8" r="0.6" fill="currentColor"></circle></svg>',
+  list: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><circle cx="4.5" cy="6" r="0.9" fill="currentColor"></circle><circle cx="4.5" cy="12" r="0.9" fill="currentColor"></circle><circle cx="4.5" cy="18" r="0.9" fill="currentColor"></circle></svg>',
+  padlock: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"></rect><path data-fr="mini-shackle" d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>',
+};
+const MINI_SHACKLE = { on: 'M8 11V8a4 4 0 0 1 8 0v3', off: 'M16 11V7a4 4 0 0 0-8 0v1' };
+
+/** Static markup from this file as a node. */
+function svg(markup) {
+  const box = document.createElement('div');
+  box.innerHTML = markup;
+  return box.firstElementChild;
+}
+
+// How much of the rings the last step showed, so the next one fills from there.
+let shownLit = null;
 
 /**
  * ctx: t, state, actions, registry, wallet, plus
  * - step: the route param,
- * - go(step): opens another step, finish(): marks the guide seen and goes home, stepBack(): back a step,
- * - reader: {available(step, pieces), read(pieces, step) -> {done, stop()}}: the step's recorded clip, or
+ * - go(step): opens another step, finish(): marks the guide seen and goes home,
+ * - reader: {available(clip, pieces), read(pieces, clip) -> {done, stop()}}: the step's recorded clip, or
  *   the phone's own voice (both free, on the phone).
+ * Back is the phone's own: each step is an entry in its history.
  */
-export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, stepBack, reader }) {
+export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, reader }) {
   const S = state.S;
   const step = stepOf(param);
   const n = stepNumber(step);
   const next = nextStep(step);
+  const privateOn = () => !!S.settings.privateOnly;
 
-  const item = (ico, tint, title, sub) => el('li', { class: 'intro-item' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 22)), el('span', { class: 'row-text' }, el('b', { text: title }), el('small', { text: sub })));
-
-  // Each step is one idea: icons first, a short heading, at most one short sentence. The detail, every
-  // honesty statement included, is under Learn more on the step it belongs to.
-  const iconRow = (id, tiles) =>
-    el('ul', { class: 'way-grid intro-icons', id, 'aria-hidden': 'true' }, ...tiles.map(([ico, tint, key]) => el('li', { class: 'way' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 26)), el('span', { text: t(key) }))));
-  const head = (key, leadKey) => [el('h1', { class: 'intro-title', tabindex: '-1', text: t(key) }), leadKey ? el('p', { class: 'intro-lead', id: 'introLead', text: t(leadKey) }) : null];
-  const learnMore = (...content) => el('details', { class: 'learn', id: 'learnMore' }, el('summary', {}, icon('plus', 18), el('span', { text: t('intro.learnMore') })), el('div', { class: 'learn-body' }, ...content));
-
-  const listen = el('button', { type: 'button', class: 'listen-chip', id: 'introListen', hidden: true });
+  // Top: Listen, the step dots, Skip (not on the last step, where Start is the way out).
+  const listen = el('button', { type: 'button', class: 'fr-listen', id: 'introListen', hidden: true });
   let speech = null;
+  const spoken = () => spokenFor(step, privateOn());
+  const words = () => spoken().keys.map((k) => t(k));
   const drawListen = () => {
-    listen.hidden = !reader.available(step, words());
+    listen.hidden = !reader.available(spoken().clip, words());
     listen.setAttribute('aria-pressed', String(!!speech));
-    listen.replaceChildren(icon(speech ? 'stop' : 'speaker', 18), el('span', { text: t(speech ? 'intro.listenStop' : 'intro.listen') }));
+    listen.replaceChildren(speech ? icon('stop', 20) : svg(SVG.listen), el('span', { text: t(speech ? 'intro.listenStop' : 'intro.listen') }));
   };
   const stopListening = () => {
     const s = speech;
@@ -46,86 +69,95 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   synth?.addEventListener?.('voiceschanged', drawListen);
   listen.addEventListener('click', () => {
     if (speech) return stopListening();
-    const s = reader.read(words(), step);
+    const s = reader.read(words(), spoken().clip);
     if (!s) return;
     speech = s;
     drawListen();
     s.done.catch(() => {}).finally(() => speech === s && ((speech = null), drawListen()));
   });
+  const dots = el('div', { class: 'fr-dots', id: 'introStep', role: 'img', 'aria-label': t('intro.step', { n, total: STEPS.length }) }, ...STEPS.map((_, i) => el('span', { class: i + 1 === n ? 'now' : i + 1 < n ? 'done' : '' })));
+  const top = el('div', { class: 'fr-top' }, listen, dots, next ? el('button', { type: 'button', class: 'fr-skip', id: 'introSkip', onclick: finish, text: t('intro.skip') }) : null);
 
-  const top = el(
-    'div',
-    { class: 'intro-top' },
-    prevStep(step) ? el('button', { type: 'button', class: 'btn text', id: 'introBack', onclick: () => stepBack(prevStep(step)) }, icon('back', 18), el('span', { text: t('intro.back') })) : el('span', { class: 'wordmark', text: t('app.name') }),
-    el('span', { class: 'intro-top-end' }, listen, el('button', { type: 'button', class: 'btn text', id: 'introSkip', onclick: finish, text: t('intro.skip') })),
-  );
+  // The hero: the step's art, its rings filling from where the last step left them.
+  const hero = el('div', { class: 'fr-hero' });
+  hero.innerHTML = ART[step];
+  const art = hero.firstElementChild;
+  art.setAttribute('aria-label', t(`intro.${step}.art${step === 'private' ? (privateOn() ? 'On' : 'Off') : ''}`));
+  fill(art, shownLit ?? 0, LIT[step]);
+  shownLit = LIT[step];
 
-  let body;
+  const lead = el('p', { class: 'fr-lead', id: 'introLead' });
+  const text = el('div', { class: 'fr-text' }, el('h1', { class: 'intro-title', tabindex: '-1', text: t(`intro.${step}.title`) }), lead);
+
+  const nextBtn = el('button', { type: 'button', class: 'fr-next', id: 'introNext', 'aria-label': t(next ? 'intro.next' : 'intro.start'), onclick: () => (next ? go(next) : finish()) }, svg(next ? SVG.next : SVG.start));
+  const linkBtn = (id, ico, key, sheet) => el('button', { type: 'button', class: 'fr-link', id, 'aria-haspopup': 'dialog', onclick: () => open(sheet) }, svg(SVG[ico]), el('span', { text: t(key) }));
+
+  const item = (ico, tint, title, sub) => el('li', { class: 'intro-item' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 22)), el('span', { class: 'row-text' }, el('b', { text: title }), el('small', { text: sub })));
+
+  let link = null;
+  let toggle = null;
   let update = () => {};
-  if (step === 'welcome') ({ body, update } = welcome());
-  else if (step === 'pay') ({ body, update } = pay());
-  else if (step === 'limits') body = limits();
-  else ({ body, update } = privateOnly());
+  const sheets = [];
+  if (step === 'welcome') ({ link, update } = welcome());
+  else if (step === 'pay') ({ link, update } = pay());
+  else if (step === 'limits') ({ link } = limits());
+  else ({ link, toggle, update } = privateOnly());
 
-  const primary = el('button', { type: 'button', class: 'btn primary block', id: 'introNext', text: t(next ? 'intro.continue' : 'intro.start'), onclick: () => (next ? go(next) : finish()) });
   const main = el(
     'main',
-    { class: 'screen intro', 'data-screen': 'intro', 'data-step': step },
+    { class: 'screen intro fr', 'data-screen': 'intro', 'data-step': step },
     top,
-    el('div', { class: 'scroll intro-body' }, body),
-    el('div', { class: 'foot' }, primary, el('p', { class: 'note center', id: 'introStep', text: t('intro.step', { n, total: STEPS.length }) })),
+    hero,
+    text,
+    el('div', { class: 'fr-space' }),
+    toggle,
+    nextBtn,
+    el('div', { class: 'fr-links' }, link),
+    ...sheets,
   );
 
+  /** A sheet over the step, for the detail. Closed by its button, a tap outside or Escape. */
+  function sheet(id, titleKey, ...content) {
+    const dialog = el('dialog', { class: 'fr-sheet', id, 'aria-labelledby': `${id}Title` });
+    const close = el('button', { type: 'button', class: 'fr-close', id: `${id}Close`, 'aria-label': t('intro.close'), onclick: () => dialog.close() }, icon('x', 22));
+    dialog.append(el('div', { class: 'fr-sheet-in' }, el('div', { class: 'fr-sheet-head' }, el('h2', { id: `${id}Title`, text: t(titleKey) }), close), el('div', { class: 'fr-sheet-body' }, ...content)));
+    dialog.addEventListener('click', (e) => e.target === dialog && dialog.close());
+    sheets.push(dialog);
+    return dialog;
+  }
+  function open(dialog) {
+    if (!dialog.open) dialog.showModal();
+  }
+
   function welcome() {
+    lead.textContent = t('intro.welcome.lead');
     // An invite code, only while this engine asks for one to open a balance. Kept in memory for the
     // funding screens, as they keep it.
     const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
     input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-    const invite = el('div', { class: 'field', id: 'introInviteField', hidden: true }, el('label', { for: 'introInvite', class: 'label', text: t('invite.label') }), input, el('p', { class: 'note', text: t('invite.hint') }));
-    const node = el(
-      'div',
-      { class: 'intro-content' },
-      iconRow('welcomeIcons', [
-        ['user', 'teal', 'intro.welcome.iconAccount'],
-        ['coins', 'gold', 'intro.welcome.iconCash'],
-        ['lock', 'teal', 'intro.welcome.iconSealed'],
-        ['phone', 'blue', 'intro.welcome.iconPhone'],
-      ]),
-      ...head('intro.welcome.title', 'intro.welcome.lead'),
-      invite,
-      learnMore(
-        el(
-          'ul',
-          { class: 'intro-list' },
-          item('user', 'teal', t('intro.welcome.account'), t('intro.welcome.accountSub')),
-          item('coins', 'gold', t('intro.welcome.cash'), t('intro.welcome.cashSub')),
-          item('lock', 'teal', t('intro.welcome.sealed'), t('intro.welcome.sealedSub')),
-          item('phone', 'blue', t('intro.welcome.phone'), t('intro.welcome.phoneSub')),
-        ),
-      ),
-    );
-    return { body: node, update: () => (invite.hidden = !!wallet.key() || !wallet.inviteOnly()) };
+    const s = sheet('inviteSheet', 'invite.label', el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, el('p', { class: 'note', text: t('invite.hint') })));
+    s.querySelector('.fr-sheet-body').append(el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') }));
+    const link = linkBtn('introInviteLink', 'ticket', 'intro.inviteLink', s);
+    return { link, update: () => (link.hidden = !!wallet.key() || !wallet.inviteOnly()) };
   }
 
   function pay() {
+    lead.textContent = t('intro.pay.lead');
     const grid = el('ul', { class: 'way-grid', id: 'payWays' });
     const none = el('p', { class: 'note', id: 'payNone', hidden: true, text: t('intro.pay.none') });
-    const node = el(
-      'div',
-      { class: 'intro-content' },
+    const s = sheet(
+      'learnSheet',
+      'intro.pay.sheet',
       grid,
       none,
-      ...head('intro.pay.title', 'intro.pay.lead'),
-      learnMore(
-        el('p', { class: 'note', text: t('intro.pay.more') }),
-        el(
-          'ul',
-          { class: 'intro-list' },
-          el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot gold', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.gold') }), el('small', { text: t('intro.pay.goldSub') }))),
-          el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot memory', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.green') }), el('small', { text: t('intro.pay.greenSub') }))),
-        ),
-        el('p', { class: 'callout gold', id: 'payCash', text: t('intro.pay.cash') }),
+      el('p', { class: 'note', text: t('intro.pay.more') }),
+      el(
+        'ul',
+        { class: 'intro-list' },
+        el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot gold', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.gold') }), el('small', { text: t('intro.pay.goldSub') }))),
+        el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot memory', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.green') }), el('small', { text: t('intro.pay.greenSub') }))),
       ),
+      el('p', { class: 'callout gold', id: 'payCash', text: t('intro.pay.cash') }),
     );
     let drawn = '';
     const update = () => {
@@ -138,73 +170,75 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       grid.replaceChildren(...ways.map((w) => el('li', { class: 'way', 'data-way': w.id }, el('span', { class: 'tile-ico tint-gold' }, icon(w.icon, 26)), el('span', { text: t(w.key) }))));
       none.hidden = ways.length > 0;
     };
-    return { body: node, update };
+    return { link: linkBtn('learnMoreLink', 'info', 'intro.learnMore', s), update };
   }
 
   function limits() {
-    return el(
-      'div',
-      { class: 'intro-content' },
-      iconRow('limitsIcons', [
-        ['lock', 'teal', 'intro.limits.can'],
-        ['eye', 'gold', 'intro.limits.cannot'],
-      ]),
-      ...head('intro.limits.title', 'intro.limits.lead'),
-      learnMore(
-        el('h2', { class: 'caps teal', text: t('intro.limits.can') }),
-        el(
-          'ul',
-          { class: 'intro-list can', id: 'limitsCan' },
-          item('lock', 'teal', t('intro.limits.questions'), t('intro.limits.questionsSub')),
-          item('image', 'teal', t('intro.limits.photos'), t('intro.limits.photosSub')),
-          item('user', 'teal', t('intro.limits.name'), t('intro.limits.nameSub')),
-        ),
-        el('h2', { class: 'caps gold', text: t('intro.limits.cannot') }),
-        el(
-          'ul',
-          { class: 'intro-list cannot', id: 'limitsCannot' },
-          item('eye', 'gold', t('intro.limits.address'), t('intro.limits.addressSub')),
-          item('mic', 'gold', t('intro.limits.voice'), t('intro.limits.voiceSub')),
-          item('bolt', 'gold', t('intro.limits.money'), t('intro.limits.moneySub')),
-          item('keyboard', 'gold', t('intro.limits.typed'), t('intro.limits.typedSub')),
-          item('phone', 'gold', t('intro.limits.watched'), t('intro.limits.watchedSub')),
-          item('unlock', 'gold', t('intro.limits.unlock'), t('intro.limits.unlockSub')),
-          item('bulb', 'gold', t('intro.limits.wrong'), t('intro.limits.wrongSub')),
-        ),
-        el('p', { class: 'note', text: t('intro.limits.always') }),
+    lead.textContent = t('intro.limits.lead');
+    const s = sheet(
+      'learnSheet',
+      'intro.limits.sheet',
+      el('h3', { class: 'caps teal', text: t('intro.limits.can') }),
+      el(
+        'ul',
+        { class: 'intro-list can', id: 'limitsCan' },
+        item('lock', 'teal', t('intro.limits.questions'), t('intro.limits.questionsSub')),
+        item('image', 'teal', t('intro.limits.photos'), t('intro.limits.photosSub')),
+        item('user', 'teal', t('intro.limits.name'), t('intro.limits.nameSub')),
       ),
+      el('h3', { class: 'caps gold', text: t('intro.limits.cannot') }),
+      el(
+        'ul',
+        { class: 'intro-list cannot', id: 'limitsCannot' },
+        item('eye', 'gold', t('intro.limits.address'), t('intro.limits.addressSub')),
+        item('mic', 'gold', t('intro.limits.voice'), t('intro.limits.voiceSub')),
+        item('bolt', 'gold', t('intro.limits.money'), t('intro.limits.moneySub')),
+        item('keyboard', 'gold', t('intro.limits.typed'), t('intro.limits.typedSub')),
+        item('phone', 'gold', t('intro.limits.watched'), t('intro.limits.watchedSub')),
+        item('unlock', 'gold', t('intro.limits.unlock'), t('intro.limits.unlockSub')),
+        item('bulb', 'gold', t('intro.limits.wrong'), t('intro.limits.wrongSub')),
+      ),
+      el('p', { class: 'note', text: t('intro.limits.always') }),
     );
+    return { link: linkBtn('fullListLink', 'list', 'intro.fullList', s) };
   }
 
   function privateOnly() {
-    // The panel's heading is the state itself: On or Off. Off says what that means and offers to turn it on.
-    const stateHead = el('b', { id: 'privateState' });
-    const sub = el('p', { id: 'privateSub' });
-    const turnOn = el('button', { type: 'button', class: 'btn primary', id: 'privateTurnOn', hidden: true, onclick: () => actions.setPrivateOnly(true), text: t('intro.private.turnOn') });
-    const hidden = el('div', { class: 'dashed-box', id: 'privateHidden' }, el('b', { text: t('intro.private.hidden') }), el('p', { text: t('intro.private.hiddenSub') }));
-    const node = el(
-      'div',
-      { class: 'intro-content' },
-      el('section', { class: 'teal-panel intro-panel', id: 'privatePanel', 'aria-labelledby': 'privateState' }, el('div', { class: 'teal-panel-head' }, icon('lock', 26), stateHead), sub, turnOn),
-      ...head('intro.private.title', 'intro.private.lead'),
-      learnMore(el('p', { class: 'note', id: 'privateMore', text: t('intro.private.onSub') }), el('p', { class: 'note', id: 'privateVoice', text: t('intro.private.voice') }), hidden),
+    // The switch is the setting itself. Off opens the padlock and says what that means.
+    const word = el('span', { class: 'fr-toggle-state', id: 'privateState' });
+    const pad = svg(SVG.padlock);
+    const toggle = el(
+      'button',
+      { type: 'button', class: 'fr-toggle', id: 'privateToggle', role: 'switch', 'aria-labelledby': 'privateLabel', onclick: () => actions.setPrivateOnly(!privateOn()) },
+      el('span', { class: 'fr-toggle-tile' }, pad),
+      el('span', { class: 'fr-toggle-text' }, el('span', { class: 'fr-toggle-label', id: 'privateLabel', text: t('intro.private.label') }), word),
+      el('span', { class: 'fr-track', 'aria-hidden': 'true' }, el('span', { class: 'fr-knob' })),
     );
+    const offSub = el('p', { class: 'note', id: 'privateOffSub', text: t('intro.private.offSub') });
+    const hidden = el('div', { class: 'dashed-box', id: 'privateHidden' }, el('b', { text: t('intro.private.hidden') }), el('p', { text: t('intro.private.hiddenSub') }));
+    const s = sheet('learnSheet', 'intro.private.label', el('p', { class: 'note', id: 'privateMore', text: t('intro.private.onSub') }), offSub, el('p', { class: 'note', id: 'privateVoice', text: t('intro.private.voice') }), hidden);
     const update = () => {
-      const on = !!S.settings.privateOnly;
-      stateHead.textContent = t(on ? 'intro.private.on' : 'intro.private.off');
-      node.querySelector('#privatePanel').classList.toggle('off', !on);
-      sub.textContent = on ? '' : t('intro.private.offSub');
-      sub.hidden = on;
-      turnOn.hidden = on;
+      const on = privateOn();
+      const look = PRIVATE_ART[on ? 'on' : 'off'];
+      toggle.setAttribute('aria-checked', String(on));
+      toggle.classList.toggle('off', !on);
+      word.textContent = t(on ? 'intro.private.on' : 'intro.private.off');
+      pad.querySelector('[data-fr=mini-shackle]').setAttribute('d', MINI_SHACKLE[on ? 'on' : 'off']);
+      lead.textContent = t(on ? 'intro.private.leadOn' : 'intro.private.leadOff');
+      art.setAttribute('aria-label', t(on ? 'intro.private.artOn' : 'intro.private.artOff'));
+      for (const p of art.querySelectorAll('[data-fr=shackle]')) p.setAttribute('d', look.shackle);
+      for (const p of art.querySelectorAll('[data-fr=glow-stop]')) p.setAttribute('stop-color', look.glow);
+      for (const p of art.querySelectorAll('[data-fr=glow-fill]')) p.setAttribute('fill', look.glow);
+      art.querySelector('[data-fr=hole]').setAttribute('opacity', look.hole);
+      offSub.hidden = on;
       hidden.hidden = !on;
     };
-    return { body: node, update };
+    return { link: linkBtn('learnMoreLink', 'info', 'intro.learnMore', s), toggle, update };
   }
 
-  /** What Listen reads: the step's heading and its one sentence (core/firstrun.js SPOKEN). */
-  function words() {
-    return SPOKEN[step].map((k) => t(k));
-  }
+  // The first run is dark on every look: the phone's bars match it while it shows.
+  const bar = document.querySelector('meta[name="theme-color"]');
+  bar?.setAttribute('content', NIGHT);
 
   const all = () => {
     update();
@@ -217,7 +251,28 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     destroy: () => {
       stopListening();
       synth?.removeEventListener?.('voiceschanged', drawListen);
+      for (const s of sheets) if (s.open) s.close();
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      if (bg) bar?.setAttribute('content', bg);
     },
     focus: main.querySelector('h1'),
   };
+}
+
+/** The dash for `share` of a ring of radius r (the design's own lengths). */
+const dash = (r, share) => `${share >= 1 ? RING[r] : Math.round(share * RING[r] * 10) / 10} ${RING[r]}`;
+
+/**
+ * Fills the art's rings from `from` to `to` (shares of the circle), gently, unless the phone asks for
+ * reduced motion; the end dots fade in once the fill arrives. The art's own lengths are the end state.
+ */
+function fill(art, from, to) {
+  if (from === to || typeof art.animate !== 'function') return;
+  if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const timing = { duration: 700, easing: 'cubic-bezier(.2, .8, .2, 1)' };
+  for (const c of art.querySelectorAll('.fr-arc')) {
+    const r = Number(c.getAttribute('r'));
+    c.animate([{ strokeDasharray: dash(r, from) }, { strokeDasharray: dash(r, to) }], timing);
+  }
+  for (const c of art.querySelectorAll('.fr-tip')) c.animate([{ opacity: 0 }, { opacity: 0, offset: 0.75 }, { opacity: c.getAttribute('opacity') ?? 1 }], { duration: 900 });
 }

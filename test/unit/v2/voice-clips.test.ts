@@ -21,7 +21,7 @@ if (!recorded) console.warn(`The first run's Listen clips are not recorded yet (
 describe.skipIf(!recorded)('Listen clips match the first run words', () => {
   const manifest = recorded ? JSON.parse(readFileSync(join(DIR, 'manifest.json'), 'utf8')) : null;
 
-  for (const step of FR.STEPS as string[]) {
+  for (const step of Object.keys(FR.SPOKEN)) {
     it(`${step}: recorded from the words the step shows now (else run ${REGENERATE})`, () => {
       const pieces = FR.SPOKEN[step].map((k: string) => en[k]);
       const c = manifest.clips[step];

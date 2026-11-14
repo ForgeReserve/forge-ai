@@ -1169,12 +1169,6 @@ function finishIntro() {
   leave('home');
 }
 
-/** First run, Back: the step before, by the phone's own history when that is where it came from. */
-function introBack(prev) {
-  if (depth() > 0 && trail[depth() - 1] === STEP_ROUTES[prev]) history.back();
-  else nav(STEP_ROUTES[prev], {}, { replace: true });
-}
-
 /** Goes back to the nearest earlier `name` on the stack, or replaces this screen with it. */
 function backTo(name) {
   for (let i = depth() - 1; i >= 0; i--) if (trail[i] === name) return history.go(i - depth());
@@ -1217,7 +1211,7 @@ function screenFor(name, params) {
     case 'introPrivate':
       // The recorded Listen clips: their manifest is read once, and Listen shows when it is in.
       clips.load().then((m) => m && store.set({}));
-      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
+      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, reader });
     case 'erase':
       return eraseScreen(ctx);
     case 'engine':

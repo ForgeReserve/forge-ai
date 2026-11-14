@@ -140,15 +140,38 @@ describe('first run copy', () => {
 });
 
 describe('first run: one idea a step', () => {
-  it('each step has a short heading and at most one short sentence, and Listen reads exactly those', () => {
-    expect(Object.keys(FR.SPOKEN)).toEqual(FR.STEPS);
-    for (const step of FR.STEPS) {
-      const [title, lead] = FR.SPOKEN[step].map((k: string) => en[k]!);
-      expect(title.length, step).toBeLessThanOrEqual(40);
-      expect(lead.length, step).toBeLessThanOrEqual(80);
-      // One sentence: a single full stop, at the end.
-      expect(lead.match(/[.!?]/g)?.length, step).toBe(1);
+  it('each step has a short heading and a short lead in short sentences, and Listen reads exactly those', () => {
+    // Every step, and Private only once more for Off: its lead says what the switch is set to.
+    expect(Object.keys(FR.SPOKEN)).toEqual([...FR.STEPS, 'private-off']);
+    for (const [clip, keys] of Object.entries(FR.SPOKEN) as [string, string[]][]) {
+      const [title, lead] = keys.map((k: string) => en[k]!) as [string, string];
+      expect(title.length, clip).toBeLessThanOrEqual(40);
+      expect(lead.length, clip).toBeLessThanOrEqual(80);
+      // Short sentences: at most three, of at most eight words each, each ending in a full stop.
+      const sentences = lead.split(/(?<=\.) /);
+      expect(sentences.length, clip).toBeLessThanOrEqual(3);
+      for (const x of sentences) {
+        expect(x, clip).toMatch(/\.$/);
+        expect(x.split(' ').length, x).toBeLessThanOrEqual(8);
+      }
       expect(`${title} ${lead}`).not.toMatch(/—|–/);
     }
+  });
+
+  it('uses the approved words', () => {
+    const words = (keys: string[]) => keys.map((k) => en[k]);
+    expect(words(FR.SPOKEN.welcome)).toEqual(["AI that doesn't know who you are.", 'No account. No name. You pay like cash.']);
+    expect(words(FR.SPOKEN.pay)).toEqual(['Pay a little, per question.', 'You see the price before you send.']);
+    expect(words(FR.SPOKEN.limits)).toEqual(['Know what it hides.', 'Only the AI can read what you type. Your connection shows, unless you use Tor.']);
+    expect(words(FR.SPOKEN.private)).toEqual(['Private by default.', 'Only private models. Forge cannot read what you type.']);
+    expect(words(FR.SPOKEN['private-off'])).toEqual(['Private by default.', 'Standard models are shown too. They can read what you type.']);
+  });
+
+  it("reads Private only's lead as the switch is set", () => {
+    expect(FR.spokenFor('private', true)).toEqual({ clip: 'private', keys: FR.SPOKEN.private });
+    expect(FR.spokenFor('private', false)).toEqual({ clip: 'private-off', keys: FR.SPOKEN['private-off'] });
+    // The switch is on Private only alone; the other steps read the same either way.
+    expect(FR.spokenFor('pay', false)).toEqual({ clip: 'pay', keys: FR.SPOKEN.pay });
+    expect(FR.spokenFor('nope').clip).toBe('welcome');
   });
 });
