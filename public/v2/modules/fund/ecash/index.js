@@ -25,7 +25,8 @@ export function create(inputs) {
         try {
           const r = await wallet.topup(token, invite.value());
           box.clear();
-          const text = r.replay ? t('fund.ecash.replay') : t('fund.ecash.added', { amount: format.units(r.credited, r.unit) });
+          // A voucher of free questions is counted in questions, never as an amount of money.
+          const text = r.replay ? t('fund.ecash.replay') : r.free ? t('fund.free.added', { count: r.credited }) : t('fund.ecash.added', { amount: format.units(r.credited, r.unit) });
           ui.toast(text);
           msg.set(text, 'ok');
           await wallet.refresh();

@@ -92,8 +92,8 @@ export function createVault(storage) {
  * engine creates, before anything else, so a key is never lost either.
  * Returns {credited, unit, replay}. Throws EngineError (with .retryable) when the token was not credited.
  */
-export async function topupWithVault({ engine, vault, token, key, invite, setKey }) {
-  const entry = vault.hold(token);
+export async function topupWithVault({ engine, vault, token, key, invite, setKey, via = 'topup' }) {
+  const entry = vault.hold(token, via);
   let r;
   try {
     r = await engine.topup(key, token, invite);
@@ -115,12 +115,14 @@ export async function topupWithVault({ engine, vault, token, key, invite, setKey
 /**
  * Sends every pending top-up token again (on start and when the connection comes back). Tokens held
  * by another flow (other-mint funding) are left to that flow. Returns how many were credited.
+ * via: 'topup' for the paid balance, 'free' for free question vouchers, which go on the free balance
+ * with its own key (core/free.js).
  */
-export async function retryPending({ engine, vault, getKey, invite, setKey }) {
+export async function retryPending({ engine, vault, getKey, invite, setKey, via = 'topup' }) {
   let n = 0;
-  for (const e of vault.incoming().filter((x) => x.state === 'pending' && (x.via ?? 'topup') === 'topup')) {
+  for (const e of vault.incoming().filter((x) => x.state === 'pending' && (x.via ?? 'topup') === via)) {
     try {
-      await topupWithVault({ engine, vault, token: e.token, key: getKey(), invite, setKey });
+      await topupWithVault({ engine, vault, token: e.token, key: getKey(), invite, setKey, via });
       n++;
     } catch (err) {
       if (err?.code === 'offline') break;

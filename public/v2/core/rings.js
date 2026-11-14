@@ -51,3 +51,28 @@ export function questionsLeft(balanceMsub, perQuestionMsub) {
   if (!balanceMsub || balanceMsub <= 0 || !perQuestionMsub || perQuestionMsub <= 0) return 0;
   return Math.floor(balanceMsub / perQuestionMsub);
 }
+
+/**
+ * The gold ring with free questions (docs/FREE-TIER.md): a lighter segment for free questions first,
+ * then the paid balance after it. Both are measured in questions: free questions left out of those
+ * added, and the paid balance in typical questions at the model's price. Without a price the two share
+ * the ring half and half. Returns {free, paid}, shares of the ring that add up to at most 1.
+ */
+export function fundsSegments({ balanceMsub, peakMsub, freeLeft = 0, freeTotal = 0, perQuestionMsub = null }) {
+  const paid = fundsFraction(balanceMsub, peakMsub);
+  const left = Number.isFinite(freeLeft) && freeLeft > 0 ? freeLeft : 0;
+  const total = Math.max(left, Number.isFinite(freeTotal) ? freeTotal : 0);
+  if (!left) return { free: 0, paid };
+  if (!(balanceMsub > 0)) return { free: clamp01(left / total), paid: 0 };
+  if (!(perQuestionMsub > 0)) return { free: clamp01(left / total) / 2, paid: paid / 2 };
+  const paidNow = balanceMsub / perQuestionMsub;
+  const paidFull = Math.max(paidNow, (peakMsub ?? balanceMsub) / perQuestionMsub);
+  const whole = total + paidFull;
+  return { free: clamp01(left / whole), paid: clamp01(paidNow / whole) };
+}
+
+/** SVG dash for the paid part of the gold ring, drawn after the free part (which starts at 12 o'clock). */
+export function dashAfter(fraction, offsetFraction, r) {
+  const d = dash(fraction, r);
+  return { ...d, dashoffset: String(-Math.round(clamp01(offsetFraction) * d.circumference)) };
+}

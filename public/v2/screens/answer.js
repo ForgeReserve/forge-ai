@@ -59,7 +59,7 @@ export function answer({ t, state, nav, actions, format }) {
     const v = state.view();
     bar.update();
     hold.update();
-    r.set(v.fundsFraction, v.memory.free, v.memory.low);
+    r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     showSpeaking(v);
     const tk = v.talk;
     // A voice question on its way to being text, or one that could not be heard.
@@ -129,7 +129,7 @@ export function answer({ t, state, nav, actions, format }) {
     );
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
-      const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut') }[ev.next];
+      const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
       errBox.replaceChildren(
         el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }) }),
         el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }),
@@ -141,8 +141,10 @@ export function answer({ t, state, nav, actions, format }) {
       if (ev.next === 'retry') tiles.querySelector('#againBtn')?.remove();
     } else errBox.hidden = true;
     const cost = a.meta?.cost != null ? format.cost(a.meta.cost, a.meta.unit) : null;
+    // A free question says so, never an amount: a credit is not money.
+    const freeNote = a.meta?.free && a.meta?.freeLeft != null ? (a.meta.freeLeft === 0 ? t('answer.freeLast') : t('answer.free', { left: a.meta.freeLeft })) : null;
     // A failed answer says its cost in the error box, so the note stays empty then.
-    note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? (cost ? t('answer.partialCost', { amount: cost }) : t('answer.partial')) : a.meta?.error ? '' : cost ? t('answer.cost', { amount: cost }) : '';
+    note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? (freeNote ? t('answer.partialFree') : cost ? t('answer.partialCost', { amount: cost }) : t('answer.partial')) : a.meta?.error ? '' : (freeNote ?? (cost ? t('answer.cost', { amount: cost }) : ''));
   };
   update();
   return { node: main, update, destroy: hold.destroy, focus: card };

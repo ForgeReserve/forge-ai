@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.free",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Free questions"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -10,6 +10,9 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
   const amount = el('div', { class: 'big', id: 'fundsAmount' });
   const fundsNote = el('p', { class: 'note', id: 'fundsNote' });
   const refundable = el('p', { class: 'note', id: 'refundable' });
+  // Free questions (credits): counted apart from the money, and never taken out as money.
+  const freeNote = el('p', { class: 'note free-note', id: 'fundsFree', hidden: true });
+  const freeModel = el('button', { type: 'button', class: 'btn small', id: 'fundsUseFree', hidden: true, onclick: () => actions.useFreeModel() }, el('span', { text: t('funds.useFreeModel') }));
   const memFree = el('div', { class: 'big', id: 'memoryFree' });
   const memNote = el('p', { class: 'note', id: 'memoryNote' });
   const items = el('ul', { class: 'held', id: 'heldItems' });
@@ -26,7 +29,7 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
   const fundsCard = el(
     'section',
     { class: 'card big-card', 'aria-labelledby': 'fundsCap' },
-    el('div', { class: 'card-top' }, fr.node, el('div', {}, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), amount, fundsNote, refundable)),
+    el('div', { class: 'card-top' }, fr.node, el('div', {}, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), amount, fundsNote, refundable, freeNote, freeModel)),
     emptySub,
     scanBtn,
     ways,
@@ -55,7 +58,9 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
       const taken = !refused && e.via === 'othermint' && (e.code === 'change_pending' || e.code === 'refund_pending');
       const [title, sub] = refused
         ? [t('funds.notAdded'), t('funds.notAddedSub', { message: e.message ?? '' })]
-        : e.via === 'othermint'
+        : e.via === 'free'
+          ? [t('funds.freeWaiting'), t('funds.waitingSub')]
+          : e.via === 'othermint'
           ? e.code === 'change_pending'
             ? [t('funds.changeWaiting'), t('funds.changeWaitingSub')]
             : e.code === 'refund_pending'
@@ -122,10 +127,14 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
 
   const update = () => {
     const v = state.view();
-    fr.set(v.fundsFraction);
+    fr.set(v.fundsFraction, null, v.freeFraction);
     scanBtn.hidden = !v.scanNote;
     amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
-    fundsNote.textContent = !v.hasKey ? t('funds.empty') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
+    fundsNote.textContent = !v.hasKey ? (v.freeLeft > 0 ? '' : t('funds.empty')) : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
+    fundsNote.hidden = !fundsNote.textContent;
+    freeNote.hidden = !(v.freeLeft > 0) && v.fundsBlock !== 'freeOut';
+    freeNote.textContent = v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'funds.freeLeftOne' : 'funds.freeLeft', { count: v.freeLeft }) : v.fundsBlock === 'freeOut' ? t('funds.freeUsed') : '';
+    freeModel.hidden = v.fundsBlock !== 'freeModel';
     refundable.textContent = v.refundable > 0 ? t('funds.refundable', { amount: format.units(v.refundable, S.unit) }) : '';
     outBtn.disabled = !(v.refundable > 0) && !vault.outgoing().length;
     // With no funds and nothing waiting to be saved, there is nothing to take out: no dead button.

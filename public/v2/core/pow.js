@@ -84,15 +84,27 @@ export function leadingZeroBits(buf) {
 
 const enc = new TextEncoder();
 
-/** Finds a nonce for a challenge and returns the header value "<challenge>:<nonce>". */
-export async function solvePow(challenge, bits, { signal } = {}) {
+/**
+ * Finds a nonce for a challenge and returns the header value "<challenge>:<nonce>".
+ * onProgress, if given, is called every few thousand hashes with the share of the expected work done
+ * (hashes tried over 2^bits, capped below 1: the search can take longer than expected).
+ */
+export async function solvePow(challenge, bits, { signal, onProgress } = {}) {
   if (!Number.isInteger(bits) || bits < 0 || bits > 32) throw new Error(`proof of work difficulty out of range: ${bits}`);
+  const expected = 2 ** bits;
   for (let i = 0; ; i++) {
     const nonce = i.toString(36);
-    if (leadingZeroBits(sha256(enc.encode(`${challenge}:${nonce}`))) >= bits) return `${challenge}:${nonce}`;
+    if (leadingZeroBits(sha256(enc.encode(`${challenge}:${nonce}`))) >= bits) {
+      onProgress?.(1);
+      return `${challenge}:${nonce}`;
+    }
     if (i % 4096 === 4095) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      onProgress?.(expectedShare(i + 1, expected));
       await new Promise((r) => setTimeout(r, 0));
     }
   }
 }
+
+/** Share of the expected work done after `tries` hashes: rises quickly, then slows, never reaching 1. */
+export const expectedShare = (tries, expected) => Math.min(0.97, 1 - Math.exp(-tries / expected));

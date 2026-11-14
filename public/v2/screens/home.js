@@ -20,7 +20,9 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const chip = el('button', { type: 'button', class: 'chip-low', id: 'memoryLow', hidden: true, onclick: () => nav('funds') }, icon('layers', 18), el('span', { text: t('home.memoryLow') }));
   const scanChip = el('button', { type: 'button', class: 'chip-scan', id: 'scanNote', hidden: true, onclick: () => nav('fund', { id: 'note' }) }, icon('qr', 18), el('span', { text: t('home.scanNote') }));
   // The rest of the empty state: every other way in, one tap away.
-  const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav('addFunds') }, icon('plus', 18), el('span', { text: t('home.otherWays') }));
+  // Once free questions are used up, it opens the ways forward instead (screens/free.js).
+  const waysLabel = el('span', { text: t('home.otherWays') });
+  const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav(state.view().fundsBlock === 'freeOut' ? 'freeOut' : 'addFunds') }, icon('plus', 18), waysLabel);
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
   const ringBox = el('div', { class: 'rings home-rings' }, r.node, ringBtn, talk);
   const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, chip, held, hint);
@@ -33,11 +35,12 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     bar.update();
     hold.update();
     const recording = v.talk.phase === 'recording';
-    r.set(v.fundsFraction, v.memory.free, v.memory.low);
+    r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     ringBtn.setAttribute('aria-label', v.balanceText ? t('home.rings', { funds: v.balanceText, memory: v.memory.percentFree }) : t('home.ringsEmpty', { memory: v.memory.percentFree }));
     ringBox.classList.toggle('invite', !!v.scanNote);
     scanChip.hidden = !v.scanNote || recording;
     waysChip.hidden = !v.noFunds || recording;
+    waysLabel.textContent = v.fundsBlock === 'freeOut' ? t('home.freeOut') : t('home.otherWays');
     chip.hidden = !v.memory.low || recording;
     held.hidden = !v.pendingCount || recording;
     held.textContent = v.pendingCount ? t('home.attached', { count: v.pendingCount }) : '';

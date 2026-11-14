@@ -142,6 +142,8 @@ export const BUNDLED = [
   { kind: 'look', folder: 'dark' },
   { kind: 'look', folder: 'midnight' },
   { kind: 'mode', folder: 'default' },
+  // Free questions first in Add funds (docs/FREE-TIER.md); listed only while the engine gives them out.
+  { kind: 'fund', folder: 'free' },
   { kind: 'fund', folder: 'note' },
   { kind: 'fund', folder: 'ecash' },
   { kind: 'fund', folder: 'lightning' },

@@ -22,8 +22,11 @@ export function typeScreen({ t, state, nav, back, actions }) {
 
   const blocker = (v) => {
     if (!v.online) return { key: 'type.offline' };
-    if (!v.hasKey || v.balanceMsub === 0) return { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') };
-    if (!v.model) return { key: 'type.noModel', btn: 'type.chooseModel', go: () => nav('model') };
+    if (!v.model) return v.noFunds ? { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') } : { key: 'type.noModel', btn: 'type.chooseModel', go: () => nav('model') };
+    // No paid balance: free questions pay, if there are any left and the model is a free one.
+    if (v.fundsBlock === 'addFunds') return { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') };
+    if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', btn: 'type.freeOutBtn', go: () => nav('freeOut') };
+    if (v.fundsBlock === 'freeModel') return { key: 'type.freeModel', btn: 'type.useFreeModel', go: () => actions.useFreeModel() };
     return null;
   };
   const update = () => {
@@ -43,7 +46,7 @@ export function typeScreen({ t, state, nav, back, actions }) {
     chips.hidden = !S.pending.length;
     const b = blocker(v);
     const est = actions.estimate(ta.value);
-    let problem = b ? null : est.reading ? 'type.reading' : est.overBody ? 'type.tooLarge' : est.overContext ? 'type.tooLong' : null;
+    let problem = b ? null : est.reading ? 'type.reading' : est.overBody ? 'type.tooLarge' : est.overContext ? 'type.tooLong' : est.freeTooLong ? 'type.freeTooLong' : null;
     if (b) {
       notice.replaceChildren(el('p', { text: t(b.key) }), b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : '');
       notice.hidden = false;
@@ -51,7 +54,7 @@ export function typeScreen({ t, state, nav, back, actions }) {
       notice.replaceChildren(el('p', { text: t(problem) }));
       notice.hidden = false;
     } else notice.hidden = true;
-    const p = priceLine(est.costMsub, est.unit, v.free);
+    const p = priceLine(est.costMsub, est.unit, est.free);
     price.replaceChildren(el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: t(p.key, p) }));
     price.hidden = !v.model;
     send.disabled = !!b || !!problem || (!ta.value.trim() && !S.pending.length);

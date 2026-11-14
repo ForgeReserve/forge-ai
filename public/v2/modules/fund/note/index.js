@@ -91,10 +91,12 @@ export function create(inputs) {
           return;
         }
         // An amount is shown only in a unit the phone formats exactly (usd, sat); any other unit is refused
-        // before its amount could be shown wrong.
+        // before its amount could be shown wrong. A voucher of free questions (from the engine's credit
+        // mint) is counted in questions: it is not money.
+        const credit = !!wallet.isCredit?.(note.mint);
         const known = isNoteUnit(note.unit);
-        const amount = known ? format.units(note.amount, note.unit) : '';
-        const mintLine = ui.el('p', { class: 'note note-mint', id: 'noteMint', text: t('fund.note.from', { mint: mintLabel(note.mint) }) });
+        const amount = credit ? t(note.amount === 1 ? 'fund.note.freeOne' : 'fund.note.free', { count: note.amount }) : known ? format.units(note.amount, note.unit) : '';
+        const mintLine = ui.el('p', { class: 'note note-mint', id: 'noteMint', text: credit ? t('fund.note.freeFrom') : t('fund.note.from', { mint: mintLabel(note.mint) }) });
         const head = known ? [ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }), mintLine] : [mintLine];
         const methods = wallet.methods();
         const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('othermint', { token: note.token }) }, 'swap', t('fund.note.useOtherMint'));
@@ -104,10 +106,11 @@ export function create(inputs) {
           foot.replaceChildren(...[kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again].filter(Boolean));
         };
         if (!known) return refused('wrong_unit');
-        const verdict = noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled });
+        // Free questions go on their own balance, so the paid balance's unit and the invite do not apply.
+        const verdict = credit ? 'add' : noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled });
         if (verdict !== 'add') return refused(verdict);
 
-        const invite = inviteField(inputs);
+        const invite = credit ? { node: null, missing: () => false, value: () => undefined } : inviteField(inputs);
         const add = btn({ class: 'btn primary block', id: 'noteAdd' }, 'plus', t('fund.note.add', { amount }));
         body.replaceChildren(...head, invite.node ?? '', msg);
         foot.replaceChildren(add, again);
@@ -118,7 +121,7 @@ export function create(inputs) {
           msg.set(t('fund.note.adding'));
           try {
             const r = await wallet.topup(note.token, invite.value());
-            const words = r.replay ? t('fund.note.replay') : t('fund.note.added', { amount: format.units(r.credited, r.unit) });
+            const words = r.replay ? t('fund.note.replay') : r.free ? t('fund.free.added', { count: r.credited }) : t('fund.note.added', { amount: format.units(r.credited, r.unit) });
             ui.toast(words);
             msg.set(words, 'ok');
             await wallet.refresh();

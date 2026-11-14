@@ -1,0 +1,13 @@
+/* The /free page: built from the v2 app's tokens and parts (Decision 5: the canvas draws no faucet page). */
+.free-page h1 { margin: 8px 0 0; font-size: 28px; }
+.free-page .lead { margin: 0; color: var(--text-body); }
+.free-page .voucher { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--gold-callout); }
+.free-page .voucher .qr { width: 100%; max-width: 280px; }
+.free-page .voucher .qr svg, .free-page .voucher .qr canvas, .free-page .voucher .qr img { width: 100%; height: auto; display: block; }
+.free-page .voucher b { font-size: 20px; }
+.free-page .row-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.free-page .row-btns .btn { flex: 1 1 120px; }
+@media print {
+  .free-page .no-print { display: none !important; }
+  .free-page .voucher { border-style: dashed; }
+}

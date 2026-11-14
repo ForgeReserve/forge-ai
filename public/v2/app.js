@@ -12,6 +12,8 @@ import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
+import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
+import { readNote } from './core/note.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
@@ -22,7 +24,7 @@ import { createTalk } from './core/talkctl.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
-import { fundsFraction, nextPeak, questionsLeft } from './core/rings.js';
+import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut } from './core/state.js';
 import * as ui from './core/ui.js';
@@ -30,6 +32,7 @@ import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
+import { freeOutScreen } from './screens/free.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
@@ -80,6 +83,12 @@ const store = createStore({
   pending: [],
   draft: '',
   streaming: false,
+  // Free questions (core/free.js): the free balance's own key, its balance, how many were added, and
+  // the engine's free tier from /v1/models.
+  freeKey: null,
+  freeMsub: null,
+  freeTotal: 0,
+  free: null,
   online: navigator.onLine !== false,
 });
 const S = store.S;
@@ -87,6 +96,7 @@ const S = store.S;
 const engineBase = () => S.settings.engine ?? '';
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
+const freeKeyStore = () => freeKeyName(engine.base, location.origin);
 
 // ------------------------------------------------------------------ derived view
 
@@ -110,11 +120,21 @@ function againNow(model) {
   return againMemo.v;
 }
 
+/** Free questions as the screens see them: how many are left, and whether the next question uses one. */
+function freeNow(model, inputTokens = 0) {
+  const left = freeLeft(S.freeMsub);
+  const u = useFree({ info: S.free, left, model, inputTokens });
+  return { left, total: Math.max(left, S.freeTotal ?? 0), use: u.use, why: u.use ? null : u.why };
+}
+
 function view() {
   const model = pickModel(S.models, S.settings);
   const unit = S.unit ?? 'usd';
   const mem = memoryNow(model);
   const hasKey = !!S.key;
+  const fr = freeNow(model);
+  const paidNone = !hasKey || S.balanceMsub === 0;
+  const seg = fundsSegments({ balanceMsub: hasKey ? S.balanceMsub : 0, peakMsub: S.peakMsub, freeLeft: fr.left, freeTotal: fr.total, perQuestionMsub: perQuestion(model, unit) });
   return {
     model,
     // With no model to use, Private only still decides: nothing is sent to a standard model.
@@ -123,11 +143,17 @@ function view() {
     hasKey,
     balanceMsub: hasKey ? S.balanceMsub : null,
     balanceText: hasKey && S.balanceMsub != null ? fmtBalance(S.balanceMsub, S.unit) : null,
-    fundsFraction: hasKey ? fundsFraction(S.balanceMsub, S.peakMsub) : 0,
-    // No funds at all (no balance yet, or a balance at zero): the home and Funds show their empty state,
-    // and the gold ring invites a paper note scan.
-    noFunds: !hasKey || S.balanceMsub === 0,
-    scanNote: (!hasKey || S.balanceMsub === 0) && !!registry?.list('fund').some((x) => x.instance.id === 'note'),
+    // The gold ring: free questions as a lighter segment first, then the paid balance (core/rings.js).
+    fundsFraction: seg.paid,
+    freeFraction: seg.free,
+    freeLeft: fr.left,
+    freeTotal: fr.total,
+    // What stops a question for lack of funds, if anything (core/free.js fundsBlock).
+    fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use }),
+    // No funds at all (no balance yet or a balance at zero, and no free questions): the home and Funds
+    // show their empty state, and the gold ring invites a paper note scan.
+    noFunds: paidNone && fr.left === 0,
+    scanNote: paidNone && fr.left === 0 && !!registry?.list('fund').some((x) => x.instance.id === 'note'),
     refundable: hasKey ? Math.floor((S.availableMsub ?? S.balanceMsub ?? 0) / 1000) : 0,
     questionsLeft: hasKey ? questionsLeft(S.balanceMsub, perQuestion(model, unit)) : 0,
     memory: mem,
@@ -140,9 +166,8 @@ function view() {
     speak: speakView(),
     // The most Ask again can cost, shown on the button before it is pressed.
     againMsub: againNow(model),
-    // A free question in place of the balance: the price lines read "Free". The free tier sets this;
-    // until it is built, every request is paid from the balance.
-    free: null,
+    // A free question in place of the balance: the price lines read "Free, 2 of 3 left".
+    free: fr.use ? { left: fr.left, total: fr.total } : null,
     // Goes up whenever conversations are burned, so an open History screen reads the list again.
     historyVersion,
   };
@@ -211,6 +236,8 @@ function talkView(model, unit) {
   const tk = S.talk ?? { phase: 'idle' };
   return {
     available: !!inMod && !!model,
+    // The engine's speech to text is paid from the paid balance, so a voice question is never all free.
+    freeOk: inMod?.id === 'device',
     phase: tk.phase,
     seconds: tk.seconds ?? 0,
     level: tk.level ?? 0,
@@ -295,7 +322,38 @@ async function savePeak() {
   await kv.put(`peak:${engine.base}`, S.peakMsub).catch(() => {});
 }
 
+function setFreeKey(k) {
+  S.freeKey = k || null;
+  keep(freeKeyStore(), S.freeKey);
+  if (!S.freeKey) S.freeMsub = null;
+  store.set({});
+}
+
+async function saveFreeTotal() {
+  await kv.put(`freeTotal:${engine.base}`, S.freeTotal).catch(() => {});
+}
+
+/** Reads the free balance. When it went up, the "of 3" count grows with it (core/free.js nextFreeTotal). */
+async function refreshFree() {
+  if (!S.freeKey) return;
+  try {
+    const w = await engine.wallet(S.freeKey);
+    const before = S.freeMsub == null ? null : freeLeft(S.freeMsub);
+    const now = freeLeft(w.balance_msub);
+    if (before == null) S.freeTotal = Math.max(S.freeTotal ?? 0, now);
+    else if (now > before) S.freeTotal = nextFreeTotal(before, S.freeTotal, now - before);
+    S.freeMsub = w.balance_msub;
+    await saveFreeTotal();
+  } catch (e) {
+    if (e instanceof EngineError && e.status === 401) {
+      keep('forge2.unrecognizedFreeKey', S.freeKey);
+      setFreeKey(null);
+    }
+  }
+}
+
 async function refreshBalance() {
+  await refreshFree();
   if (!S.key) return store.set({});
   try {
     const w = await engine.wallet(S.key);
@@ -337,7 +395,26 @@ async function loadModels() {
 
 function applyModels(body) {
   if (!body) return;
-  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [] });
+  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [], free: freeInfo(body) });
+}
+
+/** Adds free questions (a credit voucher) to the free balance, through the vault like any eCash. */
+async function topupFree(token) {
+  const r = await topupWithVault({ engine, vault, token, key: S.freeKey, setKey: setFreeKey, via: 'free' });
+  await refreshFree();
+  store.set({});
+  return { ...r, free: true };
+}
+
+/** Sends every voucher and token still waiting on the phone: free ones on the free balance. One run at a time. */
+let retrying = null;
+function retryAll() {
+  retrying ??= (async () => {
+    const paid = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey });
+    const free = await retryPending({ engine, vault, getKey: () => S.freeKey, setKey: setFreeKey, via: 'free' });
+    return paid + free;
+  })().finally(() => (retrying = null));
+  return retrying;
 }
 
 const wallet = {
@@ -354,8 +431,17 @@ const wallet = {
   mintAliases: () => S.mintAliases,
   units: () => S.units,
   lockKey: () => lockKey(),
-  /** Adds eCash through the vault: stored on the phone first, removed only once credited. */
-  topup: (token, invite) => topupWithVault({ engine, vault, token, key: S.key, invite, setKey }),
+  /**
+   * Adds eCash through the vault: stored on the phone first, removed only once credited. A voucher of
+   * free questions (from the engine's credit mint) goes on the free balance; the result says free: true.
+   */
+  topup: (token, invite) => {
+    const note = readNote(token);
+    if (note.ok && isCreditMint(S.free, note.mint)) return topupFree(token);
+    return topupWithVault({ engine, vault, token, key: S.key, invite, setKey });
+  },
+  /** True for the engine's credit mint: its eCash is free questions, not money. */
+  isCredit: (mint) => isCreditMint(S.free, mint),
 };
 
 // ------------------------------------------------------------------ conversation
@@ -394,14 +480,25 @@ function estimateFor(text) {
   const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   const cost = estimate(model, unit, tokens, maxOut);
+  const fr = freeNow(model, bodyTokens(bytes));
   return {
     costMsub: cost?.max ?? null,
     unit,
+    // Paid with a free question: the price line reads "Free, 2 of 3 left".
+    free: fr.use ? { left: fr.left, total: fr.total } : null,
+    // Free questions left, but this one is too long for one, and there is no paid balance.
+    freeTooLong: !fr.use && fr.why === 'long' && !(S.key && S.balanceMsub > 0),
     reading: S.pending.some((a) => a.status === 'reading'),
     overContext: !!model.context_length && tokens + maxOut > model.context_length,
     overBody: bytes > BODY_LIMIT * 0.98,
   };
 }
+
+/**
+ * Input tokens as the engine counts them for the free caps: the request body's bytes over two
+ * (FORGE_BYTES_PER_TOKEN), with room for the parts of the body around the messages.
+ */
+const bodyTokens = (bytes) => Math.ceil((bytes + 256) / 2);
 
 /**
  * The most the engine can charge to read up to SPEAK_MAX_CHARS of an answer aloud: 0 when the phone
@@ -456,18 +553,23 @@ async function generate() {
   const vision = !!model.capabilities?.vision;
   const conv = S.conv;
   const history = conv.messages.filter((m) => !m.meta?.error);
+  const api = apiMessages(history, { systemPrompt: t('system.prompt'), vision });
+  // A free question is used first, when the model is on the free list and the question fits its caps.
+  const fr = freeNow(model, bodyTokens(new TextEncoder().encode(JSON.stringify(api)).length));
+  const useF = fr.use && !!S.freeKey;
   const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: S.unit } };
+  if (useF) reply.meta.free = true;
   conv.messages.push(reply);
   const controller = new AbortController();
   gen = { controller };
   store.set({ streaming: true });
-  const maxTokens = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
+  const maxTokens = useF ? freeMaxTokens(S.free, Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT)) : Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   let forge = null;
   let failure = null;
   try {
     await engine.chat({
-      key: S.key,
-      body: { model: model.id, messages: apiMessages(history, { systemPrompt: t('system.prompt'), vision }), max_tokens: maxTokens },
+      key: useF ? S.freeKey : S.key,
+      body: { model: model.id, messages: api, max_tokens: maxTokens },
       encrypted: isPrivate(model) ? { upstream: model.upstream_model } : null,
       signal: controller.signal,
       onText: (d) => {
@@ -489,12 +591,19 @@ async function generate() {
   // What a failure cost comes from the engine's final event, kept on the error path too, so the words
   // never say "not charged" when the engine charged for the question.
   if (reply.meta.error) reply.meta.error.charged = chargedFor(forge, failure);
+  // A free question's charge is a credit, not money: never shown as an amount. If one was used on a
+  // failure, the words say to check the funds instead.
+  if (useF && reply.meta.error) reply.meta.error.charged = reply.meta.error.charged > 0 ? null : reply.meta.error.charged;
   if (reply.meta.error && reply.content) {
     reply.meta.partial = true;
     delete reply.meta.error;
   }
-  if (forge?.balance_msub != null) S.balanceMsub = forge.balance_msub;
-  if (forge?.charged_msub != null && (!reply.meta.error || forge.charged_msub > 0)) reply.meta.cost = forge.charged_msub;
+  if (forge?.balance_msub != null) {
+    if (useF) S.freeMsub = forge.balance_msub;
+    else S.balanceMsub = forge.balance_msub;
+  }
+  if (!useF && forge?.charged_msub != null && (!reply.meta.error || forge.charged_msub > 0)) reply.meta.cost = forge.charged_msub;
+  if (useF && forge?.charged_msub > 0) reply.meta.freeLeft = freeLeft(forge.balance_msub ?? S.freeMsub);
   // A stopped stream is settled by the engine just after the disconnect.
   if (reply.meta.stopped && !forge) await new Promise((r) => setTimeout(r, 900));
   store.set({ streaming: false });
@@ -753,7 +862,15 @@ async function settleOtherMint() {
 function blocker() {
   if (!S.online) return { key: 'type.offline' };
   if (S.streaming) return { key: 'talk.busy' };
-  if (!S.key || S.balanceMsub === 0) return { key: 'type.noFunds', go: () => nav('addFunds') };
+  if (!S.key || S.balanceMsub === 0) {
+    const v = view();
+    // A voice question the phone turns into words can be a free question; the engine's speech to text
+    // is paid from the paid balance.
+    if (!(v.talk.freeOk && v.fundsBlock === null)) {
+      if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', go: () => nav('freeOut') };
+      return { key: 'type.noFunds', go: () => nav('addFunds') };
+    }
+  }
   if (!pickModel(S.models, S.settings)) return { key: 'type.noModel', go: () => nav('model') };
   return null;
 }
@@ -847,6 +964,12 @@ const actions = {
     S.settings.privateOnly = on;
     saveSettings();
     store.set({});
+  },
+  /** Chooses the first free model Private only allows (Funds and Type offer it when free questions are left). */
+  useFreeModel: () => {
+    const m = (S.free?.models ?? []).map((id) => S.models.find((x) => x.id === id)).find((x) => x && pickModel([x], { ...S.settings, model: x.id }));
+    if (!m) return nav('model');
+    actions.chooseModel(m.id);
   },
   chooseModel: (id) => {
     S.settings.model = id;
@@ -965,6 +1088,8 @@ function screenFor(name, params) {
       return fundScreen(ctx, params);
     case 'takeOut':
       return takeOutScreen(ctx);
+    case 'freeOut':
+      return freeOutScreen({ ...ctx, engine: engineProxy });
     case 'look':
       return lookScreen(ctx);
     case 'model':
@@ -1000,6 +1125,12 @@ function render() {
       S.key = k;
       refreshBalance();
     }
+  }
+  // The same for the free balance key, and for a voucher the /free page left on this phone to add.
+  if (registry) {
+    const fk = !S.freeKey && ui.load(freeKeyStore());
+    if (fk) S.freeKey = fk;
+    if (fk || vault.incoming().some((x) => x.via === 'free' && x.state === 'pending' && !x.code)) retryAll().then(() => refreshBalance());
   }
   const { name, params } = parse(location.hash);
   unsub?.();
@@ -1049,7 +1180,7 @@ function halt() {
   for (const x of registry?.list('voice-out') ?? []) x.instance.forget?.();
   unsub?.();
   current?.destroy?.();
-  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '' });
+  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, freeKey: null, freeMsub: null, freeTotal: 0, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '' });
 }
 
 /**
@@ -1093,6 +1224,8 @@ async function start() {
   S.settings = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   S.key = ui.load(keyStore());
+  S.freeKey = ui.load(freeKeyStore());
+  S.freeTotal = (await kv.get(`freeTotal:${engine.base}`).catch(() => null)) ?? 0;
   S.peakMsub = (await kv.get(`peak:${engine.base}`).catch(() => null)) ?? null;
   S.pending = ((await kv.get('pending').catch(() => null)) ?? []).filter((a) => a.status === 'ready');
   S.draft = (await kv.get('draft').catch(() => null)) ?? '';
@@ -1121,7 +1254,7 @@ async function start() {
   addEventListener('popstate', onPop);
   addEventListener('online', () => {
     store.set({ online: true });
-    retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey }).then((n) => n && refreshBalance());
+    retryAll().then((n) => n && refreshBalance());
     settleOtherMint();
   });
   addEventListener('offline', () => store.set({ online: false }));
@@ -1136,7 +1269,7 @@ async function start() {
 
   await loadModels();
   await refreshBalance();
-  const n = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey });
+  const n = await retryAll();
   if (n) await refreshBalance();
   await settleOtherMint();
   registerWorker();

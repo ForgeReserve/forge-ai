@@ -51,6 +51,14 @@ export function errorView(code, message, charged = 0) {
       return { key: 'talk.cannotUse', next: 'retry' };
     case 'account_frozen':
       return { key: 'error.frozen', next: 'takeOut' };
+    // Free questions (docs/FREE-TIER.md): the engine refused one before any charge.
+    case 'not_free_model':
+      return { key: 'error.freeModel', next: 'chooseModel' };
+    case 'free_too_long':
+    case 'free_too_much_output':
+      return { key: 'error.freeLong', next: 'startFresh' };
+    case 'credits_expired':
+      return { key: 'error.freeExpired', next: 'freeOut' };
     default:
       return { key: 'error.other', next: 'retry', message };
   }
