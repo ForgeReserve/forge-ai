@@ -347,6 +347,42 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     }
   });
 
+  // Review of finding 3: the per-load vet can fail after the token is already swapped and held.
+  // Confirm must then answer with the in-progress state for the client to poll, never an error.
+  it('a vet failure after the swap leaves the held eCash with the poller and confirm answers melting', async () => {
+    const token = await mintToken(MINT_C, 'sat', 500);
+    const q = await post(g, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite: createInvite(g) });
+    expect(q.status).toBe(200);
+    const id = q.body.id as string;
+    const key = q.body.key as string;
+    const w = g.deps.wallet as any;
+    const orig = w.opts.vetMint;
+    w.opts.vetMint = async (m: string) => {
+      if (g.deps.funding.get(id)?.state === 'melting') throw new PaymentError('mint_not_allowed', 'this mint address is not allowed');
+      return orig(m);
+    };
+    try {
+      const c = await post(g, '/v1/wallet/fund/foreign/confirm', { id, token }, key);
+      expect(c.status).toBe(200);
+      expect(c.body.state).toBe('melting');
+      const row = g.deps.funding.get(id)!;
+      expect(row.state).toBe('melting');
+      expect(row.error).toMatch(/not allowed/);
+      expect(row.f_melt_op).toBeNull();
+      expect(g.deps.wallet.heldProofs(id).length).toBeGreaterThan(0);
+    } finally {
+      w.opts.vetMint = orig;
+    }
+    let r = g.deps.funding.get(id)!;
+    for (let i = 0; i < 50 && r.state !== 'done'; i++) {
+      r = (await g.deps.funding.advance(id))!;
+      if (r.state !== 'done') await new Promise((res) => setTimeout(res, 200));
+    }
+    expect(r.state).toBe('done');
+    expect(r.credited).toBe(q.body.foreign.credit);
+    expect(topupRows(g, r.account_id)).toBe(1);
+  });
+
   it('a melt that no longer fits is refunded to the user as eCash from their mint', async () => {
     const invite = createInvite(g);
     const token = await mintToken(MINT_C, 'sat', 600);
@@ -515,7 +551,9 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     const q = await post(g1, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite });
     const key = q.body.key as string;
     const c = await post(g1, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token }, key);
-    expect(c.status).toBe(500);
+    // The swap already holds the eCash: confirm answers the in-progress state, not an error.
+    expect(c.status).toBe(200);
+    expect(c.body.state).toBe('melting');
     expect(g1.deps.funding.get(q.body.id)!.state).toBe('melting');
     await g1.close();
 

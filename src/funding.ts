@@ -725,11 +725,19 @@ export class FundingService {
         this.set(id, { next_check: now() + 5000, error: errText(e) });
         return this.get(id)!;
       }
-      this.set(id, { state: 'melting', error: null });
-      await this.melt(this.get(id)!);
-      const after = this.get(id)!;
-      if (after.state === 'pending') await this.checkQuote(after);
-      await this.deliverPayouts(id);
+      // From here the gateway holds the user's eCash: any failure (a mint vet refusal, a resolver
+      // error, a mint that does not answer) leaves the funding where it is for the poller, and the
+      // client gets the in-progress state to poll instead of an error.
+      try {
+        this.set(id, { state: 'melting', error: null });
+        await this.melt(this.get(id)!);
+        const after = this.get(id)!;
+        if (after.state === 'pending') await this.checkQuote(after);
+        await this.deliverPayouts(id);
+      } catch (e) {
+        log.warn('fund_step_failed', { id, state: this.get(id)!.state, err: errText(e) });
+        this.set(id, { error: errText(e), next_check: now() + 5000 });
+      }
       return this.get(id)!;
     } finally {
       this.inflight.delete(id);
