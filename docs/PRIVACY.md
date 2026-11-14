@@ -28,6 +28,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - On-chain status comes from the mint only, unless `FORGE_ESPLORA_URL` is set; then the gateway asks that Esplora server about the deposit address (point it at your own node to keep addresses private).
 - eCash from another mint: the gateway contacts that mint from its own IP address to swap and melt the token. That mint learns the Forge invoice it paid. The change or refund token handed back is fresh eCash from that mint.
 - A Cashu card (v2 Android app): the phone talks only to its engine, so the engine carries the card's swap to the card's mint from its own IP address and hands the answer back (`/v1/wallet/fund/card/*`). The engine and that mint see the card's pieces, and the secret of each piece names the card's key, so a card is recognisable from one tap to the next. They see the phone's outputs only blinded; the blinding factors stay on the phone, so neither can take the eCash. The engine stores nothing of it and logs nothing of the request. The eCash is then added like any other eCash, linked to the balance key it lands on. The card's own record (mint, PIN state, pieces) is read on the phone and not sent anywhere else.
+- A Fedimint card (v2 Android app) pays through a till the person paired with, not through the engine. The phone sends the till the engine's Lightning invoice, the card's PIN and the card's answers to the till's commands, from the phone's own network address. The till learns that card, its PIN, the amount and the invoice (so it can tell the invoice is the engine's), and it keeps a record of the pay. The engine sees only a Lightning payment of its invoice, credited to the balance key that asked for it; it learns nothing of the card or the till from the app. The phone keeps the payment (`forge2.tillpays`: the invoice, its amounts, the till's pay id and the card's short id) until the funds are credited or the till has given the card its money back, never the PIN. The till's address and pay token are kept by the app, sealed in the Android Keystore.
 
 ## Free questions and the faucet
 
@@ -83,8 +84,8 @@ The Android app (docs/ANDROID.md) keeps the same things in its own web view stor
 - A photo shared in from another app is read into the app's memory and handed to Share unseen once; it is never written to storage.
 - Two kinds of photo file are written: the protected photo handed to the share sheet (the app's cache) and a photo taken with the camera for Share unseen (the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
 - Backups are off, so nothing of Forge goes into a cloud backup or a phone to phone transfer. Uninstalling the app removes everything it kept.
-- It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default).
-- Card taps: the NFC reader is on only while the Tap a card screen is open. The card's answers go to the page and nowhere else; a card's mint is reached through the engine as above.
+- It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default), and to a till the person paired with in Tap a Fedimint card, over https.
+- Card taps: the NFC reader is on only while the Tap a card or Tap a Fedimint card screen is open. A Fedimint card's answers go to the page and on to the paired till only. The card's answers go to the page and nowhere else; a card's mint is reached through the engine as above.
 - Its web view sends nothing to Google: Safe Browsing link checks and WebView usage metrics are turned off in the app's manifest.
 
 ## Encrypted pass-through (Tinfoil EHBP)

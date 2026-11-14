@@ -115,9 +115,29 @@ For a card from another mint, `/v1/wallet/fund/card/mint` also answers `max`: th
 
 Not covered: the card's clock and limits (`SET_HEADER`, the no-PIN allowance), the owner's commands, a card's DLEQ store, the NFC tag application, and a 0.x or Foxy 1.x card, which is refused as needing an update before anything is asked of it.
 
-### Not yet: Fedimint
+### A Fedimint card, through a till (the v2 Android app)
 
-Fedimint notes need a Fedimint client to reissue them in their federation and pay out to Lightning. The cashucard.org fund kit does this with `fedimint-receiver`, a separate Rust service. Forge AI does not run one, so Fedimint is not offered. Adding it would mean deploying that receiver beside the gateway and treating it like a foreign mint: reissue, pay the Forge bolt11 quote from the federation, mint and credit.
+The engine runs no Fedimint client, so it never takes Fedimint notes. A Fedimint card's notes can only be redeemed by a till: fedimintcard's `till serve --pay-enabled`, whose pay route is documented in fedimintcard-pay `docs/PAY.md`, `POS-LINK.md` and `TILL-API.md`. The till charges the card and pays a Lightning invoice from its own wallet; to the engine this is an ordinary Lightning funding. The phone follows those documents (`public/v2/core/till.js`, the module `public/v2/modules/fund/fedimint/`):
+
+1. **Pairing, once.** The till's owner runs `till pair --scope pay` and the person scans the QR code (or pastes its text, `fedimintcard-till-pay:<url>?t=<token>`). The Android app keeps the address and the pay token sealed with a key in the Android Keystore (`TillPlugin.kt`, ForgeTill) and adds the token to each request itself, so the page does not hold it after pairing. The app sends only `POST /v1/pay`, `GET /v1/pay/{id}?client_ref=`, `POST /v1/pay/{id}/refund` and `GET /v1/health`, and opens the card link. A till's own POS code (`fedimintcard-till:`) is refused, and so is plain http to another computer: the PIN and the token would cross the network in clear. The till must be on https (as the StartOS package is); http is taken only for this phone itself, for tests.
+2. **The invoice.** `POST /v1/wallet/fund/lightning` for the amount, as the Lightning row does. The phone reads the invoice's amount from it.
+3. **The price, before the tap.** The card is charged the invoice, the fee reserve the phone asks for (`max_fee_msat`: 2 sats and 0.5 percent of the invoice, in whole sats, at most the till's default cap of 1,000 sats) and the till's margin; a card whose notes cannot make exact change pays up to 2,048 msat more. The screen shows what reaches the funds, the most the card pays, and the most that goes to the till, and says that what the Lightning fees do not use stays with the till (PAY.md: the unspent reserve is not put back on the card). The pay token opens no route that tells the till's margin, so the phone takes it from the till's settings on the phone (0 unless the person enters what the till's owner set; 0 is the till's default) and from every answer the till gave before (`margin_msat`): a margin seen on one invoice bounds it on any other. If a till charges more than the price shown, the screen says so and the next price includes it.
+4. **The tap.** The payment is stored on the phone (`forge2.tillpays`) and read back before the till hears of it, with a new `client_ref`. The person holds the card to the phone. The phone opens the card link (`/v1/card/link`, a WebSocket with the pay token) and sends `POST /v1/pay` with `X-Card-Link`, the invoice, `max_fee_msat`, the `client_ref` and the PIN, with a 130 second read timeout. Each card command the till sends down the link goes to the card (ForgeNfc) and its whole answer goes back; a card that leaves is reported `lost`. The phone never reads or keeps what passes. The PIN is held in memory for that tap only and is never stored.
+5. **The answer.**
+
+| Till says | What the phone does |
+|---|---|
+| `200 paid` | The till paid the invoice. The phone asks the engine for the funding until it is `done`, then the payment is removed. |
+| `202 undecided` | The card paid, or may have. The phone asks the till (`GET /v1/pay/{id}?client_ref=`) and the engine until one says it is settled. Never another tap. |
+| `502 pay_failed` | The invoice was not paid and the till holds what the card paid (`received_msat`), owed to the card. The screen offers Get it back: the same card behind a new link, `POST /v1/pay/{id}/refund`. A full card takes part of it (`refund_owed_msat`): spend from the card, then tap again. Another card is refused (`wrong_card`). The payment stays on the phone until the till answers `refunded`. |
+| The card refused (`wrong_pin` with the tries left, `insufficient`, `no_card`, `card_link_gone`, `busy`, ...) | Nothing moved. The next tap sends the same `client_ref`. A PIN the card refused is never sent again on its own. |
+| Refused before the card was touched (`pin_required`, `invoice_expired`, `daily_cap`, `lightning_unavailable`, ...) | Nothing moved. A new `client_ref`. `fee_reserve_too_low` gives the gateway's fee: the reserve becomes that, in whole sats, and the new price is shown before the next tap. An invoice with less than 150 seconds left is not sent at all: the person sees the price again with a new invoice. |
+| `401`, `403` | The till refused the pay token: pair again. |
+| No answer, or `500` | The card may have paid. The payment is kept as sent; the next tap sends the very same request, which the till answers again without charging twice. |
+
+A payment that waits on the engine or the till is looked at again when Funds opens, when the connection comes back and when the app starts. Erase everything warns about one that is not finished. Not covered: putting the unspent fee reserve back on the card (the till does not), a till that is offline (it refuses a pay), and an iPhone (the app is Android only).
+
+Tested against a mock till that implements the documented routes, auth scope and states over real HTTP and a real card link (`test/support/mocktill.ts`), with a fake card. A real till and a real Fedimint card are not tested yet.
 
 ## The gateway's wallet
 

@@ -2,7 +2,7 @@
 
 Status: built in slice C1, card taps in A13 (docs/V2-BUILD.md). Not yet installed on a phone, and no real card has been tapped.
 
-Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 6.2.3). The app's files are inside the APK: it loads no code from the network. It talks only to its engine.
+Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 6.2.3). The app's files are inside the APK: it loads no code from the network. It talks only to its engine, and to a till the person paired for Fedimint cards.
 
 - Name **Forge**, application id `com.forgereserve.ai`, Android 9 (API 28) and up.
 - No Google services, no Firebase, no analytics. It should run on GrapheneOS without Google Play; that is not tested on a phone yet.
@@ -18,8 +18,9 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 | Share out | Share unseen's Share opens Android's share sheet with the protected photo only. Save opens the system save screen, so no storage permission is needed (`SharePlugin.kt`). |
 | Back button | Walks back through the app's screens, then leaves. |
 | Card taps | Tap a card reads a Cashu eCash card over NFC (`NfcPlugin.kt`, ForgeNfc): IsoDep connect, transceive and close, 5 seconds per command, reading on only while that screen is open. The page builds every command (`public/v2/core/card/`); the plugin checks each is one well formed short APDU and hands back the card's whole answer. |
+| Fedimint cards | Tap a Fedimint card pays the engine's Lightning invoice through a till (`TillPlugin.kt`, ForgeTill; [PAYMENTS.md](PAYMENTS.md)). Pairing scans the till's pay code; the till's address and pay token are sealed with a key in the Android Keystore and the token never goes back to the page. The plugin sends only the till's pay routes, over https, and holds the card link (a WebSocket, `TillLink.kt`) while the page relays the till's card commands to the card through ForgeNfc. Erase everything forgets the till and deletes the key. |
 
-Camera and microphone are asked for the first time they are used (scanning a note, taking a photo, holding Hold to talk), through Capacitor's web view. Camera, microphone and NFC are optional features, so the app installs on phones without them. NFC is used by Tap a card (slice A13), and is declared for the Fedimint card of slice A14. A phone with NFC turned off is asked to turn it on; one without NFC is told it cannot read cards.
+Camera and microphone are asked for the first time they are used (scanning a note, taking a photo, holding Hold to talk), through Capacitor's web view. Camera, microphone and NFC are optional features, so the app installs on phones without them. NFC is used by Tap a card (slice A13) and Tap a Fedimint card (slice A14). A phone with NFC turned off is asked to turn it on; one without NFC is told it cannot read cards.
 
 The app has no Classic mode (it carries only the v2 app) and no service worker (its files are already on the phone).
 
