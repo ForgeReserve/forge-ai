@@ -9,6 +9,7 @@ import { adapters } from './core/adapters.js';
 import { lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
 import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
+import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { chargedFor, errorView } from './core/errors.js';
@@ -28,6 +29,7 @@ import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
+import { firstRunScreen } from './screens/firstrun.js';
 import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
@@ -95,6 +97,15 @@ function memoryNow(model) {
   return memo.v;
 }
 
+let againMemo = { k: '', v: null };
+/** What Ask again would cost now, or null while an answer streams or with nothing to ask again. */
+function againNow(model) {
+  if (S.streaming || !model) return null;
+  const k = `${S.conv.id}|${S.conv.messages.length}|${model.id}|${S.unit}|${S.conv.messages.at(-1)?.meta?.error ? 'e' : ''}`;
+  if (againMemo.k !== k) againMemo = { k, v: estimateAgain(model) };
+  return againMemo.v;
+}
+
 function view() {
   const model = pickModel(S.models, S.settings);
   const unit = S.unit ?? 'usd';
@@ -109,7 +120,9 @@ function view() {
     balanceMsub: hasKey ? S.balanceMsub : null,
     balanceText: hasKey && S.balanceMsub != null ? fmtBalance(S.balanceMsub, S.unit) : null,
     fundsFraction: hasKey ? fundsFraction(S.balanceMsub, S.peakMsub) : 0,
-    // No funds at all (no balance yet, or a balance at zero): the gold ring invites a paper note scan.
+    // No funds at all (no balance yet, or a balance at zero): the home and Funds show their empty state,
+    // and the gold ring invites a paper note scan.
+    noFunds: !hasKey || S.balanceMsub === 0,
     scanNote: (!hasKey || S.balanceMsub === 0) && !!registry?.list('fund').some((x) => x.instance.id === 'note'),
     refundable: hasKey ? Math.floor((S.availableMsub ?? S.balanceMsub ?? 0) / 1000) : 0,
     questionsLeft: hasKey ? questionsLeft(S.balanceMsub, perQuestion(model, unit)) : 0,
@@ -121,6 +134,11 @@ function view() {
     hiddenCount: hiddenCount(S.models, S.settings),
     talk: talkView(model, unit),
     speak: speakView(),
+    // The most Ask again can cost, shown on the button before it is pressed.
+    againMsub: againNow(model),
+    // A free question in place of the balance: the price lines read "Free". The free tier sets this;
+    // until it is built, every request is paid from the balance.
+    free: null,
     // Goes up whenever conversations are burned, so an open History screen reads the list again.
     historyVersion,
   };
@@ -132,6 +150,25 @@ function view() {
 const voiceMods = (kind) => Object.fromEntries((registry?.list(kind) ?? []).map((x) => [x.instance.id, x.instance]));
 const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
 const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
+
+/**
+ * Reads the first run's words aloud with the phone's own voice: free, and nothing leaves the phone. The
+ * engine's voice is never used here (it costs money and the guide shows no price), so where the phone
+ * has no voice of its own the Listen chip is not shown.
+ */
+const reader = {
+  mod: () => {
+    const m = voiceMods('voice-out').device;
+    return m?.available() && m.private() ? m : null;
+  },
+  available: () => !!reader.mod(),
+  read(pieces) {
+    const m = reader.mod();
+    if (!m || !pieces.length) return null;
+    talk.stopSpeaking();
+    return m.speak(pieces);
+  },
+};
 
 /**
  * The engine's audio calls as a voice module sees them: the model of each kind that Private only allows,
@@ -362,6 +399,23 @@ function estimateFor(text) {
     overContext: !!model.context_length && tokens + maxOut > model.context_length,
     overBody: bytes > BODY_LIMIT * 0.98,
   };
+}
+
+/**
+ * The most Ask again can cost: again() drops the answers after the last question and asks the model
+ * again with the conversation up to it. null when there is no question to ask again, or no price.
+ */
+function estimateAgain(model) {
+  const unit = S.unit ?? 'usd';
+  const msgs = S.conv.messages;
+  let end = msgs.length;
+  while (end && msgs[end - 1].role === 'assistant') end--;
+  const history = msgs.slice(0, end).filter((m) => !m.meta?.error);
+  if (!history.length) return null;
+  const vision = !!model.capabilities?.vision;
+  const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
+  const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
+  return estimate(model, unit, tokens, maxOut)?.max ?? null;
 }
 
 async function ask(text, meta = null) {
@@ -834,6 +888,43 @@ function back() {
   else nav(parentOf(currentName), {}, { replace: true });
 }
 
+// Set by leave(): once the history stack has gone back to its first entry, that entry becomes `name`.
+let afterPop = null;
+
+/**
+ * Leaves a flow of screens (the first run) for `name`: back to the nearest earlier `name` on the stack,
+ * or else back to the first entry, which then becomes `name`. So the phone's back button does not walk
+ * through the flow again afterwards.
+ */
+function leave(name) {
+  for (let i = depth() - 1; i >= 0; i--) if (trail[i] === name) return history.go(i - depth());
+  const d = depth();
+  if (!d) return nav(name, {}, { replace: true });
+  afterPop = name;
+  history.go(-d);
+}
+
+function onPop() {
+  if (afterPop) {
+    const name = afterPop;
+    afterPop = null;
+    history.replaceState({ forge2: 0 }, '', href(name));
+  }
+  render();
+}
+
+/** First run: marks it seen (Skip or Start), then goes to the home. */
+function finishIntro() {
+  keep(SEEN_KEY, SEEN_VALUE);
+  leave('home');
+}
+
+/** First run, Back: the step before, by the phone's own history when that is where it came from. */
+function introBack(prev) {
+  if (depth() > 0 && trail[depth() - 1] === STEP_ROUTES[prev]) history.back();
+  else nav(STEP_ROUTES[prev], {}, { replace: true });
+}
+
 /** Goes back to the nearest earlier `name` on the stack, or replaces this screen with it. */
 function backTo(name) {
   for (let i = depth() - 1; i >= 0; i--) if (trail[i] === name) return history.go(i - depth());
@@ -868,6 +959,11 @@ function screenFor(name, params) {
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), audio } });
     case 'history':
       return historyScreen(ctx);
+    case 'intro':
+    case 'introPay':
+    case 'introLimits':
+    case 'introPrivate':
+      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
     case 'erase':
       return eraseScreen(ctx);
     case 'photo':
@@ -991,6 +1087,8 @@ async function start() {
   // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
   // other way, an old one that was never read is removed.
   if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
+  // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js).
+  if (shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
   // An answer that was streaming when the tab was killed is kept as stopped.
@@ -1006,7 +1104,7 @@ async function start() {
   if (!registry.list('mode').length) throw new Error('no mode module');
   applyLook();
 
-  addEventListener('popstate', render);
+  addEventListener('popstate', onPop);
   addEventListener('online', () => {
     store.set({ online: true });
     retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey }).then((n) => n && refreshBalance());

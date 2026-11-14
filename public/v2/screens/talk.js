@@ -128,8 +128,8 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
       heard.textContent = tk.text;
       route.textContent = t({ 'engine-private': 'talk.routePrivate', 'engine-standard': 'talk.routeStandard', device: 'talk.routeDevice' }[tk.route] ?? 'talk.routeStandard');
       route.dataset.route = tk.route ?? '';
-      const p = priceLine(tk.priceMsub, tk.unit);
-      price.textContent = t(p.key, { amount: p.amount });
+      const p = priceLine(tk.priceMsub, tk.unit, v.free);
+      price.textContent = t(p.key, p);
     }
   };
   update();

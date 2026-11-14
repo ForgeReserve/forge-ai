@@ -24,6 +24,11 @@ export const ROUTES = {
   photoMissed: 'photo/missed',
   photoNone: 'photo/none',
   photoSent: 'photo/sent',
+  // The first run (core/firstrun.js), one route per step: Welcome, How you pay, the limits, Private only.
+  intro: 'start',
+  introPay: 'start/pay',
+  introLimits: 'start/limits',
+  introPrivate: 'start/private',
 };
 
 /** '#/funds/add/ecash' -> {name: 'fund', params: {id: 'ecash'}}. Unknown routes go home. */

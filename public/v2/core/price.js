@@ -30,8 +30,16 @@ export function perQuestion(model, unit) {
 /**
  * The price line: {key, amount} for the string table. Under one cent (or one sat) reads "Under $0.01";
  * otherwise the most it can cost, rounded up to a whole cent or sat.
+ * `free` is set when the request is paid with a free question instead of the balance: true, or
+ * {left, total} to say how many are left. The line then reads "Free" or "Free, 2 of 3 left". The free
+ * questions themselves (credits) come with the free tier; until then no caller passes `free`.
  */
-export function priceLine(costMsub, unit) {
+export function priceLine(costMsub, unit, free = null) {
+  if (free) {
+    const ok = (n) => Number.isInteger(n) && n >= 0;
+    if (typeof free === 'object' && ok(free.left) && ok(free.total) && free.total > 0 && free.left <= free.total) return { key: 'price.freeLeft', amount: '', left: free.left, total: free.total };
+    return { key: 'price.free', amount: '' };
+  }
   if (costMsub == null) return { key: 'price.unknown', amount: '' };
   if (costMsub < 1000) return { key: 'price.under', amount: unit === 'sat' ? '1 sat' : '$0.01' };
   const whole = Math.ceil(costMsub / 1000);

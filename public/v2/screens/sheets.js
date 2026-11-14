@@ -29,6 +29,8 @@ export function moreSheet({ t, state, nav, registry }) {
     listRow({ ico: 'lock', tint: 'teal', title: t('more.model'), sub: state.S.settings.privateOnly ? t('more.modelSub') : t('more.modelSubOff'), id: 'moreModel', onclick: () => nav('model') }),
     voice ? listRow({ ico: 'mic', tint: 'violet', title: t('more.voice'), sub: t('more.voiceSub'), id: 'moreVoice', onclick: () => nav('voice') }) : null,
     listRow({ ico: 'sun', tint: 'blue', title: t('more.look'), sub: t('more.lookSub'), id: 'moreLook', onclick: () => nav('look') }),
+    // The first run again: how paying works, what Forge can and cannot hide, Private only.
+    listRow({ ico: 'shield', tint: 'teal', title: t('more.intro'), sub: t('more.introSub'), id: 'moreIntro', onclick: () => nav('intro') }),
     listRow({ ico: 'trash', tint: 'danger', title: t('more.erase'), sub: t('more.eraseSub'), id: 'moreErase', cls: 'danger-row', onclick: () => nav('erase') }),
   );
 }

@@ -45,7 +45,7 @@ export function answer({ t, state, nav, actions, format }) {
     if (!sp.available) return [];
     if (sp.current && sp.state !== 'idle') return [tile('speakStopBtn', 'stop', t('speak.stop'), () => actions.stopSpeaking())];
     const p = sp.priceMsub > 0 ? priceLine(sp.priceMsub, v.talk.unit) : null;
-    return [tile('speakBtn', 'speaker', t('speak.listen'), () => actions.speak(), p ? t(p.key, { amount: p.amount }) : null)];
+    return [tile('speakBtn', 'speaker', t('speak.listen'), () => actions.speak(), p ? t(p.key, p) : null)];
   };
   const showSpeaking = (v) => {
     const on = v.speak.current && v.speak.state !== 'idle';
@@ -105,7 +105,7 @@ export function answer({ t, state, nav, actions, format }) {
         if (!streaming) enhance(body);
       } else body.replaceChildren(el('p', { class: 'thinking', text: streaming ? t('answer.thinking') : '' }));
     }
-    const stateKey = `${streaming}|${a.meta?.error ?? ''}|${a.meta?.stopped ?? ''}|${a.meta?.cost ?? ''}|${v.speak.available}|${v.speak.current}|${v.speak.state}|${v.speak.priceMsub}`;
+    const stateKey = `${streaming}|${a.meta?.error ?? ''}|${a.meta?.stopped ?? ''}|${a.meta?.cost ?? ''}|${v.speak.available}|${v.speak.current}|${v.speak.state}|${v.speak.priceMsub}|${v.againMsub}|${JSON.stringify(v.free)}`;
     if (stateKey === shownState) return;
     shownState = stateKey;
     if (!streaming && a.content) enhance(body);
@@ -116,16 +116,26 @@ export function answer({ t, state, nav, actions, format }) {
       errBox.hidden = true;
       return;
     }
+    // Asking again is a new paid question: its price shows before it is pressed.
+    const againPrice = (() => {
+      const p = priceLine(v.againMsub, v.talk.unit, v.free);
+      return t(p.key, p);
+    })();
     tiles.replaceChildren(
       ...speakTile(v),
       ...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []),
-      tile('againBtn', 'again', t('answer.again'), () => actions.again()),
+      tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice),
       burnTile(),
     );
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut') }[ev.next];
-      errBox.replaceChildren(el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }) }), el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }));
+      errBox.replaceChildren(
+        el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }) }),
+        el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }),
+        // Trying again asks the model again: a paid question, with its price before the tap.
+        ev.next === 'retry' ? el('p', { class: 'price-line', id: 'retryPrice' }, el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: againPrice })) : null,
+      );
       errBox.hidden = false;
       // Ask again is the next step already when the next step is a retry.
       if (ev.next === 'retry') tiles.querySelector('#againBtn')?.remove();

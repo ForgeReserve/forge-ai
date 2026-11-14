@@ -51,8 +51,8 @@ export function typeScreen({ t, state, nav, back, actions }) {
       notice.replaceChildren(el('p', { text: t(problem) }));
       notice.hidden = false;
     } else notice.hidden = true;
-    const p = priceLine(est.costMsub, est.unit);
-    price.replaceChildren(el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: t(p.key, { amount: p.amount }) }));
+    const p = priceLine(est.costMsub, est.unit, v.free);
+    price.replaceChildren(el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: t(p.key, p) }));
     price.hidden = !v.model;
     send.disabled = !!b || !!problem || (!ta.value.trim() && !S.pending.length);
   };

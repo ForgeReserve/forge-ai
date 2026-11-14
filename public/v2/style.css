@@ -329,3 +329,47 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .change-row[data-state="failed"] b, .change-row[data-state="uncovered"] b { color: var(--danger); }
 .note.warn-text { color: var(--low-ink); }
 .centre-text { text-align: center; }
+
+/* First run (DWelcome, DHowPay, DLimits, DPrivateOnly), built from the canvas tokens */
+.screen.intro { padding-left: 20px; padding-right: 20px; }
+.intro-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; }
+.intro-top-end { display: flex; align-items: center; gap: 8px; }
+.wordmark { font-size: 15px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.btn.text { border: 0; padding: 0 10px; min-height: 48px; min-width: 48px; color: var(--text-2); }
+.listen-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px; background: var(--teal-tint); color: var(--teal); border: 1px solid var(--teal-line); border-radius: 12px; font-size: 14px; font-weight: 600; }
+.intro-body { gap: 16px; }
+.intro-content { display: flex; flex-direction: column; gap: 14px; }
+.intro-title { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+.intro-title:focus { outline: none; }
+[data-step="welcome"] .intro-title { font-size: 32px; line-height: 1.15; }
+.intro-lead { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.intro-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); }
+.intro-list.can { border-color: var(--teal-line); }
+.intro-list.cannot { border-color: var(--gold-callout); }
+.intro-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.intro-item:last-child { border-bottom: 0; }
+.intro-item .row-text b { font-size: 15px; }
+.intro-item .row-text small { line-height: 1.45; }
+.ring-dot { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 5px solid var(--gold); }
+.ring-dot.memory { border-color: var(--memory); }
+.callout { margin: 0; padding: 14px 16px; border-radius: 18px; background: var(--surface); font-size: 14px; line-height: 1.45; }
+.callout.gold { border: 1px solid var(--gold-callout); }
+.intro-panel { flex-direction: column; align-items: stretch; gap: 10px; }
+.intro-panel p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-body); }
+.teal-panel-head { display: flex; align-items: center; gap: 10px; color: var(--teal); }
+.teal-panel-head b { flex: 1; font-size: 18px; }
+.intro-panel.off { background: var(--low-tint); border-color: var(--low-line); }
+.intro-panel.off .teal-panel-head, .intro-panel.off .teal-panel-head b { color: var(--low-ink); }
+.note.center { text-align: center; }
+/* Ways to pay, by icon first, the word under it */
+.way-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.way { min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); color: var(--ink); font-size: 13px; font-weight: 600; text-align: center; }
+.way .tile-ico { width: 48px; height: 48px; }
+.funds-ways { display: flex; flex-direction: column; gap: 8px; }
+.funds-ways .way { background: var(--surface-2); box-shadow: none; }
+
+/* Empty states */
+.chip-ways { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 24px; font-size: 14px; font-weight: 600; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 16px; text-align: center; background: var(--surface); border-radius: 22px; box-shadow: var(--shadow-raised-sm); }
+.empty-state b { font-size: 17px; }
+.tile-ico.big { width: 56px; height: 56px; border-radius: 18px; }

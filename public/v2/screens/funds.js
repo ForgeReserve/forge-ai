@@ -3,7 +3,7 @@
 import { backHeader, copy, el, icon, listRow, msgLine, toast } from '../core/ui.js';
 import { cardRing } from './parts.js';
 
-export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
+export function fundsScreen({ t, state, nav, back, actions, format, vault, registry }) {
   const S = state.S;
   const fr = cardRing('gold-track', 'gold');
   const mr = cardRing('memory-track', 'memory');
@@ -17,12 +17,20 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
   const vaultBox = el('div', { class: 'vault-box', id: 'vaultBox' });
   // No funds yet: scanning a paper note is the first thing offered.
   const scanBtn = el('button', { type: 'button', class: 'btn primary block', id: 'fundsScanNote', hidden: true, onclick: () => nav('fund', { id: 'note' }) }, icon('qr', 20), el('span', { text: t('funds.scanNote') }));
+  const addBtn = el('button', { type: 'button', class: 'btn primary', id: 'addFundsBtn', onclick: () => nav('addFunds') }, icon('plus', 20), el('span', { text: t('funds.add') }));
+  // The empty state: what works without funds, and every way in by its icon, one tap each.
+  const emptySub = el('p', { class: 'note', id: 'fundsEmptySub', hidden: true, text: t('funds.emptySub') });
+  const waysHead = el('h3', { class: 'caps gold', id: 'fundsWaysHead', text: t('funds.ways') });
+  const waysGrid = el('div', { class: 'way-grid' });
+  const ways = el('div', { class: 'funds-ways', id: 'fundsWays', role: 'group', 'aria-labelledby': 'fundsWaysHead', hidden: true }, waysHead, waysGrid);
   const fundsCard = el(
     'section',
     { class: 'card big-card', 'aria-labelledby': 'fundsCap' },
     el('div', { class: 'card-top' }, fr.node, el('div', {}, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), amount, fundsNote, refundable)),
+    emptySub,
     scanBtn,
-    el('div', { class: 'card-btns' }, el('button', { type: 'button', class: 'btn primary', id: 'addFundsBtn', onclick: () => nav('addFunds') }, icon('plus', 20), el('span', { text: t('funds.add') })), outBtn),
+    ways,
+    el('div', { class: 'card-btns' }, addBtn, outBtn),
   );
   const memCard = el(
     'section',
@@ -97,6 +105,21 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
     vaultBox.hidden = !rows.length;
   };
 
+  let waysFor = null;
+  const drawWays = (v) => {
+    // Scan a note has its own big button above while there are no funds.
+    const list = v.noFunds ? registry.list('fund').filter((x) => x.instance.available(S.methods) && !(v.scanNote && x.instance.id === 'note')) : [];
+    const k = list.map((x) => x.instance.id).join(',');
+    ways.hidden = !list.length;
+    if (k === waysFor) return;
+    waysFor = k;
+    waysGrid.replaceChildren(
+      ...list.map(({ instance }) =>
+        el('button', { type: 'button', class: 'way', id: `way-${instance.id}`, onclick: () => nav('fund', { id: instance.id }) }, el('span', { class: 'tile-ico tint-gold' }, icon(instance.icon, 24)), el('span', { text: t(`fund.${instance.id}.name`) })),
+      ),
+    );
+  };
+
   const update = () => {
     const v = state.view();
     fr.set(v.fundsFraction);
@@ -105,6 +128,13 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault }) {
     fundsNote.textContent = !v.hasKey ? t('funds.empty') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
     refundable.textContent = v.refundable > 0 ? t('funds.refundable', { amount: format.units(v.refundable, S.unit) }) : '';
     outBtn.disabled = !(v.refundable > 0) && !vault.outgoing().length;
+    // With no funds and nothing waiting to be saved, there is nothing to take out: no dead button.
+    outBtn.hidden = v.noFunds && outBtn.disabled;
+    emptySub.hidden = !v.noFunds;
+    // While Scan a note is the big dark button, Add is a plain one, so one thing leads.
+    addBtn.classList.toggle('primary', !v.scanNote);
+    addBtn.classList.toggle('soft', !!v.scanNote);
+    drawWays(v);
     mr.set(v.memory.free, v.memory.low ? 'low' : 'memory');
     memFree.textContent = t('funds.free', { percent: v.memory.percentFree });
     const held = v.held;
