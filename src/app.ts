@@ -1125,7 +1125,16 @@ export function createApp(d: Deps) {
     const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
-    app.use('/*', serveStatic({ root: d.publicDir }));
+    app.use(
+      '/*',
+      serveStatic({
+        root: d.publicDir,
+        // Hono's type table has no .ogg, so the voice clips would go out as octet-stream, which Safari will not play.
+        onFound: (path, c) => {
+          if (path.endsWith('.ogg')) c.header('Content-Type', 'audio/ogg');
+        },
+      }),
+    );
   }
 
   return app;

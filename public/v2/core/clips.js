@@ -61,7 +61,9 @@ export function createClips({ base, fetch: f = (...a) => globalThis.fetch(...a),
           // Fetched whole (not streamed by the media element), so the service worker's copy serves it offline.
           const res = await f(new URL(file, base).href);
           if (!res.ok) throw new Error(`clip ${file}: HTTP ${res.status}`);
-          const blob = await res.blob();
+          // Typed here too: a copy cached before the server sent audio/ogg says octet-stream, which Safari will not play.
+          const raw = await res.blob();
+          const blob = file.endsWith('.ogg') && raw.type !== 'audio/ogg' ? new Blob([raw], { type: 'audio/ogg' }) : raw;
           if (stopped) return;
           url = objectUrl.createObjectURL(blob);
           audio = makeAudio(url);
