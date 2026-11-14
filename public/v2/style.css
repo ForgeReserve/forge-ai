@@ -65,9 +65,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .bottom-btn { flex: 1; min-height: 60px; background: var(--surface); border: 0; border-radius: 20px; box-shadow: var(--shadow-raised); color: var(--ink); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 0 4px; }
 .bottom-btn.is-open { background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); }
 
-/* Floating menu over the home (Add, More) */
-.float-wrap { position: relative; }
-.float-card { background: var(--surface); border-radius: 26px; box-shadow: var(--shadow-float); padding: 8px; display: flex; flex-direction: column; gap: 4px; animation: rise 220ms var(--ease) both; }
+/* Floating menu over the home (Add, More): a layer over the whole home, talk button included, with the
+   card above the bottom row. The bottom row stays fixed on top of the layer, so Close is always in view;
+   a card taller than the space scrolls inside itself. */
+.float-wrap { position: fixed; z-index: 20; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(520px, 100%); display: flex; flex-direction: column; justify-content: flex-end; padding: max(16px, env(safe-area-inset-top)) 16px calc(max(16px, env(safe-area-inset-bottom)) + 74px); }
+.float-card { background: var(--surface); border-radius: 26px; box-shadow: var(--shadow-float); padding: 8px; display: flex; flex-direction: column; gap: 4px; animation: rise 220ms var(--ease) both; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; flex: none; }
+.home.with-sheet .bottom-row { position: fixed; z-index: 21; left: 50%; transform: translateX(-50%); width: calc(min(520px, 100%) - 32px); bottom: max(16px, env(safe-area-inset-bottom)); }
 .row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; text-align: left; padding: 10px 12px; background: transparent; border: 0; border-radius: 18px; color: var(--ink); }
 .row:hover { background: var(--surface-2); }
 .row-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -115,9 +118,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .row-btns .btn { flex: 1; }
 
-/* Type */
-.type-body { flex: 1; display: flex; flex-direction: column; gap: 12px; }
-.type-body .field-input { flex: 1; min-height: 160px; }
+/* Type: sized to the visual viewport (core/viewport.js), so the field, the price line and Send stay above
+   a phone keyboard. Without a visual viewport it is the full screen height. */
+.screen.type { position: fixed; top: var(--vv-top, 0); left: 50%; transform: translateX(-50%); width: min(520px, 100%); height: var(--vv-h, 100dvh); min-height: 0; overflow-y: auto; gap: 10px; }
+.type-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.type-body .field-input { flex: 1; min-height: 72px; resize: none; }
 .type-foot { display: flex; flex-direction: column; gap: 10px; }
 .price-line { margin: 0; display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
 .price-line .cap { color: var(--text-2); }
@@ -400,3 +405,22 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .pow-ring::before { content: ''; grid-area: 1 / 1; width: 92px; height: 92px; border-radius: 50%; background: var(--bg); }
 .pow-ring .pow-pct { grid-area: 1 / 1; position: relative; font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 .pow-ring[hidden] { display: none; }
+
+/* First run: one idea a step. Icons first, then a short heading and one sentence; the detail is under
+   Learn more. */
+.intro-icons .way { min-height: 104px; }
+.intro-icons .tile-ico { width: 56px; height: 56px; border-radius: 18px; }
+[data-step] .intro-lead { font-size: 18px; line-height: 1.45; color: var(--text-body); }
+.learn { border-top: 1px solid var(--line); }
+.learn > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 48px; color: var(--teal); font-size: 15px; font-weight: 600; cursor: pointer; }
+.learn > summary::-webkit-details-marker { display: none; }
+.learn[open] > summary .ico { transform: rotate(45deg); }
+.learn-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+
+/* Search the web: a switch for the next question, with one line while it is on. */
+.search-box { display: flex; flex-direction: column; gap: 4px; }
+.search-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); font-size: 15px; font-weight: 600; }
+.search-row > span { flex: 1; }
+.search-row .ico { color: var(--teal); }
+.search-note { margin: 0; padding: 0 4px; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+.home .search-box { width: min(336px, 100%); }

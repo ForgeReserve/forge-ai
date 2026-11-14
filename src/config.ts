@@ -204,6 +204,20 @@ const SupplierSchema = z.object({
   attestationUrl: z.string().url().optional(),
   /** tinfoil only: permit http:// enclave URLs (tests only). */
   allowInsecureEnclave: z.boolean().default(false),
+  /**
+   * tinfoil only: web search on chat completions (docs/PAYMENTS.md, Web search). request_usd is the
+   * supplier's fee, charged once per request that searched. A search request runs several model calls
+   * and adds what it found to the input, so its hold also takes extra_input_tokens more input and
+   * output_factor times the output limit, an allowance; the charge is the reported usage, never more
+   * than the hold.
+   */
+  web_search: z
+    .object({
+      request_usd: z.number().nonnegative(),
+      extra_input_tokens: z.number().int().nonnegative().default(0),
+      output_factor: z.number().int().min(1).max(8).default(1),
+    })
+    .optional(),
 });
 export type SupplierConfig = z.infer<typeof SupplierSchema>;
 
@@ -227,6 +241,8 @@ const ModelSchema = z.object({
   reasoning_efforts: z.array(z.string()).default([]),
   /** Rough speed hint for the chat page. */
   speed: z.enum(['fast', 'balanced', 'slow']).optional(),
+  /** Can search the web (its supplier sets web_search). Off on every request unless the client asks. */
+  web_search: z.boolean().default(false),
 });
 export type ModelConfig = z.infer<typeof ModelSchema>;
 
@@ -276,6 +292,8 @@ export const CatalogSchema = z
       if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });
       ids.add(m.id);
       if (!c.suppliers[m.supplier]) ctx.addIssue({ code: 'custom', message: `model ${m.id}: unknown supplier ${m.supplier}` });
+      else if (m.web_search && (!c.suppliers[m.supplier]!.web_search || c.suppliers[m.supplier]!.type !== 'tinfoil' || c.suppliers[m.supplier]!.pricing !== 'metered'))
+        ctx.addIssue({ code: 'custom', message: `model ${m.id}: web_search needs a metered tinfoil supplier with a web_search fee` });
     }
     for (const m of c.audio) {
       if (ids.has(m.id)) ctx.addIssue({ code: 'custom', message: `duplicate model id ${m.id}` });

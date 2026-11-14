@@ -8,6 +8,9 @@ const CACHE = 'forge2-runtime-v1';
 // not delete it before the page has taken it.
 const SHARE = 'forge2-share';
 const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/manifest.webmanifest'];
+// The first run's recorded Listen clips (public/v2/voice/en/, scripts/record-voice), kept so Listen works
+// offline. A missing one does not stop the worker installing.
+const VOICE = ['/v2/voice/en/manifest.json', '/v2/voice/en/welcome.ogg', '/v2/voice/en/pay.ogg', '/v2/voice/en/limits.ogg', '/v2/voice/en/private.ogg'];
 const MINE = /^\/(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
 const NEVER = /^\/(v1\/|v1$|admin|beta|attestation|\.well-known\/|healthz|__dev)/;
 
@@ -16,6 +19,7 @@ self.addEventListener('install', (event) => {
     (async () => {
       const c = await caches.open(CACHE);
       await c.addAll(SHELL.map((p) => new Request(p, { cache: 'no-cache' })));
+      await Promise.all(VOICE.map((p) => c.add(new Request(p, { cache: 'no-cache' })).catch(() => {})));
       await self.skipWaiting();
     })(),
   );

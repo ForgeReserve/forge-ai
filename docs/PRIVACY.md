@@ -18,7 +18,7 @@ Streams are read in memory as they pass, to count tokens when the supplier does 
 | Gateway sees prompt and reply | Yes, in memory while relaying | Yes, in memory while relaying | No: bodies are HPKE ciphertext end to end |
 | Supplier sees prompt and reply | Yes | Only inside an attested enclave | Only inside an attested enclave |
 | Gateway sees | Model, sizes, usage, timing, client IP | Same | Model name, body size, max output tokens, frame count, timing, client IP, usage numbers reported by Tinfoil |
-| How usage is measured | Upstream `usage` | Upstream `usage` | `X-Tinfoil-Usage-Metrics` response header (non-streaming) or HTTP trailer (streaming); else flat schedule |
+| How usage is measured | Upstream `usage` | Upstream `usage` | `X-Tinfoil-Usage-Metrics` response header (non-streaming) or HTTP trailer (streaming); else the metered worst case (the hold) |
 
 Payment links: with a balance key, every request on that key is linkable to the others. A P2PK lock key is a stable identifier: reusing one key links the payouts locked to it, at the gateway and at the mint, which sees the key in the locked proofs when they are redeemed. Use a fresh key per payout (cashu.me warns when a key was used before) if that matters. With NUT-24, requests are not linked by the gateway, but the mint knows its own swaps. Client IPs reach the gateway (and Caddy); use Tor or a VPN to hide them.
 
@@ -37,6 +37,12 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - The faucet keeps a count of vouchers given out per UTC day (`faucet_days`), with no address and no time of a claim. Its per-address limit is held in the gateway's memory only, keyed by an HMAC of the address with a key made fresh at each start, and is never written to disk or logged. It resets on restart. The address still reaches the gateway, as for any request; behind a proxy only with `FORGE_TRUST_PROXY`. Tor exits are not told apart yet, so people on Tor share an exit's limit.
 - The puzzle is worked on the phone. No name, email or CAPTCHA is asked for.
 - The `/free` page's Add to Forge keeps the voucher in this site's `localStorage` (the v2 vault) until the app adds it. Copy and Print put it wherever the person chooses.
+
+## Web search
+
+- Off by default in the v2 app, for the next question only, and only on a private (Tinfoil) model. With it on, the model searches from its enclave: the searches go from the enclave to Tinfoil's search provider (Exa, under a zero data retention agreement, per Tinfoil), which sees the search and the enclave's address, not the person's. The app asks for both safety filters: personal details detected in a search are taken out before it leaves the enclave (detection can miss things), and pages carrying planted instructions are dropped before the model reads them.
+- The gateway sees only that search was asked for (`X-Forge-Web-Search: 1`, kept in the request's hold, not logged with any content) and, from Tinfoil's usage metrics, how many searches ran. It never sees the searches or the results: they are inside the encrypted request and answer.
+- The app's line while it is on: the sealed machine sends the search to a search service, which sees the search but not who asked.
 
 ## Audio (speech to text, text to speech)
 

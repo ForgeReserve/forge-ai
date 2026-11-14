@@ -228,3 +228,13 @@ describe('errors in plain words', () => {
     for (const k of ['error.modelCharged', 'error.modelUnknown']) expect(en[k]).not.toMatch(/not charged/);
   });
 });
+
+describe('the visible height above a keyboard', () => {
+  it('follows the visual viewport, and leaves pinch zoom alone', async () => {
+    const VP: any = await import('../../../public/v2/core/viewport.js' as string);
+    expect(VP.viewportVars({ height: 532.4, offsetTop: 10.6, scale: 1 })).toEqual({ '--vv-h': '532px', '--vv-top': '11px' });
+    expect(VP.viewportVars({ height: 500, offsetTop: -3, scale: 1 })['--vv-top']).toBe('0px');
+    expect(VP.viewportVars({ height: 500, offsetTop: 0, scale: 2 })).toBeNull();
+    expect(VP.viewportVars(undefined)).toBeNull();
+  });
+});

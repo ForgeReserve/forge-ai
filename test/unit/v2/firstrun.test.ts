@@ -138,3 +138,17 @@ describe('first run copy', () => {
     expect(en['intro.private.voice']).toMatch(/could hear or read them/);
   });
 });
+
+describe('first run: one idea a step', () => {
+  it('each step has a short heading and at most one short sentence, and Listen reads exactly those', () => {
+    expect(Object.keys(FR.SPOKEN)).toEqual(FR.STEPS);
+    for (const step of FR.STEPS) {
+      const [title, lead] = FR.SPOKEN[step].map((k: string) => en[k]!);
+      expect(title.length, step).toBeLessThanOrEqual(40);
+      expect(lead.length, step).toBeLessThanOrEqual(80);
+      // One sentence: a single full stop, at the end.
+      expect(lead.match(/[.!?]/g)?.length, step).toBe(1);
+      expect(`${title} ${lead}`).not.toMatch(/—|–/);
+    }
+  });
+});

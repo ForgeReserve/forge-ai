@@ -1,5 +1,5 @@
 {
-  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory prices are PLACEHOLDERS (price_verified=false): set them from your Token Factory rate card before launch (their /v1/model/info returned no cost fields on 2026-11-09; context lengths below are from that endpoint's max_input_tokens). Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09. Audio models (the audio list) were read from https://api.tinfoil.sh/api/config/models on 2026-11-13: whisper-large-v3-turbo requestPrice 0.01 USD and voxtral-tts requestPrice 0.002 USD per request, no token price; voices from docs.tinfoil.sh/guides/processing-audio.",
+  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory prices are PLACEHOLDERS (price_verified=false): set them from your Token Factory rate card before launch (their /v1/model/info returned no cost fields on 2026-11-09; context lengths below are from that endpoint's max_input_tokens). Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09. Audio models (the audio list) were read from https://api.tinfoil.sh/api/config/models on 2026-11-13: whisper-large-v3-turbo requestPrice 0.01 USD and voxtral-tts requestPrice 0.002 USD per request, no token price; voices from docs.tinfoil.sh/guides/processing-audio. Web search (2026-11-14): Tinfoil's Private Web Search requestPrice 0.05 USD per request that searched, from https://api.tinfoil.sh/api/config/models (model websearch, type tool); every Tinfoil chat model listed there has toolCalling true, and docs.tinfoil.sh/guides/web-search says search is used alongside chat models. extra_input_tokens and output_factor are Forge's hold allowance for what a search adds (results in the input, several model calls), not Tinfoil figures.",
   "suppliers": {
     "tokenfactory": {
       "type": "openai",
@@ -19,22 +19,10 @@
         "tinfoil.sh"
       ],
       "attestationUrl": "https://atc.tinfoil.sh/attestation",
-      "flat": {
-        "buckets": [
-          {
-            "maxBytes": 8192,
-            "usd": 0.002
-          },
-          {
-            "maxBytes": 65536,
-            "usd": 0.01
-          },
-          {
-            "maxBytes": 1000000,
-            "usd": 0.05
-          }
-        ],
-        "output_usd_per_mtok": 20
+      "web_search": {
+        "request_usd": 0.05,
+        "extra_input_tokens": 16000,
+        "output_factor": 2
       }
     }
   },
@@ -57,7 +45,8 @@
         "high"
       ],
       "speed": "fast",
-      "name": "gpt-oss-120b"
+      "name": "gpt-oss-120b",
+      "web_search": true
     },
     {
       "id": "tinfoil/kimi-k3-1-pro",
@@ -76,7 +65,8 @@
         "high",
         "max"
       ],
-      "name": "Kimi K3.1 Pro"
+      "name": "Kimi K3.1 Pro",
+      "web_search": true
     },
     {
       "id": "tinfoil/glm-5-3",
@@ -95,7 +85,8 @@
         "high",
         "max"
       ],
-      "name": "GLM 5.3"
+      "name": "GLM 5.3",
+      "web_search": true
     },
     {
       "id": "tinfoil/deepseek-v4-1-flash",
@@ -115,7 +106,8 @@
         "max"
       ],
       "speed": "fast",
-      "name": "DeepSeek V4.1 Flash"
+      "name": "DeepSeek V4.1 Flash",
+      "web_search": true
     },
     {
       "id": "tinfoil/gemma4-31b",
@@ -135,7 +127,8 @@
         "high"
       ],
       "speed": "fast",
-      "name": "Gemma 4 31B"
+      "name": "Gemma 4 31B",
+      "web_search": true
     },
     {
       "id": "tinfoil/llama3-3-70b",
@@ -149,7 +142,8 @@
       "uncensored": false,
       "vision": false,
       "reasoning": false,
-      "name": "Llama 3.3 70B"
+      "name": "Llama 3.3 70B",
+      "web_search": true
     },
     {
       "id": "qwen3.8-27b",

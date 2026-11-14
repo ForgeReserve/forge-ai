@@ -13,6 +13,33 @@ export interface Usage {
   outputTokens: number;
   /** What the supplier says this request cost us, in USD, when it reports it. */
   costUsd?: number;
+  /** Web searches the model made; the supplier's web search fee applies once when above zero. */
+  webSearchCalls?: number;
+  /** Auxiliary fees the supplier reports (privacy filter), in USD, passed on with the markup. */
+  otherCostUsd?: number;
+}
+
+/** A supplier's web search terms (config.ts SupplierSchema web_search). */
+export interface WebSearchTerms {
+  request_usd: number;
+  extra_input_tokens: number;
+  output_factor: number;
+}
+
+/** The web search fee for one request in nano-USD, with markup, rounded up. */
+export function searchNanoUsd(ws: Pick<WebSearchTerms, 'request_usd'>, markup: number): number {
+  return Math.ceil(ws.request_usd * markup * 1e9 - 1e-6);
+}
+
+/**
+ * What a chat request is charged in nano-USD for its usage: the tokens at the model's prices, plus the
+ * web search fee when the model searched, plus any auxiliary fees the supplier reported, all with markup.
+ */
+export function usageNanoUsd(model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>, usage: Usage, markup: number, search?: Pick<WebSearchTerms, 'request_usd'>): number {
+  let nano = costNanoUsd(model, usage, markup);
+  if (search && (usage.webSearchCalls ?? 0) > 0) nano += searchNanoUsd(search, markup);
+  if (usage.otherCostUsd) nano += Math.ceil(usage.otherCostUsd * markup * 1e9 - 1e-6);
+  return nano;
 }
 
 /** Sale price per token in nano-USD, after markup. Rounded up so we never undercharge. */
@@ -31,6 +58,67 @@ export function flatCostNanoUsd(flat: FlatPricing, bodyBytes: number, maxOutputT
   const bucket = flat.buckets.find((b) => b.maxBytes >= bodyBytes) ?? flat.buckets[flat.buckets.length - 1]!;
   const base = Math.ceil(bucket.usd * markup * 1e9);
   return base + maxOutputTokens * nanoUsdPerToken(flat.output_usd_per_mtok, markup);
+}
+
+/**
+ * The funds hold of a chat request in nano-USD: the most it can be charged.
+ * - pricing "flat": the flat schedule (request-size bucket plus declared max output at its output price).
+ * - pricing "metered": the model's own metered worst case, the input estimated from the body
+ *   (bytes / bytesPerToken, rounded up) plus maxOut, at the model's prices with markup. A flat schedule on
+ *   a metered supplier does not drive the hold (owner decision, 2026-11-14).
+ * The app computes the same figure from GET /v1/models (`pricing.hold`, public/v2/core/price.js holdMsub).
+ */
+export function holdNanoUsd(
+  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>,
+  bodyBytes: number,
+  maxOut: number,
+  markup: number,
+  bytesPerToken: number,
+  search?: WebSearchTerms,
+): number {
+  if (supplier.pricing === 'flat') return flatCostNanoUsd(supplier.flat!, bodyBytes, maxOut, markup);
+  return usageNanoUsd(model, worstUsage(bodyBytes, maxOut, bytesPerToken, search), markup, search);
+}
+
+/**
+ * The hold figures GET /v1/models lists under `pricing.hold`, so a client computes the same hold exactly
+ * (public/v2/core/price.js holdMsub). Integers in nano-USD, markup applied, rounded as the gateway rounds.
+ */
+export function holdInfo(
+  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing; web_search?: WebSearchTerms },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'> & { web_search?: boolean },
+  markup: number,
+  bytesPerToken: number,
+) {
+  if (supplier.pricing === 'flat') {
+    return {
+      basis: 'flat' as const,
+      buckets: supplier.flat!.buckets.map((b) => ({ max_bytes: b.maxBytes, nano_usd: Math.ceil(b.usd * markup * 1e9) })),
+      output_nano_usd_per_token: nanoUsdPerToken(supplier.flat!.output_usd_per_mtok, markup),
+    };
+  }
+  return {
+    basis: 'metered' as const,
+    bytes_per_token: bytesPerToken,
+    input_nano_usd_per_token: nanoUsdPerToken(model.input_usd_per_mtok, markup),
+    output_nano_usd_per_token: nanoUsdPerToken(model.output_usd_per_mtok, markup),
+    // With the Search the web switch on (X-Forge-Web-Search: 1, or web_search_options in a plaintext body).
+    web_search:
+      model.web_search && supplier.web_search
+        ? { nano_usd: searchNanoUsd(supplier.web_search, markup), extra_input_tokens: supplier.web_search.extra_input_tokens, output_factor: supplier.web_search.output_factor }
+        : null,
+  };
+}
+
+/**
+ * The usage a metered hold assumes: the whole body as input at bytesPerToken, and the whole output limit.
+ * With web search on, the search allowance too (more input, more output) and one search.
+ */
+export function worstUsage(bodyBytes: number, maxOut: number, bytesPerToken: number, search?: WebSearchTerms): Usage {
+  const u: Usage = { inputTokens: estimateTokensFromBytes(bodyBytes, bytesPerToken), outputTokens: maxOut };
+  if (!search) return u;
+  return { inputTokens: u.inputTokens + search.extra_input_tokens, outputTokens: maxOut * search.output_factor, webSearchCalls: 1 };
 }
 
 /**

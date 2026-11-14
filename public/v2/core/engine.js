@@ -44,6 +44,17 @@ function charges(res) {
  * encryptedFetch: for private models, a fetch that encrypts the body to the verified enclave
  * (the Tinfoil SDK); see tinfoilFetch below.
  */
+/**
+ * The exact JSON a chat request sends (streamed, usage asked for; the upstream model name when it is
+ * encrypted to the enclave). The funds hold is priced on these bytes, so the app's price line uses the
+ * same function (app.js questionHold).
+ */
+export function chatPayload(body, encrypted = null) {
+  const payload = { ...body, stream: true, stream_options: { include_usage: true } };
+  if (encrypted) payload.model = encrypted.upstream;
+  return JSON.stringify(payload);
+}
+
 export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(...a), solve = solvePow, encryptedFetch = null } = {}) {
   const root = trimBase(base);
   const url = (path) => root + path;
@@ -170,9 +181,13 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
      * Streams a chat completion. body is the OpenAI request (stream is forced on). Handlers receive the
      * answer as it arrives. Throws EngineError for a refused request; an AbortError when stopped.
      */
-    async chat({ key, body, encrypted = null, signal, onText, onReasoning, onUsage, onForge }) {
-      const payload = { ...body, stream: true, stream_options: { include_usage: true } };
+    async chat({ key, body, encrypted = null, search = false, signal, onText, onReasoning, onUsage, onForge }) {
+      const text = chatPayload(body, encrypted);
+      const payload = JSON.parse(text);
       const headers = { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+      // Search the web: the engine cannot read an encrypted body, so the hold for the search fee is asked
+      // for in a header (docs/PAYMENTS.md, Web search). The search options themselves are in the body.
+      if (search) headers['X-Forge-Web-Search'] = '1';
       let doFetch = plain;
       let path = '/v1/chat/completions';
       if (encrypted) {
@@ -181,11 +196,10 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
           throw new EngineError('encryption_unavailable', `The enclave could not be verified: ${e?.message ?? e}`, { retryable: true });
         });
         doFetch = (p, init) => ef(p.replace(/^\/v1\//, ''), init);
-        payload.model = encrypted.upstream;
         headers['X-Tinfoil-Model'] = encrypted.upstream;
         headers['X-Tinfoil-Max-Output-Tokens'] = String(payload.max_tokens);
       }
-      const res = await send(doFetch, path, { method: 'POST', headers, body: JSON.stringify(payload), signal });
+      const res = await send(doFetch, path, { method: 'POST', headers, body: text, signal });
       if (!res.ok) {
         let b = null;
         try {

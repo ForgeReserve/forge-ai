@@ -104,6 +104,11 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'welcome');
     expect(await page.evaluate(() => location.hash)).toBe('#/start');
     expect(await page.textContent('h1')).toBe("AI that doesn't know who you are.");
+    // One idea a step: icons first, a short heading, one sentence. The detail is under Learn more.
+    expect(await page.locator('#welcomeIcons .way').allTextContents()).toEqual(['No account', 'Like cash', 'Sealed', 'On this phone']);
+    expect(await page.textContent('#introLead')).toBe('No account, no name, and you pay like cash.');
+    expect(await page.isVisible('.intro-item')).toBe(false);
+    await page.click('#learnMore summary');
     expect(await page.locator('.intro-item b').allTextContents()).toEqual(['No account', 'Paid like cash', 'Read only in sealed hardware', 'Kept on this phone']);
     expect(await page.textContent('#introStep')).toBe('Step 1 of 4');
     expect(await page.isVisible('#introBack')).toBe(false);
@@ -124,7 +129,11 @@ describe('first run in a phone-sized browser', () => {
     expect(ways).not.toContain('card');
     expect(await page.locator('[data-way=note] svg').count()).toBe(1);
     expect(await page.textContent('[data-way=note]')).toBe('Paper note');
-    expect(await page.textContent('.callout.gold')).toBe('Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.');
+    expect(await page.textContent('#introLead')).toBe('Each question costs a little, and you see the price first.');
+    // Funds are like cash: said under Learn more, never dropped.
+    expect(await page.isVisible('#payCash')).toBe(false);
+    await page.click('#learnMore summary');
+    expect(await page.textContent('#payCash')).toBe('Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.');
 
     // Back goes to the step before, and what was typed there is still there.
     await page.click('#introBack');
@@ -136,6 +145,9 @@ describe('first run in a phone-sized browser', () => {
     await page.click('#introNext');
     await atStep(page, 'limits');
     expect(await page.textContent('h1')).toBe('What it can and cannot hide');
+    expect(await page.textContent('#introLead')).toBe('It hides your typed questions, not your network address.');
+    expect(await page.isVisible('#limitsCannot')).toBe(false);
+    await page.click('#learnMore summary');
     expect(await page.locator('#limitsCan .intro-item').count()).toBe(3);
     expect(await page.locator('#limitsCannot .intro-item b').allTextContents()).toEqual([
       'Your network address',
@@ -153,7 +165,10 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'private');
     // Private only is on by default, and the step says what that does and does not cover.
     expect(await page.textContent('#privateState')).toBe('On');
-    expect(await page.textContent('#privateSub')).toContain('Forge and the model provider cannot read them.');
+    expect(await page.textContent('#introLead')).toBe('Only models in sealed hardware, so Forge cannot read your typed questions.');
+    expect(await page.isVisible('#privateSub')).toBe(false);
+    await page.click('#learnMore summary');
+    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot read them.');
     expect(await page.textContent('#privateVoice')).toContain('The engine could hear or read them.');
     expect(await page.isVisible('#privateHidden')).toBe(true);
     expect(await page.isVisible('#privateTurnOn')).toBe(false);
@@ -239,20 +254,30 @@ describe('first run in a phone-sized browser', () => {
     await ctx.close();
   }, 60_000);
 
-  it("Listen reads the step aloud with the phone's own voice, and is not offered without one", async () => {
-    const { ctx, page, errors, requests } = await phone({ voices: true });
+  it('Listen plays the recorded clip of the step, on the phone, and works without a phone voice', async () => {
+    // No voice of the phone's own: the recorded clips still read the steps.
+    const { ctx, page, errors, requests } = await phone({ voices: false });
+    await page.addInitScript(() => {
+      const w = window as any;
+      w.__played = [];
+      const play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        w.__played.push(this.src);
+        this.addEventListener('ended', () => w.__played.push('ended'));
+        return play.call(this);
+      };
+    });
     await page.goto(`${g.url}/v2/`);
     await atStep(page, 'welcome');
     await page.waitForSelector('#introListen:not([hidden])');
     expect(await page.textContent('#introListen')).toBe('Listen');
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
-    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 10_000 }).toBeGreaterThan(8);
-    const spoken: string[] = await page.evaluate(() => (window as any).__spoken);
-    expect(spoken[0]).toBe("AI that doesn't know who you are.");
-    expect(spoken).toContain('No account');
-    expect(spoken).toContain('Your history stays here. Erase it whenever you want.');
-    await expect.poll(() => page.textContent('#introListen'), { timeout: 10_000 }).toBe('Listen');
+    expect(requests).toContain('/v2/voice/en/welcome.ogg');
+    await expect.poll(() => page.evaluate(() => (window as any).__played.length)).toBeGreaterThan(0);
+    // The clip plays to its end (about 6 seconds), then Listen is offered again.
+    await expect.poll(() => page.evaluate(() => (window as any).__played.includes('ended')), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => page.textContent('#introListen')).toBe('Listen');
     // Stop stops it.
     await page.click('#introNext');
     await atStep(page, 'pay');
@@ -260,15 +285,62 @@ describe('first run in a phone-sized browser', () => {
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Listen');
-    const before = await page.evaluate(() => (window as any).__spoken.length);
-    await page.waitForTimeout(600);
-    expect(await page.evaluate(() => (window as any).__spoken.length)).toBe(before);
-    // Read on the phone: nothing was sent to the engine's voice.
+    expect(await page.evaluate(() => [...document.querySelectorAll('audio')].every((a) => a.paused))).toBe(true);
+    // Played on the phone: nothing was sent to the engine's voice.
     expect(requests.filter((r) => r.startsWith('/v1/audio'))).toEqual([]);
     expect(errors).toEqual([]);
     await ctx.close();
+  }, 60_000);
 
+  it('Listen works offline: the service worker keeps the clips', async () => {
+    const { ctx, page, errors } = await phone({ voices: false });
+    await page.addInitScript(() => {
+      const w = window as any;
+      w.__playing = [];
+      const play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        this.addEventListener('playing', () => w.__playing.push(this.src));
+        return play.call(this);
+      };
+    });
+    await page.goto(`${g.url}/v2/`);
+    await atStep(page, 'welcome');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    // Once more online with the worker in charge, so it keeps the app's files too; then offline.
+    await page.reload();
+    await atStep(page, 'welcome');
+    await ctx.setOffline(true);
+    await page.reload();
+    await atStep(page, 'welcome');
+    await page.waitForSelector('#introListen:not([hidden])');
+    await page.click('#introListen');
+    await expect.poll(() => page.evaluate(() => (window as any).__playing[0] ?? ''), { timeout: 10_000 }).toMatch(/^blob:/);
+    expect(errors.filter((e) => !/Failed to load resource|ERR_INTERNET_DISCONNECTED/.test(e))).toEqual([]);
+    await ctx.setOffline(false);
+    await ctx.close();
+  }, 60_000);
+
+  it("Listen uses the phone's own voice when a clip does not match the words, and is not offered with neither", async () => {
+    // A clip recorded from other words (the strings changed since): the phone's voice reads the step.
+    const stale = await phone({ voices: true });
+    await stale.page.route('**/v2/voice/en/manifest.json', async (route) => {
+      const m = await (await route.fetch()).json();
+      for (const c of Object.values(m.clips) as any[]) c.text = ['Old words.'];
+      await route.fulfill({ json: m });
+    });
+    await stale.page.goto(`${g.url}/v2/`);
+    await atStep(stale.page, 'welcome');
+    await stale.page.waitForSelector('#introListen:not([hidden])');
+    await stale.page.click('#introListen');
+    await expect.poll(() => stale.page.evaluate(() => (window as any).__spoken.length), { timeout: 10_000 }).toBe(2);
+    expect(await stale.page.evaluate(() => (window as any).__spoken)).toEqual(["AI that doesn't know who you are.", 'No account, no name, and you pay like cash.']);
+    expect(stale.requests.filter((r) => r.endsWith('.ogg'))).toEqual([]);
+    await stale.ctx.close();
+
+    // No clips and no voice of the phone's own: no Listen.
     const none = await phone({ voices: false });
+    await none.page.route('**/v2/voice/en/manifest.json', (route) => route.fulfill({ status: 404, body: '' }));
     await none.page.goto(`${g.url}/v2/`);
     await atStep(none.page, 'welcome');
     await none.page.waitForTimeout(500);

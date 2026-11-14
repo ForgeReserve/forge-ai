@@ -167,6 +167,40 @@ describe('v2 in a phone-sized browser', () => {
     await ctx.close();
   }, 60_000);
 
+  it("shows the engine's funds hold exactly, and says before sending when the funds do not cover it", async () => {
+    const { ctx, page } = await phone();
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), await fundedKey(200));
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await chooseModel(page, 'mock-echo');
+    await page.click('#btn-type');
+    await page.fill('#question', 'What should I bring on Saturday?');
+    const shown = Number(await page.getAttribute('#priceLine', 'data-msub'));
+    expect(shown).toBeGreaterThan(0);
+    await page.click('#sendBtn');
+    await page.waitForSelector('[data-screen=answer]');
+    let row: any;
+    await expect
+      .poll(() => (row = g.deps.db.prepare("SELECT reserved_msub FROM requests WHERE model = 'mock-echo' ORDER BY created_at DESC, rowid DESC LIMIT 1").get()))
+      .toBeTruthy();
+    expect(row.reserved_msub).toBe(shown);
+
+    // 20 cents does not cover this model's hold (256 output tokens at $1000 per million is 25.6 cents).
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), await fundedKey(20));
+    await page.goto(`${g.url}/v2/#/`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('$0.20');
+    await page.click('#btn-type');
+    await page.fill('#question', 'And on Sunday?');
+    await expect.poll(() => page.textContent('#typeNotice')).toContain('Not enough funds for this question.');
+    expect(await page.isDisabled('#sendBtn')).toBe(true);
+    await page.click('#noticeBtn');
+    await page.waitForSelector('[data-screen=addFunds]');
+    await ctx.close();
+  }, 60_000);
+
   it('carries a v1 balance over, and adds a file to the next question', async () => {
     const { ctx, page } = await phone();
     const key = await fundedKey();
@@ -448,8 +482,8 @@ describe('v2 money paths in a phone-sized browser', () => {
 });
 
 /** A balance key funded with $2.00 through the API, as v1 would have. */
-async function fundedKey(): Promise<string> {
-  const token = await mintToken(MINT_A, 'usd', 200);
+async function fundedKey(cents = 200): Promise<string> {
+  const token = await mintToken(MINT_A, 'usd', cents);
   const r = await fetch(`${g.url}/v1/wallet/topup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, invite: createInvite(g) }) });
   const b: any = await r.json();
   if (!b.key) throw new Error(`topup failed: ${JSON.stringify(b)}`);

@@ -117,3 +117,23 @@ export function bottomRow({ t, nav, open = null }) {
   };
   return el('nav', { class: 'bottom-row', 'aria-label': t('app.name') }, b('type', 'keyboard', t('home.type')), b('add', 'plus', t('home.add')), b('more', 'dots', t('home.more')));
 }
+
+/**
+ * Search the web, for the next question only (docs/PAYMENTS.md, Web search): a switch where the model can
+ * search, off by default and off again once a question is sent, with one honest line while it is on.
+ * The price line includes the search fee while it is on. `id` keeps the Type and home switches apart.
+ */
+export function searchSwitch({ t, state, actions, id }) {
+  const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id, 'aria-labelledby': `${id}Label` }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
+  sw.addEventListener('click', () => actions.setSearch(!state.view().search.on));
+  const note = el('p', { class: 'search-note', id: `${id}Note`, hidden: true, text: t('search.note') });
+  const node = el('div', { class: 'search-box', hidden: true }, el('div', { class: 'search-row' }, icon('globe', 20), el('span', { id: `${id}Label`, text: t('search.label') }), sw), note);
+  const update = () => {
+    const s = state.view().search;
+    node.hidden = !s.available;
+    sw.setAttribute('aria-checked', String(!!s.on));
+    note.hidden = !s.on;
+  };
+  update();
+  return { node, update };
+}

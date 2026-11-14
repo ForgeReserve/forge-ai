@@ -4,9 +4,10 @@
 // opens the scanner in one tap. A second chip under it opens Add funds, for every other way in. Tapping the ring itself still opens Funds and memory, where Scan a note
 // is the first button while there are no funds.
 // The Add and More sheets open over it (ZAdd, ZMore): the rings fade and a floating card sits above
-// the bottom row, whose button turns dark and reads Close.
+// the bottom row, whose button turns dark and reads Close. The sheet covers the whole home, the talk
+// button included, and the bottom row stays fixed in view, so Close never needs a scroll.
 import { el, icon } from '../core/ui.js';
-import { bottomRow, rings, statusBar } from './parts.js';
+import { bottomRow, rings, searchSwitch, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
 export function home({ t, state, nav, actions }, { sheet = null, open = null } = {}) {
@@ -24,10 +25,14 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const waysLabel = el('span', { text: t('home.otherWays') });
   const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav(state.view().fundsBlock === 'freeOut' ? 'freeOut' : 'addFunds') }, icon('plus', 18), waysLabel);
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
+  // Search the web for the next question, asked by voice or typed (screens/parts.js).
+  const search = searchSwitch({ t, state, actions, id: 'searchHome' });
   const ringBox = el('div', { class: 'rings home-rings' }, r.node, ringBtn, talk);
-  const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, chip, held, hint);
-  const main = el('main', { class: 'screen home', 'data-screen': 'home' }, bar.node, stage);
-  if (sheet) main.append(el('div', { class: 'float-wrap' }, sheet));
+  const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, scanChip, waysChip, search.node, chip, held, hint);
+  const main = el('main', { class: `screen home${sheet ? ' with-sheet' : ''}`, 'data-screen': 'home' }, bar.node, stage);
+  // The sheet is a layer over the whole home (the talk button included), with the bottom row above it so
+  // Close is always in view. A tap on the layer outside the card closes it, as Close does.
+  if (sheet) main.append(el('div', { class: 'float-wrap', onclick: (e) => e.target === e.currentTarget && nav('home') }, sheet));
   main.append(bottomRow({ t, nav, open }));
 
   const update = () => {
@@ -43,6 +48,9 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     waysLabel.textContent = v.fundsBlock === 'freeOut' ? t('home.freeOut') : t('home.otherWays');
     chip.hidden = !v.memory.low || recording;
     held.hidden = !v.pendingCount || recording;
+    search.update();
+    // A search is paid from the balance (never a free question): with no funds the home keeps its empty state.
+    if (recording || v.noFunds || v.fundsBlock) search.node.hidden = true;
     held.textContent = v.pendingCount ? t('home.attached', { count: v.pendingCount }) : '';
   };
   update();

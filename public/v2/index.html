@@ -12,11 +12,88 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Forge AI">
-  <link rel="stylesheet" href="/v2/style.css">
+  <!-- First paint: the Light look's background and the two rings come with the page, so the phone shows
+       them at once while the app loads. The stylesheet comes after them in the body, so it does not hold
+       them up; the app draws its first screen once the stylesheet is in (app.js stylesReady). -->
+  <style>
+    :root { --bg: #F6F5F1; --gold-track: #F3E3BC; --memory-track: #D5F2EA; }
+    html, body { margin: 0; height: 100%; background: var(--bg); }
+    .boot { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+    .boot svg { width: min(336px, 82vw); height: auto; }
+    @media (prefers-reduced-motion: no-preference) { .boot svg { animation: boot-breathe 2.4s ease-in-out infinite; } }
+    @keyframes boot-breathe { 50% { opacity: .55; } }
+  </style>
+  <!-- Every module the first screen needs, asked for at once (test/unit/v2/preload.test.ts keeps this
+       list exactly in step with the imports). -->
   <link rel="modulepreload" href="/v2/app.js">
-  <script type="module" src="/v2/app.js"></script>
+  <link rel="modulepreload" href="/v2/modules/look/light/index.js">
+  <link rel="modulepreload" href="/v2/modules/look/dark/index.js">
+  <link rel="modulepreload" href="/v2/modules/look/midnight/index.js">
+  <link rel="modulepreload" href="/v2/modules/mode/default/index.js">
+  <link rel="modulepreload" href="/js/ui.js">
+  <link rel="modulepreload" href="/js/files.js">
+  <link rel="modulepreload" href="/js/lockkey.js">
+  <link rel="modulepreload" href="/js/qr.js">
+  <link rel="modulepreload" href="/v2/core/adapters.js">
+  <link rel="modulepreload" href="/v2/core/conversation.js">
+  <link rel="modulepreload" href="/v2/core/db.js">
+  <link rel="modulepreload" href="/v2/core/erase.js">
+  <link rel="modulepreload" href="/v2/core/firstrun.js">
+  <link rel="modulepreload" href="/v2/core/history.js">
+  <link rel="modulepreload" href="/v2/core/engine.js">
+  <link rel="modulepreload" href="/v2/core/native.js">
+  <link rel="modulepreload" href="/v2/core/free.js">
+  <link rel="modulepreload" href="/v2/core/note.js">
+  <link rel="modulepreload" href="/v2/core/till.js">
+  <link rel="modulepreload" href="/v2/core/errors.js">
+  <link rel="modulepreload" href="/v2/core/i18n.js">
+  <link rel="modulepreload" href="/v2/core/image.js">
+  <link rel="modulepreload" href="/v2/core/photo.js">
+  <link rel="modulepreload" href="/v2/core/price.js">
+  <link rel="modulepreload" href="/v2/core/speech.js">
+  <link rel="modulepreload" href="/v2/core/viewport.js">
+  <link rel="modulepreload" href="/v2/core/clips.js">
+  <link rel="modulepreload" href="/v2/core/talkctl.js">
+  <link rel="modulepreload" href="/v2/core/voice.js">
+  <link rel="modulepreload" href="/v2/core/refunds.js">
+  <link rel="modulepreload" href="/v2/core/registry.js">
+  <link rel="modulepreload" href="/v2/core/router.js">
+  <link rel="modulepreload" href="/v2/core/state.js">
+  <link rel="modulepreload" href="/v2/core/ui.js">
+  <link rel="modulepreload" href="/v2/core/vault.js">
+  <link rel="modulepreload" href="/v2/modules/fund/kit.js">
+  <link rel="modulepreload" href="/v2/screens/engine.js">
+  <link rel="modulepreload" href="/v2/screens/erase.js">
+  <link rel="modulepreload" href="/v2/screens/firstrun.js">
+  <link rel="modulepreload" href="/v2/screens/free.js">
+  <link rel="modulepreload" href="/v2/screens/funds.js">
+  <link rel="modulepreload" href="/v2/screens/history.js">
+  <link rel="modulepreload" href="/v2/screens/photo.js">
+  <link rel="modulepreload" href="/v2/screens/settings.js">
+  <link rel="modulepreload" href="/v2/screens/sheets.js">
+  <link rel="modulepreload" href="/v2/screens/type.js">
+  <link rel="modulepreload" href="/v2/screens/answer.js">
+  <link rel="modulepreload" href="/v2/screens/home.js">
+  <link rel="modulepreload" href="/v2/core/rings.js">
+  <link rel="modulepreload" href="/v2/core/pow.js">
+  <link rel="modulepreload" href="/v2/core/sse.js">
+  <link rel="modulepreload" href="/v2/strings/en.js">
+  <link rel="modulepreload" href="/v2/core/covers.js">
+  <link rel="modulepreload" href="/v2/core/filters.js">
+  <link rel="modulepreload" href="/v2/core/photometa.js">
+  <link rel="modulepreload" href="/v2/core/talk.js">
+  <link rel="modulepreload" href="/v2/core/engineaddr.js">
+  <link rel="modulepreload" href="/v2/core/faucet.js">
+  <link rel="modulepreload" href="/v2/screens/parts.js">
+  <link rel="modulepreload" href="/v2/screens/talk.js">
 </head>
 <body>
-  <div id="app" class="app" aria-live="off"></div>
+  <div id="app" class="app" aria-live="off">
+    <div class="boot" aria-hidden="true">
+      <svg viewBox="0 0 336 336" width="336" height="336"><circle cx="168" cy="168" r="150" fill="none" stroke="var(--gold-track)" stroke-width="26"/><circle cx="168" cy="168" r="121" fill="none" stroke="var(--memory-track)" stroke-width="26"/></svg>
+    </div>
+  </div>
+  <link rel="stylesheet" href="/v2/style.css">
+  <script type="module" src="/v2/app.js"></script>
 </body>
 </html>

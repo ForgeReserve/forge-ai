@@ -11,7 +11,7 @@ import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
-import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
+import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { createNative, defaultEngine } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
@@ -20,9 +20,11 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { estimate, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, holdMsub, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
+import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
+import { createClips } from './core/clips.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
@@ -43,7 +45,7 @@ import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
 import { typeScreen } from './screens/type.js';
 
-const MAX_OUT = 4096; // the most output a question asks for; the engine holds the worst case up front
+const MAX_OUT = 4096; // the most output a question asks for; the engine holds the worst case up front (questionHold)
 const MODELS_CACHE = 'forge2.models';
 const LOOK_CACHE = 'forge2.look';
 
@@ -75,6 +77,8 @@ const store = createStore({
   peakMsub: null,
   models: [],
   audioModels: [],
+  // Search the web, for the next question only: off by default, and off again once a question is sent.
+  search: false,
   inviteOnly: false,
   units: [],
   mints: [],
@@ -171,6 +175,8 @@ function view() {
     streaming: S.streaming,
     hiddenCount: hiddenCount(S.models, S.settings),
     talk: talkView(model, unit),
+    // Search the web: offered when the model can search; on for the next question only.
+    search: { available: canSearch(model), on: searchOn(model) },
     speak: speakView(),
     // The most Ask again can cost, shown on the button before it is pressed.
     againMsub: againNow(model),
@@ -189,21 +195,32 @@ const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
 const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
 
 /**
- * Reads the first run's words aloud with the phone's own voice: free, and nothing leaves the phone. The
- * engine's voice is never used here (it costs money and the guide shows no price), so where the phone
- * has no voice of its own the Listen chip is not shown.
+ * Reads the first run's words aloud: the step's recorded clip (core/clips.js, public/v2/voice/en/), or,
+ * when there is none for these words or it cannot play, the phone's own voice. Both are free and nothing
+ * leaves the phone. The engine's voice is never used here (it costs money and the guide shows no price),
+ * so with neither a clip nor a voice of the phone's own the Listen chip is not shown.
  */
+const clips = createClips({ base: new URL('./voice/en/', import.meta.url) });
 const reader = {
   mod: () => {
     const m = voiceMods('voice-out').device;
     return m?.available() && m.private() ? m : null;
   },
-  available: () => !!reader.mod(),
-  read(pieces) {
-    const m = reader.mod();
-    if (!m || !pieces.length) return null;
+  available: (step, pieces) => (!!step && clips.has(step, pieces)) || !!reader.mod(),
+  read(pieces, step) {
+    if (!pieces.length) return null;
     talk.stopSpeaking();
-    return m.speak(pieces);
+    const phone = () => reader.mod()?.speak(pieces) ?? null;
+    const clip = step ? clips.play(step, pieces) : null;
+    if (!clip) return phone();
+    let current = clip;
+    const done = clip.done.catch((e) => {
+      const p = phone();
+      if (!p) throw e;
+      current = p;
+      return p.done;
+    });
+    return { done, stop: () => current.stop() };
   },
 };
 
@@ -403,7 +420,7 @@ async function loadModels() {
 
 function applyModels(body) {
   if (!body) return;
-  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [], free: freeInfo(body) });
+  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [], btcUsd: body.btc_usd ?? null, free: freeInfo(body) });
 }
 
 /** Adds free questions (a credit voucher) to the free balance, through the vault like any eCash. */
@@ -486,6 +503,31 @@ async function savePending() {
   await scratchChanged();
 }
 
+/**
+ * The funds hold for a question with these API messages, in msub: exactly what the engine holds before
+ * sending it on (core/price.js holdMsub), from the body generate() sends, encrypted for a private model.
+ * Falls back to the per-token estimate when the engine lists no hold figures. null when unpriced.
+ */
+function questionHold(model, api, maxOut, inputTokens, search = false) {
+  const unit = S.unit ?? 'usd';
+  const enc = isPrivate(model) ? { upstream: model.upstream_model } : null;
+  const plain = new TextEncoder().encode(chatPayload(chatBody(model, api, maxOut, search), enc)).length;
+  const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd, search });
+  if (held != null || search) return held;
+  return estimate(model, unit, inputTokens, maxOut)?.max ?? null;
+}
+
+/**
+ * Search the web (docs/PAYMENTS.md, Web search): the model searches from its sealed machine, through
+ * Tinfoil's search service, with both of its safety filters on (personal details taken out of the search,
+ * and instructions planted in pages dropped). Only on a model that offers it.
+ */
+const SEARCH_FIELDS = { web_search_options: {}, pii_check_options: {}, prompt_injection_check_options: {} };
+const canSearch = (model) => !!model?.capabilities?.web_search;
+const searchOn = (model) => !!S.search && canSearch(model);
+/** The chat request body generate() sends, also used to price it. */
+const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: api, max_tokens: maxOut, ...(search ? SEARCH_FIELDS : {}) });
+
 function estimateFor(text) {
   const model = pickModel(S.models, S.settings);
   const unit = S.unit ?? 'usd';
@@ -496,10 +538,15 @@ function estimateFor(text) {
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
   const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const cost = estimate(model, unit, tokens, maxOut);
-  const fr = freeNow(model, bodyTokens(bytes));
+  const search = searchOn(model);
+  const costMsub = questionHold(model, api, maxOut, tokens, search);
+  // A search is never a free question: it is paid from the balance.
+  const fr = search ? { ...freeNow(model, bodyTokens(bytes)), use: false } : freeNow(model, bodyTokens(bytes));
   return {
-    costMsub: cost?.max ?? null,
+    costMsub,
+    search,
+    // The engine refuses a question whose hold is more than the funds not already held: say so first.
+    short: !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
     unit,
     // Paid with a free question: the price line reads "Free, 2 of 3 left".
     free: fr.use ? { left: fr.left, total: fr.total } : null,
@@ -540,7 +587,7 @@ function estimateAgain(model) {
   const vision = !!model.capabilities?.vision;
   const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const chat = estimate(model, unit, tokens, maxOut)?.max ?? null;
+  const chat = questionHold(model, apiMessages(history, { systemPrompt: t('system.prompt'), vision }), maxOut, tokens, searchOn(model));
   const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
   if (chat == null || reading == null) return null;
   return chat + reading;
@@ -573,9 +620,13 @@ async function generate() {
   const api = apiMessages(history, { systemPrompt: t('system.prompt'), vision });
   // A free question is used first, when the model is on the free list and the question fits its caps.
   const fr = freeNow(model, bodyTokens(new TextEncoder().encode(JSON.stringify(api)).length));
-  const useF = fr.use && !!S.freeKey;
+  // Search the web applies to this question only, and is never a free question.
+  const search = searchOn(model);
+  if (S.search) S.search = false;
+  const useF = fr.use && !!S.freeKey && !search;
   const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: S.unit } };
   if (useF) reply.meta.free = true;
+  if (search) reply.meta.search = true;
   conv.messages.push(reply);
   const controller = new AbortController();
   gen = { controller };
@@ -586,8 +637,9 @@ async function generate() {
   try {
     await engine.chat({
       key: useF ? S.freeKey : S.key,
-      body: { model: model.id, messages: api, max_tokens: maxTokens },
+      body: chatBody(model, api, maxTokens, search),
       encrypted: isPrivate(model) ? { upstream: model.upstream_model } : null,
+      search,
       signal: controller.signal,
       onText: (d) => {
         reply.content += d;
@@ -907,6 +959,8 @@ function blocker() {
     }
   }
   if (!pickModel(S.models, S.settings)) return { key: 'type.noModel', go: () => nav('model') };
+  // Even a short question would hold more than the funds left.
+  if (estimateFor('').short) return { key: 'type.short', go: () => nav('addFunds') };
   return null;
 }
 
@@ -953,6 +1007,11 @@ const actions = {
   attachPhoto,
   removePending,
   estimate: estimateFor,
+  /** Search the web for the next question (off again once it is sent). */
+  setSearch: (on) => {
+    S.search = !!on;
+    store.set({});
+  },
   saveDraft: (v) => {
     S.draft = v;
     kv.put('draft', v).catch(() => {});
@@ -1156,6 +1215,8 @@ function screenFor(name, params) {
     case 'introPay':
     case 'introLimits':
     case 'introPrivate':
+      // The recorded Listen clips: their manifest is read once, and Listen shows when it is in.
+      clips.load().then((m) => m && store.set({}));
       return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
     case 'erase':
       return eraseScreen(ctx);
@@ -1282,8 +1343,23 @@ function showErased(ok) {
 
 // ------------------------------------------------------------------ start
 
+/**
+ * Waits for the stylesheet. It sits after the page's own first paint (index.html), so it does not hold
+ * that up; the app's screens are drawn only once it is in.
+ */
+function stylesReady() {
+  const link = document.querySelector('link[rel="stylesheet"][href="/v2/style.css"]');
+  if (!link || link.sheet) return null;
+  return new Promise((resolve) => {
+    link.addEventListener('load', resolve, { once: true });
+    link.addEventListener('error', resolve, { once: true });
+  });
+}
+
 async function start() {
   document.title = t('app.name');
+  // The visible height above a phone keyboard, for Type (core/viewport.js).
+  watchViewport();
   // Erase everything in another tab clears localStorage there (key null) and deletes the database.
   onErasedElsewhere(erasedElsewhere);
   addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
@@ -1315,10 +1391,17 @@ async function start() {
     ...loader,
     inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
   });
-  await registry.loadAll(BUNDLED);
-  if (registry.refused.length) console.warn('modules refused', registry.refused);
+  // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
+  // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
+  // (the How you pay step fills in its ways when they arrive). Any other screen waits for all of them,
+  // which load at the same time (core/registry.js).
+  const firstRun = stepOfRoute(parse(location.hash).name) !== null;
+  const drawFirst = BUNDLED.filter((m) => m.kind === 'look' || m.kind === 'mode');
+  const rest = BUNDLED.filter((m) => !drawFirst.includes(m));
+  await registry.loadAll(firstRun ? drawFirst : BUNDLED);
   if (!registry.list('mode').length) throw new Error('no mode module');
   applyLook();
+  await stylesReady();
 
   addEventListener('popstate', onPop);
   native?.shareIn.onShared(() => !erased && nav('photoShared'));
@@ -1337,6 +1420,11 @@ async function start() {
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
   live = true;
+  if (firstRun) {
+    await registry.loadAll(rest);
+    store.set({});
+  }
+  if (registry.refused.length) console.warn('modules refused', registry.refused);
   document.documentElement.dataset.ready = '1';
 
   await loadModels();

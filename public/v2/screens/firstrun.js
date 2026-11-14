@@ -3,14 +3,15 @@
 // guide is under More. Built from the canvas tokens: the Listen chip top right, a plain Back top left
 // from step 2, the primary button and "Step n of 4" at the foot.
 // The pure rules (steps, when it shows, which ways to pay) are in core/firstrun.js.
-import { nextStep, payWays, prevStep, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
+import { nextStep, payWays, prevStep, SPOKEN, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
 import { el, icon } from '../core/ui.js';
 
 /**
  * ctx: t, state, actions, registry, wallet, plus
  * - step: the route param,
  * - go(step): opens another step, finish(): marks the guide seen and goes home, stepBack(): back a step,
- * - reader: {available(), read(pieces) -> {done, stop()}}, the phone's own voice (free, on the phone).
+ * - reader: {available(step, pieces), read(pieces, step) -> {done, stop()}}: the step's recorded clip, or
+ *   the phone's own voice (both free, on the phone).
  */
 export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, stepBack, reader }) {
   const S = state.S;
@@ -20,10 +21,17 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
 
   const item = (ico, tint, title, sub) => el('li', { class: 'intro-item' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 22)), el('span', { class: 'row-text' }, el('b', { text: title }), el('small', { text: sub })));
 
+  // Each step is one idea: icons first, a short heading, at most one short sentence. The detail, every
+  // honesty statement included, is under Learn more on the step it belongs to.
+  const iconRow = (id, tiles) =>
+    el('ul', { class: 'way-grid intro-icons', id, 'aria-hidden': 'true' }, ...tiles.map(([ico, tint, key]) => el('li', { class: 'way' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 26)), el('span', { text: t(key) }))));
+  const head = (key, leadKey) => [el('h1', { class: 'intro-title', tabindex: '-1', text: t(key) }), leadKey ? el('p', { class: 'intro-lead', id: 'introLead', text: t(leadKey) }) : null];
+  const learnMore = (...content) => el('details', { class: 'learn', id: 'learnMore' }, el('summary', {}, icon('plus', 18), el('span', { text: t('intro.learnMore') })), el('div', { class: 'learn-body' }, ...content));
+
   const listen = el('button', { type: 'button', class: 'listen-chip', id: 'introListen', hidden: true });
   let speech = null;
   const drawListen = () => {
-    listen.hidden = !reader.available();
+    listen.hidden = !reader.available(step, words());
     listen.setAttribute('aria-pressed', String(!!speech));
     listen.replaceChildren(icon(speech ? 'stop' : 'speaker', 18), el('span', { text: t(speech ? 'intro.listenStop' : 'intro.listen') }));
   };
@@ -38,7 +46,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   synth?.addEventListener?.('voiceschanged', drawListen);
   listen.addEventListener('click', () => {
     if (speech) return stopListening();
-    const s = reader.read(words());
+    const s = reader.read(words(), step);
     if (!s) return;
     speech = s;
     drawListen();
@@ -77,16 +85,24 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     const node = el(
       'div',
       { class: 'intro-content' },
-      el('h1', { class: 'intro-title', tabindex: '-1', text: t('intro.welcome.title') }),
-      el(
-        'ul',
-        { class: 'intro-list' },
-        item('user', 'teal', t('intro.welcome.account'), t('intro.welcome.accountSub')),
-        item('coins', 'gold', t('intro.welcome.cash'), t('intro.welcome.cashSub')),
-        item('lock', 'teal', t('intro.welcome.sealed'), t('intro.welcome.sealedSub')),
-        item('phone', 'blue', t('intro.welcome.phone'), t('intro.welcome.phoneSub')),
-      ),
+      iconRow('welcomeIcons', [
+        ['user', 'teal', 'intro.welcome.iconAccount'],
+        ['coins', 'gold', 'intro.welcome.iconCash'],
+        ['lock', 'teal', 'intro.welcome.iconSealed'],
+        ['phone', 'blue', 'intro.welcome.iconPhone'],
+      ]),
+      ...head('intro.welcome.title', 'intro.welcome.lead'),
       invite,
+      learnMore(
+        el(
+          'ul',
+          { class: 'intro-list' },
+          item('user', 'teal', t('intro.welcome.account'), t('intro.welcome.accountSub')),
+          item('coins', 'gold', t('intro.welcome.cash'), t('intro.welcome.cashSub')),
+          item('lock', 'teal', t('intro.welcome.sealed'), t('intro.welcome.sealedSub')),
+          item('phone', 'blue', t('intro.welcome.phone'), t('intro.welcome.phoneSub')),
+        ),
+      ),
     );
     return { body: node, update: () => (invite.hidden = !!wallet.key() || !wallet.inviteOnly()) };
   }
@@ -97,19 +113,19 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     const node = el(
       'div',
       { class: 'intro-content' },
-      el('h1', { class: 'intro-title', tabindex: '-1', text: t('intro.pay.title') }),
-      el('p', { class: 'intro-lead', text: t('intro.pay.lead') }),
-      el('h2', { class: 'caps gold', text: t('intro.pay.ways') }),
       grid,
       none,
-      el('p', { class: 'note', text: t('intro.pay.more') }),
-      el(
-        'ul',
-        { class: 'intro-list' },
-        el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot gold', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.gold') }), el('small', { text: t('intro.pay.goldSub') }))),
-        el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot memory', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.green') }), el('small', { text: t('intro.pay.greenSub') }))),
+      ...head('intro.pay.title', 'intro.pay.lead'),
+      learnMore(
+        el('p', { class: 'note', text: t('intro.pay.more') }),
+        el(
+          'ul',
+          { class: 'intro-list' },
+          el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot gold', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.gold') }), el('small', { text: t('intro.pay.goldSub') }))),
+          el('li', { class: 'intro-item' }, el('span', { class: 'ring-dot memory', 'aria-hidden': 'true' }), el('span', { class: 'row-text' }, el('b', { text: t('intro.pay.green') }), el('small', { text: t('intro.pay.greenSub') }))),
+        ),
+        el('p', { class: 'callout gold', id: 'payCash', text: t('intro.pay.cash') }),
       ),
-      el('p', { class: 'callout gold', text: t('intro.pay.cash') }),
     );
     let drawn = '';
     const update = () => {
@@ -129,33 +145,39 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     return el(
       'div',
       { class: 'intro-content' },
-      el('h1', { class: 'intro-title', tabindex: '-1', text: t('intro.limits.title') }),
-      el('h2', { class: 'caps teal', text: t('intro.limits.can') }),
-      el(
-        'ul',
-        { class: 'intro-list can', id: 'limitsCan' },
-        item('lock', 'teal', t('intro.limits.questions'), t('intro.limits.questionsSub')),
-        item('image', 'teal', t('intro.limits.photos'), t('intro.limits.photosSub')),
-        item('user', 'teal', t('intro.limits.name'), t('intro.limits.nameSub')),
+      iconRow('limitsIcons', [
+        ['lock', 'teal', 'intro.limits.can'],
+        ['eye', 'gold', 'intro.limits.cannot'],
+      ]),
+      ...head('intro.limits.title', 'intro.limits.lead'),
+      learnMore(
+        el('h2', { class: 'caps teal', text: t('intro.limits.can') }),
+        el(
+          'ul',
+          { class: 'intro-list can', id: 'limitsCan' },
+          item('lock', 'teal', t('intro.limits.questions'), t('intro.limits.questionsSub')),
+          item('image', 'teal', t('intro.limits.photos'), t('intro.limits.photosSub')),
+          item('user', 'teal', t('intro.limits.name'), t('intro.limits.nameSub')),
+        ),
+        el('h2', { class: 'caps gold', text: t('intro.limits.cannot') }),
+        el(
+          'ul',
+          { class: 'intro-list cannot', id: 'limitsCannot' },
+          item('eye', 'gold', t('intro.limits.address'), t('intro.limits.addressSub')),
+          item('mic', 'gold', t('intro.limits.voice'), t('intro.limits.voiceSub')),
+          item('bolt', 'gold', t('intro.limits.money'), t('intro.limits.moneySub')),
+          item('keyboard', 'gold', t('intro.limits.typed'), t('intro.limits.typedSub')),
+          item('phone', 'gold', t('intro.limits.watched'), t('intro.limits.watchedSub')),
+          item('unlock', 'gold', t('intro.limits.unlock'), t('intro.limits.unlockSub')),
+          item('bulb', 'gold', t('intro.limits.wrong'), t('intro.limits.wrongSub')),
+        ),
+        el('p', { class: 'note', text: t('intro.limits.always') }),
       ),
-      el('h2', { class: 'caps gold', text: t('intro.limits.cannot') }),
-      el(
-        'ul',
-        { class: 'intro-list cannot', id: 'limitsCannot' },
-        item('eye', 'gold', t('intro.limits.address'), t('intro.limits.addressSub')),
-        item('mic', 'gold', t('intro.limits.voice'), t('intro.limits.voiceSub')),
-        item('bolt', 'gold', t('intro.limits.money'), t('intro.limits.moneySub')),
-        item('keyboard', 'gold', t('intro.limits.typed'), t('intro.limits.typedSub')),
-        item('phone', 'gold', t('intro.limits.watched'), t('intro.limits.watchedSub')),
-        item('unlock', 'gold', t('intro.limits.unlock'), t('intro.limits.unlockSub')),
-        item('bulb', 'gold', t('intro.limits.wrong'), t('intro.limits.wrongSub')),
-      ),
-      el('p', { class: 'note', text: t('intro.limits.always') }),
     );
   }
 
   function privateOnly() {
-    // The panel's heading is the state itself: On or Off.
+    // The panel's heading is the state itself: On or Off. Off says what that means and offers to turn it on.
     const stateHead = el('b', { id: 'privateState' });
     const sub = el('p', { id: 'privateSub' });
     const turnOn = el('button', { type: 'button', class: 'btn primary', id: 'privateTurnOn', hidden: true, onclick: () => actions.setPrivateOnly(true), text: t('intro.private.turnOn') });
@@ -163,26 +185,25 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     const node = el(
       'div',
       { class: 'intro-content' },
-      el('h1', { class: 'intro-title', tabindex: '-1', text: t('intro.private.title') }),
-      el('section', { class: 'teal-panel intro-panel', id: 'privatePanel', 'aria-labelledby': 'privateState' }, el('div', { class: 'teal-panel-head' }, icon('lock', 22), stateHead), sub, turnOn),
-      el('p', { class: 'note', id: 'privateVoice', text: t('intro.private.voice') }),
-      hidden,
+      el('section', { class: 'teal-panel intro-panel', id: 'privatePanel', 'aria-labelledby': 'privateState' }, el('div', { class: 'teal-panel-head' }, icon('lock', 26), stateHead), sub, turnOn),
+      ...head('intro.private.title', 'intro.private.lead'),
+      learnMore(el('p', { class: 'note', id: 'privateMore', text: t('intro.private.onSub') }), el('p', { class: 'note', id: 'privateVoice', text: t('intro.private.voice') }), hidden),
     );
     const update = () => {
       const on = !!S.settings.privateOnly;
       stateHead.textContent = t(on ? 'intro.private.on' : 'intro.private.off');
       node.querySelector('#privatePanel').classList.toggle('off', !on);
-      sub.textContent = t(on ? 'intro.private.onSub' : 'intro.private.offSub');
+      sub.textContent = on ? '' : t('intro.private.offSub');
+      sub.hidden = on;
       turnOn.hidden = on;
       hidden.hidden = !on;
     };
     return { body: node, update };
   }
 
-  /** What Listen reads: the words shown on this step, top to bottom. */
+  /** What Listen reads: the step's heading and its one sentence (core/firstrun.js SPOKEN). */
   function words() {
-    const shown = [...body.querySelectorAll('h1, h2, b, small, p, .way > span:last-child')].filter((n) => !n.closest('[hidden]'));
-    return shown.map((n) => n.textContent.trim()).filter(Boolean);
+    return SPOKEN[step].map((k) => t(k));
   }
 
   const all = () => {

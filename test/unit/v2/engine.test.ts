@@ -179,6 +179,22 @@ describe('engine client', () => {
     expect(JSON.parse(init.body).model).toBe('x-up');
   });
 
+  it('Search the web: the search options travel in the encrypted body, and the hold is asked for in X-Forge-Web-Search', async () => {
+    const ef = vi.fn(async (_path: string, _init: any) => sse([chunk('found')]));
+    const e = E.createEngine({ fetch: vi.fn(), encryptedFetch: async () => ef });
+    const body = { model: 'tinfoil/x', messages: [], max_tokens: 99, web_search_options: {}, pii_check_options: {}, prompt_injection_check_options: {} };
+    await e.chat({ key: 'k', body, encrypted: { upstream: 'x-up' }, search: true, onText: () => {} });
+    const [, init] = ef.mock.calls[0]!;
+    expect(init.headers['X-Forge-Web-Search']).toBe('1');
+    const sent = JSON.parse(init.body);
+    expect(sent).toMatchObject({ model: 'x-up', web_search_options: {}, pii_check_options: {}, prompt_injection_check_options: {} });
+    // The bytes sent are exactly the ones the app priced (chatPayload).
+    expect(init.body).toBe(E.chatPayload(body, { upstream: 'x-up' }));
+    // Off: no header.
+    await e.chat({ key: 'k', body: { model: 'tinfoil/x', messages: [], max_tokens: 9 }, encrypted: { upstream: 'x-up' }, onText: () => {} });
+    expect(ef.mock.calls[1]![1].headers['X-Forge-Web-Search']).toBeUndefined();
+  });
+
   it('never sends a private question in plain text when the enclave cannot be checked', async () => {
     const plain = vi.fn();
     const e = E.createEngine({ fetch: plain, encryptedFetch: async () => { throw new Error('attestation failed'); } });

@@ -2,6 +2,7 @@
 // screen (Decision 5), so this one is built from its tokens: back header, one field, one primary button.
 import { priceLine } from '../core/price.js';
 import { backHeader, el, icon } from '../core/ui.js';
+import { searchSwitch } from './parts.js';
 
 export function typeScreen({ t, state, nav, back, actions }) {
   const S = state.S;
@@ -12,12 +13,13 @@ export function typeScreen({ t, state, nav, back, actions }) {
   const price = el('p', { class: 'price-line', id: 'priceLine' });
   const notice = el('div', { class: 'notice', id: 'typeNotice', role: 'status', hidden: true });
   const send = el('button', { type: 'button', class: 'btn primary block', id: 'sendBtn' }, icon('send', 20), el('span', { text: t('type.send') }));
+  const search = searchSwitch({ t, state, actions, id: 'searchSwitch' });
   const main = el(
     'main',
     { class: 'screen sub type', 'data-screen': 'type' },
     backHeader(t('type.title'), back, t('common.back')),
     el('div', { class: 'type-body' }, follow, chips, el('label', { class: 'sr-only', for: 'question', text: t('type.label') }), ta, notice),
-    el('div', { class: 'type-foot' }, price, send),
+    el('div', { class: 'type-foot' }, search.node, price, send),
   );
 
   const blocker = (v) => {
@@ -31,6 +33,7 @@ export function typeScreen({ t, state, nav, back, actions }) {
   };
   const update = () => {
     const v = state.view();
+    search.update();
     follow.hidden = !v.lastExchange;
     chips.replaceChildren(
       ...S.pending.map((a) =>
@@ -44,8 +47,9 @@ export function typeScreen({ t, state, nav, back, actions }) {
       ),
     );
     chips.hidden = !S.pending.length;
-    const b = blocker(v);
     const est = actions.estimate(ta.value);
+    // The funds left (less what other questions hold) do not cover this question's hold.
+    const b = blocker(v) ?? (est.short ? { key: 'type.short', btn: 'type.addFunds', go: () => nav('addFunds') } : null);
     let problem = b ? null : est.reading ? 'type.reading' : est.overBody ? 'type.tooLarge' : est.overContext ? 'type.tooLong' : est.freeTooLong ? 'type.freeTooLong' : null;
     if (b) {
       notice.replaceChildren(el('p', { text: t(b.key) }), b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : '');
@@ -57,6 +61,8 @@ export function typeScreen({ t, state, nav, back, actions }) {
     const p = priceLine(est.costMsub, est.unit, est.free);
     price.replaceChildren(el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: t(p.key, p) }));
     price.hidden = !v.model;
+    // The exact hold in msub, the figure the engine holds (tests compare the two).
+    price.dataset.msub = est.costMsub == null ? '' : String(est.costMsub);
     send.disabled = !!b || !!problem || (!ta.value.trim() && !S.pending.length);
   };
   const submit = () => {
