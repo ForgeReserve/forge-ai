@@ -144,7 +144,7 @@ export class Ledger {
           .prepare("UPDATE reservations SET status = 'settled', charged_msub = ?, shortfall_msub = ?, settled_at = ? WHERE id = ?")
           .run(charged, shortfall, now(), reservationId);
         if (r.status === 'released') {
-          log.warn('settled_after_release', { reservation_id: reservationId, account_id: r.account_id, ref, owed_msub: owed, charged_msub: charged, shortfall_msub: shortfall });
+          log.warn('settled_after_release', { reservation_id: reservationId, ref, owed_msub: owed, charged_msub: charged, shortfall_msub: shortfall });
         }
         return { charged, balance: this.get(r.account_id)!.balance_msub, shortfall };
       });

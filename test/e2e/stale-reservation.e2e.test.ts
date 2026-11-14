@@ -111,8 +111,10 @@ describe.skipIf(!up)('stale reservations and active streams', () => {
     } finally {
       mock.chat = realChat;
     }
-    // Nothing owns the reservation any more: the periodic sweep frees it in-process, no restart needed.
-    g.deps.ledger.releaseStale(0);
+    // The reservation is still held, but nothing owns it any more: the periodic sweep frees it
+    // in-process, no restart needed.
+    expect(g.deps.ledger.reservedMsub(id)).toBeGreaterThan(0);
+    expect(g.deps.ledger.releaseStale(0)).toBe(1);
     expect(g.deps.ledger.reservedMsub(id)).toBe(0);
     expect(g.deps.ledger.get(id)!.balance_msub).toBe(100_000);
   });

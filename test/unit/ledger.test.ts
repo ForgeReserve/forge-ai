@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openDb, tx } from '../../src/db.ts';
+import { setLogSilent } from '../../src/log.ts';
 import { Invites, isApiKeyShape, Ledger, newApiKey, sha256 } from '../../src/ledger.ts';
 
 function setup() {
@@ -105,6 +106,28 @@ describe('ledger', () => {
     expect(ledger.get(a.id)!.balance_msub).toBe(7000);
     const row: any = db.prepare('SELECT status, charged_msub, shortfall_msub FROM reservations WHERE id = ?').get(r);
     expect(row).toEqual({ status: 'settled', charged_msub: 3000, shortfall_msub: 3000 });
+  });
+
+  it('the settled_after_release warning carries no account-tied value', () => {
+    const { db, ledger, a } = setup();
+    const r = ledger.reserve(a.id, 5000);
+    expect(new Ledger(db).releaseStale(0)).toBe(1);
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: any) => {
+      lines.push(String(chunk));
+      return true;
+    });
+    setLogSilent(false);
+    try {
+      ledger.settle(r, 1234, 'req-late');
+    } finally {
+      setLogSilent(process.env.FORGE_LOG_SILENT === '1');
+      spy.mockRestore();
+    }
+    const warn = lines.map((l) => JSON.parse(l)).find((l) => l.msg === 'settled_after_release');
+    expect(warn).toMatchObject({ reservation_id: r, ref: 'req-late', owed_msub: 1234, charged_msub: 1234, shortfall_msub: 0 });
+    expect(warn).not.toHaveProperty('account_id');
+    expect(Object.values(warn)).not.toContain(a.id);
   });
 
   it('a settled reservation is no longer protected from the sweep bookkeeping', () => {
