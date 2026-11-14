@@ -874,6 +874,24 @@ async function settleOtherMint() {
   }
 }
 
+/**
+ * Card payments this phone holds (core/card/flow.js): a swap at the card's mint not finished yet is sent
+ * again, and a token not yet in the vault goes there. Change owed to a card waits for that card's tap.
+ */
+async function resumeCards() {
+  if (!cardJobsWaiting()) return;
+  try {
+    const { flow, handToken } = await loadCards();
+    const n = await flow.resume((job) => handToken(job, { wallet, vault, engineBase: engine.base ?? '', message: t('fund.card.toOtherMint') }));
+    if (n) {
+      store.set({});
+      await refreshBalance();
+    }
+  } catch {
+    /* offline: next time */
+  }
+}
+
 /** Why a question cannot be asked right now, with where to go about it, or null. */
 function blocker() {
   if (!S.online) return { key: 'type.offline' };
@@ -1191,6 +1209,7 @@ function render() {
   if (name === 'takeOut' || name === 'funds') {
     collectRefunds();
     settleOtherMint();
+    resumeCards();
   }
 }
 
@@ -1292,7 +1311,7 @@ async function start() {
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
   });
   await registry.loadAll(BUNDLED);
   if (registry.refused.length) console.warn('modules refused', registry.refused);
@@ -1305,6 +1324,7 @@ async function start() {
     store.set({ online: true });
     retryAll().then((n) => n && refreshBalance());
     settleOtherMint();
+    resumeCards();
   });
   addEventListener('offline', () => store.set({ online: false }));
   // Auto-delete while open: the sweeper's timer, and a check whenever the app comes back to the front
@@ -1321,11 +1341,34 @@ async function start() {
   const n = await retryAll();
   if (n) await refreshBalance();
   await settleOtherMint();
+  await resumeCards();
   registerWorker();
 }
 
 /** The engine as fund modules see it: always the current engine object. */
 const engineProxy = new Proxy({}, { get: (_, k) => engine[k] });
+
+/** Card taps: the Android app's reader, or the website's stand-in that says a page cannot read cards. */
+const nfc = native?.nfc ?? adapters.nfc;
+/**
+ * Taking eCash off a Cashu card (core/card/flow.js), with the card's mint reached through the current
+ * engine. Loaded the first time it is needed, so its curve library is not fetched with every page.
+ */
+let cardsLoading = null;
+const loadCards = () =>
+  (cardsLoading ??= import('./core/card/flow.js').then((m) => ({
+    flow: m.createCardFunding({ storage, relay: { mint: (b) => engine.cardMint(b), swap: (b) => engine.cardSwap(b), restore: (b) => engine.cardRestore(b) } }),
+    handToken: m.handToken,
+  })));
+/** True when this phone holds a card payment (core/card/flow.js keeps them under forge2.cards). */
+function cardJobsWaiting() {
+  try {
+    return (JSON.parse(storage.getItem('forge2.cards') ?? '{}').jobs ?? []).length > 0;
+  } catch {
+    return false;
+  }
+}
+const cards = { load: loadCards };
 
 let workerReg = null;
 function registerWorker() {

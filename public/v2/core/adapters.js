@@ -1,6 +1,6 @@
 // Small adapters for the phone's hardware, so tests can put a fake in their place: the camera (scanning
 // an eCash code), the microphone, the browser's own speech recogniser and voices, the speaker, the share
-// sheet, and vibration. NFC comes with a later slice.
+// sheet, vibration, and card taps (NFC, which only the Android app has: core/native.js).
 import { loadScript } from '../../js/ui.js';
 
 const Recognition = () => (typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined);
@@ -167,6 +167,18 @@ const defaults = {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     },
+  },
+
+  /**
+   * Card taps. A web page cannot talk to these cards, so on the website there is no reader: supported()
+   * is false. The Android app puts its own in place (core/native.js nativeNfc). There, start(onCard)
+   * calls onCard({transceive(bytes) -> bytes, close()}) for each card that comes into the field (null for
+   * one that is not a smart card) and returns {started, stop()}.
+   */
+  nfc: {
+    supported: () => false,
+    status: async () => ({ available: false, enabled: false }),
+    start: () => ({ started: Promise.resolve(false), stop() {} }),
   },
 
   /** A short vibration, where the phone has one. */

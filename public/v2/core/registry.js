@@ -14,7 +14,7 @@ export const INPUTS = {
   look: [],
   language: [],
   mode: ['t', 'ui', 'state', 'nav', 'actions', 'format'],
-  fund: ['t', 'ui', 'engine', 'wallet', 'vault', 'format', 'scan', 'qr'],
+  fund: ['t', 'ui', 'engine', 'wallet', 'vault', 'format', 'scan', 'qr', 'nfc', 'card'],
   filter: ['t'],
   'voice-in': ['t', 'mic', 'recognizer', 'audio'],
   'voice-out': ['t', 'speaker', 'synth', 'audio'],
@@ -145,6 +145,7 @@ export const BUNDLED = [
   // Free questions first in Add funds (docs/FREE-TIER.md); listed only while the engine gives them out.
   { kind: 'fund', folder: 'free' },
   { kind: 'fund', folder: 'note' },
+  { kind: 'fund', folder: 'card' },
   { kind: 'fund', folder: 'ecash' },
   { kind: 'fund', folder: 'lightning' },
   { kind: 'fund', folder: 'onchain' },

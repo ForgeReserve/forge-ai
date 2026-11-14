@@ -189,6 +189,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .note-hint { margin: 0; text-align: center; font-weight: 600; }
 .note-mint { align-self: center; margin: 0; overflow-wrap: anywhere; text-align: center; }
 .token-out { display: flex; flex-direction: column; gap: 14px; }
+.card-art { position: relative; align-self: center; width: min(260px, 100%); aspect-ratio: 260 / 164; border-radius: 18px; border: 2px solid var(--gold-callout); background: var(--surface); box-shadow: var(--shadow-raised-sm, none); display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+.card-art-word { font-size: 18px; font-weight: 700; letter-spacing: 0.06em; color: var(--gold-ink); }
+.card-art-waves { position: absolute; right: 16px; top: 14px; color: var(--gold-ink); }
+.card-art-amount { font-size: 28px; font-weight: 700; }
+.card-hold { margin: 0; text-align: center; font-size: 18px; font-weight: 600; }
+.card-view .note { text-align: center; }
+.card-view .field .note { text-align: left; }
+.card-preview { display: flex; flex-direction: column; gap: 4px; }
+.card-preview p { margin: 0; }
+.card-get { font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 .token-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--gold-callout); }
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form p { margin: 0; }

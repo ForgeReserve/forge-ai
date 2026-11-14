@@ -429,11 +429,12 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
   }
 
   /**
-   * Step 3 and on: the PIN, the signature, the swap and the change, all in this tap. Resolves to the job
+   * Step 3 and on: the PIN, the signature, the swap and the change, all in this tap. route says where the
+   * token goes after (kept with the job for resume). Resolves to the job
    * with its token ({state: 'swapped', token, received, changeOwed}). After the card signed, a failure
    * keeps the job: settle() and finishOnCard() finish it later, and the error says kept: true.
    */
-  async function pay(tx, { summary, info, plan, pin, acceptUnlisted = false }) {
+  async function pay(tx, { summary, info, plan, pin, acceptUnlisted = false, route = 'topup' }) {
     const pinSet = summary.pinState === 'set';
     try {
       await sameCard(tx, summary.pubkey);
@@ -464,6 +465,8 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
         refundKey: summary.refundKey,
         pinSet,
         acceptUnlisted,
+        // Where the eCash goes once it is here: 'topup' (the engine's own mint) or 'othermint'.
+        route,
         keys: { [plan.keyset]: info.keys[plan.keyset] },
         inputs,
         outputs,
@@ -484,10 +487,13 @@ export function createCardFunding({ storage, relay, now = () => Date.now() }) {
     try {
       sig = await apdu.spendAllSign(tx);
     } catch (e) {
-      const f = cardFailure(e);
-      // Refused before the commit (PIN, limit): nothing was burned, so nothing is kept.
-      if (f.code !== 'tap_lost') store.remove(job.id);
-      throw f.code === 'tap_lost' ? new CardFlowError('unfinished', 'The card left before it finished. Tap the same card again.', { kept: true }) : f;
+      // A status word is the card refusing before its commit (PIN, limit): nothing was burned, so nothing
+      // is kept. Anything else (the card left, a garbled answer) may have come after the commit: kept.
+      if (e instanceof apdu.CardError) {
+        store.remove(job.id);
+        throw cardFailure(e);
+      }
+      throw new CardFlowError('unfinished', 'The card left before it finished. Tap the same card again.', { kept: true });
     }
     if (!schnorrVerify(sig, message(job), summary.pubkey)) throw new CardFlowError('unfinished', "The card's answer did not check out. Tap the same card again.", { kept: true });
     job = store.put({ ...job, sig, state: 'signed' });
@@ -563,4 +569,25 @@ function matchRestored(outputs, body) {
   const by = new Map(outs.map((o, i) => [String(o.B_).toLowerCase(), sigs[i]]));
   const got = outputs.map((o) => by.get(o.B_.toLowerCase()));
   return got.every(Boolean) ? got : null;
+}
+
+/**
+ * Puts a card job's token where it goes, so the job can let it go. The engine's own mint: wallet.topup,
+ * which stores it in the vault before sending it, and keeps it there when the engine refuses it or does
+ * not answer. Another mint: the vault, marked not added, until the person adds it through Other mint
+ * (Funds lists it, with Copy). Resolves once the vault has the token; throws only when it does not.
+ * Returns {route, credited, unit, replay, error} as far as known.
+ */
+export async function handToken(job, { wallet, vault, engineBase = '', message = '' }) {
+  if (job.route === 'othermint') {
+    const e = vault.hold(job.token, 'card', { engine: engineBase });
+    vault.refused(e.id, 'card_other_mint', message);
+    return { route: 'othermint' };
+  }
+  try {
+    return { route: 'topup', ...(await wallet.topup(job.token, wallet.invite?.() || undefined)) };
+  } catch (error) {
+    if (!vault.incoming().some((x) => x.token === job.token)) throw error;
+    return { route: 'topup', error };
+  }
 }

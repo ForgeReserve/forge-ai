@@ -1,8 +1,9 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
-// The bridge carries calls to the app's two plugins: ForgeShare (the share sheet, Save, and removing the
-// photo files the app wrote) and ForgeShareIn (a photo shared in from another app). The balance key,
-// chats and eCash never pass through it.
+// The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
+// photo files the app wrote), ForgeShareIn (a photo shared in from another app) and ForgeNfc (card taps:
+// the bytes of each card command and the card's answer). The balance key and chats never pass through
+// it; a card's answers carry its pieces, which only the page reads.
 
 /** The engine the app talks to until the person sets another one in More. */
 export const DEFAULT_ENGINE = 'https://ai.forge-reserve.com';
@@ -80,5 +81,50 @@ export function createNative(win = globalThis) {
       clear: () => call('ForgeShareIn', 'clear').catch(() => {}),
     },
     forget: () => call('ForgeShare', 'forget').catch(() => {}),
+    nfc: nativeNfc(call, on),
+  };
+}
+
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => {
+  const s = String(h ?? '');
+  if (s.length % 2 || !/^[0-9a-f]*$/i.test(s)) throw new Error('the card answer is not hex');
+  const out = [];
+  for (let i = 0; i < s.length; i += 2) out.push(parseInt(s.slice(i, i + 2), 16));
+  return out;
+};
+
+/**
+ * Card taps through ForgeNfc, as the nfc adapter (core/adapters.js) describes it. Each card that comes
+ * into the field is numbered by the app; its transceiver sends that number with every command, so a
+ * command meant for one card never reaches the next.
+ */
+export function nativeNfc(call, on) {
+  return {
+    supported: () => true,
+    async status() {
+      const r = await call('ForgeNfc', 'status').catch(() => null);
+      return { available: r?.available === true, enabled: r?.enabled === true };
+    },
+    start(onCard) {
+      const handle = on('ForgeNfc', 'card', (ev) => {
+        if (ev?.isoDep === false) return onCard(null);
+        const id = ev?.id;
+        onCard({
+          transceive: async (apdu) => unhex((await call('ForgeNfc', 'transceive', { id, apdu: hex(apdu) }))?.data),
+          close: () => call('ForgeNfc', 'close', { id }).catch(() => {}),
+        });
+      });
+      const started = call('ForgeNfc', 'start');
+      return {
+        started,
+        stop() {
+          Promise.resolve(handle)
+            .then((h) => h?.remove?.())
+            .catch(() => {});
+          call('ForgeNfc', 'stop').catch(() => {});
+        },
+      };
+    },
   };
 }

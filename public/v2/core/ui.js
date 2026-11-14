@@ -27,6 +27,7 @@ const PATHS = {
   file: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/>',
   card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>',
+  nfc: '<path d="M7 9a4.5 4.5 0 0 1 0 6"/><path d="M10.5 6.5a8 8 0 0 1 0 11"/><path d="M14 4a11.5 11.5 0 0 1 0 16"/>',
   qr: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2M20 14v6h-6"/>',
   coins: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
   bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
