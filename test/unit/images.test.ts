@@ -42,3 +42,23 @@ describe('container images (report section 9)', () => {
     expect(new Set(froms.map((r) => r.ref)).size).toBe(1);
   });
 });
+
+describe('CI workflow', () => {
+  const ci = read('.github/workflows/ci.yml');
+
+  it('pins every action by commit and grants no permission by default', () => {
+    const uses = [...ci.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map((m) => m[1]!);
+    expect(uses.length).toBeGreaterThan(0);
+    for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
+    expect(ci).toMatch(/^permissions: \{\}$/m);
+    expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(['      contents: read', '      contents: read', '      contents: read']);
+  });
+
+  it('runs read-only, without credentials, and covers every suite', () => {
+    expect(ci).not.toMatch(/\$\{\{\s*secrets\./);
+    expect(ci).not.toMatch(/persist-credentials: true/);
+    for (const step of ['pnpm install --frozen-lockfile', 'pnpm typecheck', 'pnpm test', 'pnpm mint:up', 'pnpm test:e2e', 'pnpm test:ui', './gradlew assembleDebug testDebugUnitTest']) {
+      expect(ci, step).toContain(step);
+    }
+  });
+});
