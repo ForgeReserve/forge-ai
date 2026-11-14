@@ -856,7 +856,7 @@ export default {
   'intro.pay.cash': 'Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.',
   'intro.limits.title': 'Know what it hides.',
   'intro.limits.lead': 'Only the AI can read what you type. Your connection shows, unless you use Tor.',
-  'intro.limits.art': 'A closed eye, inside two rings. Three quarters of each ring is lit.',
+  'intro.limits.art': 'An eye with a line through it, inside two rings. Three quarters of each ring is lit.',
   'intro.limits.sheet': 'What it can and cannot hide',
   'intro.limits.can': 'Forge hides',
   'intro.limits.cannot': 'Forge cannot hide',
