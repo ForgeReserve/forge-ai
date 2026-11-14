@@ -785,7 +785,15 @@ export function createApp(d: Deps) {
     }
 
     if (!stream) {
-      const text = await res.text();
+      // The body read belongs to settlement: a failure here settles as an upstream failure (nothing charged,
+      // reservation released, change owed) before the error reaches the client, never left running.
+      let text: string;
+      try {
+        text = await res.text();
+      } catch (e) {
+        const r = await settle(undefined, 'none', 'upstream_error');
+        return apiError(c, 502, 'upstream_error', `upstream response failed: ${errText(e)}. You were not charged.`, resultHeaders(r));
+      }
       let usage: Usage | undefined;
       let source = 'upstream';
       try {

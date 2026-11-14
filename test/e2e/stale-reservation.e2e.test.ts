@@ -89,18 +89,13 @@ describe.skipIf(!up)('stale reservations and active streams', () => {
 
   it('a request that fails before settling leaves its reservation to the abandoned-request sweep', async () => {
     const { key, id } = account(100_000);
-    const mock = g.deps.suppliers.get('mock')!;
-    const realChat = mock.chat.bind(mock);
-    // The upstream answers 200 and then the body read fails.
-    mock.chat = async () =>
-      new Response(
-        new ReadableStream({
-          start(ctrl) {
-            ctrl.error(new Error('connection reset'));
-          },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
+    const ledger = g.deps.ledger;
+    const realSettle = ledger.settle.bind(ledger);
+    // Settlement itself throws, so the error escapes the request before anything is settled. (A failed
+    // upstream body read no longer escapes: it settles as an upstream failure, see upstream-failures.e2e.)
+    ledger.settle = () => {
+      throw new Error('settlement failed');
+    };
     try {
       const res = await fetch(`${g.url}/v1/chat/completions`, {
         method: 'POST',
@@ -109,7 +104,7 @@ describe.skipIf(!up)('stale reservations and active streams', () => {
       });
       expect(res.ok).toBe(false);
     } finally {
-      mock.chat = realChat;
+      ledger.settle = realSettle;
     }
     // The reservation is still held, but nothing owns it any more: the periodic sweep frees it
     // in-process, no restart needed.
