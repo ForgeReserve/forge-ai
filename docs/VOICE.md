@@ -16,7 +16,7 @@ The v2 app reads answers aloud with **Phonon 31m English** (Gradium, Apache-2.0)
 
 `scripts/phonon/lock.json` pins every file to a Hugging Face commit (`gradium/phonon-31m-en@92741c5b`, `gradium/phonon-voices@0ee17205`) with its size and SHA-256. The script downloads into `.tmp/phonon-download/`, checks size and hash, and only then moves a file into `public/`. It refuses any repo but `phonon-31m-en` (the 40m models are CC BY-NC) and any URL that is not pinned. `--check` checks without the network.
 
-The Docker image runs the script during the build. The app never asks Hugging Face for anything: phonon-tts is always handed a model on the app's own address, never its default model (a test checks no app file names Hugging Face).
+The Docker image runs the script during the build, and so does every Android build (`scripts/android-web.ts`). The app never asks Hugging Face for anything: phonon-tts is always handed a model on the app's own address, never its default model (a test checks no app file names Hugging Face).
 
 ## How it runs
 
@@ -26,10 +26,11 @@ The Docker image runs the script during the build. The app never asks Hugging Fa
 - **First use on the website:** before downloading, the app asks once and shows the size (about 65 MB: the model and the default voice). Not now reads nothing; answers to spoken questions are then not read on their own until the person taps Listen, which asks again. phonon-tts keeps the files in Cache Storage (`phonon-tts-v1`), so later uses load from the phone.
 - **Offline:** the voice package lives under `/v2/` so the v2 service worker controls its worker too (a service worker only controls a worker whose script is inside its scope). The package files are kept by the service worker; the model files are left to phonon-tts's own cache, so they are not kept twice. Tested: after one use, the app reloads and reads aloud with the network off.
 - **Threads:** the gateway serves `/v2/` and `/vendor/` with `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Resource-Policy: same-origin` (`src/app.ts`), so the page is cross-origin isolated and the model runs on 3 threads. `/vendor/` needs them because pdf.js starts a worker from there, and an isolated page cannot start a worker without them. Without isolation, phonon-tts runs on one thread.
+- **Android:** the APK carries the model and voices (stored uncompressed, `noCompress 'gguf', 'safetensors'`), read straight from the APK, never copied into Cache Storage, so the first open reads aloud with no download. `MainActivity` adds the same isolation headers to the app's own files (`IsolationRules.kt`). If the very first page load came up without them, the page reloads once (`reloadForIsolation`).
 
 ## What cross-origin isolation changes
 
-With `require-corp`, the v2 page may only load other sites' files that opt in. The v2 app loads none: it talks to its engine with CORS requests (allowed), and every script, style, image and worker is its own. Checked with every UI and e2e test passing with the headers on: private (EHBP) answers, Lightning and eCash funding, camera notes, photos shared in, card taps. Classic (v1) at `/` gets no new headers.
+With `require-corp`, the v2 page may only load other sites' files that opt in. The v2 app loads none: it talks to its engine with CORS requests (allowed), and every script, style, image and worker is its own. Checked with every UI and e2e test passing with the headers on: private (EHBP) answers, Lightning and eCash funding, camera notes, photos shared in, card taps, the Android bundle. Classic (v1) at `/` gets no new headers.
 
 ## The voice lab
 
@@ -42,4 +43,4 @@ With `require-corp`, the v2 page may only load other sites' files that opt in. T
 
 ## Not verified
 
-Real phones (the Pixel 8 Pro on GrapheneOS, a low-end phone): speed, memory, threads and WebGPU there. Which voice sounds best: the default (Maeve) was not chosen by ear. The licence of the Mimi codec weights inside Phonon (the model card puts the whole file under Apache-2.0 and credits Kyutai's Pocket TTS and Mimi).
+Real phones (the Pixel 8 Pro on GrapheneOS, a low-end phone): speed, memory, threads and WebGPU there, and whether the Android web view grants cross-origin isolation (`crossOriginIsolated`, shown in the voice lab). Which voice sounds best: the default (Maeve) was not chosen by ear. The licence of the Mimi codec weights inside Phonon (the model card puts the whole file under Apache-2.0 and credits Kyutai's Pocket TTS and Mimi).

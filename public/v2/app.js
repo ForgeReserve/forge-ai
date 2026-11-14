@@ -12,7 +12,7 @@ import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
-import { createNative, defaultEngine } from './core/native.js';
+import { createNative, defaultEngine, reloadForIsolation } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
 import { createTillPays, createTillSettings } from './core/till.js';
@@ -1407,6 +1407,7 @@ function stylesReady() {
 }
 
 async function start() {
+  if (reloadForIsolation({ native, isolated: globalThis.crossOriginIsolated === true, session: sessionStorage })) return location.reload();
   document.title = t('app.name');
   // The visible height above a phone keyboard, for Type (core/viewport.js).
   watchViewport();

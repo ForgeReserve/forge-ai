@@ -17,6 +17,7 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 | Photos shared in | Another app's share sheet sends a photo to Forge. It opens Share unseen with it (`ShareInPlugin.kt`, `public/v2/core/native.js`). The photo is read into memory, never written to storage. |
 | Share out | Share unseen's Share opens Android's share sheet with the protected photo only. Save opens the system save screen, so no storage permission is needed (`SharePlugin.kt`). |
 | Back button | Walks back through the app's screens, then leaves. |
+| Natural voice | The APK carries the natural voice (Phonon 31m and seven en-GB voices, docs/VOICE.md), stored uncompressed, so answers are read aloud offline from the first open with no download. The web view reads the files straight from the APK; nothing is copied into its cache. `MainActivity` serves the app's own files with the cross-origin isolation headers (`IsolationRules.kt`) so the voice can run on several threads; whether this web view grants isolation is shown in the voice lab (`#/voice-lab`) and is not yet checked on a phone. |
 | Card taps | Tap a card reads a Cashu eCash card over NFC (`NfcPlugin.kt`, ForgeNfc): IsoDep connect, transceive and close, 5 seconds per command, reading on only while that screen is open. The page builds every command (`public/v2/core/card/`); the plugin checks each is one well formed short APDU and hands back the card's whole answer. |
 | Fedimint cards | Tap a Fedimint card pays the engine's Lightning invoice through a till (`TillPlugin.kt`, ForgeTill; [PAYMENTS.md](PAYMENTS.md)). Pairing scans the till's pay code; the till's address and pay token are sealed with a key in the Android Keystore and the token never goes back to the page. The plugin sends only the till's pay routes, over https, and holds the card link (a WebSocket, `TillLink.kt`) while the page relays the till's card commands to the card through ForgeNfc. Erase everything forgets the till and deletes the key. |
 
@@ -42,7 +43,7 @@ cd android
 # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Every build first runs `node scripts/android-web.ts`, which copies the v2 app and what it imports (`public/v2`, `public/js`, `public/vendor` with the licences, the icons) into `android/app/src/main/assets/public`, with the v2 page as its start page. v1, the admin and beta pages, `/free` and `/download` stay on the website. The copied files are not committed.
+Every build first runs `node scripts/android-web.ts`. It puts the natural voice's files in place (`scripts/phonon-model.ts`: downloaded from Hugging Face at build time when missing, pinned by commit and SHA-256 in `scripts/phonon/lock.json`), then copies the v2 app and what it imports (`public/v2`, `public/js`, `public/vendor` with the licences, the icons) into `android/app/src/main/assets/public`, with the v2 page as its start page. v1, the admin and beta pages, `/free` and `/download` stay on the website. The copied files are not committed. The voice makes the debug APK about 84 MB (12 MB without it, 2026-11-14).
 
 The Android project is kept by hand. Do not run `npx cap add`, `cap sync` or `cap update`: they would put back the Cordova module, the Google services hook and the template icons.
 

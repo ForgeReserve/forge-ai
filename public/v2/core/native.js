@@ -195,3 +195,21 @@ export function nativeNfc(call, on) {
     },
   };
 }
+
+/**
+ * Inside the Android app, the page is served cross-origin isolated (MainActivity adds the headers, so
+ * the natural voice can run on several threads). The very first load can start before those headers
+ * are in place; then the page reloads once. True when this page should reload now. `session` is
+ * sessionStorage: the flag in it makes sure that happens once, also where the web view cannot isolate
+ * a page at all (the voice then runs on one thread).
+ */
+export function reloadForIsolation({ native, isolated, session }) {
+  if (!native || isolated) return false;
+  try {
+    if (session.getItem('forge2.isolationReload')) return false;
+    session.setItem('forge2.isolationReload', '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
