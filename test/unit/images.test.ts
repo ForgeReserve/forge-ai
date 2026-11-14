@@ -14,7 +14,7 @@ function references(): { file: string; ref: string }[] {
     const m = /^FROM\s+(\S+)/i.exec(line.trim());
     if (m) out.push({ file: 'Dockerfile', ref: m[1]! });
   }
-  for (const file of ['docker-compose.yml', 'docker-compose.test.yml']) {
+  for (const file of ['docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml']) {
     for (const line of read(file).split('\n')) {
       const m = /^\s*image:\s*(\S+)/.exec(line);
       if (m) out.push({ file, ref: m[1]!.replace(/^["']|["']$/g, '') });
@@ -29,7 +29,7 @@ function references(): { file: string; ref: string }[] {
 describe('container images (report section 9)', () => {
   it('finds the image references it guards', () => {
     const files = new Set(references().map((r) => r.file));
-    expect(files).toEqual(new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'docs/ADMIN.md', '.env.example']));
+    expect(files).toEqual(new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml', 'docs/ADMIN.md', '.env.example']));
   });
 
   it('pins every image to a version and a digest, never a moving tag alone', () => {

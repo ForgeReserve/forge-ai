@@ -6,7 +6,8 @@
 name: forge-credit-mint
 services:
   credit-mint:
-    image: cashubtc/nutshell:0.22.1
+    # Nutshell 0.22.1, pinned by digest (multi-arch index, the same image as docker-compose.test.yml).
+    image: cashubtc/nutshell:0.22.1@sha256:05b536e0e3d6beee75417ece319a3f89a687d34cfb3cc12c6b19d253104b450e
     command: ["poetry", "run", "mint"]
     restart: unless-stopped
     ports: ["127.0.0.1:3348:3338"]
