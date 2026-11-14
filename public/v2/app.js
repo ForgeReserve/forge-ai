@@ -11,7 +11,7 @@ import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
-import { createEngine, EngineError, tinfoilFetch } from './core/engine.js';
+import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { createNative, defaultEngine } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
@@ -20,7 +20,7 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { estimate, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, holdMsub, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { createTalk } from './core/talkctl.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
@@ -43,7 +43,7 @@ import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
 import { typeScreen } from './screens/type.js';
 
-const MAX_OUT = 4096; // the most output a question asks for; the engine holds the worst case up front
+const MAX_OUT = 4096; // the most output a question asks for; the engine holds the worst case up front (questionHold)
 const MODELS_CACHE = 'forge2.models';
 const LOOK_CACHE = 'forge2.look';
 
@@ -403,7 +403,7 @@ async function loadModels() {
 
 function applyModels(body) {
   if (!body) return;
-  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [], free: freeInfo(body) });
+  Object.assign(S, { models: body.data ?? [], audioModels: Array.isArray(body.audio) ? body.audio : [], inviteOnly: !!body.invite_only, units: body.units ?? [], mints: body.mints ?? [], mintAliases: body.mint_aliases ?? [], btcUsd: body.btc_usd ?? null, free: freeInfo(body) });
 }
 
 /** Adds free questions (a credit voucher) to the free balance, through the vault like any eCash. */
@@ -486,6 +486,19 @@ async function savePending() {
   await scratchChanged();
 }
 
+/**
+ * The funds hold for a question with these API messages, in msub: exactly what the engine holds before
+ * sending it on (core/price.js holdMsub), from the body generate() sends, encrypted for a private model.
+ * Falls back to the per-token estimate when the engine lists no hold figures. null when unpriced.
+ */
+function questionHold(model, api, maxOut, inputTokens) {
+  const unit = S.unit ?? 'usd';
+  const enc = isPrivate(model) ? { upstream: model.upstream_model } : null;
+  const plain = new TextEncoder().encode(chatPayload({ model: model.id, messages: api, max_tokens: maxOut }, enc)).length;
+  const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd });
+  return held ?? estimate(model, unit, inputTokens, maxOut)?.max ?? null;
+}
+
 function estimateFor(text) {
   const model = pickModel(S.models, S.settings);
   const unit = S.unit ?? 'usd';
@@ -496,10 +509,12 @@ function estimateFor(text) {
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
   const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const cost = estimate(model, unit, tokens, maxOut);
+  const costMsub = questionHold(model, api, maxOut, tokens);
   const fr = freeNow(model, bodyTokens(bytes));
   return {
-    costMsub: cost?.max ?? null,
+    costMsub,
+    // The engine refuses a question whose hold is more than the funds not already held: say so first.
+    short: !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
     unit,
     // Paid with a free question: the price line reads "Free, 2 of 3 left".
     free: fr.use ? { left: fr.left, total: fr.total } : null,
@@ -540,7 +555,7 @@ function estimateAgain(model) {
   const vision = !!model.capabilities?.vision;
   const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const chat = estimate(model, unit, tokens, maxOut)?.max ?? null;
+  const chat = questionHold(model, apiMessages(history, { systemPrompt: t('system.prompt'), vision }), maxOut, tokens);
   const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
   if (chat == null || reading == null) return null;
   return chat + reading;
@@ -907,6 +922,8 @@ function blocker() {
     }
   }
   if (!pickModel(S.models, S.settings)) return { key: 'type.noModel', go: () => nav('model') };
+  // Even a short question would hold more than the funds left.
+  if (estimateFor('').short) return { key: 'type.short', go: () => nav('addFunds') };
   return null;
 }
 

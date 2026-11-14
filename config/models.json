@@ -18,24 +18,7 @@
       "enclaveHosts": [
         "tinfoil.sh"
       ],
-      "attestationUrl": "https://atc.tinfoil.sh/attestation",
-      "flat": {
-        "buckets": [
-          {
-            "maxBytes": 8192,
-            "usd": 0.002
-          },
-          {
-            "maxBytes": 65536,
-            "usd": 0.01
-          },
-          {
-            "maxBytes": 1000000,
-            "usd": 0.05
-          }
-        ],
-        "output_usd_per_mtok": 20
-      }
+      "attestationUrl": "https://atc.tinfoil.sh/attestation"
     }
   },
   "models": [

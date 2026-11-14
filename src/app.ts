@@ -25,7 +25,7 @@ import { type Account, type Invites, type Ledger, LedgerError } from './ledger.t
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
 import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
-import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage } from './pricing.ts';
+import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, worstUsage } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
@@ -206,6 +206,9 @@ export function createApp(d: Deps) {
             ? { input: round(displayPrice(m.input_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!), output: round(displayPrice(m.output_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!) }
             : null,
           verified: m.price_verified,
+          // What the gateway holds for a request, so a client can show and check the same figure exactly
+          // (public/v2/core/price.js holdMsub). Integers in nano-USD with markup applied.
+          hold: holdInfo(s, m, env.FORGE_MARKUP, env.FORGE_BYTES_PER_TOKEN),
         },
         upstream_model: s.type === 'tinfoil' ? m.upstream : undefined,
       };
@@ -649,16 +652,18 @@ export function createApp(d: Deps) {
       if (!rate) return apiError(c, 503, 'rate_unavailable', 'BTC/USD rate unavailable; sat pricing is paused. Pay in usd or retry later.');
     }
 
-    // 3. Maximum cost of this request.
-    // pricing=flat: always the flat schedule. pricing=metered with a flat schedule: flat is the fallback
-    // when no usage signal arrives (e.g. encrypted pass-through without usage metrics).
-    const flat = supplierCfg.flat;
+    // 3. Maximum cost of this request: the funds hold (pricing.ts holdNanoUsd).
+    // pricing=flat: always the flat schedule. pricing=metered: the model's own metered worst case, and a
+    // response that arrives without a usage count is charged that worst case, which is the hold. A flat
+    // schedule on a metered supplier no longer drives the hold or the fallback (owner decision, 2026-11-14).
     const alwaysFlat = supplierCfg.pricing === 'flat';
     const markup = env.FORGE_MARKUP;
-    const flatNano = flat ? flatCostNanoUsd(flat, raw.length, maxOut, markup) : 0;
-    const meteredMax = costNanoUsd(model, { inputTokens: estimateTokensFromBytes(raw.length, env.FORGE_BYTES_PER_TOKEN), outputTokens: maxOut }, markup);
-    const maxNano = alwaysFlat ? flatNano : Math.max(meteredMax, flatNano);
+    const flatNano = alwaysFlat ? flatCostNanoUsd(supplierCfg.flat!, raw.length, maxOut, markup) : 0;
+    const worst = worstUsage(raw.length, maxOut, env.FORGE_BYTES_PER_TOKEN);
+    const maxNano = holdNanoUsd(supplierCfg, model, raw.length, maxOut, markup, env.FORGE_BYTES_PER_TOKEN);
     const reserveMsub = free ? CREDIT_MSUB : Math.max(1, nanoUsdToMsub(maxNano, unit, rate));
+    /** Source label for a response with no usage count: the flat schedule, or the metered worst case. */
+    const noUsage = alwaysFlat ? 'flat' : 'worst-case';
     const requiredUnits = msubToUnitsCeil(reserveMsub);
 
     // 4. Payment.
@@ -730,7 +735,10 @@ export function createApp(d: Deps) {
         }
         // A free question costs one credit when it is answered, nothing when it fails.
         if (free) nano = 0;
-        const actualMsub = free ? (status === 'ok' || status === 'partial' ? CREDIT_MSUB : 0) : nanoUsdToMsub(nano, unit, rate);
+        const owedMsub = free ? (status === 'ok' || status === 'partial' ? CREDIT_MSUB : 0) : nanoUsdToMsub(nano, unit, rate);
+        // Never more than the hold, on every payment path.
+        const actualMsub = Math.min(owedMsub, reserveMsub);
+        if (owedMsub > reserveMsub) log.warn('usage_over_reservation', { request_id: requestId, actual_msub: owedMsub, reserved_msub: reserveMsub });
         // Our cost: the supplier's own figure when it sends one, else the usage at our catalog cost (no markup).
         let costNusd: number | null = null;
         let costSource: string | null = null;
@@ -748,7 +756,6 @@ export function createApp(d: Deps) {
           const s = ledger.settle(pay.reservationId, actualMsub, requestId);
           res.chargedMsub = s.charged;
           res.balanceMsub = s.balance;
-          if (actualMsub > reserveMsub) log.warn('usage_over_reservation', { request_id: requestId, actual_msub: actualMsub, reserved_msub: reserveMsub });
         } else {
           const chargedUnits = Math.min(pay.paid, msubToUnitsCeil(actualMsub));
           res.chargedMsub = chargedUnits * MSUB_PER_UNIT;
@@ -845,7 +852,9 @@ export function createApp(d: Deps) {
         const reported = complete ? await up.usage : undefined;
         if (!ok) return settle(undefined, 'none', 'upstream_error');
         if (reported) return settle(reported, 'tinfoil-metrics', complete ? 'ok' : 'partial');
-        return settle({ inputTokens: estimateInput(), outputTokens: complete ? maxOut : frames.frames }, flat ? 'flat' : 'estimate', complete ? 'ok' : 'partial');
+        // No usage count: a complete answer is charged the hold; a cut-off one the frames it carried.
+        if (complete) return settle(worst, noUsage, 'ok');
+        return settle({ inputTokens: estimateInput(), outputTokens: frames.frames }, 'estimate', 'partial');
       };
       if (!isStream) {
         const chunks: Buffer[] = [];
@@ -930,8 +939,8 @@ export function createApp(d: Deps) {
       const headerCost = costFromHeaders(res.headers) ?? parseUsageMetrics(res.headers.get(TINFOIL_USAGE_HEADER) ?? undefined)?.costUsd;
       if (usage && usage.costUsd === undefined && headerCost !== undefined) usage.costUsd = headerCost;
       if (!usage) {
-        source = flat ? 'flat' : 'estimate';
-        usage = { inputTokens: estimateInput(), outputTokens: maxOut };
+        source = noUsage;
+        usage = worst;
       }
       const r = await settle(usage, source, 'ok');
       return new Response(text, {
@@ -975,7 +984,9 @@ export function createApp(d: Deps) {
               send(meter.push(value));
             }
             send(meter.flush());
-            const r = await settle(usageNow(), meter.usage ? 'upstream' : flat ? 'flat' : 'estimate', 'ok');
+            // No usage count on a plaintext stream: the gateway counted the answer as it passed (an
+            // estimate, at most the hold); a flat-priced supplier charges its schedule.
+            const r = await settle(usageNow(), meter.usage ? 'upstream' : alwaysFlat ? 'flat' : 'estimate', 'ok');
             send(forgeEvent(r));
           } catch (e) {
             const r = await settle(usageNow(), meter.usage ? 'upstream' : 'estimate', 'partial');

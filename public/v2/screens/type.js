@@ -44,8 +44,9 @@ export function typeScreen({ t, state, nav, back, actions }) {
       ),
     );
     chips.hidden = !S.pending.length;
-    const b = blocker(v);
     const est = actions.estimate(ta.value);
+    // The funds left (less what other questions hold) do not cover this question's hold.
+    const b = blocker(v) ?? (est.short ? { key: 'type.short', btn: 'type.addFunds', go: () => nav('addFunds') } : null);
     let problem = b ? null : est.reading ? 'type.reading' : est.overBody ? 'type.tooLarge' : est.overContext ? 'type.tooLong' : est.freeTooLong ? 'type.freeTooLong' : null;
     if (b) {
       notice.replaceChildren(el('p', { text: t(b.key) }), b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : '');
@@ -57,6 +58,8 @@ export function typeScreen({ t, state, nav, back, actions }) {
     const p = priceLine(est.costMsub, est.unit, est.free);
     price.replaceChildren(el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: t(p.key, p) }));
     price.hidden = !v.model;
+    // The exact hold in msub, the figure the engine holds (tests compare the two).
+    price.dataset.msub = est.costMsub == null ? '' : String(est.costMsub);
     send.disabled = !!b || !!problem || (!ta.value.trim() && !S.pending.length);
   };
   const submit = () => {

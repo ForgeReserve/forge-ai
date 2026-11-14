@@ -18,7 +18,7 @@ Streams are read in memory as they pass, to count tokens when the supplier does 
 | Gateway sees prompt and reply | Yes, in memory while relaying | Yes, in memory while relaying | No: bodies are HPKE ciphertext end to end |
 | Supplier sees prompt and reply | Yes | Only inside an attested enclave | Only inside an attested enclave |
 | Gateway sees | Model, sizes, usage, timing, client IP | Same | Model name, body size, max output tokens, frame count, timing, client IP, usage numbers reported by Tinfoil |
-| How usage is measured | Upstream `usage` | Upstream `usage` | `X-Tinfoil-Usage-Metrics` response header (non-streaming) or HTTP trailer (streaming); else flat schedule |
+| How usage is measured | Upstream `usage` | Upstream `usage` | `X-Tinfoil-Usage-Metrics` response header (non-streaming) or HTTP trailer (streaming); else the metered worst case (the hold) |
 
 Payment links: with a balance key, every request on that key is linkable to the others. A P2PK lock key is a stable identifier: reusing one key links the payouts locked to it, at the gateway and at the mint, which sees the key in the locked proofs when they are redeemed. Use a fresh key per payout (cashu.me warns when a key was used before) if that matters. With NUT-24, requests are not linked by the gateway, but the mint knows its own swaps. Client IPs reach the gateway (and Caddy); use Tor or a VPN to hide them.
 

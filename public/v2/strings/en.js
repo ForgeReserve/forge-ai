@@ -75,6 +75,7 @@ export default {
   'type.followUp': 'Follow-up to your last answer',
   'type.noFunds': 'Add funds to ask a question.',
   'type.addFunds': 'Add funds',
+  'type.short': 'Not enough funds for this question.',
   'type.noModel': 'No private model is available right now.',
   'type.chooseModel': 'Choose a model',
   'type.reading': 'Wait until the file is read.',

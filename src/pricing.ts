@@ -34,6 +34,56 @@ export function flatCostNanoUsd(flat: FlatPricing, bodyBytes: number, maxOutputT
 }
 
 /**
+ * The funds hold of a chat request in nano-USD: the most it can be charged.
+ * - pricing "flat": the flat schedule (request-size bucket plus declared max output at its output price).
+ * - pricing "metered": the model's own metered worst case, the input estimated from the body
+ *   (bytes / bytesPerToken, rounded up) plus maxOut, at the model's prices with markup. A flat schedule on
+ *   a metered supplier does not drive the hold (owner decision, 2026-11-14).
+ * The app computes the same figure from GET /v1/models (`pricing.hold`, public/v2/core/price.js holdMsub).
+ */
+export function holdNanoUsd(
+  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>,
+  bodyBytes: number,
+  maxOut: number,
+  markup: number,
+  bytesPerToken: number,
+): number {
+  if (supplier.pricing === 'flat') return flatCostNanoUsd(supplier.flat!, bodyBytes, maxOut, markup);
+  return costNanoUsd(model, worstUsage(bodyBytes, maxOut, bytesPerToken), markup);
+}
+
+/**
+ * The hold figures GET /v1/models lists under `pricing.hold`, so a client computes the same hold exactly
+ * (public/v2/core/price.js holdMsub). Integers in nano-USD, markup applied, rounded as the gateway rounds.
+ */
+export function holdInfo(
+  supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>,
+  markup: number,
+  bytesPerToken: number,
+) {
+  if (supplier.pricing === 'flat') {
+    return {
+      basis: 'flat' as const,
+      buckets: supplier.flat!.buckets.map((b) => ({ max_bytes: b.maxBytes, nano_usd: Math.ceil(b.usd * markup * 1e9) })),
+      output_nano_usd_per_token: nanoUsdPerToken(supplier.flat!.output_usd_per_mtok, markup),
+    };
+  }
+  return {
+    basis: 'metered' as const,
+    bytes_per_token: bytesPerToken,
+    input_nano_usd_per_token: nanoUsdPerToken(model.input_usd_per_mtok, markup),
+    output_nano_usd_per_token: nanoUsdPerToken(model.output_usd_per_mtok, markup),
+  };
+}
+
+/** The usage a metered hold assumes: the whole body as input at bytesPerToken, and the whole output limit. */
+export function worstUsage(bodyBytes: number, maxOut: number, bytesPerToken: number): Usage {
+  return { inputTokens: estimateTokensFromBytes(bodyBytes, bytesPerToken), outputTokens: maxOut };
+}
+
+/**
  * Converts nano-USD to msub of the given unit, rounding up.
  * usd: 1 msub = 1e-5 USD = 10_000 nano-USD.
  * sat: 1 msub = 1 msat = 1e-11 BTC; nanoUsd / 1e9 / rate * 1e11 = nanoUsd * 100 / rate.

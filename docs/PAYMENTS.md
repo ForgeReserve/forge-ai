@@ -20,9 +20,9 @@ The token is then swapped at the mint into new proofs that only the gateway know
 ## Flow 1: NUT-24 per request
 
 1. Client sends the request with no credentials.
-2. The gateway prices the worst case: input tokens estimated as `body bytes / FORGE_BYTES_PER_TOKEN` (default 2, deliberately high) plus `max_tokens` at the output price. It answers `402` with `X-Cashu: creqA...`, a NUT-18 request with `a` (amount), `u` (unit), `m` (trusted mints), `s: true` and `i`, the request id, which is also in the `X-Forge-Request-Id` header. Sat quotes carry `FORGE_SAT_PRICE_BUFFER` headroom.
+2. The gateway prices the worst case (the funds hold, below): input tokens estimated as `body bytes / FORGE_BYTES_PER_TOKEN` (default 2, deliberately high) plus `max_tokens` at the output price. It answers `402` with `X-Cashu: creqA...`, a NUT-18 request with `a` (amount), `u` (unit), `m` (trusted mints), `s: true` and `i`, the request id, which is also in the `X-Forge-Request-Id` header. Sat quotes carry `FORGE_SAT_PRICE_BUFFER` headroom.
 3. Client retries with `X-Cashu: cashuB...` and `X-Forge-Request-Id` set to that id (and `X-Forge-Invite` while invite-only). The paid request then runs under the id the client already holds, so its change stays findable at `GET /v1/change/{request_id}` even when the paid response is lost and error or startup recovery owes the change. Each id can be used for one paid attempt, even one that fails: an id that already has a request is `409 request_id_used`, before the token is touched; a malformed id is `400`. A retry without the header gets a new id, returned in `X-Forge-Request-Id`.
-4. The gateway re-prices, checks the token covers it, swaps it, calls the supplier, and charges `ceil(actual cost)` capped at what was paid.
+4. The gateway re-prices, checks the token covers it, swaps it, calls the supplier, and charges `ceil(actual cost)` capped at the hold (and so at what was paid).
 5. Change, if any, is issued as a new token from the same mint: in the `X-Cashu-Change` response header for non-streaming responses, in the final `event: forge` of a stream, and always at `GET /v1/change/{request_id}`.
 
 NUT-24 does not specify change. Forge AI's choice (header, final stream event, re-fetch URL) is documented here and in the README. Upstream failures charge nothing and return everything.
@@ -35,13 +35,27 @@ NUT-24 does not specify change. Forge AI's choice (header, final stream event, r
 
 Only a SHA-256 of each key is stored.
 
+## The funds hold
+
+Before a request is sent on, the gateway holds the most it can cost (a balance reservation, or the NUT-24 quote):
+
+- `pricing: "metered"`: the model's own metered worst case, at the model's prices with `FORGE_MARKUP`: input estimated as `ceil(body bytes / FORGE_BYTES_PER_TOKEN)` plus `max_tokens` (or `X-Tinfoil-Max-Output-Tokens`) of output. For an encrypted request the body bytes are the ciphertext the gateway receives.
+- `pricing: "flat"`: the flat schedule, a request-size bucket plus declared max output at the schedule's output price.
+
+No request is ever charged more than its hold, on any payment path; a usage figure above it is logged as `usage_over_reservation` and charged at the hold.
+
+Until 2026-11-14 a metered supplier that also carried a flat schedule held the larger of the two. For `tinfoil/gpt-oss-120b` at 4,096 output tokens that held about 156 sat for a question charged about 0.1 sat, and refused a person with 124 sat. A flat schedule on a metered supplier is now ignored, for the hold and for the charge.
+
+`GET /v1/models` lists each model's hold figures under `pricing.hold`, integers in nano-USD with the markup applied (`basis`, `bytes_per_token`, `input_nano_usd_per_token`, `output_nano_usd_per_token`; for a flat supplier `buckets` and `output_nano_usd_per_token`). The v2 app computes the same hold from them (`public/v2/core/price.js` `holdMsub`), shows it as the price line, and says "Not enough funds for this question" before sending when the funds not already held do not cover it. A sat hold also depends on the BTC/USD rate: the app uses `btc_usd` from the same listing, and the two agree to the msat while the gateway's rate has not moved since.
+
 ## Metering
 
 - Plaintext requests: the gateway asks the supplier for usage (`stream_options.include_usage` on streams) and settles on it. If the client did not ask for usage, the usage-only chunk is removed from the stream it sees.
-- No usage reported: input is estimated as `body bytes / 4` and output from the stream (at least one token per content chunk, or characters / 4 if larger). Non-streaming responses without usage are charged at `max_tokens`.
+- No usage reported on a plaintext stream: the gateway counted the answer as it passed, so input is estimated as `body bytes / 4` and output from the stream (at least one token per content chunk, or characters / 4 if larger), at most the hold.
+- No usage reported on a complete non-streaming or encrypted response (nothing the gateway could count): the metered worst case is charged, which is the hold.
 - A non-streaming response, plaintext or encrypted, whose body fails to arrive after `200` headers is an upstream failure, settled before the error is returned: `502`, nothing charged, the reservation released and, for NUT-24, the full change in `X-Cashu-Change` and at `GET /v1/change/{request_id}` at once.
 - Client disconnects mid-stream: the gateway aborts the upstream call and settles on what was produced so far, using upstream usage if it arrived, else the estimate above.
-- Encrypted pass-through: see PRIVACY.md. Usage comes from Tinfoil's `X-Tinfoil-Usage-Metrics` header or trailer; without it the supplier's flat schedule (if configured) or the reservation is charged.
+- Encrypted pass-through: see PRIVACY.md. Usage comes from Tinfoil's `X-Tinfoil-Usage-Metrics` header or trailer; without it a complete answer is charged the metered worst case (the hold), and a stream cut off midway is charged the input estimate plus one token per frame it carried.
 - `pricing: "flat"` suppliers always charge the flat schedule: a request-size bucket plus declared max output tokens.
 
 ## Flow 3: funding a balance through the Forge mint
