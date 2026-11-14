@@ -304,6 +304,8 @@ First-load JavaScript is about 59 KB gzipped (page code and the Markdown librari
 - **Erase everything** (from More): shows the balance that would be lost with Take funds out, warns about eCash not yet saved, and needs the button held for two seconds. It removes all of the site's `localStorage`, `sessionStorage`, IndexedDB databases, caches and service workers (v2 and the Classic app share them), then checks that nothing is left (`public/v2/core/erase.js`). What each of these removes and what it cannot reach: [docs/PRIVACY.md](docs/PRIVACY.md#the-v2-app-what-it-keeps-and-how-it-removes-it).
 - **Service worker:** `public/v2/sw.js`, scope `/v2/`, network first with a cached copy for offline. It also catches a photo shared to `/v2/share` and keeps it in its own cache only until the page takes it. v1's worker passes `/v2/` by. Only the worker's install creates its cache, so once Erase everything has removed it, nothing puts it back.
 - **Strings:** every word is in `public/v2/strings/en.js`, the printed notes' words too.
+- **Engine:** More, Engine sets the address questions and payments go to (HTTPS only; the engine must answer before the app switches). The website's default is its own engine.
+- **Android app:** `android/` wraps the v2 app in Capacitor, with its files in the APK, application id `com.forgereserve.ai`, Android 9 and up, no Google services. It takes photos shared from other apps into Share unseen and shares out through Android's share sheet. `scripts/android-release.sh` signs a release with the owner's keystore, and `/download` offers the APK set in `FORGE_APK_PATH` with its SHA-256. See [docs/ANDROID.md](docs/ANDROID.md).
 
 ### Printing free question vouchers
 
@@ -340,6 +342,7 @@ pnpm typecheck
 pnpm test                 # unit tests
 pnpm mint:up && pnpm test:e2e && pnpm mint:down    # end to end against real local Nutshell mints
 pnpm test:ui              # the v2 app in a 412 x 915 browser (installed Chrome, no download); needs pnpm mint:up
+cd android && ./gradlew assembleDebug testDebugUnitTest   # the Android app (Android SDK, JDK 17)
 pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env if present)
 ```
 

@@ -74,6 +74,16 @@ What these do not do:
 - Ask about it sends the new file, made smaller, with the question to the engine, like any added photo.
 - A photo shared into Forge while its service worker is not running (just installed, or after Erase everything) is posted by the phone to the gateway at `/v2/share`. The gateway does not read it, keeps nothing and opens the page saying so: the phone sent the photo to the server, which dropped it.
 
+### In the Android app
+
+The Android app (docs/ANDROID.md) keeps the same things in its own web view storage, and Erase everything removes them the same way. The differences:
+
+- No offline copy and no service worker: the app's files are in the APK.
+- A photo shared in from another app is read into the app's memory and handed to Share unseen once; it is never written to storage.
+- Two kinds of photo file are written: the protected photo handed to the share sheet (the app's cache) and a photo taken with the camera for Share unseen (the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
+- Backups are off, so nothing of Forge goes into a cloud backup or a phone to phone transfer. Uninstalling the app removes everything it kept.
+- It talks only to the engine set in More, Engine (`https://ai.forge-reserve.com` by default).
+
 ## Encrypted pass-through (Tinfoil EHBP)
 
 Tinfoil's Encrypted HTTP Body Protocol encrypts request and response bodies with HPKE to a key held inside an attested enclave, and leaves headers readable. Forge AI follows Tinfoil's proxy guide (docs.tinfoil.sh/guides/proxy-server):
