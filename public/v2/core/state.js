@@ -28,8 +28,9 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
 
 /**
  * voiceIn: 'engine' (default; the engine's speech to text) or 'device' (the browser's recogniser, never
- * with Private only on). voiceOut: 'auto' (the phone's own voice when it has one, else the engine's),
- * 'engine', 'device' or 'off'. Voice questions are read aloud unless voiceOut is 'off'.
+ * with Private only on). voiceOut: 'auto' (the natural voice made on the phone where it runs, else the
+ * phone's own voice, else the engine's), 'phonon', 'engine', 'device' or 'off'. Voice questions are read
+ * aloud unless voiceOut is 'off'.
  */
 /**
  * autoDelete: when conversations are removed from this phone ('off', 'close', 'hour', 'day', 'week';
@@ -48,18 +49,24 @@ export function pickVoiceIn(mods, settings) {
   return ok(mods.engine) ? mods.engine : null;
 }
 
-/** The voice-out module to use, or null when answers are not read aloud. */
+/**
+ * The voice-out module to use, or null when answers are not read aloud. 'auto' (the default) is the
+ * natural voice made on the phone (phonon) where the phone can run it, else the phone's own voice,
+ * else the engine's.
+ */
 export function pickVoiceOut(mods, settings) {
   const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
   switch (settings.voiceOut) {
     case 'off':
       return null;
+    case 'phonon':
+      return ok(mods.phonon) ? mods.phonon : null;
     case 'engine':
       return ok(mods.engine) ? mods.engine : null;
     case 'device':
       return ok(mods.device) ? mods.device : null;
     default:
-      return ok(mods.device) ? mods.device : ok(mods.engine) ? mods.engine : null;
+      return [mods.phonon, mods.device, mods.engine].find(ok) ?? null;
   }
 }
 

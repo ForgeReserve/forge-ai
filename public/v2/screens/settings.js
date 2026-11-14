@@ -116,7 +116,7 @@ export function modelScreen({ t, state, back, actions, format }) {
  * Voice (from More): how talking becomes words, and how answers are read aloud. Only ways that work here
  * are listed; the browser's recogniser is shown but cannot be chosen while Private only is on.
  */
-export function voiceScreen({ t, state, back, actions, voice }) {
+export function voiceScreen({ t, state, back, actions, voice, native = null }) {
   const S = state.S;
   const option = (group, id, title, sub, { on, disabled = false } = {}) =>
     el(
@@ -140,10 +140,13 @@ export function voiceScreen({ t, state, back, actions, voice }) {
       inRows.push(option('voiceIn', 'device', t('voice.in.device'), blocked ? t('voice.in.deviceOff') : t('voice.in.deviceSub'), { on: inUsed === 'device', disabled: blocked }));
     }
     inList.replaceChildren(...(inRows.length ? inRows : [el('p', { class: 'hint', id: 'voiceInNone', text: t('voice.in.none') })]));
-    const choice = S.settings.voiceOut ?? 'auto';
-    const outRows = [option('voiceOut', 'auto', t('voice.out.auto'), t('voice.out.autoSub'), { on: choice === 'auto' })];
-    if (outs.engine?.available()) outRows.push(option('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: choice === 'engine' }));
+    // Automatic (the setting until one is picked) shows as the voice it reads with: the natural voice
+    // where this phone runs it, else the phone's own voice, else the engine's.
+    const choice = (S.settings.voiceOut ?? 'auto') === 'auto' ? (voice.outUsed?.() ?? 'auto') : S.settings.voiceOut;
+    const outRows = [];
+    if (outs.phonon?.available()) outRows.push(option('voiceOut', 'phonon', t('voice.out.phonon'), native ? t('voice.out.phononSubApp') : t('voice.out.phononSub'), { on: choice === 'phonon' }));
     if (outs.device?.available()) outRows.push(option('voiceOut', 'device', t('voice.out.device'), t('voice.out.deviceSub'), { on: choice === 'device' }));
+    if (outs.engine?.available()) outRows.push(option('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: choice === 'engine' }));
     outRows.push(option('voiceOut', 'off', t('voice.out.off'), t('voice.out.offSub'), { on: choice === 'off' }));
     outList.replaceChildren(...outRows);
   };

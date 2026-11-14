@@ -50,6 +50,7 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - With an enclave supplier (Tinfoil) the sound and text are read by the model inside an attested enclave, so the supplier's staff cannot read them; the gateway operator could, while they pass. A Tinfoil supplier set to `allowPlaintext: false` refuses audio.
 - In the v2 app the engine way is labelled Engine, not private, and its words say the engine could hear the recording, or read the answer it reads aloud, on the way. With Private only on, the engine still sees the recording, the transcript that comes back and, when it reads answers aloud, the answer text.
 - In the v2 app, Private only sends voice only to an enclave audio model, and never uses the browser's own recogniser, which may send the voice to the browser's maker. The phone's own voices are used only when they run on the phone (`localService`).
+- The v2 app's natural voice (Phonon 31m, docs/VOICE.md) reads answers on the phone: the model runs in a worker in the page, and the answer text is not sent anywhere. Its model and voices come from the gateway's own address (on the website, downloaded once after the person agrees, then kept in Cache Storage as `phonon-tts-v1`) or from inside the APK (the Android app). Fetching them tells the gateway that this address uses the voice, nothing about what it reads.
 
 ## The v2 app: what it keeps and how it removes it
 
@@ -58,6 +59,7 @@ The v2 app at `/v2/` keeps, on the phone only:
 - **Conversations** in IndexedDB (`forge2`, store `chats`): every question and answer, with the photos and file text added to them. Settings, what waits for the next question (added files and photos, a half-typed question) and the open conversation's id are in the `kv` store.
 - **The balance key** (`forge.balanceKey`, shared with the Classic app) and **eCash in transit** (`forge2.vault`: tokens being added, refunds not yet saved; `forge2.cards`: a card payment until its swap is done and its eCash is in the vault, and change owed to a card until that card takes it back) in `localStorage`, plus the last model list and look, and a mark that the first run was seen (`forge2.firstRun`). The invite code typed on the first run's Welcome step is held in the page's memory only, never stored.
 - **The offline copy** of the app in Cache Storage (`forge2-runtime-v1`), kept by the v2 service worker. It holds the app's own files, never a conversation, a key or an API response.
+- **The natural voice's model** in Cache Storage (`phonon-tts-v1`, about 67 MB), once the person agreed to download it. Model files only. Erase everything removes it with the other caches.
 - **A photo shared in from another app**, for a moment: the service worker keeps it in its own cache (`forge2-share`) until the Share unseen screen opens and takes it, then deletes that cache. Opened any other way, the app deletes an old one it finds. A photo picked or taken inside the app is never stored.
 
 Ways to remove things, each tested in Chrome against every IndexedDB store, every Cache Storage entry, `localStorage` and `sessionStorage` (`test/ui/history.ui.test.ts`):

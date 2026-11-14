@@ -278,7 +278,7 @@ describe('voice modules get only their own inputs', () => {
 
   it('bundles both ways for each direction', () => {
     const ids = R.BUNDLED.filter((b: any) => b.kind.startsWith('voice')).map((b: any) => `${b.kind}/${b.folder}`);
-    expect(ids.sort()).toEqual(['voice-in/device', 'voice-in/engine', 'voice-out/device', 'voice-out/engine']);
+    expect(ids.sort()).toEqual(['voice-in/device', 'voice-in/engine', 'voice-out/device', 'voice-out/engine', 'voice-out/phonon']);
   });
 });
 

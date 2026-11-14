@@ -112,8 +112,16 @@ describe('the web bundle in the APK', () => {
     expect(cfg.webDir).toBeUndefined();
     expect(readFileSync(join(dir, 'capacitor.plugins.json'), 'utf8').trim()).toBe('[]');
     expect(r.files).toBe(bundleFiles(PUBLIC).length + 1);
-    // Small enough to install over a slow connection.
-    expect(r.bytes).toBeLessThan(30 * 1024 * 1024);
+    // Small enough to install over a slow connection, apart from the natural voice (about 67 MB),
+    // which the app carries so it reads aloud offline from the first open.
+    expect(r.bytes - r.voiceBytes).toBeLessThan(30 * 1024 * 1024);
+    if (existsSync(join(PUBLIC, 'v2/voice/phonon/index.json'))) {
+      const index = JSON.parse(readFileSync(join(PUBLIC, 'v2/voice/phonon/index.json'), 'utf8'));
+      for (const f of index.files) expect(existsSync(join(dir, 'public/v2/voice/phonon', f.path)), f.path).toBe(true);
+      expect(r.voiceBytes).toBe(index.files.reduce((s: number, f: any) => s + f.size, 0) + statSync(join(PUBLIC, 'v2/voice/phonon/index.json')).size);
+    }
+    // The voice package, which the app imports from its own files.
+    expect(existsSync(join(dir, 'public/v2/vendor/phonon-tts/worker.js'))).toBe(true);
   });
 
   it('removes files that left public/ on the next bundle', () => {

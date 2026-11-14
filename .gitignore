@@ -5,3 +5,6 @@ data/
 .env
 dist
 .tmp/
+# The on-device voice files (scripts/phonon-model.ts fetches them at build time, pinned in scripts/phonon/lock.json).
+public/v2/voice/phonon/*/
+public/v2/voice/phonon/index.json

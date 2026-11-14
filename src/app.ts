@@ -85,6 +85,21 @@ function apiError(c: Context, status: number, code: string, message: string, hea
   return c.json({ error: { message, type: code, code }, ...extra }, status as any);
 }
 
+/**
+ * The headers that make a page cross-origin isolated (`crossOriginIsolated`), which WebAssembly threads
+ * need. CORP same-origin also keeps other sites from embedding these files.
+ */
+export const ISOLATION_HEADERS = Object.freeze({
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+});
+
+async function isolated(c: Context, next: () => Promise<void>) {
+  await next();
+  for (const [k, v] of Object.entries(ISOLATION_HEADERS)) c.header(k, v);
+}
+
 /** The shape of a request id this gateway issues; a paid retry may echo one back (see the chat route). */
 const REQUEST_ID = /^req_[0-9a-f]{32}$/;
 
@@ -1125,6 +1140,19 @@ export function createApp(d: Deps) {
     const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
+    // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
+    // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
+    // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same
+    // headers because a worker an isolated page starts must carry them (pdf.js reads PDFs in one); on
+    // a v1 page they change nothing, as v1 is not isolated and its workers fetch only this origin.
+    app.use('/v2/*', isolated);
+    app.use('/vendor/*', isolated);
+    // The voice files are pinned to a commit and the commit is in their path, so they never change
+    // under the same address: the phone may keep them for a year without asking again.
+    app.use('/v2/voice/phonon/*', async (c, next) => {
+      await next();
+      if (c.res.ok && !c.req.path.endsWith('/index.json')) c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    });
     app.use(
       '/*',
       serveStatic({

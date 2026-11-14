@@ -17,7 +17,7 @@ export const INPUTS = {
   fund: ['t', 'ui', 'engine', 'wallet', 'vault', 'format', 'scan', 'qr', 'nfc', 'card', 'till'],
   filter: ['t'],
   'voice-in': ['t', 'mic', 'recognizer', 'audio'],
-  'voice-out': ['t', 'speaker', 'synth', 'audio'],
+  'voice-out': ['t', 'speaker', 'synth', 'audio', 'phonon'],
   cover: ['t', 'ui'],
   guides: ['t', 'ui'],
   protect: ['t', 'ui'],
@@ -28,7 +28,8 @@ export const INPUTS = {
  * never the balance key) and the answer and voice actions, never the app's raw state or an action that
  * takes money out. Burn (remove this conversation from the phone) is one of the answer actions.
  * A voice module gets the engine's audio calls for its direction only, which the app makes with the
- * balance key the module never sees.
+ * balance key the module never sees. A voice-out module also gets the phone's own Phonon engine
+ * (core/phonon.js): whether it can run, what a first use downloads, and the loaded model.
  */
 export const PROJECTIONS = {
   mode: {
@@ -36,7 +37,7 @@ export const PROJECTIONS = {
     actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'] },
-  'voice-out': { audio: ['model', 'price', 'speak'] },
+  'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load'] },
 };
 
 /** Permissions a manifest may ask for in this release. None: a module that asks for one is refused. */
@@ -178,6 +179,8 @@ export const BUNDLED = [
   { kind: 'fund', folder: 'othermint' },
   { kind: 'voice-in', folder: 'engine' },
   { kind: 'voice-in', folder: 'device' },
+  // The natural voice made on the phone first: it is the default where the phone can run it.
+  { kind: 'voice-out', folder: 'phonon' },
   { kind: 'voice-out', folder: 'device' },
   { kind: 'voice-out', folder: 'engine' },
   // Share unseen runs the filters in this order: hidden details, then faces, then writing.

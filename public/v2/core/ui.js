@@ -125,6 +125,29 @@ export function listRow({ ico, tint = 'gold', title, sub, onclick, id, cls = '' 
   );
 }
 
+/**
+ * A download bar: a progressbar with what is done and the phase in words under it. set({fraction, text,
+ * phase}) moves the bar (fraction 0 to 1, or null to leave it) and writes the two lines.
+ */
+export function meterBar({ id, label }) {
+  const fill = el('span');
+  fill.style.width = '0%';
+  const bar = el('div', { class: 'bar meter-bar', role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, fill);
+  const amount = el('p', { class: 'meter-amount' });
+  const phase = el('p', { class: 'meter-phase', 'aria-live': 'polite' });
+  const node = el('div', { class: 'meter', id }, bar, amount, phase);
+  node.set = ({ fraction = null, text, phase: words } = {}) => {
+    if (fraction != null) {
+      const pct = Math.max(0, Math.min(100, Math.floor(fraction * 100)));
+      fill.style.width = `${pct}%`;
+      bar.setAttribute('aria-valuenow', String(pct));
+    }
+    if (text != null) amount.textContent = text;
+    if (words != null) phase.textContent = words;
+  };
+  return node;
+}
+
 /** A status line under a form: role=status, with a kind of '', 'err' or 'ok'. */
 export function msgLine() {
   const p = el('p', { class: 'msg', role: 'status' });

@@ -11,9 +11,14 @@ const TICK_MS = 100;
 /**
  * deps: store ({S, set}), t, ui, nav, haptics, voiceIn() and voiceOut() (the chosen module instance or
  * null), blocker() (null, or {key, go} when a question cannot be asked now), ask(text, meta),
- * refresh() (the balance), errorText(err, unit), now().
+ * refresh() (the balance), errorText(err, unit), now(), askDownload(bytes) (resolves true when the
+ * person agrees to the one-time download a voice needs before its first use), showDownload(bytes) (opens the
+ * download's progress and returns {progress(p), fail(message, retry) -> shown, close()}), and
+ * unlockAudio(), called
+ * inside every tap that may lead to sound, before anything is awaited (iPhone Safari starts sound only
+ * there: adapters.js speaker.unlock).
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now() }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {} }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -22,6 +27,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   let timer = 0;
   let sending = null; // AbortController while the recording is being turned into text
   let speech = null; // {key, ctl}
+  let asking = null; // the read waiting for the answer to the download question
+  let declined = false; // the download was refused: answers are not read on their own until Listen
 
   const set = (patch) => store.set({ talk: { ...S.talk, ...patch } });
 
@@ -140,6 +147,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   // ---------------------------------------------------------------- the talk button
 
   function down() {
+    unlockAudio();
     if (S.talk.phase !== 'idle') return;
     const b = blocker();
     if (b) {
@@ -150,7 +158,11 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     dispatch({ type: 'down', at: now() });
   }
 
-  const up = () => dispatch({ type: 'up', at: now() });
+  // Letting go is the tap the answer is read after: the sound is unlocked here, the answer comes later.
+  const up = () => {
+    unlockAudio();
+    dispatch({ type: 'up', at: now() });
+  };
   const move = (isInside) => dispatch({ type: 'move', inside: isInside });
 
   function cancel() {
@@ -171,20 +183,64 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     return mod.price(pieces(msg, mod), msg.id);
   }
 
-  function speak(msg) {
+  /**
+   * Reads an answer aloud. auto: the app reads the answer to a voice question on its own. A voice that
+   * needs a download first (the natural voice, the first time) asks once; refused, answers are not read
+   * on their own again until the person taps Listen. retry: Try again after a failed download, which
+   * the person already agreed to (no second question).
+   */
+  function speak(msg, { auto = false, retry = false } = {}) {
+    if (!auto) unlockAudio();
     const mod = voiceOut();
     if (!mod || !msg?.content) return;
     stopSpeaking();
+    if (!mod.download) return play(mod, msg);
+    const ticket = {};
+    asking = ticket;
+    (async () => {
+      const d = await mod.download().catch(() => ({ needed: false }));
+      if (asking !== ticket) return;
+      let view = null;
+      if (d.needed) {
+        if (auto && declined) return;
+        const ok = retry || (await askDownload(d.bytes));
+        if (asking !== ticket) return;
+        declined = !ok;
+        if (!ok) return;
+        // The download the person agreed to: its progress shows until the voice starts reading.
+        view = showDownload(d.bytes);
+      }
+      asking = null;
+      play(mod, msg, view);
+    })();
+  }
+
+  /** p: {loaded, total, fraction, phase} from the voice module, while it downloads and gets ready. */
+  function play(mod, msg, view = null) {
     const key = msg.id;
-    const ctl = mod.speak(pieces(msg, mod), { key, onState: (state) => store.set({ speaking: { key, state } }) });
-    speech = { key, ctl };
+    let ctl = null;
+    const onProgress = (p) => {
+      if (speech?.ctl !== ctl) return;
+      view?.progress(p);
+      store.set({ speaking: { key, state: 'loading', progress: Math.min(99, Math.floor((p?.fraction ?? 0) * 100)) } });
+    };
+    const onState = (state) => {
+      if (state === 'playing') view?.close();
+      store.set({ speaking: { key, state } });
+    };
+    ctl = mod.speak(pieces(msg, mod), { key, onState, onProgress });
+    speech = { key, ctl, view };
     store.set({ speaking: { key, state: 'loading' } });
     ctl.done
       .then((r) => {
         if (r?.chargedMsub) refresh();
       })
       .catch((e) => {
-        if (e?.name === 'AbortError') return;
+        if (e?.name === 'AbortError') return view?.close();
+        // A failed download says why, with Try again, in the window that showed its progress.
+        if (view && e?.name !== 'AudioBlocked' && !e?.code && view.fail(e?.message ?? String(e), () => speak(msg, { retry: true }))) return;
+        view?.close();
+        if (e?.name === 'AudioBlocked') return ui.toast(t('speak.blocked'), 4500);
         ui.toast(e?.code ? errorText({ code: e.code, message: e.message, charged: 0 }) : t('speak.failed'), 4000);
         refresh();
       })
@@ -197,10 +253,12 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
   }
 
   function stopSpeaking() {
+    asking = null;
     if (!speech) return;
     const s = speech;
     speech = null;
     s.ctl.stop();
+    s.view?.close();
     store.set({ speaking: { key: null, state: 'idle' } });
   }
 

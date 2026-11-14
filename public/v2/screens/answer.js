@@ -62,7 +62,8 @@ export function answer({ t, state, nav, actions, format }) {
   const showSpeaking = (v) => {
     const on = v.speak.current && v.speak.state !== 'idle';
     speaking.hidden = !on;
-    speakWhat.textContent = on ? t(v.speak.state === 'loading' ? 'speak.loading' : 'speak.speaking') : '';
+    const loading = v.speak.state === 'loading';
+    speakWhat.textContent = !on ? '' : loading && v.speak.progress != null ? t('speak.loadingPct', { pct: v.speak.progress }) : t(loading ? 'speak.loading' : 'speak.speaking');
     // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
     speakVia.hidden = !(on && v.speak.viaEngine);
     speakVia.textContent = speakVia.hidden ? '' : t('speak.viaEngine');

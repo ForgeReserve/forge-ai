@@ -18,6 +18,12 @@ COPY package.json ./
 COPY src ./src
 COPY config ./config
 COPY public ./public
+# The natural voice (Phonon 31m and its voices, docs/VOICE.md): fetched here at build time when the
+# build context does not carry it, pinned by commit and SHA-256 in scripts/phonon/lock.json, then
+# served from this origin. The app never fetches it from Hugging Face.
+COPY scripts/phonon-model.ts ./scripts/phonon-model.ts
+COPY scripts/phonon/lock.json ./scripts/phonon/lock.json
+RUN node scripts/phonon-model.ts && rm -rf .tmp
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]

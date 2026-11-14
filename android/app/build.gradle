@@ -20,6 +20,9 @@ android {
         aaptOptions {
             // Files and dirs to omit from the packaged assets dir (Capacitor's default).
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            // The natural voice's model and voices go in uncompressed: they barely compress, and the
+            // web view reads them straight from the APK without inflating 65 MB first.
+            noCompress 'gguf', 'safetensors'
         }
     }
     buildTypes {
@@ -58,6 +61,9 @@ def webAssets = tasks.register('forgeWebAssets', Exec) {
     // The KEEP and SKIP rules that decide what goes in the APK.
     inputs.file(new File(repoRoot, 'scripts/lib/android-web.ts'))
     inputs.file(new File(repoRoot, 'capacitor.config.json'))
+    // The natural voice, fetched at build time when missing (scripts/phonon-model.ts, pinned in lock.json).
+    inputs.file(new File(repoRoot, 'scripts/phonon-model.ts'))
+    inputs.file(new File(repoRoot, 'scripts/phonon/lock.json'))
     outputs.dir(file('src/main/assets/public'))
     outputs.file(file('src/main/assets/capacitor.config.json'))
     outputs.file(file('src/main/assets/capacitor.plugins.json'))

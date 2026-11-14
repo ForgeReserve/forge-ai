@@ -19,6 +19,8 @@ export const ROUTES = {
   history: 'more/history',
   erase: 'more/erase',
   engine: 'more/engine',
+  // A developer page, not linked from any menu: measures the voices this phone can run (screens/voicelab.js).
+  voiceLab: 'voice-lab',
   photo: 'photo',
   // Share unseen, opened by a photo shared in from another app (public/v2/sw.js): it arrived, it did not
   // reach the app, or the share held no photo. photoSent: the worker was not running, so the phone posted

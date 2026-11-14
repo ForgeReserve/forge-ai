@@ -1,0 +1,12 @@
+{
+  "id": "forge.voice-out.phonon",
+  "kind": "voice-out",
+  "version": "1.0.0",
+  "name": {
+    "en": "Natural voice"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

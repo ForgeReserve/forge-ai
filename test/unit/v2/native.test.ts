@@ -169,3 +169,19 @@ describe('the engine address', () => {
     expect(R.parentOf('engine')).toBe('more');
   });
 });
+
+describe('cross-origin isolation in the app', () => {
+  const session = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('reloads once when the app page came up without isolation, never on the website or when isolated', () => {
+    const s = session();
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(true);
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(false);
+    expect(N.reloadForIsolation({ native: {}, isolated: true, session: session() })).toBe(false);
+    expect(N.reloadForIsolation({ native: null, isolated: false, session: session() })).toBe(false);
+    const blocked = { getItem: () => { throw new Error('blocked'); }, setItem() {} };
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: blocked })).toBe(false);
+  });
+});

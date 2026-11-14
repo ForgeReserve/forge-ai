@@ -34,7 +34,8 @@ function serveBundle(dir: string): Promise<Server> {
     const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     let file = normalize(join(dir, path));
     if (!file.startsWith(dir) || !existsSync(file) || statSync(file).isDirectory()) file = join(dir, 'index.html');
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+    // With the isolation headers MainActivity adds to the app's own files (IsolationRules.kt).
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' });
     createReadStream(file).pipe(res);
   });
   return new Promise((r) => s.listen(0, '127.0.0.1', () => r(s)));
@@ -195,6 +196,31 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);
+
+  it('carries the natural voice: isolated, nothing to download, and it reads from the bundle with nothing kept twice', async () => {
+    const { ctx, page, errors, outside } = await appPhone();
+    await page.goto(`${app}/#/more/voice`);
+    await page.waitForSelector('[data-screen=voice]');
+    expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+    await page.waitForSelector('#voiceOut-phonon');
+    expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFree. Made on this phone, so the answer is not sent anywhere.');
+    // The voice lab, one way only: the model loads from the bundle on several threads.
+    await page.goto(`${app}/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.click('#labRun');
+    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('#labResults')).toMatch(/several threads/);
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    // Read straight from the bundle: no copy in Cache Storage, and nothing fetched from elsewhere.
+    expect(await page.evaluate(() => caches.has('phonon-tts-v1'))).toBe(false);
+    expect(outside.filter((u) => !u.startsWith('https://ai.forge-reserve.com/'))).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
 
   it('opens Share unseen with a photo shared in, and shares only the protected copy out', async () => {
     const { ctx, page, errors, outside } = await appPhone();

@@ -116,6 +116,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 .btn.block { width: 100%; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+/* The one-time question before the natural voice downloads (app.js askVoiceDownload). */
+dialog.voice-dl { border: 0; color: var(--ink); width: min(92vw, 420px); padding: 20px; gap: 12px; }
+dialog.voice-dl h2 { margin: 0; font-size: 20px; }
+dialog.voice-dl p { margin: 0; color: var(--text-2); line-height: 1.45; }
+dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .row-btns .btn { flex: 1; }
 
 /* Type: sized to the visual viewport (core/viewport.js), so the field, the price line and Send stay above
@@ -170,6 +175,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .held-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar { height: 5px; border-radius: 3px; background: var(--bar-track); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--memory); border-radius: 3px; }
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter .meter-bar { height: 8px; border-radius: 4px; }
+.meter .meter-bar > span { background: var(--gold); border-radius: 4px; transition: width 120ms linear; }
+.meter p { margin: 0; font-size: 14px; }
+.meter .meter-amount { color: var(--ink); font-variant-numeric: tabular-nums; }
+.meter .meter-phase { color: var(--text-2); }
 .vault-box { display: flex; flex-direction: column; gap: 10px; }
 .vault-row { padding: 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--gold-callout); display: flex; flex-direction: column; gap: 8px; }
 .vault-row.refused { border-color: var(--danger); }
@@ -449,3 +460,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .search-row .ico { color: var(--teal); }
 .search-note { margin: 0; padding: 0 4px; font-size: 13px; line-height: 1.4; color: var(--text-2); }
 .home .search-box { width: min(336px, 100%); }
+
+/* The voice lab (#/voice-lab), a developer page. */
+.voicelab .lab-env { margin: 0 0 12px; padding-left: 18px; color: var(--text-body); font-size: 14px; }
+.voicelab .lab-check { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
+.voicelab .lab-check input { width: 22px; height: 22px; flex: none; }
+.voicelab .lab-select { min-height: 44px; flex: 1; font-size: 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 10px; }
+.voicelab .lab-results { overflow-x: auto; margin: 12px 0; }
+.voicelab .lab-error { color: var(--danger); font-weight: 600; }
+.voicelab table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.voicelab th, .voicelab td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
