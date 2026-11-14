@@ -365,19 +365,62 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .note.warn-text { color: var(--low-ink); }
 .centre-text { text-align: center; }
 
-/* First run (DWelcome, DHowPay, DLimits, DPrivateOnly), built from the canvas tokens */
-.screen.intro { padding-left: 20px; padding-right: 20px; }
-.intro-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; }
-.intro-top-end { display: flex; align-items: center; gap: 8px; }
-.wordmark { font-size: 15px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
-.btn.text { border: 0; padding: 0 10px; min-height: 48px; min-width: 48px; color: var(--text-2); }
-.listen-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px; background: var(--teal-tint); color: var(--teal); border: 1px solid var(--teal-line); border-radius: 12px; font-size: 14px; font-weight: 600; }
-.intro-body { gap: 16px; }
-.intro-content { display: flex; flex-direction: column; gap: 14px; }
-.intro-title { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
-.intro-title:focus { outline: none; }
-[data-step="welcome"] .intro-title { font-size: 32px; line-height: 1.15; }
-.intro-lead { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+/* First run (C-Welcome, C-Pay, C-Limits, C-Private, approved 2026-11-14). Its own screen on the dark
+   Night ground in every look: the tokens are set here, so the parts it shares with other screens (the
+   lists, the field and the buttons in its sheets) are dark too. The frame is the design's 390 by 844:
+   the top row at 18, the 300 px hero at 92, the heading at 416, Next at 664 and the link below it. On a
+   shorter phone the gaps and then the hero shrink, the same on every step, so nothing scrolls. */
+.screen.fr {
+  --bg: #0B0D10; --surface: #1A1E25; --surface-2: #171A22; --ink: #F5F5F7; --text-2: #A1A4AB; --text-body: #C9CBD1;
+  --line: #2A2F3A; --dash: #4A505C; --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55; --memory: #3FCFB4; --memory-track: #16302C;
+  --gold: #E2B552; --gold-ink: #E2B552; --gold-tint: #2A2416; --gold-callout: #6B5527; --blue: #7FB4FF; --blue-tint: #16202F;
+  --primary: #F5F5F7; --primary-ink: #0B0D10; --shadow-primary: none; --shadow-raised-sm: none; --focus: #3FCFB4;
+  color-scheme: dark;
+  position: fixed; inset: 0; z-index: 5; min-height: 0; gap: 0; overflow-x: hidden; overflow-y: auto;
+  padding: max(18px, env(safe-area-inset-top)) max(24px, calc(50vw - 236px)) max(clamp(12px, 5dvh, 42px), env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--ink);
+}
+.fr :focus-visible { outline: 2px solid #3FCFB4; outline-offset: 3px; }
+.fr-top { flex: none; height: 48px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; }
+.fr-listen { grid-column: 1; justify-self: start; height: 48px; border-radius: 24px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: inline-flex; gap: 8px; align-items: center; padding: 0 16px 0 14px; font-size: 15px; font-weight: 500; color: #3FCFB4; }
+.fr-dots { grid-column: 2; justify-self: center; display: flex; gap: 6px; align-items: center; }
+.fr-dots span { width: 6px; height: 6px; border-radius: 3px; background: #3A3D44; }
+.fr-dots span.done, .fr-dots span.now { background: #F5F5F7; }
+.fr-dots span.now { width: 22px; }
+.fr-skip { grid-column: 3; justify-self: end; height: 48px; min-width: 48px; padding: 0 6px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
+.fr-hero { flex: none; height: clamp(112px, calc(100dvh - 484px), 300px); margin-top: clamp(8px, 3.1dvh, 26px); display: flex; justify-content: center; }
+.fr-hero svg { width: auto; height: 100%; aspect-ratio: 1; }
+.fr-text { flex: none; margin-top: clamp(12px, 2.85dvh, 24px); display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.fr .intro-title { margin: 0; font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; }
+.fr .intro-title:focus { outline: none; }
+.fr-lead { margin: 0; max-width: 330px; font-size: 17px; line-height: 1.45; color: #A1A4AB; }
+.fr-space { flex: 1 0 8px; }
+.fr-toggle { flex: none; width: 100%; min-height: 72px; margin-bottom: clamp(12px, 3.8dvh, 32px); border-radius: 22px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: flex; align-items: center; gap: 14px; padding: 0 18px 0 14px; color: #F5F5F7; text-align: left; }
+.fr-toggle-tile { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; background: rgba(63,207,180,0.16); color: #3FCFB4; display: flex; align-items: center; justify-content: center; }
+.fr-toggle-text { flex-grow: 1; display: flex; flex-direction: column; gap: 3px; }
+.fr-toggle-label { font-size: 18px; font-weight: 600; }
+.fr-toggle-state { font-size: 15px; font-weight: 500; color: #3FCFB4; }
+.fr-track { width: 56px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E7C6B; display: flex; align-items: center; justify-content: flex-end; padding: 3px; }
+.fr-knob { width: 26px; height: 26px; border-radius: 13px; background: #F5F5F7; display: block; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+.fr-toggle.off { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); }
+.fr-toggle.off .fr-toggle-tile { background: rgba(255,138,120,0.12); color: #FF8A78; }
+.fr-toggle.off .fr-toggle-state { color: #FF8A78; }
+.fr-toggle.off .fr-track { background: #3A3D44; justify-content: flex-start; }
+.fr-next { flex: none; align-self: center; width: 76px; height: 76px; border-radius: 38px; border: 0; background: #F5F5F7; color: #0B0D10; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10); transition: transform 120ms var(--ease); }
+.fr-next:active { transform: scale(.96); }
+.fr-links { flex: none; min-height: 48px; margin-top: 14px; display: flex; justify-content: center; }
+.fr-link { height: 48px; min-width: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
+/* The detail behind Learn more and See the full list, and the invite code: a sheet from the bottom. */
+.fr-sheet { margin: auto auto 0; width: min(520px, 100%); max-width: 100%; max-height: 88dvh; padding: 0; border: 0; border-radius: 26px 26px 0 0; background: #111317; color: var(--ink); box-shadow: 0 -12px 40px rgba(0,0,0,0.5); }
+.fr-sheet[open] { animation: rise 220ms var(--ease) both; }
+.fr-sheet::backdrop { background: rgba(5,6,8,0.65); }
+.fr-sheet-in { display: flex; flex-direction: column; max-height: 88dvh; padding: 8px 20px max(20px, env(safe-area-inset-bottom)); }
+.fr-sheet-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; }
+.fr-sheet-head h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.fr-close { flex: none; width: 48px; height: 48px; border: 0; border-radius: 24px; background: rgba(255,255,255,0.06); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.fr-sheet-body { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.fr-sheet .note { font-size: 15px; line-height: 1.5; color: var(--text-body); }
+.fr-sheet .callout { background: var(--surface); color: var(--text-body); }
 .intro-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); }
 .intro-list.can { border-color: var(--teal-line); }
 .intro-list.cannot { border-color: var(--gold-callout); }
@@ -389,13 +432,6 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .ring-dot.memory { border-color: var(--memory); }
 .callout { margin: 0; padding: 14px 16px; border-radius: 18px; background: var(--surface); font-size: 14px; line-height: 1.45; }
 .callout.gold { border: 1px solid var(--gold-callout); }
-.intro-panel { flex-direction: column; align-items: stretch; gap: 10px; }
-.intro-panel p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-body); }
-.teal-panel-head { display: flex; align-items: center; gap: 10px; color: var(--teal); }
-.teal-panel-head b { flex: 1; font-size: 18px; }
-.intro-panel.off { background: var(--low-tint); border-color: var(--low-line); }
-.intro-panel.off .teal-panel-head, .intro-panel.off .teal-panel-head b { color: var(--low-ink); }
-.note.center { text-align: center; }
 /* Ways to pay, by icon first, the word under it */
 .way-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .way { min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); color: var(--ink); font-size: 13px; font-weight: 600; text-align: center; }
@@ -416,17 +452,6 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .pow-ring::before { content: ''; grid-area: 1 / 1; width: 92px; height: 92px; border-radius: 50%; background: var(--bg); }
 .pow-ring .pow-pct { grid-area: 1 / 1; position: relative; font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 .pow-ring[hidden] { display: none; }
-
-/* First run: one idea a step. Icons first, then a short heading and one sentence; the detail is under
-   Learn more. */
-.intro-icons .way { min-height: 104px; }
-.intro-icons .tile-ico { width: 56px; height: 56px; border-radius: 18px; }
-[data-step] .intro-lead { font-size: 18px; line-height: 1.45; color: var(--text-body); }
-.learn { border-top: 1px solid var(--line); }
-.learn > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 48px; color: var(--teal); font-size: 15px; font-weight: 600; cursor: pointer; }
-.learn > summary::-webkit-details-marker { display: none; }
-.learn[open] > summary .ico { transform: rotate(45deg); }
-.learn-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
 
 /* Search the web: a switch for the next question, with one line while it is on. */
 .search-box { display: flex; flex-direction: column; gap: 4px; }

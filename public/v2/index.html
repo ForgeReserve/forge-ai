@@ -22,7 +22,18 @@
     .boot svg { width: min(336px, 82vw); height: auto; }
     @media (prefers-reduced-motion: no-preference) { .boot svg { animation: boot-breathe 2.4s ease-in-out infinite; } }
     @keyframes boot-breathe { 50% { opacity: .55; } }
+    /* A phone that has not seen the first run opens on it (core/firstrun.js shouldShow): its dark ground at once. */
+    :root.fr-boot { --bg: #0B0D10; }
+    .fr-boot .boot svg { visibility: hidden; }
   </style>
+  <script>
+    try {
+      if (localStorage.getItem('forge2.firstRun') !== 'done' && /^(#\/?)?$/.test(location.hash)) {
+        document.documentElement.classList.add('fr-boot');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0B0D10');
+      }
+    } catch {}
+  </script>
   <!-- Every module the first screen needs, asked for at once (test/unit/v2/preload.test.ts keeps this
        list exactly in step with the imports). -->
   <link rel="modulepreload" href="/v2/app.js">
@@ -66,6 +77,7 @@
   <link rel="modulepreload" href="/v2/screens/engine.js">
   <link rel="modulepreload" href="/v2/screens/erase.js">
   <link rel="modulepreload" href="/v2/screens/firstrun.js">
+  <link rel="modulepreload" href="/v2/screens/firstrun-art.js">
   <link rel="modulepreload" href="/v2/screens/free.js">
   <link rel="modulepreload" href="/v2/screens/funds.js">
   <link rel="modulepreload" href="/v2/screens/history.js">

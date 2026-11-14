@@ -13,12 +13,12 @@
       ],
       "text": [
         "AI that doesn't know who you are.",
-        "No account, no name, and you pay like cash."
+        "No account. No name. You pay like cash."
       ],
-      "text_sha256": "a4a8bc20dcabdb6010f6ebd9bd66885a28bfe2b5b973725f1292cdda79bad87d",
-      "bytes": 23573,
-      "sha256": "a1881567527a7c320592636244412c4c8a241839f7c5b44563ba97b4adb9c2eb",
-      "seconds": 5.83
+      "text_sha256": "4215425c01b252c6ebc77faa6295028760db77493291906808b9a469800b7387",
+      "bytes": 22103,
+      "sha256": "34f2f49a51a006753c83f727eec39b1bb067366e1aaae4be56b4b0937bc284b2",
+      "seconds": 5.45
     },
     "pay": {
       "file": "pay.ogg",
@@ -27,13 +27,13 @@
         "intro.pay.lead"
       ],
       "text": [
-        "How you pay",
-        "Each question costs a little, and you see the price first."
+        "Pay a little, per question.",
+        "You see the price before you send."
       ],
-      "text_sha256": "1d096bd617af7646f569381bc1425cbc94bd0b6cf17f6c441f661fdee339a0d6",
-      "bytes": 20384,
-      "sha256": "437ec88cdfaea8828d6f85df963dfc5be64b14098347eaf6fdbed7a570de8bcc",
-      "seconds": 5.03
+      "text_sha256": "0145bb9cf3737de03bc9f56da423037be37c72014038cb135b12228e38997ecc",
+      "bytes": 19062,
+      "sha256": "bb86f2ba9b66b92e318f12a4c3464c2fcd781ef29500d2ce0af6228a41705380",
+      "seconds": 4.75
     },
     "limits": {
       "file": "limits.ogg",
@@ -42,28 +42,43 @@
         "intro.limits.lead"
       ],
       "text": [
-        "What it can and cannot hide",
-        "It hides your typed questions, not your network address."
+        "Know what it hides.",
+        "Only the AI can read what you type. Your connection shows, unless you use Tor."
       ],
-      "text_sha256": "7d0540c9285ffd1a591d35a64f00156996d1782ad66ff4fc5469c4c5d45063fe",
-      "bytes": 25256,
-      "sha256": "cb77544ee974c4d7947c4b807938baebdbfda46a798f9f18a5d8a58d2f757daf",
-      "seconds": 6.17
+      "text_sha256": "e782f5914652a4049f372ca98c9cd4ee994d18e18f56da7670614c4ae8797789",
+      "bytes": 29729,
+      "sha256": "7ef65b31b78282f083b5353f1f6fb38b69acc0a565eb62076254fe4270929ff7",
+      "seconds": 7.2
     },
     "private": {
       "file": "private.ogg",
       "keys": [
         "intro.private.title",
-        "intro.private.lead"
+        "intro.private.leadOn"
       ],
       "text": [
-        "Private only",
-        "Only models in sealed hardware, so Forge cannot read your typed questions."
+        "Private by default.",
+        "Only private models. Forge cannot read what you type."
       ],
-      "text_sha256": "92f915e42d0d0309b9de2679a55c8e7e0a73823b6928f91123fb917c3b014546",
-      "bytes": 27589,
-      "sha256": "1db33fdbb256c27155bf95573675218f45b95f7ff5ce628b9062eb70305d83eb",
-      "seconds": 6.72
+      "text_sha256": "7d6c9f39d833755a20eaa70202a6cdb8c2a068bbc205f6b7c567ace3cbb5136f",
+      "bytes": 24146,
+      "sha256": "76cc7a8914fb808e54fb7f09bb4bf9b010c45e67b24edfd082cf615d186ab41f",
+      "seconds": 5.9
+    },
+    "private-off": {
+      "file": "private-off.ogg",
+      "keys": [
+        "intro.private.title",
+        "intro.private.leadOff"
+      ],
+      "text": [
+        "Private by default.",
+        "Standard models are shown too. They can read what you type."
+      ],
+      "text_sha256": "049fde05304e284026101b995c95579a01b4a86dcc803430a5d66c265fd55e96",
+      "bytes": 23540,
+      "sha256": "9e6d845ddcb1aa1fb2f2bfba884a0ff376c6a45a08e0b1d3e3e2a41475298d17",
+      "seconds": 5.78
     }
   }
 }

@@ -1,11 +1,14 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 
-// The first run (slice A6) in a phone-sized Chrome on a clean profile: Welcome, How you pay, What it can
-// and cannot hide, Private only, then the home. Shown once, skippable, and under More. Also the empty
-// states (home, Funds, History) and the price shown before Ask again.
+// The first run (slice A6, the design approved 2026-11-14: C-Welcome, C-Pay, C-Limits, C-Private) in a
+// phone-sized Chrome on a clean profile: Welcome, How you pay, What it hides, Private only, then the
+// home. Shown once, skippable, and under More. Also the empty states (home, Funds, History) and the
+// price shown before Ask again.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 
 let g: Gateway;
@@ -97,31 +100,62 @@ async function fundedKey(): Promise<string> {
   return b.key;
 }
 
+const SIZES = [
+  { width: 360, height: 640 },
+  { width: 412, height: 915 },
+];
+const SHOTS = join(import.meta.dirname, '../../.tmp/firstrun-c');
+
+/** Opens a sheet by its link, and waits until it is open. */
+async function openSheet(page: Page, link: string, sheet: string): Promise<void> {
+  await page.click(link);
+  await page.waitForSelector(`dialog#${sheet}[open]`);
+}
+
 describe('first run in a phone-sized browser', () => {
-  it('walks Welcome, How you pay, the limits and Private only on a clean profile, then never shows again', async () => {
+  it('walks Welcome, How you pay, What it hides and Private only on a clean profile, then never shows again', async () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/`);
     await atStep(page, 'welcome');
     expect(await page.evaluate(() => location.hash)).toBe('#/start');
+    // Dark on the first paint, before the app has drawn anything, and on the first run itself.
+    expect(await page.evaluate(() => document.documentElement.classList.contains('fr-boot'))).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('main')!).backgroundColor)).toBe('rgb(11, 13, 16)');
+    expect(await page.getAttribute('meta[name="theme-color"]', 'content')).toBe('#0B0D10');
     expect(await page.textContent('h1')).toBe("AI that doesn't know who you are.");
-    // One idea a step: icons first, a short heading, one sentence. The detail is under Learn more.
-    expect(await page.locator('#welcomeIcons .way').allTextContents()).toEqual(['No account', 'Like cash', 'Sealed', 'On this phone']);
-    expect(await page.textContent('#introLead')).toBe('No account, no name, and you pay like cash.');
-    expect(await page.isVisible('.intro-item')).toBe(false);
-    await page.click('#learnMore summary');
-    expect(await page.locator('.intro-item b').allTextContents()).toEqual(['No account', 'Paid like cash', 'Read only in sealed hardware', 'Kept on this phone']);
-    expect(await page.textContent('#introStep')).toBe('Step 1 of 4');
-    expect(await page.isVisible('#introBack')).toBe(false);
+    expect(await page.textContent('#introLead')).toBe('No account. No name. You pay like cash.');
+    expect(await page.getAttribute('.fr-hero svg', 'aria-label')).toBe('A hooded person with no face, inside two rings. One quarter of each ring is lit.');
+    // The step dots between Listen and Skip, a quarter of the rings lit; no Back button (the phone's Back is the way back).
+    expect(await page.getAttribute('#introStep', 'aria-label')).toBe('Step 1 of 4');
+    expect(await page.locator('#introStep span.now').count()).toBe(1);
+    expect(await page.getAttribute('.fr-hero .fr-arc >> nth=1', 'stroke-dasharray')).toBe('185.4 741.4');
     expect(await page.isVisible('#introSkip')).toBe(true);
-    // This engine needs an invite code to open a balance: Welcome asks for it.
-    await page.waitForSelector('#introInviteField:not([hidden])');
+    expect(await page.locator('main button', { hasText: /^Back$/ }).count()).toBe(0);
+    expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Next');
+
+    // This engine needs an invite code to open a balance: "I have an invite code" opens the field.
+    await page.waitForSelector('#introInviteLink:not([hidden])');
+    expect(await page.textContent('#introInviteLink')).toBe('I have an invite code');
+    expect(await page.locator('#introInviteLink svg').count()).toBe(1);
+    expect(await page.isVisible('#introInvite')).toBe(false);
+    await openSheet(page, '#introInviteLink', 'inviteSheet');
+    expect(await page.textContent('#inviteSheetTitle')).toBe('Invite code');
     await page.fill('#introInvite', invite);
+    await page.click('#introInviteDone');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
 
     await page.click('#introNext');
     await atStep(page, 'pay');
-    expect(await page.textContent('h1')).toBe('How you pay');
-    expect(await page.textContent('#introStep')).toBe('Step 2 of 4');
-    // Shown by icon, and only the ways that work here: no free questions or cards before their slices.
+    expect(await page.textContent('h1')).toBe('Pay a little, per question.');
+    expect(await page.textContent('#introLead')).toBe('You see the price before you send.');
+    expect(await page.getAttribute('#introStep', 'aria-label')).toBe('Step 2 of 4');
+    expect(await page.getAttribute('.fr-hero .fr-arc >> nth=1', 'stroke-dasharray')).toBe('370.7 741.4');
+    expect(await page.textContent('#learnMoreLink')).toBe('Learn more');
+    // Learn more: the ways to pay by icon, only those that work here (no free questions or cards on
+    // this engine and website), the two rings, and funds work like cash.
+    expect(await page.isVisible('#payCash')).toBe(false);
+    await openSheet(page, '#learnMoreLink', 'learnSheet');
+    expect(await page.textContent('#learnSheetTitle')).toBe('How you pay');
     await page.waitForSelector('[data-way]');
     const ways = await page.locator('[data-way]').evaluateAll((n) => n.map((x) => x.getAttribute('data-way')));
     expect(ways[0]).toBe('note');
@@ -129,25 +163,31 @@ describe('first run in a phone-sized browser', () => {
     expect(ways).not.toContain('card');
     expect(await page.locator('[data-way=note] svg').count()).toBe(1);
     expect(await page.textContent('[data-way=note]')).toBe('Paper note');
-    expect(await page.textContent('#introLead')).toBe('Each question costs a little, and you see the price first.');
-    // Funds are like cash: said under Learn more, never dropped.
-    expect(await page.isVisible('#payCash')).toBe(false);
-    await page.click('#learnMore summary');
     expect(await page.textContent('#payCash')).toBe('Funds work like cash in a pocket. If this phone is lost or erased, the balance on it is lost. Keep small amounts.');
+    await page.click('#learnSheetClose');
+    await page.waitForSelector('dialog#learnSheet:not([open])', { state: 'attached' });
 
-    // Back goes to the step before, and what was typed there is still there.
-    await page.click('#introBack');
+    // The phone's Back goes to the step before, and the code typed there is still there.
+    await page.goBack();
     await atStep(page, 'welcome');
+    await openSheet(page, '#introInviteLink', 'inviteSheet');
     expect(await page.inputValue('#introInvite')).toBe(invite);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
     await page.click('#introNext');
     await atStep(page, 'pay');
 
     await page.click('#introNext');
     await atStep(page, 'limits');
-    expect(await page.textContent('h1')).toBe('What it can and cannot hide');
-    expect(await page.textContent('#introLead')).toBe('It hides your typed questions, not your network address.');
+    expect(await page.textContent('h1')).toBe('Know what it hides.');
+    expect(await page.textContent('#introLead')).toBe('Only the AI can read what you type. Your connection shows, unless you use Tor.');
+    expect(await page.getAttribute('#introStep', 'aria-label')).toBe('Step 3 of 4');
+    expect(await page.getAttribute('.fr-hero .fr-arc >> nth=1', 'stroke-dasharray')).toBe('556.1 741.4');
+    // See the full list: everything Forge hides and cannot hide.
+    expect(await page.textContent('#fullListLink')).toBe('See the full list');
     expect(await page.isVisible('#limitsCannot')).toBe(false);
-    await page.click('#learnMore summary');
+    await openSheet(page, '#fullListLink', 'learnSheet');
+    expect(await page.textContent('#learnSheetTitle')).toBe('What it can and cannot hide');
     expect(await page.locator('#limitsCan .intro-item').count()).toBe(3);
     expect(await page.locator('#limitsCannot .intro-item b').allTextContents()).toEqual([
       'Your network address',
@@ -159,21 +199,32 @@ describe('first run in a phone-sized browser', () => {
       'Wrong answers',
     ]);
     expect(await page.textContent('#limitsCannot')).toContain('Only Tor or a relay hides it.');
-    expect(await page.textContent('#introStep')).toBe('Step 3 of 4');
+    // A tap outside the sheet closes it.
+    await page.mouse.click(200, 30);
+    await page.waitForSelector('dialog#learnSheet:not([open])', { state: 'attached' });
 
     await page.click('#introNext');
     await atStep(page, 'private');
     // Private only is on by default, and the step says what that does and does not cover.
+    expect(await page.textContent('h1')).toBe('Private by default.');
+    expect(await page.getAttribute('#privateToggle', 'role')).toBe('switch');
+    expect(await page.getAttribute('#privateToggle', 'aria-checked')).toBe('true');
     expect(await page.textContent('#privateState')).toBe('On');
-    expect(await page.textContent('#introLead')).toBe('Only models in sealed hardware, so Forge cannot read your typed questions.');
-    expect(await page.isVisible('#privateSub')).toBe(false);
-    await page.click('#learnMore summary');
-    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot read them.');
+    expect(await page.textContent('#introLead')).toBe('Only private models. Forge cannot read what you type.');
+    expect(await page.getAttribute('.fr-hero svg', 'aria-label')).toBe('A closed padlock, inside two fully lit rings.');
+    expect(await page.getAttribute('#introStep', 'aria-label')).toBe('Step 4 of 4');
+    // No Skip on the last step: Start is the way on, a check mark named Start.
+    expect(await page.isVisible('#introSkip')).toBe(false);
+    expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Start');
+    expect(await page.locator('#introNext svg path').getAttribute('d')).toBe('M5 12.5l4.5 4.5L19 7.5');
+    await openSheet(page, '#learnMoreLink', 'learnSheet');
+    expect(await page.textContent('#learnSheetTitle')).toBe('Private only');
+    expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot.');
     expect(await page.textContent('#privateVoice')).toContain('The engine could hear or read them.');
     expect(await page.isVisible('#privateHidden')).toBe(true);
-    expect(await page.isVisible('#privateTurnOn')).toBe(false);
-    expect(await page.textContent('#introNext')).toBe('Start');
-    expect(await page.textContent('#introStep')).toBe('Step 4 of 4');
+    expect(await page.isVisible('#privateOffSub')).toBe(false);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog#learnSheet:not([open])', { state: 'attached' });
 
     await page.click('#introNext');
     await page.waitForSelector('[data-screen=home]');
@@ -181,6 +232,8 @@ describe('first run in a phone-sized browser', () => {
     // The phone's back button does not walk through the guide again: the home is the first entry.
     expect(await page.evaluate(() => history.state?.forge2 ?? 0)).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem('forge2.firstRun'))).toBe('done');
+    // The home is in the look again (Light), not the first run's dark.
+    expect(await page.getAttribute('meta[name="theme-color"]', 'content')).toBe('#F6F5F1');
 
     // The invite code typed on Welcome is the one Add funds uses.
     await page.goto(`${g.url}/v2/#/funds/add/ecash`);
@@ -193,6 +246,7 @@ describe('first run in a phone-sized browser', () => {
       await page.reload();
       await page.waitForSelector('[data-screen=home]');
       expect(await page.isVisible('[data-screen=intro]')).toBe(false);
+      expect(await page.evaluate(() => document.documentElement.classList.contains('fr-boot'))).toBe(false);
     }
 
     // It is always under More, and Skip there goes back to the home.
@@ -232,21 +286,47 @@ describe('first run in a phone-sized browser', () => {
     await ctx.close();
   }, 60_000);
 
-  it('Private only off: the step says so plainly and turns it back on', async () => {
+  it('the Private only switch sets the setting, opens the padlock when off, and is dark in every look', async () => {
     const { ctx, page } = await phone({ seen: true });
+    // The Dark look: the first run keeps its own dark ground all the same.
+    await page.goto(`${g.url}/v2/#/more/look`);
+    await page.waitForSelector('[data-screen=look]');
+    await page.click('#look-dark');
+    await page.goto(`${g.url}/v2/#/start/private`);
+    await atStep(page, 'private');
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('main')!).backgroundColor)).toBe('rgb(11, 13, 16)');
+    expect(await page.getAttribute('#privateToggle', 'aria-checked')).toBe('true');
+    const shackle = () => page.getAttribute('.fr-hero [data-fr=shackle] >> nth=0', 'd');
+    expect(await shackle()).toBe('M127 142V116a23 23 0 0 1 46 0v26');
+
+    await page.click('#privateToggle');
+    await expect.poll(() => page.getAttribute('#privateToggle', 'aria-checked')).toBe('false');
+    expect(await page.textContent('#privateState')).toBe('Off');
+    expect(await page.textContent('#introLead')).toBe('Standard models are shown too. They can read what you type.');
+    expect(await shackle()).toBe('M173 142V108a23 23 0 0 0-46 0v10');
+    expect(await page.getAttribute('.fr-hero svg', 'aria-label')).toBe('An open padlock, inside two fully lit rings.');
+    expect(await page.getAttribute('.fr-hero [data-fr=hole]', 'opacity')).toBe('0.85');
+    await openSheet(page, '#learnMoreLink', 'learnSheet');
+    expect(await page.textContent('#privateOffSub')).toBe('Standard models are shown too. The engine and the model provider can read questions to them.');
+    expect(await page.isVisible('#privateHidden')).toBe(false);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300); // the setting is written to IndexedDB
+
+    // The setting itself changed: the Model screen says so, after a reload.
     await page.goto(`${g.url}/v2/#/more/model`);
+    await page.reload();
     await page.waitForSelector('[data-screen=model]');
-    await page.click('#privateOnly');
     expect(await page.getAttribute('#privateOnly', 'aria-checked')).toBe('false');
+
+    // Opened again with it off: the step shows Off, and the switch turns it back on.
     await page.goto(`${g.url}/v2/#/start/private`);
     await atStep(page, 'private');
     expect(await page.textContent('#privateState')).toBe('Off');
-    expect(await page.textContent('#privateSub')).toBe('Standard models are shown too. The engine and the model provider can read questions to them.');
-    expect(await page.isVisible('#privateHidden')).toBe(false);
-    await page.click('#privateTurnOn');
-    await expect.poll(() => page.textContent('#privateState')).toBe('On');
-    expect(await page.isVisible('#privateTurnOn')).toBe(false);
-    await page.waitForTimeout(300); // the setting is written to IndexedDB
+    await page.click('#privateToggle');
+    await expect.poll(() => page.getAttribute('#privateToggle', 'aria-checked')).toBe('true');
+    expect(await page.textContent('#introLead')).toBe('Only private models. Forge cannot read what you type.');
+    expect(await shackle()).toBe('M127 142V116a23 23 0 0 1 46 0v26');
+    await page.waitForTimeout(300);
     await page.goto(`${g.url}/v2/#/more/model`);
     await page.reload();
     await page.waitForSelector('[data-screen=model]');
@@ -275,7 +355,7 @@ describe('first run in a phone-sized browser', () => {
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
     expect(requests).toContain('/v2/voice/en/welcome.ogg');
     await expect.poll(() => page.evaluate(() => (window as any).__played.length)).toBeGreaterThan(0);
-    // The clip plays to its end (about 6 seconds), then Listen is offered again.
+    // The clip plays to its end (about 5 seconds), then Listen is offered again.
     await expect.poll(() => page.evaluate(() => (window as any).__played.includes('ended')), { timeout: 15_000 }).toBe(true);
     await expect.poll(() => page.textContent('#introListen')).toBe('Listen');
     // Stop stops it.
@@ -283,9 +363,20 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'pay');
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
+    expect(requests).toContain('/v2/voice/en/pay.ogg');
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Listen');
     expect(await page.evaluate(() => [...document.querySelectorAll('audio')].every((a) => a.paused))).toBe(true);
+    // Private only reads what the switch is set to: its Off words have their own clip.
+    await page.goto(`${g.url}/v2/#/start/private`);
+    await atStep(page, 'private');
+    await page.click('#privateToggle');
+    await expect.poll(() => page.getAttribute('#privateToggle', 'aria-checked')).toBe('false');
+    await page.waitForSelector('#introListen:not([hidden])');
+    await page.click('#introListen');
+    await expect.poll(() => requests.includes('/v2/voice/en/private-off.ogg')).toBe(true);
+    await page.click('#introListen');
+    await page.click('#privateToggle');
     // Played on the phone: nothing was sent to the engine's voice.
     expect(requests.filter((r) => r.startsWith('/v1/audio'))).toEqual([]);
     expect(errors).toEqual([]);
@@ -334,7 +425,7 @@ describe('first run in a phone-sized browser', () => {
     await stale.page.waitForSelector('#introListen:not([hidden])');
     await stale.page.click('#introListen');
     await expect.poll(() => stale.page.evaluate(() => (window as any).__spoken.length), { timeout: 10_000 }).toBe(2);
-    expect(await stale.page.evaluate(() => (window as any).__spoken)).toEqual(["AI that doesn't know who you are.", 'No account, no name, and you pay like cash.']);
+    expect(await stale.page.evaluate(() => (window as any).__spoken)).toEqual(["AI that doesn't know who you are.", 'No account. No name. You pay like cash.']);
     expect(stale.requests.filter((r) => r.endsWith('.ogg'))).toEqual([]);
     await stale.ctx.close();
 
@@ -348,16 +439,71 @@ describe('first run in a phone-sized browser', () => {
     await none.ctx.close();
   }, 60_000);
 
-  it('fits 360 px with no sideways scrolling and 44 px touch targets on every step', async () => {
-    const { ctx, page } = await phone({ seen: true, viewport: { width: 360, height: 740 } });
-    for (const route of ['start', 'start/pay', 'start/limits', 'start/private']) {
-      await page.goto(`${g.url}/v2/#/${route}`);
-      await page.waitForSelector('[data-screen=intro]');
-      await page.waitForTimeout(200);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth), route).toBeLessThanOrEqual(360);
-      const small = await page.locator('main button:visible, main input:visible').evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && (r.width < 44 || r.height < 44)).length);
-      expect(small, `touch targets on ${route}`).toBe(0);
+  for (const size of SIZES) {
+    it(`fits ${size.width} by ${size.height} on every step: no scrolling, 48 px touch targets, the hero and Next in the same place`, async () => {
+      const { ctx, page } = await phone({ seen: true, viewport: size });
+      let hero = '';
+      let next = '';
+      for (const route of ['start', 'start/pay', 'start/limits', 'start/private']) {
+        await page.goto(`${g.url}/v2/#/${route}`);
+        await page.waitForSelector('[data-screen=intro]');
+        await page.waitForTimeout(200);
+        const m = await page.evaluate(() => {
+          const main = document.querySelector('main')!;
+          const box = (sel: string) => JSON.stringify(document.querySelector(sel)!.getBoundingClientRect());
+          return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, mainScroll: main.scrollHeight - main.clientHeight, hero: box('.fr-hero svg'), next: box('#introNext'), bottom: document.querySelector('.fr-links')!.getBoundingClientRect().bottom };
+        });
+        expect(m.scrollW, route).toBeLessThanOrEqual(size.width);
+        expect(m.scrollH, route).toBeLessThanOrEqual(size.height);
+        expect(m.mainScroll, `${route} scrolls`).toBe(0);
+        expect(m.bottom, route).toBeLessThanOrEqual(size.height);
+        // The same hero, in the same place, on every step; and Next too.
+        hero ||= m.hero;
+        next ||= m.next;
+        expect(m.hero, route).toBe(hero);
+        expect(m.next, route).toBe(next);
+        const small = await page.locator('main button:visible').evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()).filter((r) => r.width < 48 || r.height < 48).length);
+        expect(small, `touch targets on ${route}`).toBe(0);
+      }
+      const box = JSON.parse(hero);
+      if (size.height >= 844) expect([box.width, box.height]).toEqual([300, 300]);
+      await ctx.close();
+    }, 60_000);
+  }
+
+  it('looks like the design at 412 by 915 (screenshots for the owner, under .tmp/firstrun-c/)', async () => {
+    mkdirSync(SHOTS, { recursive: true });
+    const { ctx, page } = await phone({ seen: true, viewport: { width: 412, height: 915 } });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    for (const [i, step] of ['welcome', 'pay', 'limits', 'private'].entries()) {
+      await page.goto(`${g.url}/v2/#/${['start', 'start/pay', 'start/limits', 'start/private'][i]}`);
+      await atStep(page, step);
+      await page.waitForSelector('#introListen:not([hidden])');
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({ path: join(SHOTS, `${i + 1}-${step}.png`) });
     }
+    await page.click('#privateToggle');
+    await expect.poll(() => page.getAttribute('#privateToggle', 'aria-checked')).toBe('false');
+    await page.screenshot({ path: join(SHOTS, '4-private-off.png') });
+    await page.click('#privateToggle');
+    await ctx.close();
+  }, 60_000);
+
+  it('fills the rings gently between steps, and not at all with reduced motion', async () => {
+    const { ctx, page } = await phone({ seen: true });
+    const running = () => page.evaluate(() => document.getAnimations().filter((a) => (a.effect as KeyframeEffect)?.target instanceof SVGElement).length);
+    await page.goto(`${g.url}/v2/#/start`);
+    await atStep(page, 'welcome');
+    await page.click('#introNext');
+    await atStep(page, 'pay');
+    expect(await running()).toBeGreaterThan(0);
+    // When it ends, the rings are as the design draws them.
+    await expect.poll(running, { timeout: 3_000 }).toBe(0);
+    expect(await page.getAttribute('.fr-hero .fr-arc >> nth=1', 'stroke-dasharray')).toBe('370.7 741.4');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.click('#introNext');
+    await atStep(page, 'limits');
+    expect(await running()).toBe(0);
     await ctx.close();
   }, 60_000);
 
