@@ -1300,6 +1300,19 @@ function showErased(ok) {
 
 // ------------------------------------------------------------------ start
 
+/**
+ * Waits for the stylesheet. It sits after the page's own first paint (index.html), so it does not hold
+ * that up; the app's screens are drawn only once it is in.
+ */
+function stylesReady() {
+  const link = document.querySelector('link[rel="stylesheet"][href="/v2/style.css"]');
+  if (!link || link.sheet) return null;
+  return new Promise((resolve) => {
+    link.addEventListener('load', resolve, { once: true });
+    link.addEventListener('error', resolve, { once: true });
+  });
+}
+
 async function start() {
   document.title = t('app.name');
   // The visible height above a phone keyboard, for Type (core/viewport.js).
@@ -1335,10 +1348,17 @@ async function start() {
     ...loader,
     inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
   });
-  await registry.loadAll(BUNDLED);
-  if (registry.refused.length) console.warn('modules refused', registry.refused);
+  // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
+  // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
+  // (the How you pay step fills in its ways when they arrive). Any other screen waits for all of them,
+  // which load at the same time (core/registry.js).
+  const firstRun = stepOfRoute(parse(location.hash).name) !== null;
+  const drawFirst = BUNDLED.filter((m) => m.kind === 'look' || m.kind === 'mode');
+  const rest = BUNDLED.filter((m) => !drawFirst.includes(m));
+  await registry.loadAll(firstRun ? drawFirst : BUNDLED);
   if (!registry.list('mode').length) throw new Error('no mode module');
   applyLook();
+  await stylesReady();
 
   addEventListener('popstate', onPop);
   native?.shareIn.onShared(() => !erased && nav('photoShared'));
@@ -1357,6 +1377,11 @@ async function start() {
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
   live = true;
+  if (firstRun) {
+    await registry.loadAll(rest);
+    store.set({});
+  }
+  if (registry.refused.length) console.warn('modules refused', registry.refused);
   document.documentElement.dataset.ready = '1';
 
   await loadModels();

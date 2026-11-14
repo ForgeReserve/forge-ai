@@ -87,30 +87,55 @@ export function createRegistry({ load, importEntry, inputs = {} }) {
   const refused = [];
   return {
     refused,
+    /**
+     * Loads the listed modules. The manifests and entries are fetched at the same time (one round trip
+     * each, not one per module: on a slow phone network the modules one after another took most of
+     * the first paint), then registered in list order, so the order, the duplicate check and the
+     * refusals are the same as loading them one by one.
+     */
     async loadAll(list) {
-      for (const { kind, folder } of list) {
-        try {
-          const manifest = await load(kind, folder);
-          const errors = checkManifest(manifest, kind);
-          if (errors.length) {
-            refused.push({ kind, folder, errors });
-            continue;
+      const settled = await Promise.all(
+        list.map(async ({ kind, folder }) => {
+          try {
+            const manifest = await load(kind, folder);
+            const errors = checkManifest(manifest, kind);
+            if (errors.length) return { kind, folder, errors };
+            const mod = Promise.resolve().then(() => importEntry(kind, folder, manifest.entry));
+            mod.catch(() => {}); // a refused duplicate's import is never awaited
+            return { kind, folder, manifest, mod };
+          } catch (e) {
+            return { kind, folder, errors: [String(e?.message ?? e)] };
           }
-          if (loaded.get(kind)?.some((x) => x.manifest.id === manifest.id)) {
-            refused.push({ kind, folder, errors: [`id ${manifest.id} is already loaded`] });
-            continue;
+        }),
+      );
+      // Duplicates are refused before their entry runs (create is only called for the first one).
+      const taken = new Set([...loaded.values()].flat().map((x) => `${x.manifest.kind}|${x.manifest.id}`));
+      const keep = settled.map((r) => {
+        if (r.errors) return r;
+        const id = `${r.kind}|${r.manifest.id}`;
+        if (taken.has(id)) return { kind: r.kind, folder: r.folder, errors: [`id ${r.manifest.id} is already loaded`] };
+        taken.add(id);
+        return r;
+      });
+      const made = await Promise.all(
+        keep.map(async (r) => {
+          if (r.errors) return r;
+          try {
+            const mod = await r.mod;
+            if (typeof mod?.create !== 'function') return { kind: r.kind, folder: r.folder, errors: ['entry does not export create()'] };
+            return { ...r, instance: await mod.create(inputsFor(r.kind, inputs)) };
+          } catch (e) {
+            return { kind: r.kind, folder: r.folder, errors: [String(e?.message ?? e)] };
           }
-          const mod = await importEntry(kind, folder, manifest.entry);
-          if (typeof mod?.create !== 'function') {
-            refused.push({ kind, folder, errors: ['entry does not export create()'] });
-            continue;
-          }
-          const instance = await mod.create(inputsFor(kind, inputs));
-          if (!loaded.has(kind)) loaded.set(kind, []);
-          loaded.get(kind).push({ manifest: Object.freeze({ ...manifest }), instance });
-        } catch (e) {
-          refused.push({ kind, folder, errors: [String(e?.message ?? e)] });
+        }),
+      );
+      for (const r of made) {
+        if (r.errors) {
+          refused.push({ kind: r.kind, folder: r.folder, errors: r.errors });
+          continue;
         }
+        if (!loaded.has(r.kind)) loaded.set(r.kind, []);
+        loaded.get(r.kind).push({ manifest: Object.freeze({ ...r.manifest }), instance: r.instance });
       }
       return this;
     },

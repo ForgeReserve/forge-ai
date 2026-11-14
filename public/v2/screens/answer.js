@@ -3,7 +3,19 @@
 // costs.
 // Smaller rings below with the reply button (hold to talk), and the bottom row. Errors show in plain
 // words with one next step. A voice question shows here as text once it has been heard.
-import { renderMarkdown, enhance } from '../../js/markdown.js';
+// Markdown (js/markdown.js with marked and DOMPurify, about 80 KB) loads when an answer screen is first
+// made, not with the app, so it does not hold up the first paint. Until it is in, the answer shows as
+// plain text.
+let md = null;
+let mdLoading = null;
+const loadMarkdown = () =>
+  (mdLoading ??= import('../../js/markdown.js').then(
+    (m) => (md = m),
+    (e) => {
+      mdLoading = null; // offline and not kept yet: try again on the next answer screen
+      throw e;
+    },
+  ));
 import { errorView } from '../core/errors.js';
 import { priceLine } from '../core/price.js';
 import { el, icon } from '../core/ui.js';
@@ -100,15 +112,15 @@ export function answer({ t, state, nav, actions, format }) {
     const streaming = v.streaming;
     if (a.content !== shownText) {
       shownText = a.content;
-      if (a.content) {
-        body.innerHTML = renderMarkdown(a.content);
-        if (!streaming) enhance(body);
-      } else body.replaceChildren(el('p', { class: 'thinking', text: streaming ? t('answer.thinking') : '' }));
+      if (a.content && md) {
+        body.innerHTML = md.renderMarkdown(a.content);
+        if (!streaming) md.enhance(body);
+      } else if (a.content) body.replaceChildren(el('p', { class: 'plain', text: a.content })); else body.replaceChildren(el('p', { class: 'thinking', text: streaming ? t('answer.thinking') : '' }));
     }
     const stateKey = `${streaming}|${a.meta?.error ?? ''}|${a.meta?.stopped ?? ''}|${a.meta?.cost ?? ''}|${v.speak.available}|${v.speak.current}|${v.speak.state}|${v.speak.priceMsub}|${v.againMsub}|${JSON.stringify(v.free)}`;
     if (stateKey === shownState) return;
     shownState = stateKey;
-    if (!streaming && a.content) enhance(body);
+    if (!streaming && a.content && md) md.enhance(body);
     body.setAttribute('aria-busy', String(streaming));
     if (streaming) {
       tiles.replaceChildren(tile('stopBtn', 'stop', t('answer.stop'), () => actions.stop()));
@@ -147,5 +159,24 @@ export function answer({ t, state, nav, actions, format }) {
     note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? (freeNote ? t('answer.partialFree') : cost ? t('answer.partialCost', { amount: cost }) : t('answer.partial')) : a.meta?.error ? '' : (freeNote ?? (cost ? t('answer.cost', { amount: cost }) : ''));
   };
   update();
-  return { node: main, update, destroy: hold.destroy, focus: card };
+  // Once markdown is in, the answer is drawn again with it.
+  let gone = false;
+  if (!md)
+    loadMarkdown()
+      .then(() => {
+        if (gone) return;
+        shownText = null;
+        shownState = null;
+        update();
+      })
+      .catch(() => {});
+  return {
+    node: main,
+    update,
+    destroy: () => {
+      gone = true;
+      hold.destroy?.();
+    },
+    focus: card,
+  };
 }
