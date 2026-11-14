@@ -129,6 +129,8 @@ export function summarize(rows) {
     nanRuns: ok.filter((r) => r.nan > 0).length,
     silentRuns: ok.filter((r) => r.silent).length,
     clippedRuns: ok.filter((r) => r.clipped > 0).length,
+    // Phone voice lines whose end never came (iOS often drops it): cancelled at their deadline.
+    timedOutRuns: ok.filter((r) => r.timedOut).length,
   };
 }
 
@@ -223,14 +225,16 @@ export async function readLine(tts, text, { voice, signal, stallMs = LINE_STALL_
   const s0 = now();
   const out = { arrivals: [], durations: [], chunks: [], totalMs: 0, stopped: false };
   let timer = null;
+  const abortedP = whenAborted(signal);
   try {
     for (;;) {
       const stalled = new Promise((_, reject) => {
         timer = setTimeout(() => reject(lineError('stalled', `no sound for ${Math.round(stallMs / 1000)} s${out.chunks.length ? ` after ${out.chunks.length} pieces` : ''}`)), stallMs);
       });
-      const r = await Promise.race([it.next(), stalled]);
+      // Stop ends the line at once, even when the model never answers again (a hung worker).
+      const r = await Promise.race([it.next(), stalled, abortedP]);
       clearTimeout(timer);
-      if (r.done) break;
+      if (r === ABORTED || r.done) break;
       out.arrivals.push(now() - s0);
       out.durations.push((r.value.length / tts.sampleRate) * 1000);
       out.chunks.push(r.value);
@@ -261,4 +265,134 @@ export function candidateError(c, { stopped = false } = {}) {
   if (!rows.length) return stopped ? null : 'no line was read, and no error was given';
   if (rows.every((r) => r.error)) return `every line failed: ${rows[0].error}`;
   return null;
+}
+
+const ABORTED = Symbol('aborted');
+/** Resolves to ABORTED once signal aborts (never, without a signal). */
+function whenAborted(signal) {
+  if (!signal) return new Promise(() => {});
+  if (signal.aborted) return Promise.resolve(ABORTED);
+  return new Promise((resolve) => signal.addEventListener('abort', () => resolve(ABORTED), { once: true }));
+}
+
+/**
+ * The promise, or an AbortError as soon as signal aborts, whichever comes first: so Stop never waits on
+ * something that ignores it (a load, a sound that never ends, a hung worker).
+ */
+export async function untilAborted(promise, signal) {
+  const r = await Promise.race([promise, whenAborted(signal)]);
+  if (r === ABORTED) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
+  return r;
+}
+
+/**
+ * A line cut for the phone's own voice: pieces of at most max characters, at sentence ends where it
+ * can, else at a comma or a space. iOS reads a long utterance badly and often never says it ended.
+ */
+export function splitForSpeech(text, max = 200) {
+  const sentences = String(text).trim().split(/(?<=[.!?])\s+/).filter(Boolean);
+  const cut = (s) => {
+    const parts = [];
+    let rest = s;
+    while (rest.length > max) {
+      const head = rest.slice(0, max + 1);
+      const at = Math.max(head.lastIndexOf(', ') + 1, head.lastIndexOf(' '));
+      const end = at > 0 ? at : max;
+      parts.push(rest.slice(0, end).trim());
+      rest = rest.slice(end).trim();
+    }
+    if (rest) parts.push(rest);
+    return parts;
+  };
+  const pieces = [];
+  for (const s of sentences.flatMap(cut)) {
+    const last = pieces.at(-1);
+    if (last != null && last.length + 1 + s.length <= max) pieces[pieces.length - 1] = `${last} ${s}`;
+    else pieces.push(s);
+  }
+  return pieces;
+}
+
+/** Characters a voice says in a second, for the phone voice's deadline (as core/voice.js reckons). */
+export const SPEECH_CPS = 16;
+
+/** How long a piece of the phone's voice may take before the lab gives up on its end: 2.5 times its length, plus 5 s. */
+export const speechDeadlineMs = (text, cps = SPEECH_CPS) => Math.round(2.5 * (String(text).length / cps) * 1000 + 5000);
+
+/**
+ * Says one corpus line with the phone's own voice (speechSynthesis), piece by piece (splitForSpeech),
+ * and times it. Every piece has a deadline (speechDeadlineMs): when its end never comes, as iOS often
+ * does, it is cancelled and the line is timedOut, and the rest of it is skipped. Stop resolves at once
+ * (stopped), whatever the voice does. Resolves to {firstMs, totalMs, started, timedOut, stopped,
+ * pieces, error}; never rejects. Utterance: SpeechSynthesisUtterance (tests pass a fake).
+ */
+export async function speakLine({ synth, Utterance, voice, text, signal, now = () => performance.now(), deadline = speechDeadlineMs, settleMs = 250 }) {
+  const pieces = splitForSpeech(text);
+  const s0 = now();
+  const out = { firstMs: null, totalMs: null, started: false, timedOut: false, stopped: false, pieces: pieces.length, error: null };
+  for (const piece of pieces) {
+    if (signal?.aborted) break;
+    const r = await new Promise((resolve) => {
+      let timer = null;
+      const end = (how) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve(how);
+      };
+      const onAbort = () => {
+        try {
+          synth.cancel();
+        } catch {
+          /* nothing to cancel */
+        }
+        end({ stopped: true });
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      const u = new Utterance(piece);
+      if (voice) {
+        u.voice = voice;
+        u.lang = voice.lang;
+      }
+      u.onstart = () => {
+        out.started = true;
+        out.firstMs ??= now() - s0;
+      };
+      u.onend = () => end({});
+      u.onerror = (e) => {
+        const why = String(e?.error ?? 'error');
+        // A cancel (ours or the system's) is not this piece's failure.
+        end(why === 'interrupted' || why === 'canceled' ? {} : { error: why });
+      };
+      timer = setTimeout(() => {
+        try {
+          synth.cancel();
+        } catch {
+          /* nothing to cancel */
+        }
+        end({ timedOut: true });
+      }, deadline(piece));
+      try {
+        synth.speak(u);
+      } catch (e) {
+        end({ error: String(e?.message ?? e) });
+      }
+    });
+    if (r.stopped) {
+      out.stopped = true;
+      break;
+    }
+    if (r.error) {
+      out.error = r.error;
+      break;
+    }
+    if (r.timedOut) {
+      out.timedOut = true;
+      // iOS needs a moment after a cancel before it speaks again.
+      await Promise.race([new Promise((res) => setTimeout(res, settleMs)), whenAborted(signal)]);
+      break;
+    }
+  }
+  out.totalMs = now() - s0;
+  out.stopped ||= !!signal?.aborted;
+  return out;
 }

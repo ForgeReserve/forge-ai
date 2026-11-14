@@ -310,7 +310,7 @@ describe('the natural voice', () => {
     for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
     await page.selectOption('#labLines', '3');
     await page.click('#labRun');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
     const dl = page.waitForEvent('download');
     await page.click('#labSave');
@@ -389,8 +389,8 @@ describe('where the natural voice runs', () => {
  * en-US voices) only after a while and a voiceschanged event; or, as on GrapheneOS, never any voice.
  * Speaking takes a few ms and ends.
  */
-async function iosSpeech(ctx: BrowserContext, { voices = true } = {}) {
-  await ctx.addInitScript((voices: boolean) => {
+async function iosSpeech(ctx: BrowserContext, { voices = true, ends = true } = {}) {
+  await ctx.addInitScript(({ voices, ends }: { voices: boolean; ends: boolean }) => {
     const w = window as any;
     const target = new EventTarget();
     let list: any[] = [];
@@ -410,9 +410,12 @@ async function iosSpeech(ctx: BrowserContext, { voices = true } = {}) {
       speak(u: any) {
         w.__spoken.push(u.text);
         setTimeout(() => u.onstart?.(), 5);
-        setTimeout(() => u.onend?.(), 30);
+        // As iOS often does for a long utterance: it plays, and its end never comes.
+        if (ends) setTimeout(() => u.onend?.(), 30);
       },
-      cancel() {},
+      cancel() {
+        w.__cancels = (w.__cancels ?? 0) + 1;
+      },
       speaking: false,
       pending: false,
     });
@@ -426,7 +429,7 @@ async function iosSpeech(ctx: BrowserContext, { voices = true } = {}) {
         this.text = text;
       }
     };
-  }, voices);
+  }, { voices, ends });
 }
 
 describe("the voice lab's phone voice", () => {
@@ -442,7 +445,7 @@ describe("the voice lab's phone voice", () => {
       for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu']) await page.uncheck(`#lab-${id}`);
       await page.selectOption('#labLines', '3');
       await page.click('#labRun');
-      await page.waitForSelector('#labSave:not([hidden])', { timeout: 30_000 });
+      await page.waitForSelector('#labRun:not([hidden])', { timeout: 30_000 });
       const dl = page.waitForEvent('download');
       await page.click('#labSave');
       const json = JSON.parse(readFileSync(await (await dl).path(), 'utf8'));
@@ -492,7 +495,7 @@ describe("the voice lab's results when a way of reading fails", () => {
     for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phone-voice']) await page.uncheck(`#lab-${id}`);
     await page.selectOption('#labLines', '3');
     await page.click('#labRun');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('[data-candidate=phonon-webgpu]')).toBe('Natural voice, graphics chipFailed: every line failed: the model ended the line with no sound and no error');
     const dl = page.waitForEvent('download');
     await page.click('#labSave');
@@ -507,6 +510,73 @@ describe("the voice lab's results when a way of reading fails", () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 180_000);
+});
+
+async function saveJson(page: Page) {
+  const dl = page.waitForEvent('download');
+  await page.click('#labSave');
+  return JSON.parse(readFileSync(await (await dl).path(), 'utf8'));
+}
+
+describe("the voice lab's phone voice when its end never comes (iOS)", () => {
+  it('cancels each line at its deadline, marks it timed out, and the run ends with Save', async () => {
+    const { ctx, page, errors } = await phone({ before: (c) => iosSpeech(c, { ends: false }) });
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.click('#labRun');
+    // The three short lines' deadlines: 2.5 times their spoken length plus 5 s each, about 23 s in all.
+    await expect.poll(() => page.textContent('#labStatus'), { timeout: 45_000 }).toMatch(/^Done\./);
+    expect(await page.textContent('#labSave')).toBe('Save results');
+    const json = await saveJson(page);
+    const c = json.candidates.find((x: any) => x.id === 'phone-voice');
+    expect(c.rows).toHaveLength(3);
+    expect(c.rows.map((r: any) => [r.timedOut, r.audioS, r.error])).toEqual([
+      [true, null, undefined],
+      [true, null, undefined],
+      [true, null, undefined],
+    ]);
+    expect(c.rows.every((r: any) => r.firstMs != null)).toBe(true);
+    expect(c.summary.timedOutRuns).toBe(3);
+    expect(await page.evaluate(() => (window as any).__cancels)).toBeGreaterThanOrEqual(3);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  it('saves the results so far while it runs, and Stop ends the run at once with the rows done kept', async () => {
+    const { ctx, page, errors } = await phone({ before: (c) => iosSpeech(c, { ends: false }) });
+    await page.goto(`${g.url}/v2/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '10');
+    await page.click('#labRun');
+    await expect.poll(() => page.textContent('#labStatus'), { timeout: 20_000 }).toMatch(/^1 of 10/);
+    // While it runs: Save results so far.
+    expect(await page.textContent('#labSave')).toBe('Save results so far');
+    const sofar = await saveJson(page);
+    expect(sofar.partial).toBe(true);
+    expect(sofar.candidates[0].rows.length).toBeGreaterThanOrEqual(1);
+    // Stop, in the middle of a line whose end never comes: the run ends at once.
+    const t0 = Date.now();
+    await page.click('#labStop');
+    await expect.poll(() => page.textContent('#labStatus'), { timeout: 3000 }).toMatch(/^Stopped\./);
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(await page.isVisible('#labRun')).toBe(true);
+    expect(await page.textContent('#labSave')).toBe('Save results');
+    const json = await saveJson(page);
+    expect(json.partial).toBeUndefined();
+    const c = json.candidates[0];
+    expect(c.id).toBe('phone-voice');
+    expect(c.stopped).toBe(true);
+    expect(c.rows.length).toBeGreaterThanOrEqual(1);
+    expect(c.rows.length).toBeLessThan(10);
+    expect(c.rows.every((r: any) => r.timedOut)).toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
 });
 
 describe('the accent test in the voice lab', () => {
@@ -526,7 +596,7 @@ describe('the accent test in the voice lab', () => {
     for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
     await page.selectOption('#labLines', '3');
     await page.click('#labRun');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
     const dl = page.waitForEvent('download');
     await page.click('#labSave');
@@ -558,7 +628,7 @@ describe('sound that may only start inside a tap, as on iPhone Safari', () => {
     await page.selectOption('#labLines', '3');
     await page.check('#labPlay');
     await page.click('#labRun');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 90_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 90_000 });
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
     // The one sound context was made or resumed inside the tap, and every line was heard.
     const audio = await page.evaluate(() => (window as any).__audio);
@@ -630,7 +700,7 @@ describe('the natural voice download, shown as it goes', () => {
     // Try again, with the connection back: the bar runs to 100%, then Getting ready and the lines.
     await watchMeter(page, 'labMeter');
     await page.click('#labRetry');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
     expect(await page.isVisible('#labRetry')).toBe(false);
     const m = await meterSeen(page);

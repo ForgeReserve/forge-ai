@@ -956,6 +956,8 @@ export default {
   'lab.col.bad': 'Broken',
   'lab.legend': 'Time per second of sound is the real-time factor: under 1 keeps up with playback. Gaps are pauses a listener would hear. Broken counts lines that failed, came out silent or held invalid numbers.',
   'lab.save': 'Save results',
+  'lab.saveSoFar': 'Save results so far',
+  'lab.copySoFar': 'Copy results so far',
   'lab.copy': 'Copy results',
   'lab.copied': 'Copied.',
   'lab.copyFailed': 'Could not copy. Use Save results.',

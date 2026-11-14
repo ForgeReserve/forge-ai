@@ -808,7 +808,7 @@ describe('the voice lab', () => {
       { firstMs: 20, rtf: 0.2, underruns: 0, nan: 0, silent: true, clipped: 1 },
       { error: 'boom' },
     ]);
-    expect(s).toEqual({ items: 4, failed: 1, firstMs: { median: 20, p90: 30 }, rtf: { median: 0.2, p90: 0.3 }, underruns: 2, nanRuns: 1, silentRuns: 1, clippedRuns: 1 });
+    expect(s).toEqual({ items: 4, failed: 1, firstMs: { median: 20, p90: 30 }, rtf: { median: 0.2, p90: 0.3 }, underruns: 2, nanRuns: 1, silentRuns: 1, clippedRuns: 1, timedOutRuns: 0 });
     const rep = LAB.report({ env: { cores: 8 }, voice: 'Maeve', candidates: [{ id: 'phonon-cpu-threads', rows: [] }, { id: 'phone-voice', error: 'none' }] });
     expect(rep).toMatchObject({ kind: 'forge-voice-lab', corpusVersion: LAB.CORPUS_VERSION, voice: 'Maeve', env: { cores: 8 } });
     expect(rep.candidates[1].summary).toBeNull();
@@ -906,6 +906,104 @@ describe('the voice lab', () => {
     expect(LAB.candidateError({ rows: [] }, { stopped: true })).toBeNull();
     expect(LAB.candidateError({ rows: [{ error: 'the model ended the line with no sound and no error' }, { error: 'x' }] })).toBe('every line failed: the model ended the line with no sound and no error');
     expect(LAB.candidateError({ rows: [{ error: 'x' }, { firstMs: 20 }] })).toBeNull();
+  });
+
+  it('Stop ends a line at once even when the model never answers again', async () => {
+    const ctrl = new AbortController();
+    const p = LAB.readLine(labTts('hang'), 'x', { signal: ctrl.signal, stallMs: 60_000 });
+    setTimeout(() => ctrl.abort(), 5);
+    expect(await p).toMatchObject({ stopped: true });
+    const c2 = new AbortController();
+    const w = LAB.untilAborted(new Promise(() => {}), c2.signal);
+    c2.abort();
+    await expect(w).rejects.toMatchObject({ name: 'AbortError' });
+    expect(await LAB.untilAborted(Promise.resolve(3), new AbortController().signal)).toBe(3);
+  });
+
+  it("cuts a line for the phone's voice at sentence ends into pieces of at most 200 characters", () => {
+    const long = LAB.CORPUS.find((c: any) => c.kind === 'long').text;
+    const pieces = LAB.splitForSpeech(long);
+    expect(pieces.length).toBeGreaterThan(2);
+    for (const p of pieces) expect(p.length).toBeLessThanOrEqual(200);
+    for (const p of pieces.slice(0, -1)) expect(p).toMatch(/[.!?]$/);
+    expect(pieces.join(' ')).toBe(long);
+    expect(LAB.splitForSpeech('Yes.')).toEqual(['Yes.']);
+    // One sentence longer than 200: cut at a comma or a space, never mid-word.
+    const one = Array.from({ length: 60 }, (_, i) => `word${i}`).join(' ') + '.';
+    const cut = LAB.splitForSpeech(one);
+    for (const p of cut) expect(p.length).toBeLessThanOrEqual(200);
+    expect(cut.join(' ')).toBe(one);
+    // 2.5 times the spoken length at 16 characters a second, plus 5 s.
+    expect(LAB.speechDeadlineMs('x'.repeat(160))).toBe(30_000);
+    expect(LAB.speechDeadlineMs('')).toBe(5000);
+  });
+
+  /** A speechSynthesis that starts each utterance, and ends it or not. */
+  function fakeSpeech({ ends = true, starts = true, error = null as string | null } = {}) {
+    const said: string[] = [];
+    let cancels = 0;
+    class Utterance {
+      text: string;
+      voice: any = null;
+      lang = '';
+      onstart: any = null;
+      onend: any = null;
+      onerror: any = null;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    const synth = {
+      speak(u: any) {
+        said.push(u.text);
+        if (starts) setTimeout(() => u.onstart?.(), 1);
+        if (error) setTimeout(() => u.onerror?.({ error }), 2);
+        else if (ends) setTimeout(() => u.onend?.(), 3);
+      },
+      cancel: () => cancels++,
+    };
+    return { synth, Utterance, said, cancels: () => cancels };
+  }
+
+  it("says a line with the phone's voice piece by piece, and times it", async () => {
+    const f = fakeSpeech();
+    const long = LAB.CORPUS.find((c: any) => c.kind === 'long').text;
+    const r = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: long });
+    expect(r).toMatchObject({ started: true, timedOut: false, stopped: false, error: null });
+    expect(r.pieces).toBe(f.said.length);
+    expect(f.said.length).toBeGreaterThan(2);
+    expect(r.firstMs).not.toBeNull();
+  });
+
+  it('cancels a piece whose end never comes (iOS) at its deadline, marks the line timed out, and goes on', async () => {
+    const f = fakeSpeech({ ends: false });
+    const deadline = () => 20;
+    const a = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: LAB.CORPUS.find((c: any) => c.kind === 'long').text, deadline, settleMs: 1 });
+    expect(a).toMatchObject({ started: true, timedOut: true, stopped: false });
+    expect(f.said).toHaveLength(1); // the rest of that line is skipped
+    expect(f.cancels()).toBe(1);
+    const b = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: 'Next line.', deadline, settleMs: 1 });
+    expect(b.timedOut).toBe(true);
+    expect(f.said).toHaveLength(2);
+    // Never started at all: timed out and not started, which the lab takes as the voice not working.
+    const n = fakeSpeech({ ends: false, starts: false });
+    expect(await LAB.speakLine({ synth: n.synth, Utterance: n.Utterance, text: 'x', deadline, settleMs: 1 })).toMatchObject({ started: false, timedOut: true });
+  });
+
+  it('Stop ends a line at once, with the voice cancelled, whatever the voice does', async () => {
+    const f = fakeSpeech({ ends: false });
+    const ctrl = new AbortController();
+    const p = LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: 'Hello there.', signal: ctrl.signal, deadline: () => 60_000 });
+    setTimeout(() => ctrl.abort(), 5);
+    expect(await p).toMatchObject({ stopped: true });
+    expect(f.cancels()).toBe(1);
+  });
+
+  it('an error fails the line; a cancel does not', async () => {
+    const e = fakeSpeech({ error: 'synthesis-failed' });
+    expect((await LAB.speakLine({ synth: e.synth, Utterance: e.Utterance, text: 'x' })).error).toBe('synthesis-failed');
+    const c = fakeSpeech({ error: 'interrupted' });
+    expect((await LAB.speakLine({ synth: c.synth, Utterance: c.Utterance, text: 'x' })).error).toBeNull();
   });
 
   it('is reachable only by its address: no menu or screen links to it', async () => {
