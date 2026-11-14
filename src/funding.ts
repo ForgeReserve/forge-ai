@@ -697,6 +697,17 @@ export class FundingService {
     // A key given at confirm replaces the one given at quote; neither is required.
     if (lockPubkey) this.set(id, { f_lock_pubkey: lockPubkey });
     if (row.expires_at && now() > row.expires_at - 15_000) throw new PaymentError('quote_expired', 'this quote expired; ask for a new one', 409);
+    // The token must name the quoted mint and unit before any mint is loaded or contacted: the
+    // proof-secret hash alone does not bind it, since the same secrets can be relabelled.
+    let meta: { mint: string; unit?: string };
+    try {
+      meta = getTokenMetadata(token);
+    } catch {
+      throw new PaymentError('invalid_token', 'could not decode token');
+    }
+    if (normalizeMintUrl(meta.mint) !== row.f_mint || (meta.unit ?? 'sat') !== row.f_unit) {
+      throw new PaymentError('token_mismatch', 'this is not the token that was quoted', 400);
+    }
     const t = await this.wallet.inspect(token, undefined, { foreign: true });
     if (t.hash !== row.f_token_hash) throw new PaymentError('token_mismatch', 'this is not the token that was quoted', 400);
     if (this.inflight.has(id)) throw new PaymentError('in_flight', 'this funding is being processed', 409);

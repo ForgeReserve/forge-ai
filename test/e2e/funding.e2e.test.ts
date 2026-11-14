@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { getEncodedToken } from '@cashu/cashu-ts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../../src/db.ts';
 import { sqliteStore } from '../../src/mint-discovery.ts';
-import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
+import { chatBody, createInvite, type Gateway, MINT_A, MINT_B, MINT_C, mintProofs, mintToken, mintsUp, redeem, startGateway } from './helpers.ts';
 import { type OnchainMock, startOnchainMock } from './onchain-mock.ts';
 
 const up = (await mintsUp()) && (await fetch(`${MINT_C}/v1/info`).then((r) => r.ok).catch(() => false));
@@ -270,6 +273,44 @@ describe.skipIf(!up)('funding: eCash from another mint (receive, melt, mint at F
     const other = await mintToken(MINT_C, 'sat', 300);
     const mismatch = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: other }, q.body.key);
     expect(mismatch.body.error.code).toBe('token_mismatch');
+  });
+
+  // Report finding 2: confirmation compared only the proof-secret hash, so a token relabelled with
+  // another mint URL or unit sent the gateway to that mint. It must be refused before any contact.
+  it('confirm is bound to the quoted mint and unit: a relabelled token is refused before any mint is contacted', async () => {
+    const hits: string[] = [];
+    const listener = createServer((req, res) => {
+      hits.push(req.url ?? '');
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((r) => listener.listen(0, '127.0.0.1', () => r()));
+    const elsewhere = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`;
+    try {
+      const proofs = await mintProofs(MINT_C, 'sat', 400);
+      const token = getEncodedToken({ mint: MINT_C, unit: 'sat', proofs });
+      const q = await post(g, '/v1/wallet/fund/foreign/quote', { token, unit: 'sat', invite: createInvite(g) });
+      expect(q.status).toBe(200);
+      const key = q.body.key as string;
+
+      const otherMint = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: elsewhere, unit: 'sat', proofs }) }, key);
+      expect(otherMint.status).toBe(400);
+      expect(otherMint.body.error.code).toBe('token_mismatch');
+      expect(hits).toEqual([]);
+
+      const otherUnit = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: MINT_C, unit: 'usd', proofs }) }, key);
+      expect(otherUnit.status).toBe(400);
+      expect(otherUnit.body.error.code).toBe('token_mismatch');
+      expect(g.deps.funding.get(q.body.id)!.state).toBe('quoted');
+
+      // The quoted mint spelled with a trailing slash is the same mint: the funding still completes.
+      const c = await post(g, '/v1/wallet/fund/foreign/confirm', { id: q.body.id, token: getEncodedToken({ mint: `${MINT_C}/`, unit: 'sat', proofs }) }, key);
+      expect(c.status).toBe(200);
+      const done = c.body.state === 'done' ? c.body : await waitFor(g, q.body.id, key);
+      expect(done.credited).toBe(q.body.foreign.credit);
+      expect(hits).toEqual([]);
+    } finally {
+      listener.close();
+    }
   });
 
   it('a melt that no longer fits is refunded to the user as eCash from their mint', async () => {
