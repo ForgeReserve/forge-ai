@@ -815,6 +815,47 @@ describe('the voice lab', () => {
     expect(LAB.CANDIDATES.map((c: any) => c.id)).toEqual(['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu', 'phone-voice']);
   });
 
+  it("counts the phone's own English voices that run on it, as iOS lists them (en-GB, en_US, all local)", () => {
+    const v = (name: string, lang: string, localService = true, def = false) => ({ name, lang, localService, default: def });
+    // iOS Safari: every voice local, BCP 47 languages; older WebKit writes en_US.
+    const ios = [v('Samantha', 'en-US', true, true), v('Amélie', 'fr-CA'), v('Daniel', 'en-GB'), v('Karen', 'en_AU'), v('Moira', 'en-IE')];
+    expect(LAB.phoneVoices(ios).map((x: any) => x.name)).toEqual(['Daniel', 'Samantha', 'Karen', 'Moira']);
+    // Chrome on a desktop: the Google voices send the text out and do not count.
+    expect(LAB.phoneVoices([v('Google UK English Female', 'en-GB', false), v('Alex', 'en-US')]).map((x: any) => x.name)).toEqual(['Alex']);
+    expect(LAB.phoneVoices([v('Thomas', 'fr-FR'), v('English?', 'eng')])).toEqual([]);
+    expect(LAB.phoneVoices([])).toEqual([]);
+    expect(LAB.voiceLang({ lang: 'en_GB' })).toBe('en-gb');
+  });
+
+  /** A speechSynthesis whose list starts empty and fills after `after` ms, with or without the event. */
+  function lateSynth(voices: any[], { after = 30, event = true } = {}) {
+    const target = new EventTarget();
+    let list: any[] = [];
+    setTimeout(() => {
+      list = voices;
+      if (event) target.dispatchEvent(new Event('voiceschanged'));
+    }, after);
+    return Object.assign(target, { getVoices: () => list });
+  }
+
+  it('waits for the voice list, which is often empty at first (iOS Safari), rather than say there is none', async () => {
+    const daniel = { name: 'Daniel', lang: 'en-GB', localService: true };
+    expect(await LAB.waitForVoices(lateSynth([daniel]), 2000)).toEqual([daniel]);
+    // Filled without the event: found by looking again.
+    expect(await LAB.waitForVoices(lateSynth([daniel], { event: false }), 2000, 10)).toEqual([daniel]);
+    // A list that is there at once is not waited for.
+    const now = Date.now();
+    expect(await LAB.waitForVoices({ getVoices: () => [daniel], addEventListener() {}, removeEventListener() {} }, 2000)).toEqual([daniel]);
+    expect(Date.now() - now).toBeLessThan(50);
+  });
+
+  it('still finds no voice on a phone without a speech engine (GrapheneOS), after the wait', async () => {
+    const t0 = Date.now();
+    expect(await LAB.waitForVoices(lateSynth([], { after: 10 }), 120, 10)).toEqual([]);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(100);
+    expect(await LAB.waitForVoices(undefined)).toEqual([]);
+  });
+
   it('is reachable only by its address: no menu or screen links to it', async () => {
     const ROUTER: any = await import('../../../public/v2/core/router.js' as string);
     expect(ROUTER.parse('#/voice-lab').name).toBe('voiceLab');

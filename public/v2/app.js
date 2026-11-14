@@ -1531,6 +1531,9 @@ async function start() {
 
   // Which natural-voice files this app has (a small index, read once); the voice is offered once it is in.
   phonon.init().then((x) => x && store.set({}));
+  // The phone's own voices are often listed only a while after the page opens (iOS Safari): the Phone
+  // voice is offered once they are.
+  globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => store.set({}));
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,

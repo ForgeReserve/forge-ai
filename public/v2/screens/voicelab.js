@@ -5,7 +5,7 @@
 // sends on. Nothing here is sent anywhere.
 import { gpuInfo, meterNumbers, soundCheck } from '../core/phonon.js';
 import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
-import { CANDIDATES, CORPUS, report, summarize, virtualUnderruns } from '../core/voicelab.js';
+import { CANDIDATES, CORPUS, phoneVoices, report, summarize, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
 
 const now = () => performance.now();
 const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
@@ -19,6 +19,20 @@ async function pageMemory() {
     total = await Promise.race([performance.measureUserAgentSpecificMemory().then((m) => m.bytes), new Promise((res) => setTimeout(() => res(null), 20_000))]).catch(() => null);
   }
   return { jsHeapBytes: heap, pageBytes: total };
+}
+
+/** Speaks a silent utterance inside a tap, as iOS wants before a page may speak later; asks for the voice list. */
+function unlockSpeech() {
+  try {
+    const synth = globalThis.speechSynthesis;
+    if (!synth || typeof SpeechSynthesisUtterance !== 'function') return;
+    synth.getVoices();
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    synth.speak(u);
+  } catch {
+    /* no speech here */
+  }
 }
 
 export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
@@ -94,7 +108,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       accent.length ? el('optgroup', { label: t('lab.voicesAccent'), 'data-group': 'accent' }, ...accent.map((v) => el('option', { value: v.name, text: t('lab.accentVoice', { name: v.name, locale: t(`lab.locale.${v.locale}`) }) }))) : null,
     );
     showVoiceNote();
-    runBtn.disabled = !index && !(globalThis.speechSynthesis?.getVoices().length > 0);
+    runBtn.disabled = !index && !phoneVoices(await waitForVoices(globalThis.speechSynthesis)).length;
   })().catch((e) => (status.textContent = t('lab.failed', { message: message(e) })));
 
   async function runPhonon(c, voice, signal, onRow) {
@@ -189,12 +203,20 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     return out;
   }
 
-  /** The phone's own voice (speechSynthesis, voices that run on the phone): time to the first sound only. */
+  /**
+   * The phone's own voice (speechSynthesis, voices that run on the phone): time to the first sound only.
+   * The list is often empty until the browser has loaded it (iOS Safari): wait for it before saying
+   * there is none.
+   */
   async function runPhoneVoice(signal, onRow) {
     const out = { id: 'phone-voice', rows: [] };
-    const voices = (globalThis.speechSynthesis?.getVoices() ?? []).filter((v) => v.localService && v.lang?.toLowerCase().startsWith('en'));
+    const synth = globalThis.speechSynthesis;
+    const all = await waitForVoices(synth);
+    const voices = phoneVoices(all);
+    // What the browser listed, to see why a voice did or did not count (name, language, local).
+    out.listed = all.slice(0, 40).map((v) => ({ name: v.name, lang: v.lang, localService: v.localService, default: v.default }));
     if (!voices.length) {
-      out.error = 'no voice of the phone runs on the phone';
+      out.error = all.length ? 'no English voice of the phone runs on the phone' : 'no voice of the phone runs on the phone';
       return out;
     }
     out.voice = `${voices[0].name} (${voices[0].lang})`;
@@ -206,12 +228,31 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
         u.lang = voices[0].lang;
         const s0 = now();
         let start = null;
-        const stop = () => speechSynthesis.cancel();
+        let timer = null;
+        const end = (row) => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', stop);
+          resolve(row);
+        };
+        const stop = () => synth.cancel();
         signal.addEventListener('abort', stop, { once: true });
-        u.onstart = () => (start = now() - s0);
-        u.onend = () => resolve({ id: item.id, kind: item.kind, chars: item.text.length, firstMs: r1(start), totalMs: r1(now() - s0), audioS: start == null ? null : r1((now() - s0 - start) / 1000), rtf: null });
-        u.onerror = (e) => resolve({ id: item.id, kind: item.kind, error: String(e.error ?? 'error') });
-        speechSynthesis.speak(u);
+        // A voice that never starts (sound blocked, or no engine behind the list) fails the line
+        // rather than hold the run for ever.
+        const wait = (ms, why) => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            synth.cancel();
+            end({ id: item.id, kind: item.kind, error: why });
+          }, ms);
+        };
+        wait(10_000, 'the phone voice did not start in 10 s');
+        u.onstart = () => {
+          start = now() - s0;
+          wait(Math.max(30_000, item.text.length * 300), 'the phone voice did not finish');
+        };
+        u.onend = () => end({ id: item.id, kind: item.kind, chars: item.text.length, firstMs: r1(start), totalMs: r1(now() - s0), audioS: start == null ? null : r1((now() - s0 - start) / 1000), rtf: null });
+        u.onerror = (e) => end({ id: item.id, kind: item.kind, error: String(e.error ?? 'error') });
+        synth.speak(u);
       });
       out.rows.push(row);
       onRow(out.rows.length);
@@ -254,6 +295,9 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     // First, before any await: iPhone Safari starts sound only inside the tap itself.
     speaker.unlock?.();
     if (ctrl) return;
+    // The phone's own voice too: iOS lets a page speak only once it spoke inside a tap, so a silent
+    // utterance now lets the lines spoken minutes later (after the natural voice's runs) be heard.
+    if (boxes['phone-voice']?.checked) unlockSpeech();
     blockedNote.hidden = true;
     errorLine.hidden = retryBtn.hidden = true;
     ctrl = new AbortController();

@@ -382,6 +382,85 @@ describe('where the natural voice runs', () => {
   }, 180_000);
 });
 
+/**
+ * The phone's own voice as iOS Safari gives it: getVoices() empty at first, the list (local en-GB and
+ * en-US voices) only after a while and a voiceschanged event; or, as on GrapheneOS, never any voice.
+ * Speaking takes a few ms and ends.
+ */
+async function iosSpeech(ctx: BrowserContext, { voices = true } = {}) {
+  await ctx.addInitScript((voices: boolean) => {
+    const w = window as any;
+    const target = new EventTarget();
+    let list: any[] = [];
+    w.__spoken = [];
+    if (voices) {
+      setTimeout(() => {
+        list = [
+          { name: 'Samantha', lang: 'en-US', localService: true, default: true, voiceURI: 'samantha' },
+          { name: 'Daniel', lang: 'en-GB', localService: true, default: false, voiceURI: 'daniel' },
+          { name: 'Thomas', lang: 'fr-FR', localService: true, default: false, voiceURI: 'thomas' },
+        ];
+        target.dispatchEvent(new Event('voiceschanged'));
+      }, 1500);
+    }
+    const synth = Object.assign(target, {
+      getVoices: () => list,
+      speak(u: any) {
+        w.__spoken.push(u.text);
+        setTimeout(() => u.onstart?.(), 5);
+        setTimeout(() => u.onend?.(), 30);
+      },
+      cancel() {},
+      speaking: false,
+      pending: false,
+    });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => synth });
+    w.SpeechSynthesisUtterance = class {
+      text: string;
+      voice: any = null;
+      lang = '';
+      volume = 1;
+      constructor(text: string) {
+        this.text = text;
+      }
+    };
+  }, voices);
+}
+
+describe("the voice lab's phone voice", () => {
+  for (const [what, voices] of [
+    ['waits for a voice list that starts empty and fills later (iOS Safari), and reads with its British voice', true],
+    ['says there is no voice when none ever comes (GrapheneOS)', false],
+  ] as const) {
+    it(what, async () => {
+      const { ctx, page, errors } = await phone({ before: (c) => iosSpeech(c, { voices }) });
+      await page.goto(`${g.url}/v2/#/voice-lab`);
+      await page.waitForSelector('[data-screen=voiceLab]');
+      await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+      for (const id of ['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu']) await page.uncheck(`#lab-${id}`);
+      await page.selectOption('#labLines', '3');
+      await page.click('#labRun');
+      await page.waitForSelector('#labSave:not([hidden])', { timeout: 30_000 });
+      const dl = page.waitForEvent('download');
+      await page.click('#labSave');
+      const json = JSON.parse(readFileSync(await (await dl).path(), 'utf8'));
+      const c = json.candidates.find((x: any) => x.id === 'phone-voice');
+      if (voices) {
+        expect(c.error).toBeUndefined();
+        expect(c.voice).toBe('Daniel (en-GB)');
+        expect(c.rows).toHaveLength(3);
+        expect(c.rows.every((r: any) => r.firstMs != null && !r.error)).toBe(true);
+        expect(c.listed.map((v: any) => v.name)).toEqual(['Samantha', 'Daniel', 'Thomas']);
+      } else {
+        expect(c.error).toBe('no voice of the phone runs on the phone');
+        expect(c.rows).toEqual([]);
+      }
+      expect(errors).toEqual([]);
+      await ctx.close();
+    }, 60_000);
+  }
+});
+
 describe('the accent test in the voice lab', () => {
   it('lists other locales\' speakers under their own group, reads English with one, and the app never offers them', async () => {
     const { ctx, page, errors, requests } = await phone();

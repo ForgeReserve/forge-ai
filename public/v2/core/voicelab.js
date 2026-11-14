@@ -147,3 +147,56 @@ export function report({ env, voice, voiceLocale = null, accentTest = false, can
     candidates: candidates.map((c) => ({ ...c, summary: c.rows ? summarize(c.rows) : null })),
   };
 }
+
+/** A voice's language as BCP 47 in lower case: en-GB, en_GB (older WebKit) and en-gb all read en-gb. */
+export const voiceLang = (v) => String(v?.lang ?? '').replace(/_/g, '-').toLowerCase();
+
+/**
+ * The phone's own voices that read English on the phone: localService (never one that sends the text
+ * to a voice service, as Chrome's Google voices do), language en or en-*. WebKit marks every iOS and
+ * macOS voice local, with languages like en-GB and en-US. British English first, then American, then
+ * any other English; the system's default first within each.
+ */
+export function phoneVoices(list) {
+  const rank = (v) => {
+    const l = voiceLang(v);
+    return (l === 'en-gb' ? 0 : l === 'en-us' ? 2 : 4) + (v.default ? 0 : 1);
+  };
+  return [...(list ?? [])]
+    .filter((v) => v?.localService && /^en(-|$)/.test(voiceLang(v)))
+    .map((v, i) => [v, i])
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([v]) => v);
+}
+
+/**
+ * The browser's voice list once it has one. getVoices() is often empty at first and fills later
+ * (iOS Safari among others): this waits for the voiceschanged event, and also looks again every
+ * `poll` ms (some browsers fill the list without the event), for up to `ms`. Resolves to the list,
+ * empty when the phone has no voice at all (GrapheneOS has no speech engine).
+ */
+export function waitForVoices(synth, ms = 4000, poll = 250) {
+  const now = () => {
+    try {
+      return synth?.getVoices?.() ?? [];
+    } catch {
+      return [];
+    }
+  };
+  const first = now();
+  if (first.length || !synth) return Promise.resolve(first);
+  return new Promise((resolve) => {
+    let timer = null;
+    let ticker = null;
+    const finish = () => {
+      clearTimeout(timer);
+      clearInterval(ticker);
+      synth.removeEventListener?.('voiceschanged', check);
+      resolve(now());
+    };
+    const check = () => now().length && finish();
+    synth.addEventListener?.('voiceschanged', check);
+    ticker = setInterval(check, poll);
+    timer = setTimeout(finish, ms);
+  });
+}
