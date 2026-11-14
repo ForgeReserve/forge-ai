@@ -6,7 +6,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readConfig, writeBundle } from '../../scripts/lib/android-web.ts';
-import { type Gateway, MINT_A, mintsUp, startGateway } from '../e2e/helpers.ts';
+import { type Gateway, MINT_A, MINT_C, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { mintSigner, provision } from '../support/cards.ts';
 import { CardSim } from '../support/cardsim.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
@@ -38,7 +38,7 @@ function serveBundle(dir: string): Promise<Server> {
 
 beforeAll(async () => {
   if (!(await mintsUp())) throw new Error('The local test mints are not running. Start them with pnpm mint:up.');
-  g = await startGateway({ env: { FORGE_INVITE_ONLY: 'false' } });
+  g = await startGateway({ env: { FORGE_INVITE_ONLY: 'false', FORGE_FOREIGN_ALLOW_INSECURE: 'true' } });
   const assets = mkdtempSync(join(tmpdir(), 'forge-apk-assets-'));
   writeBundle(join(ROOT, 'public'), assets, readConfig(join(ROOT, 'capacitor.config.json')));
   site = await serveBundle(join(assets, 'public'));
@@ -178,7 +178,7 @@ describe('Tap a card', () => {
     await ctx.close();
   }, 120_000);
 
-  it('in the app: part of it, and a card lifted after it signed loses nothing; the next tap finishes it with the PIN given', async () => {
+  it('in the app: part of it, and a card lifted after it signed loses nothing; Erase warns, and the next tap finishes it with the PIN', async () => {
     const card = new CardSim({ pin: '1234', mint: MINT_A });
     await provision(card, await mintSigner(MINT_A), [16, 8, 4, 2]);
     const { ctx, page, errors } = await appWithCard(card);
@@ -199,9 +199,20 @@ describe('Tap a card', () => {
     // The pieces are burned on the card and the payment is held on the phone.
     expect(card.balance()).toBe(8);
     expect((await cardStore(page))[0].state).toBe('ready');
+    // Erase everything warns that a card payment is not finished; its button leads back to the card.
+    await page.goto(`${app}/#/more/erase`);
+    await page.waitForSelector('#eraseCards');
+    expect(await page.textContent('#eraseCards')).toBe('A card payment is not finished on this phone. Hold that card to the phone in Tap a card first, or that money is lost.');
+    await page.click('#eraseSaveFirst');
+    await page.waitForSelector('[data-fund=card] #cardHold');
 
     await tap(page, card);
-    // The next tap: the card gives its signature again, the swap is made, the change goes back on it.
+    // A new screen does not have the PIN: the card's payment waits for it.
+    await page.waitForSelector('#cardFinish', { timeout: 20_000 });
+    expect(await page.textContent('#cardToFinish')).toBe('This card has a payment to finish.');
+    await page.fill('#cardFinishPin', '1234');
+    await page.click('#cardFinish');
+    // The card is still there: it gives its signature again, the swap is made, the change goes back on it.
     await page.waitForSelector('#cardMove', { timeout: 30_000 });
     await expect.poll(() => card.balance()).toBe(9);
     await page.goto(`${app}/#/funds`);
@@ -209,6 +220,54 @@ describe('Tap a card', () => {
     await expect.poll(() => page.textContent('#fundsAmount')).toBe('21 sat');
     expect(await cardStore(page)).toEqual([]);
     expect((await vault(page)).in).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('in the app: the card is lifted as it signs and held again on the same screen: no second PIN, the money arrives', async () => {
+    const card = new CardSim({ pin: '1234', mint: MINT_A });
+    await provision(card, await mintSigner(MINT_A), [32, 8]);
+    const { ctx, page, errors } = await appWithCard(card);
+    await openCard(page);
+    await tap(page, card);
+    await page.waitForSelector('#cardMove', { timeout: 20_000 });
+    await page.fill('#cardPin', '1234');
+    card.breaks.push({ ins: 0x24, when: 'after' });
+    await page.click('#cardMove');
+    await page.waitForSelector('#cardHoldLine:has-text("Nothing is lost")', { timeout: 20_000 });
+    await tap(page, card);
+    // All of it moved, so the card is empty: the screen goes back to Funds with the balance.
+    await page.waitForSelector('[data-screen=funds]', { timeout: 30_000 });
+    await expect.poll(() => page.textContent('#fundsAmount')).toBe('40 sat');
+    expect(card.balance()).toBe(0);
+    expect(await cardStore(page)).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('in the app: a card from another mint pays its input fee and goes on to Other mint with the eCash', async () => {
+    const card = new CardSim({ pin: null, mint: MINT_C });
+    await provision(card, await mintSigner(MINT_C), [64, 32]);
+    const { ctx, page, errors } = await appWithCard(card);
+    await openCard(page);
+    await tap(page, card);
+    await page.waitForSelector('#cardMove', { timeout: 20_000 });
+    // No PIN on this card: no PIN field.
+    expect(await page.locator('#cardPin').count()).toBe(0);
+    expect(await page.textContent('#cardFee')).toBe('The card mint takes 1 sat to move it.');
+    expect(await page.textContent('#cardGet')).toBe('You get 95 sat.');
+    await page.click('#cardMove');
+    // Other mint opens with the eCash and asks the engine for its price at once.
+    await page.waitForSelector('[data-fund=othermint] #foreignConfirm', { timeout: 30_000 });
+    expect(card.balance()).toBe(0);
+    // Until it is added, the eCash is kept on the phone, listed as not added.
+    const held = (await vault(page)).in;
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ via: 'card', state: 'refused', code: 'card_other_mint' });
+    await page.click('#foreignConfirm');
+    await page.waitForSelector('#fundDone', { timeout: 30_000 });
+    await expect.poll(async () => (await vault(page)).in).toEqual([]);
+    expect(await cardStore(page)).toEqual([]);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

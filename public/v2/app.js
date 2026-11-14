@@ -1123,7 +1123,7 @@ function backTo(name) {
 
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
-  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base };
+  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount };
   switch (name) {
     case 'add':
       return mode.home({ sheet: addSheet(ctx), open: 'add' });
@@ -1360,14 +1360,15 @@ const loadCards = () =>
     flow: m.createCardFunding({ storage, relay: { mint: (b) => engine.cardMint(b), swap: (b) => engine.cardSwap(b), restore: (b) => engine.cardRestore(b) } }),
     handToken: m.handToken,
   })));
-/** True when this phone holds a card payment (core/card/flow.js keeps them under forge2.cards). */
-function cardJobsWaiting() {
+/** How many card payments this phone holds (core/card/flow.js keeps them under forge2.cards). */
+function cardJobCount() {
   try {
-    return (JSON.parse(storage.getItem('forge2.cards') ?? '{}').jobs ?? []).length > 0;
+    return (JSON.parse(storage.getItem('forge2.cards') ?? '{}').jobs ?? []).length;
   } catch {
-    return false;
+    return 0;
   }
 }
+const cardJobsWaiting = () => cardJobCount() > 0;
 const cards = { load: loadCards };
 
 let workerReg = null;

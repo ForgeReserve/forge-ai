@@ -309,6 +309,7 @@ export default {
   'erase.unsaved': 'eCash not saved yet',
   'erase.unsavedSub': 'There is eCash on this phone that is not in a wallet yet. Save it first, or it is lost.',
   'erase.unsavedBtn': 'Save it first',
+  'erase.cardsSub': 'A card payment is not finished on this phone. Hold that card to the phone in Tap a card first, or that money is lost.',
   'erase.goes': 'What is removed',
   'erase.goesConversations': 'Every conversation, and the photos and files added to it',
   'erase.goesSettings': 'Settings and the look',
