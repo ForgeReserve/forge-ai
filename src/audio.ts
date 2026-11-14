@@ -158,42 +158,49 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
     const nano = audioCostNanoUsd(o.model, o.usage, env.FORGE_MARKUP);
     const msub = Math.max(1, nanoUsdToMsub(nano, unit, rate));
     const reservationId = ledger.reserve(o.a.id, msub);
-    db.prepare(
-      "INSERT INTO requests (id, account_id, payment, unit, model, supplier, encrypted, status, reserved_msub, created_at) VALUES (?, ?, 'balance', ?, ?, ?, 0, 'running', ?, ?)",
-    ).run(o.requestId, o.a.id, unit, o.model.id, o.model.supplier, msub, now());
-    const settle = (ok: boolean) => {
-      const s = ledger.settle(reservationId, ok ? msub : 0, o.requestId);
-      db.prepare('UPDATE requests SET status = ?, usage_source = ?, charged_msub = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?').run(
-        ok ? 'settled' : 'failed',
-        'audio',
-        s.charged,
-        Date.now() - t0,
-        ok ? nano : 0,
-        ok ? audioCostNanoUsd(o.model, o.usage, 1) : null,
-        ok ? 'catalog' : null,
-        o.requestId,
-      );
-      log.info('audio', {
-        request_id: o.requestId,
-        model: o.model.id,
-        supplier: o.model.supplier,
-        kind: o.model.kind,
-        unit,
-        status: ok ? 'ok' : 'upstream_error',
-        seconds: o.usage.seconds !== undefined ? Math.round(o.usage.seconds * 10) / 10 : undefined,
-        chars: o.usage.chars,
-        reserved_msub: msub,
-        charged_msub: s.charged,
-        latency_ms: Date.now() - t0,
-      });
-      return { 'X-Forge-Request-Id': o.requestId, 'X-Forge-Unit': unit, 'X-Forge-Privacy': o.privacy, 'X-Forge-Charged-Msub': String(s.charged), 'X-Forge-Balance-Msub': String(s.balance) };
-    };
-    const signal = c.req.raw.signal;
+    // The request owns its reservation until it settles (src/ledger.ts). However it ends, it then gives
+    // the reservation up: after a settle this changes nothing, and after an error that escaped before
+    // settling (the metering row could not be written, say) the abandoned-request sweep can release it.
     try {
-      const result = await call(signal);
-      return { result, headers: settle(true) };
-    } catch (e) {
-      return { error: e, headers: settle(false) };
+      db.prepare(
+        "INSERT INTO requests (id, account_id, payment, unit, model, supplier, encrypted, status, reserved_msub, created_at) VALUES (?, ?, 'balance', ?, ?, ?, 0, 'running', ?, ?)",
+      ).run(o.requestId, o.a.id, unit, o.model.id, o.model.supplier, msub, now());
+      const settle = (ok: boolean) => {
+        const s = ledger.settle(reservationId, ok ? msub : 0, o.requestId);
+        db.prepare('UPDATE requests SET status = ?, usage_source = ?, charged_msub = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?').run(
+          ok ? 'settled' : 'failed',
+          'audio',
+          s.charged,
+          Date.now() - t0,
+          ok ? nano : 0,
+          ok ? audioCostNanoUsd(o.model, o.usage, 1) : null,
+          ok ? 'catalog' : null,
+          o.requestId,
+        );
+        log.info('audio', {
+          request_id: o.requestId,
+          model: o.model.id,
+          supplier: o.model.supplier,
+          kind: o.model.kind,
+          unit,
+          status: ok ? 'ok' : 'upstream_error',
+          seconds: o.usage.seconds !== undefined ? Math.round(o.usage.seconds * 10) / 10 : undefined,
+          chars: o.usage.chars,
+          reserved_msub: msub,
+          charged_msub: s.charged,
+          latency_ms: Date.now() - t0,
+        });
+        return { 'X-Forge-Request-Id': o.requestId, 'X-Forge-Unit': unit, 'X-Forge-Privacy': o.privacy, 'X-Forge-Charged-Msub': String(s.charged), 'X-Forge-Balance-Msub': String(s.balance) };
+      };
+      const signal = c.req.raw.signal;
+      try {
+        const result = await call(signal);
+        return { result, headers: settle(true) };
+      } catch (e) {
+        return { error: e, headers: settle(false) };
+      }
+    } finally {
+      ledger.disown(reservationId);
     }
   }
 
