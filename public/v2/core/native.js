@@ -4,8 +4,9 @@
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
 // through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
-// voice made by native code: the answer's text goes to the app, which plays the sound itself) and
-// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back). The
+// voice made by native code: the answer's text goes to the app, which plays the sound itself),
+// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back) and
+// ForgeBars (the phone's status and navigation bars in the page's colour). The
 // balance key and chats never pass through it; a card's answers carry its pieces, which only the page
 // reads.
 
@@ -89,7 +90,31 @@ export function createNative(win = globalThis) {
     till: nativeTill(call, on),
     voice: nativeVoice(call, on),
     speech: nativeSpeech(call, on),
+    /**
+     * The phone's status and navigation bars in this colour (a plain hex colour), with light icons on a
+     * dark one and dark icons on a light one (BarsPlugin.kt).
+     */
+    bars: (color) => call('ForgeBars', 'set', { color }).catch(() => {}),
   };
+}
+
+/**
+ * Keeps the phone's bars the colour of the page, as a browser keeps them the theme-color: the look's
+ * ground, and the first run's dark one while it shows (screens/firstrun.js). Calls bars(color) now and
+ * whenever the colour changes. Returns a function that stops it.
+ */
+export function followBars(bars, doc = globalThis.document) {
+  const meta = doc?.querySelector?.('meta[name="theme-color"]');
+  if (!meta || typeof MutationObserver !== 'function') return () => {};
+  let last = null;
+  const send = () => {
+    const c = meta.getAttribute('content');
+    if (c && c !== last) bars((last = c));
+  };
+  const watch = new MutationObserver(send);
+  watch.observe(meta, { attributes: true, attributeFilter: ['content'] });
+  send();
+  return () => watch.disconnect();
 }
 
 /**

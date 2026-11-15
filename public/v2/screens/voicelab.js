@@ -104,7 +104,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null, native
       phononFiles: index ? { revision: index.model.revision, firstBytes: index.firstBytes } : null,
       kokoro: 'not in this build',
     };
-    envList.replaceChildren(
+    // replaceChildren writes a null as the word "null": the rows this phone does not have are left out.
+    const rows = [
       el('li', { text: t('lab.isolated', { value: yes(env.crossOriginIsolated) }) }),
       el('li', { text: t('lab.cores', { value: env.cores ?? t('lab.unknown') }) }),
       el('li', { text: t('lab.memory', { value: env.deviceMemoryGb ?? t('lab.unknown') }) }),
@@ -113,7 +114,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null, native
       el('li', { text: index ? t('lab.files', { size: Math.round(index.firstBytes / 1e6) }) : t('lab.none') }),
       el('li', { text: t('lab.kokoro') }),
       nst ? el('li', { id: 'labNative', text: t('lab.native', { value: nativeOn ? t('lab.nativeYes', { cores: nst.cores ?? '?', big: (nst.bigCores ?? []).join(', ') || '-', threads: nst.threads ?? '?' }) : t('lab.nativeNo', { reason: nst.reason ?? '' }) }) }) : null,
-    );
+    ];
+    envList.replaceChildren(...rows.filter(Boolean));
     for (const r of nativeRows) r.hidden = !nativeOn;
     for (const c of CANDIDATES) if (c.engine === 'native' && !nativeOn) boxes[c.id].checked = false;
     if (nativeOn) {

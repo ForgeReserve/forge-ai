@@ -104,3 +104,46 @@ describe('looks', () => {
     for (const [fg, bg] of [['gold-ink', 'gold-tint'], ['teal', 'memory-track'], ['danger', 'danger-tint']] as const) expect(contrast(t[fg], t[bg]), `${fg} on ${bg}`).toBeGreaterThanOrEqual(3);
   });
 });
+
+const STATE: any = await import('../../../public/v2/core/state.js' as string);
+const PAGE: any = await import('../../../public/v2/core/pagelook.js' as string);
+
+describe('Midnight, the default look (owner, 2026-11-15)', () => {
+  it('is the look of a fresh profile', () => {
+    expect(STATE.DEFAULT_SETTINGS.look).toBe('midnight');
+    expect(STATE.loadedSettings(null).look).toBe('midnight');
+    expect(STATE.loadedSettings({ privateOnly: false }).look).toBe('midnight');
+  });
+
+  it('takes a saved Light from before as the default, and keeps a Light the person picked', () => {
+    // Light was the default and was saved with every other setting, so a saved Light means nothing was picked.
+    expect(STATE.loadedSettings({ look: 'light', privateOnly: false })).toMatchObject({ look: 'midnight', privateOnly: false });
+    expect(STATE.loadedSettings({ look: 'light', lookPicked: true }).look).toBe('light');
+    expect(STATE.loadedSettings({ look: 'dark' }).look).toBe('dark');
+    expect(STATE.loadedSettings({ look: 'midnight', lookPicked: true }).look).toBe('midnight');
+  });
+
+  it('is the look the stylesheet and the page shell paint before any module loads', () => {
+    const t = looks.midnight.tokens;
+    const css = readFileSync(join(V2, 'style.css'), 'utf8');
+    const root = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')));
+    for (const [k, v] of Object.entries(t)) expect(root, k).toContain(`--${k}: ${v};`);
+    expect(root).toContain('color-scheme: dark');
+    const html = readFileSync(join(V2, 'index.html'), 'utf8');
+    expect(html).toContain(`:root { --bg: ${t.bg}; --gold-track: ${t['gold-track']}; --memory-track: ${t['memory-track']}; color-scheme: dark; }`);
+    expect(html).toContain(`<meta name="theme-color" content="${t.bg}">`);
+  });
+
+  it('is the look of the /free and /download pages unless the app keeps another', () => {
+    expect(PAGE.pageLook(null)).toEqual({ tokens: looks.midnight.tokens, scheme: 'dark' });
+    expect(PAGE.pageLook('not json')).toEqual({ tokens: looks.midnight.tokens, scheme: 'dark' });
+    // A light look kept from before Midnight was the default: not picked, so Midnight.
+    expect(PAGE.pageLook(JSON.stringify({ tokens: looks.light.tokens, scheme: 'light' })).scheme).toBe('dark');
+    expect(PAGE.pageLook(JSON.stringify({ look: 'light', tokens: looks.light.tokens, scheme: 'light' }))).toEqual({ tokens: looks.light.tokens, scheme: 'light' });
+    expect(PAGE.pageLook(JSON.stringify({ look: 'dark', tokens: looks.dark.tokens, scheme: 'dark' })).tokens.bg).toBe('#161B24');
+    // Only a look's own tokens, as strings.
+    const odd = PAGE.pageLook(JSON.stringify({ look: 'x', tokens: { bg: '#000000', extra: 'x', ink: 5 }, scheme: 'dark' }));
+    expect(odd.tokens.extra).toBeUndefined();
+    expect(odd.tokens.ink).toBe(looks.midnight.tokens.ink);
+  });
+});

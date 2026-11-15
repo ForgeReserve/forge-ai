@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="forge_bg">#F6F5F1</color>
+    <!-- Midnight's ground, the default look (the first run is on it too). The page sets the bars to its
+         own look once it is open (BarsPlugin). -->
+    <color name="forge_bg">#0B0D10</color>
     <color name="forge_ink">#14161A</color>
     <color name="forge_teal">#0E7C6B</color>
     <!-- The launcher icon's tile, as in public/icons/maskable-512.png. -->

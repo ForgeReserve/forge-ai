@@ -250,8 +250,9 @@ describe('first run in a phone-sized browser', () => {
     // The phone's back button does not walk through the guide again: the home is the first entry.
     expect(await page.evaluate(() => history.state?.forge2 ?? 0)).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem('forge2.firstRun'))).toBe('done');
-    // The home is in the look again (Light), not the first run's dark.
-    expect(await page.getAttribute('meta[name="theme-color"]', 'content')).toBe('#F6F5F1');
+    // The home is in the look again: Midnight, the default look.
+    expect(await page.getAttribute('meta[name="theme-color"]', 'content')).toBe('#0B0D10');
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(11, 13, 16)');
 
     // The invite code typed on the last step is the one Add funds uses.
     await page.goto(`${g.url}/v2/#/funds/add/ecash`);

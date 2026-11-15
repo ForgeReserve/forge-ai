@@ -47,7 +47,11 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * answer is read by the phone's own voice, core/voicepace.js). voicePace: how fast this phone makes the
  * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '' });
+/**
+ * look: 'midnight' by default (the owner, 2026-11-15), 'light' or 'dark'. lookPicked: true once the
+ * person picked a look in More, Mode and look.
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '' });
 
 /**
  * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the
@@ -66,11 +70,13 @@ export function pickVoiceIn(mods, settings) {
 /**
  * The settings from what was saved. Until 'auto' came (with the phone's own recogniser), 'engine' was
  * the default and was saved with any other setting, so a saved 'engine' is 'auto' unless the person
- * picked it in More, Voice since then (voiceInPicked).
+ * picked it in More, Voice since then (voiceInPicked). In the same way Light was the default look until
+ * Midnight, so a saved 'light' is Midnight unless the person picked a look since then (lookPicked).
  */
 export function loadedSettings(saved) {
   const s = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
   if (s.voiceIn === 'engine' && !s.voiceInPicked) s.voiceIn = 'auto';
+  if (s.look === 'light' && !s.lookPicked) s.look = DEFAULT_SETTINGS.look;
   return s;
 }
 

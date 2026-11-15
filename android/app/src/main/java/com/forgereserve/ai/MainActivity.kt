@@ -21,6 +21,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(TillPlugin::class.java)
         registerPlugin(VoicePlugin::class.java)
         registerPlugin(SpeechPlugin::class.java)
+        registerPlugin(BarsPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The app's own files are served cross-origin isolated, as the website serves /v2/, so the natural
         // voice can run on several threads (IsolationRules).

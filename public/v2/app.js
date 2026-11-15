@@ -12,7 +12,7 @@ import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
-import { createNative, defaultEngine, reloadForIsolation } from './core/native.js';
+import { createNative, defaultEngine, followBars, reloadForIsolation } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { readNote } from './core/note.js';
 import { createTillPays, createTillSettings } from './core/till.js';
@@ -371,10 +371,11 @@ function applyLook() {
   const looks = registry?.list('look') ?? [];
   let id = S.settings.look;
   if (S.settings.followSystem) id = darkQuery?.matches ? (S.settings.look === 'midnight' ? 'midnight' : 'dark') : 'light';
-  const look = looks.find((l) => l.instance.id === id) ?? looks[0];
+  const look = looks.find((l) => l.instance.id === id) ?? looks.find((l) => l.instance.id === DEFAULT_SETTINGS.look) ?? looks[0];
   if (!look) return;
   setTokens(look.instance.tokens, look.instance.scheme);
-  keep(LOOK_CACHE, JSON.stringify({ tokens: look.instance.tokens, scheme: look.instance.scheme }));
+  // index.html paints the first frame from this, before any script of the app has loaded.
+  keep(LOOK_CACHE, JSON.stringify({ look: look.instance.id, tokens: look.instance.tokens, scheme: look.instance.scheme }));
 }
 
 function setTokens(tokens, scheme) {
@@ -385,14 +386,17 @@ function setTokens(tokens, scheme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tokens.bg);
 }
 
-// The last look, before the modules load, so a dark look does not flash light.
+// The last look, before the modules load, so a dark look does not flash light. A light one saved before
+// Midnight became the default (no `look` in it) is Midnight now unless picked again (core/state.js).
 try {
   const c = JSON.parse(ui.load(LOOK_CACHE) ?? 'null');
-  if (c?.tokens) setTokens(c.tokens, c.scheme);
+  if (c?.tokens && (c.look || c.scheme === 'dark')) setTokens(c.tokens, c.scheme);
 } catch {
   /* first run */
 }
 darkQuery?.addEventListener?.('change', () => S.settings.followSystem && applyLook());
+// In the Android app the phone's bars follow the page's colour (core/native.js followBars).
+if (native) followBars(native.bars);
 
 // ------------------------------------------------------------------ balance
 
@@ -1237,6 +1241,7 @@ const actions = {
   takeOut,
   setLook: (id) => {
     S.settings.look = id;
+    S.settings.lookPicked = true;
     applyLook();
     saveSettings();
     store.set({});

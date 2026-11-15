@@ -221,7 +221,8 @@ describe('the home drawn to the art standard', () => {
     expect(r.low).toBe(true);
     expect(r.memory).toBeGreaterThan(0);
     expect(r.memory).toBeLessThan(0.2 * 760);
-    expect(r.inner).toBe('rgb(194, 96, 10)');
+    // Midnight's low colour (#F0904A): the default look.
+    expect(r.inner).toBe('rgb(240, 144, 74)');
     expect(r.memoryTip.shown).toBe(true);
     expect(Math.abs(r.memoryTip.turn - (r.memory / 760) * 360)).toBeLessThan(1.5);
     await shot(page, 'home-3-memory-low.png');

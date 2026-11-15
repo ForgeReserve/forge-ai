@@ -2,16 +2,11 @@
 // site has no APK yet it says the app is coming and points to the web app. Nothing here is sent anywhere
 // but this site.
 import { t } from '../core/i18n.js';
+import { applyPageLook } from '../core/pagelook.js';
 import { el, icon } from '../core/ui.js';
-import { tokens as dark } from '../modules/look/dark/index.js';
-import { tokens as light } from '../modules/look/light/index.js';
 import { apkView } from './view.js';
 
-const scheme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-const look = scheme === 'dark' ? dark : light;
-for (const [k, v] of Object.entries(look)) document.documentElement.style.setProperty(`--${k}`, v);
-document.documentElement.style.colorScheme = scheme;
-document.querySelector('meta[name="theme-color"]')?.setAttribute('content', look.bg);
+applyPageLook();
 document.title = t('download.title');
 
 const root = document.getElementById('download');

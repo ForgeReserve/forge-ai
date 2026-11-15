@@ -16,6 +16,8 @@ Rows below follow the canvas layout, top to bottom, left to right. Section headi
 
 Canvas note: "Default mode: Walkie Kit". All screens use the Light look.
 
+As built, the default look is **Midnight** (owner, 2026-11-15: "let's make the home screen midnight by default", after comparing the home rings on Light and Midnight with the dark first run). A phone where nobody picked a look opens on Midnight from its first paint; Light and Dark stay in Mode and look, and a look picked there is kept. The screens are drawn from the Light canvas with Midnight's tokens (section 4); where a part sits on fixed art (the Funds coin, the wallet cards) it keeps its own fixed colours.
+
 | Row (canvas note) | File | Canvas label |
 |---|---|---|
 | Core | `ZHome1.dc.html` | 1. Home: the rings |
@@ -276,7 +278,7 @@ Top to bottom:
 6. Three look cards (white, radius 20). Each has a 60 x 84 thumbnail with mini rings, a name, a line and a radio dot.
    - "Light", "Calm and ordinary." Selected: 2 px border `#14161A`, filled radio.
    - "Dark", "Softer on the eyes at night."
-   - "Midnight", "Black, for dark rooms."
+   - "Midnight", "Black, for dark rooms." As built, Midnight is selected until the person picks another look.
 7. Row "Follow the phone setting" with value "Off".
 8. Primary button "Done".
 
@@ -704,6 +706,8 @@ The canvas does not draw any final screen in Dark. Values found:
 | talk button | `#F1EFE9` | XThemes thumbnail centre dot (light button on dark) |
 
 ### Midnight (from `XThemes.dc.html` thumbnail and the Classic mode screens, for example `Home.dc.html`, `AddFunds.dc.html`)
+
+The default look as built (2026-11-15). Raised cards and buttons carry a faint light edge (`inset 0 0 0 1px rgba(255,255,255,0.07)` in `shadow-raised`), so they show where they end on the black ground. On Dark and Midnight the primary button is light, so the teal and gold icons on it take the Light look's deeper `#0D7A69` and `#8A6410`. Text and icons on a teal fill (the FREE tag, the Start free banner, the Funds check) take `primary-ink`.
 
 | Token | Value | Use |
 |---|---|---|

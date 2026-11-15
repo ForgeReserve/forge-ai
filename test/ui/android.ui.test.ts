@@ -276,6 +276,27 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.textContent('#photoAlert')).toContain('No photo came with that share.');
     await ctx.close();
   }, 60_000);
+
+  it('keeps the phone\'s bars the colour of the look: Midnight by default, light on the Light look', async () => {
+    const { ctx, page, errors } = await appPhone();
+    const bars = () => page.evaluate(() => (window as any).__native.calls.filter((c: any) => c.plugin === 'ForgeBars').map((c: any) => `${c.method} ${c.opts.color}`));
+    await page.goto(`${app}/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(bars).toEqual(['set #0B0D10']);
+    await page.goto(`${app}/#/more/look`);
+    await page.waitForSelector('[data-screen=look]');
+    await page.click('#look-light');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1']);
+    // The first run is dark on every look: the bars go dark while it shows, and back after.
+    await page.goto(`${app}/#/start`);
+    await page.waitForSelector('[data-screen=intro]');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1', 'set #0B0D10']);
+    await page.click('#introSkip');
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1', 'set #0B0D10', 'set #F6F5F1']);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
 });
 
 describe('the /download page', () => {

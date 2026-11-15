@@ -7,16 +7,11 @@ import * as QR from '../../js/qr.js';
 import { createEngine } from '../core/engine.js';
 import { faucetLine, faucetRefusal, faucetStatus, getVoucher } from '../core/faucet.js';
 import { t } from '../core/i18n.js';
+import { applyPageLook } from '../core/pagelook.js';
 import { copy, el, icon, msgLine, toast } from '../core/ui.js';
 import { createVault } from '../core/vault.js';
-import { tokens as dark } from '../modules/look/dark/index.js';
-import { tokens as light } from '../modules/look/light/index.js';
 
-const scheme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-const look = scheme === 'dark' ? dark : light;
-for (const [k, v] of Object.entries(look)) document.documentElement.style.setProperty(`--${k}`, v);
-document.documentElement.style.colorScheme = scheme;
-document.querySelector('meta[name="theme-color"]')?.setAttribute('content', look.bg);
+applyPageLook();
 document.title = t('faucet.title');
 
 const engine = createEngine({ base: '' });
