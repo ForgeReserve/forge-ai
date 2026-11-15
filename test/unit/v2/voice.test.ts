@@ -15,6 +15,8 @@ const VIN: any = await import('../../../public/v2/modules/voice-in/engine/index.
 const VIN_DEVICE: any = await import('../../../public/v2/modules/voice-in/device/index.js' as string);
 const VOUT: any = await import('../../../public/v2/modules/voice-out/engine/index.js' as string);
 const VOUT_DEVICE: any = await import('../../../public/v2/modules/voice-out/device/index.js' as string);
+const ERR: any = await import('../../../public/v2/core/errors.js' as string);
+const EN: any = (await import('../../../public/v2/strings/en.js' as string)).default;
 
 /** Runs events through the state machine from idle; returns the final state and every effect. */
 function run(events: object[]) {
@@ -216,7 +218,7 @@ describe('the engine client audio calls', () => {
       },
     });
     const r = await engine.transcribe('sk-forge-k', { model: 'stt', audio: WAV.encodeWav(new Float32Array(16000)), seconds: 1, language: 'en' });
-    expect(r).toEqual({ text: 'Hello', chargedMsub: 1250, balanceMsub: 98750 });
+    expect(r).toEqual({ text: 'Hello', chargedMsub: 1250, balanceMsub: 98750, freeVoiceLeft: null });
     expect(seen.url).toBe('/v1/audio/transcriptions');
     expect(seen.init.headers.authorization).toBe('Bearer sk-forge-k');
     const form: FormData = seen.init.body;
@@ -226,6 +228,17 @@ describe('the engine client audio calls', () => {
     const file = form.get('file') as File;
     expect(file.type).toBe('audio/wav');
     expect(WAV.wavSeconds(new Uint8Array(await file.arrayBuffer()))).toBe(1);
+  });
+
+  it('reads what a free voice question leaves for today, and says plainly when they are used up', async () => {
+    const engine = E.createEngine({
+      fetch: async () => new Response(JSON.stringify({ text: 'Hi' }), { headers: { 'x-forge-charged-msub': '0', 'x-forge-balance-msub': '0', 'x-forge-free-voice-left': '19' } }),
+    });
+    expect(await engine.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).toEqual({ text: 'Hi', chargedMsub: 0, balanceMsub: 0, freeVoiceLeft: 19 });
+    const used = E.createEngine({ fetch: async () => new Response(JSON.stringify({ error: { code: 'free_voice_limit', message: 'used up' }, free_voice: { left: 0 } }), { status: 402 }) });
+    await expect(used.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).rejects.toMatchObject({ code: 'free_voice_limit', status: 402 });
+    expect(ERR.errorView('free_voice_limit', 'used up')).toEqual({ key: 'talk.freeVoiceOut', next: 'addFunds' });
+    expect(EN['talk.freeVoiceOut']).toBe('Free voice questions are used up for today. Type instead, or add funds.');
   });
 
   it('turns a refused or failed audio request into an EngineError, and answers proof of work', async () => {
@@ -501,7 +514,7 @@ describe('voice out through the engine', () => {
 });
 
 describe('the talk controller', () => {
-  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?' } = {}) {
+  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?', result = null as any } = {}) {
     let now = 0;
     const S: any = {};
     const store = { S, set: (p: object) => Object.assign(S, p) };
@@ -516,7 +529,7 @@ describe('the talk controller', () => {
       start: async () => ({
         finish: async () => {
           if (failWith) throw failWith;
-          return { text, chargedMsub: 1300, balanceMsub: 4000 };
+          return result ?? { text, chargedMsub: 1300, balanceMsub: 4000 };
         },
         cancel: () => cancelled++,
       }),
@@ -553,6 +566,19 @@ describe('the talk controller', () => {
     expect(x.S.balanceMsub).toBe(4000);
     expect(x.S.talk.phase).toBe('idle');
     expect(x.pulses.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps what a free voice question leaves for today', async () => {
+    const x = setup({ result: { text: 'Hi', chargedMsub: 0, balanceMsub: 0, freeVoiceLeft: 4 } });
+    x.S.freeVoice = { enabled: true, per_day: 20, left: 5, resets_at: 1 };
+    x.ctl.down();
+    await flush();
+    x.advance(1500);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.freeVoice).toEqual({ enabled: true, per_day: 20, left: 4, resets_at: 1 });
+    expect(x.S.balanceMsub).toBe(0);
   });
 
   it('does not record when a question cannot be asked, and says why', () => {

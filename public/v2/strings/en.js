@@ -54,6 +54,7 @@ export default {
   'talk.empty': 'Nothing was heard. Hold the button and speak.',
   'talk.holdAgain': 'Hold the button to say it again.',
   'talk.busy': 'Wait until the answer is done.',
+  'talk.freeVoiceOut': 'Free voice questions are used up for today. Type instead, or add funds.',
   'talk.tooLong': 'That was too long to send. Ask in shorter parts.',
   'talk.cannotUse': 'The engine could not use this recording. Hold the button and try again.',
   'talk.routePrivate': 'Goes through the engine to a private model. The engine could hear it on the way. Not saved.',

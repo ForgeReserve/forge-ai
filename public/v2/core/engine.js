@@ -137,7 +137,7 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
 
     /**
      * Speech to text: sends a WAV recording to the engine's audio model. Returns {text, chargedMsub,
-     * balanceMsub}. Throws EngineError for a refused or failed request (the engine does not charge those).
+     * balanceMsub, freeVoiceLeft}. Throws EngineError for a refused or failed request (the engine does not charge those).
      */
     async transcribe(key, { model, audio, seconds, language, signal }) {
       const form = new FormData();
@@ -155,7 +155,9 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
       }
       if (!res.ok) throw errorFrom(res.status, body);
       if (typeof body?.text !== 'string') throw new EngineError('bad_answer', 'The engine sent no text.');
-      return { text: body.text, ...charges(res) };
+      // A free voice question (docs/PAYMENTS.md): how many this balance has left today.
+      const left = res.headers.get('x-forge-free-voice-left');
+      return { text: body.text, ...charges(res), freeVoiceLeft: left != null && /^\d+$/.test(left) ? Number(left) : null };
     },
 
     /** Text to speech: returns {blob (WAV), chargedMsub, balanceMsub}. Throws EngineError on failure. */

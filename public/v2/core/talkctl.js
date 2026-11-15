@@ -124,6 +124,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       const out = await session.finish({ signal: ctrl.signal });
       sending = null;
       if (out.balanceMsub != null) store.set({ balanceMsub: out.balanceMsub });
+      // A free voice question: the engine says how many are left today.
+      if (out.freeVoiceLeft != null && S.freeVoice) store.set({ freeVoice: { ...S.freeVoice, left: out.freeVoiceLeft } });
       const text = String(out.text ?? '').trim();
       dispatch({ type: 'done' });
       if (!text) {
