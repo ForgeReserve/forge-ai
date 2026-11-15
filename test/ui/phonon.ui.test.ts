@@ -748,3 +748,91 @@ describe('the natural voice download, shown as it goes', () => {
     await ctx.close();
   }, 200_000);
 });
+
+/**
+ * A slow phone: phonon-tts replaced by an engine that makes the voice at 1.3 times real time (each
+ * 80 ms piece of sound takes 104 ms), about 0.065 s of sound per character, as Maeve speaks.
+ */
+async function slowEngine(ctx: BrowserContext, rtf = 1.3) {
+  const body = `
+    export class PhononTTS {
+      static async load(opts) {
+        opts.onProgress?.({ file: 'weights', loaded: 1, total: 1, cached: true });
+        return new PhononTTS();
+      }
+      constructor() { this.sampleRate = 24000; this.device = 'cpu'; this.threads = 1; }
+      stream(text, { signal } = {}) {
+        const rtf = ${rtf};
+        return (async function* () {
+          const n = Math.max(1, Math.round((text.length * 0.065) / 0.08));
+          const t0 = performance.now();
+          for (let i = 0; i < n; i++) {
+            const due = t0 + (i + 1) * 80 * rtf;
+            await new Promise((r) => setTimeout(r, Math.max(0, due - performance.now())));
+            if (signal?.aborted) return;
+            const pcm = new Float32Array(1920);
+            for (let k = 0; k < pcm.length; k++) pcm[k] = 0.2 * Math.sin(((i * 1920 + k) / 24000) * 2 * Math.PI * 220);
+            yield pcm;
+          }
+        })();
+      }
+      dispose() {}
+    }`;
+  await ctx.route('**/v2/vendor/phonon-tts/index.js', (r) => r.fulfill({ contentType: 'text/javascript', body }));
+  // Every piece queued on Web Audio: when it starts and how long it lasts, to find the gaps.
+  await ctx.addInitScript(() => {
+    const w = window as any;
+    w.__queued = [];
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (when?: number, ...rest: any[]) {
+      if ((this.buffer?.length ?? 0) > 1) w.__queued.push([when ?? this.context.currentTime, this.buffer!.duration]);
+      return start.call(this, when as any, ...rest);
+    };
+  });
+}
+
+/** Gaps a listener hears: a piece queued to start after the one before has ended. */
+const gapsHeard = (page: Page) =>
+  page.evaluate(() => {
+    const q = (window as any).__queued as [number, number][];
+    let gaps = 0;
+    for (let i = 1; i < q.length; i++) if (q[i]![0] > q[i - 1]![0] + q[i - 1]![1] + 0.005) gaps++;
+    return { pieces: q.length, gaps };
+  });
+
+describe('the natural voice on a slow phone', () => {
+  it('at 1.3 times real time it says "Getting the voice ready" with a bar, then reads the answer with no gaps', async () => {
+    const { ctx, page, errors } = await phone({ context: { serviceWorkers: 'block' }, before: (c) => slowEngine(c) });
+    await hold(page, '#talkBtn', 900);
+    await page.waitForSelector('[data-screen=answer]');
+    await page.waitForSelector('#voiceDownload', { timeout: 20_000 });
+    await page.click('#voiceDlYes');
+    // It waits for sound in hand: the words and the bar, and nothing played yet.
+    await page.waitForSelector('#speakReady:not([hidden])', { timeout: 20_000 });
+    expect(await page.textContent('#speakState')).toBe('Getting the voice ready');
+    expect(await played(page)).toBe(0);
+    await expect.poll(async () => Number(await page.getAttribute('#speakReady', 'aria-valuenow')), { timeout: 10_000 }).toBeGreaterThan(30);
+    // Then it reads, all the way through, with no gap.
+    await expect.poll(() => page.textContent('#speakState'), { timeout: 20_000 }).toBe('Speaking');
+    await page.waitForSelector('#speakBtn', { timeout: 30_000 });
+    const heard = await gapsHeard(page);
+    expect(heard.pieces).toBeGreaterThan(30);
+    expect(heard.gaps).toBe(0);
+    // How fast this phone makes the voice is kept, so the next answer starts by it.
+    const pace = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((res, rej) => {
+        const r = indexedDB.open('forge2');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      return new Promise<any>((res) => {
+        const g = db.transaction('kv', 'readonly').objectStore('kv').get('settings');
+        g.onsuccess = () => res(g.result?.voicePace ?? null);
+        g.onerror = () => res(null);
+      });
+    });
+    expect(Object.values(pace as Record<string, any>)[0].rtf).toBeGreaterThan(1.2);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+});

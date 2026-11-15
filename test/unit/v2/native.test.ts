@@ -185,3 +185,73 @@ describe('cross-origin isolation in the app', () => {
     expect(N.reloadForIsolation({ native: {}, isolated: false, session: blocked })).toBe(false);
   });
 });
+
+describe('the native natural voice through ForgeVoice', () => {
+  it('says whether this phone runs it, once, and asks again after the thread count changes', async () => {
+    let asked = 0;
+    const { win, calls } = fakeCapacitor({ 'ForgeVoice.status': () => (asked++, { available: true, reason: null, cores: 8, bigCores: [6, 7], threads: 2, chosenThreads: 0, defaultThreads: 2 }), 'ForgeVoice.config': () => ({}) });
+    const v = N.createNative(win).voice;
+    expect(await v.status()).toEqual({ available: true, reason: null, cores: 8, bigCores: [6, 7], threads: 2, chosenThreads: 0, defaultThreads: 2 });
+    await v.status();
+    expect(asked).toBe(1);
+    await v.config(4);
+    expect(calls.at(-1)).toEqual(['ForgeVoice', 'config', { threads: 4 }]);
+    await v.status();
+    expect(asked).toBe(2);
+  });
+
+  it('is unavailable when the app has no such plugin', async () => {
+    const { win } = fakeCapacitor({
+      'ForgeVoice.status': () => {
+        throw Object.assign(new Error('not implemented'), { code: 'UNIMPLEMENTED' });
+      },
+    });
+    expect((await N.createNative(win).voice.status()).available).toBe(false);
+  });
+
+  it("speaks the pieces with this phone's speed, hands each answer's own events to it, and stops it by id", async () => {
+    let finish: (v: any) => void = () => {};
+    const { win, calls, listeners } = fakeCapacitor({ 'ForgeVoice.speak': () => new Promise((r) => (finish = r)) });
+    const v = N.createNative(win).voice;
+    const seen: any[] = [];
+    const h = await v.speak({ pieces: ['One.', 'Two.'], voice: 'Maeve', rtf: 1.1, spc: 0.07, phoneVoice: true, onStarted: () => seen.push('started'), onBuffering: (b: any) => seen.push(b) });
+    const [, , opts] = calls.find((c) => c[1] === 'speak')!;
+    expect(opts).toEqual({ id: h.id, pieces: ['One.', 'Two.'], voice: 'Maeve', rtf: 1.1, spc: 0.07, preferNatural: false, phoneVoice: true, threads: 0 });
+    const fire = (event: string, ev: any) => listeners.filter(([p, e]) => p === 'ForgeVoice' && e === event).forEach(([, , fn]) => (fn as any)(ev));
+    fire('buffering', { id: 'someone-else', fraction: 0.9 });
+    fire('buffering', { id: h.id, fraction: 0.4 });
+    fire('started', { id: h.id });
+    expect(seen).toEqual([{ fraction: 0.4 }, 'started']);
+    await h.stop();
+    expect(calls.at(-1)).toEqual(['ForgeVoice', 'stop', { id: h.id }]);
+    finish({ rtf: 1.2, stopped: true });
+    expect(await h.done).toEqual({ rtf: 1.2, stopped: true });
+    // Its handlers are gone once it ended.
+    fire('started', { id: h.id });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('gives a failure its code: too-slow (with how slow), crashed and the rest', async () => {
+    const { win } = fakeCapacitor({
+      'ForgeVoice.speak': () => {
+        throw Object.assign(new Error('too slow'), { code: 'too-slow', data: { rtf: 2.1 } });
+      },
+      'ForgeVoice.bench': () => {
+        throw Object.assign(new Error('The voice stopped working.'), { code: 'crashed' });
+      },
+    });
+    const v = N.createNative(win).voice;
+    await expect((await v.speak({ pieces: ['x'] })).done).rejects.toMatchObject({ code: 'too-slow', data: { rtf: 2.1 } });
+    await expect(v.bench({ text: 'Yes.', threads: 4 })).rejects.toMatchObject({ code: 'crashed' });
+  });
+
+  it('measures a line at a thread count, and keeps the lab results in the app', async () => {
+    const { win, calls } = fakeCapacitor({ 'ForgeVoice.bench': () => ({ firstMs: 40, audioS: 1, genMs: 300 }), 'ForgeVoice.saveLab': () => ({ saved: true }) });
+    const v = N.createNative(win).voice;
+    expect(await v.bench({ text: 'Yes.', voice: 'Maeve', threads: 6 })).toEqual({ firstMs: 40, audioS: 1, genMs: 300 });
+    expect(calls[0]![2]).toMatchObject({ text: 'Yes.', voice: 'Maeve', threads: 6 });
+    expect(calls[0]![2].id).toMatch(/^bench-/);
+    expect(await v.saveLab('forge-voice-lab-1.json', '{}')).toBe(true);
+    expect(calls[1]).toEqual(['ForgeVoice', 'saveLab', { name: 'forge-voice-lab-1.json', json: '{}' }]);
+  });
+});

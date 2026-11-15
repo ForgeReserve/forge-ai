@@ -112,8 +112,20 @@ const engineBase = () => S.settings.engine || defaultEngine(native);
 // the APK in the Android app, where there is nothing to download. It runs on the graphics chip or the
 // processor (core/phonon.js chooseVoiceDevice); a WebGPU failure is remembered in the settings
 // (voiceDevice), so the next start goes straight to the processor.
+// In the Android app, native code makes the voice where the phone runs it (core/native.js nativeVoice).
+// How fast this phone makes it is kept in the settings (voicePace), so a slow phone waits for sound in
+// hand, or reads with its own voice, from the first word of the next answer (core/voicepace.js).
 const phonon = createPhonon({
   native: !!native,
+  nativeVoice: native?.voice ?? null,
+  pace: {
+    get: () => S.settings.voicePace || null,
+    set: (v) => {
+      S.settings.voicePace = v;
+      saveSettings();
+    },
+  },
+  prefs: () => ({ preferNatural: !!S.settings.preferNatural }),
   voice: () => S.settings.naturalVoice || null,
   memory: {
     get: () => S.settings.voiceDevice || null,
@@ -1097,6 +1109,11 @@ const actions = {
     saveSettings();
     store.set({});
   },
+  setPreferNatural: (on) => {
+    S.settings.preferNatural = !!on;
+    saveSettings();
+    store.set({});
+  },
   setVoiceOut: (id) => {
     S.settings.voiceOut = id;
     if (id === 'off') talk.stopSpeaking();
@@ -1343,7 +1360,7 @@ function screenFor(name, params) {
         return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.opening') })) };
       }
       try {
-        return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });
+        return voiceLab({ ...ctx, phonon, speaker: adapters.speaker, nativeVoice: native?.voice ?? null });
       } catch (e) {
         return labErrorScreen(e);
       }

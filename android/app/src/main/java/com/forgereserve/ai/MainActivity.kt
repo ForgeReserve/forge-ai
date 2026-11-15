@@ -1,5 +1,7 @@
 package com.forgereserve.ai
 
+import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -15,12 +17,21 @@ class MainActivity : BridgeActivity() {
         registerPlugin(SharePlugin::class.java)
         registerPlugin(NfcPlugin::class.java)
         registerPlugin(TillPlugin::class.java)
+        registerPlugin(VoicePlugin::class.java)
         super.onCreate(savedInstanceState)
         // The app's own files are served cross-origin isolated, as the website serves /v2/, so the natural
         // voice can run on several threads (IsolationRules).
         bridge?.let { b ->
             b.setWebViewClient(
                 object : BridgeWebViewClient(b) {
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        super.onPageFinished(view, url)
+                        labAuto?.let {
+                            labAuto = null
+                            view.evaluateJavascript(it, null)
+                        }
+                    }
+
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                         val res = super.shouldInterceptRequest(view, request) ?: return null
                         val add = IsolationRules.headersFor(request.url.scheme, request.url.host, b.scheme, b.host)
@@ -30,6 +41,7 @@ class MainActivity : BridgeActivity() {
                 },
             )
         }
+        takeLabAuto(intent)
         // The back button walks back through the app's screens (they are web history), then leaves.
         onBackPressedDispatcher.addCallback(
             this,
@@ -43,5 +55,27 @@ class MainActivity : BridgeActivity() {
                 }
             },
         )
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeLabAuto(intent)
+        labAuto?.let { js ->
+            labAuto = null
+            bridge?.webView?.evaluateJavascript(js, null)
+        }
+    }
+
+    /**
+     * Debug builds only: `adb shell am start -n com.forgereserve.ai/.MainActivity -e forge.labAuto
+     * native:10` opens the voice lab and runs those candidates on that many lines; the results go to
+     * the app's files (files/voice-lab/), where `adb shell run-as com.forgereserve.ai` reads them. A
+     * release build ignores the extra.
+     */
+    private var labAuto: String? = null
+
+    private fun takeLabAuto(intent: Intent?) {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        labAuto = LabAuto.script(intent?.getStringExtra("forge.labAuto")) ?: return
     }
 }

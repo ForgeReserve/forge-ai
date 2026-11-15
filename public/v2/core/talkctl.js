@@ -215,20 +215,33 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     })();
   }
 
-  /** p: {loaded, total, fraction, phase} from the voice module, while it downloads and gets ready. */
+  /**
+   * p: {loaded, total, fraction, phase} from the voice module, while it downloads and gets ready, then
+   * {fraction, phase: 'buffering'} while a slow phone makes sound ahead before the start.
+   */
   function play(mod, msg, view = null) {
     const key = msg.id;
     let ctl = null;
     const onProgress = (p) => {
       if (speech?.ctl !== ctl) return;
+      const pct = Math.min(99, Math.floor((p?.fraction ?? 0) * 100));
+      if (p?.phase === 'buffering') return store.set({ speaking: { key, state: 'buffering', progress: pct } });
       view?.progress(p);
-      store.set({ speaking: { key, state: 'loading', progress: Math.min(99, Math.floor((p?.fraction ?? 0) * 100)) } });
+      store.set({ speaking: { key, state: 'loading', progress: pct } });
     };
     const onState = (state) => {
-      if (state === 'playing') view?.close();
+      if (state === 'playing' || state === 'buffering') view?.close();
+      if (state === 'buffering' && S.speaking?.state === 'buffering') return;
       store.set({ speaking: { key, state } });
     };
-    ctl = mod.speak(pieces(msg, mod), { key, onState, onProgress });
+    // The natural voice is too slow on this phone for this answer, so the phone's own voice reads it:
+    // said once a session, in plain words (More, Voice can keep the natural voice anyway).
+    const onNotice = (kind) => {
+      if (kind !== 'slow' || slowSaid) return;
+      slowSaid = true;
+      ui.toast(t('speak.slowPhone'), 6000);
+    };
+    ctl = mod.speak(pieces(msg, mod), { key, onState, onProgress, onNotice });
     speech = { key, ctl, view };
     store.set({ speaking: { key, state: 'loading' } });
     ctl.done
@@ -251,6 +264,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
         }
       });
   }
+
+  let slowSaid = false;
 
   function stopSpeaking() {
     asking = null;
