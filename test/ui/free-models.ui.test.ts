@@ -102,6 +102,9 @@ describe('Start free on the first run', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=intro][data-step=welcome]');
+    // Start free sits in the invite sheet, behind "I have an invite code".
+    await page.waitForSelector('#introInviteLink:not([hidden])');
+    await page.click('#introInviteLink');
     await page.waitForSelector('#introStartFree:not([hidden])');
     expect(await page.textContent('#introStartFree')).toBe('Start free');
     await page.click('#introStartFree');
@@ -115,8 +118,10 @@ describe('Start free on the first run', () => {
     await expect.poll(() => page.textContent('#introFreeMsg')).toBe('Balance opened. The free models are Standard models: turn off Private only in Choose a model to use them.');
     const key = await page.evaluate(() => localStorage.getItem('forge.balanceKey'));
     expect(key).toMatch(/^sk-forge-/);
-    // The field and the button are gone once there is a key.
-    await expect.poll(() => page.isVisible('#introInviteField')).toBe(false);
+    // Start free and the invite link are gone once there is a key.
+    await expect.poll(() => page.isVisible('#introStartFree')).toBe(false);
+    await page.click('#introInviteDone');
+    await expect.poll(() => page.isVisible('#introInviteLink')).toBe(false);
 
     // The balance is $0 and real: a free model answers on it, a paid one is refused for funds.
     const w = await (await fetch(`${g.url}/v1/wallet`, { headers: { authorization: `Bearer ${key}` } })).json();
@@ -150,9 +155,11 @@ describe('Start free on the first run', () => {
       const ctx = await browser.newContext(PHONE);
       const page = await ctx.newPage();
       await page.goto(`${plain.url}/v2/`);
-      await page.waitForSelector('#introInviteField:not([hidden])');
+      await page.waitForSelector('#introInviteLink:not([hidden])');
       // The methods are read after the first paint; give them the time a phone would.
       await page.waitForTimeout(500);
+      await page.click('#introInviteLink');
+      await page.waitForSelector('#introInvite');
       expect(await page.isVisible('#introStartFree')).toBe(false);
       expect((await (await fetch(`${plain.url}/v1/wallet/fund/methods`)).json()).open).toEqual({ enabled: false, free_models: [] });
       await ctx.close();
