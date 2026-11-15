@@ -16,7 +16,7 @@ export const INPUTS = {
   mode: ['t', 'ui', 'state', 'nav', 'actions', 'format'],
   fund: ['t', 'ui', 'engine', 'wallet', 'vault', 'format', 'scan', 'qr', 'nfc', 'card', 'till'],
   filter: ['t'],
-  'voice-in': ['t', 'mic', 'recognizer', 'audio'],
+  'voice-in': ['t', 'mic', 'recognizer', 'audio', 'speech'],
   'voice-out': ['t', 'speaker', 'synth', 'audio', 'phonon'],
   cover: ['t', 'ui'],
   guides: ['t', 'ui'],
@@ -28,8 +28,9 @@ export const INPUTS = {
  * never the balance key) and the answer and voice actions, never the app's raw state or an action that
  * takes money out. Burn (remove this conversation from the phone) is one of the answer actions.
  * A voice module gets the engine's audio calls for its direction only, which the app makes with the
- * balance key the module never sees. A voice-out module also gets the phone's own Phonon engine
- * (core/phonon.js): whether it can run, what a first use downloads, the loaded model, the native voice
+ * balance key the module never sees. A voice-in module also gets the phone's on-device recogniser in the
+ * Android app (core/native.js nativeSpeech: available and start only; empty on the website). A
+ * voice-out module also gets the phone's own Phonon engine (core/phonon.js): whether it can run, what a first use downloads, the loaded model, the native voice
  * in the Android app, the voice picked, and how fast this phone makes it (core/voicepace.js).
  */
 export const PROJECTIONS = {
@@ -37,7 +38,7 @@ export const PROJECTIONS = {
     state: ['view', 'subscribe'],
     actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch'],
   },
-  'voice-in': { audio: ['model', 'price', 'transcribe'] },
+  'voice-in': { audio: ['model', 'price', 'transcribe'], speech: ['available', 'start'] },
   'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load', 'native', 'nativeFailed', 'voice', 'paceKey', 'pace', 'notePace', 'preferNatural'] },
 };
 
@@ -180,6 +181,8 @@ export const BUNDLED = [
   { kind: 'fund', folder: 'lightning' },
   { kind: 'fund', folder: 'onchain' },
   { kind: 'fund', folder: 'othermint' },
+  // The phone's own on-device recogniser first, in the Android app where it has the language: free and private.
+  { kind: 'voice-in', folder: 'phone' },
   { kind: 'voice-in', folder: 'engine' },
   { kind: 'voice-in', folder: 'device' },
   // The natural voice made on the phone first: it is the default where the phone can run it.

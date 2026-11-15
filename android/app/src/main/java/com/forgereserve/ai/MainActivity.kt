@@ -3,6 +3,8 @@ package com.forgereserve.ai
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -18,6 +20,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(NfcPlugin::class.java)
         registerPlugin(TillPlugin::class.java)
         registerPlugin(VoicePlugin::class.java)
+        registerPlugin(SpeechPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The app's own files are served cross-origin isolated, as the website serves /v2/, so the natural
         // voice can run on several threads (IsolationRules).
@@ -42,6 +45,7 @@ class MainActivity : BridgeActivity() {
             )
         }
         takeLabAuto(intent)
+        speechCheck(intent)
         // The back button walks back through the app's screens (they are web history), then leaves.
         onBackPressedDispatcher.addCallback(
             this,
@@ -60,6 +64,7 @@ class MainActivity : BridgeActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         takeLabAuto(intent)
+        speechCheck(intent)
         labAuto?.let { js ->
             labAuto = null
             bridge?.webView?.evaluateJavascript(js, null)
@@ -77,5 +82,16 @@ class MainActivity : BridgeActivity() {
     private fun takeLabAuto(intent: Intent?) {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         labAuto = LabAuto.script(intent?.getStringExtra("forge.labAuto")) ?: return
+    }
+
+    /**
+     * Debug builds only: `adb shell am start -n com.forgereserve.ai/.MainActivity -e forge.speechCheck
+     * en-US` runs ForgeSpeech's availability check for that language and logs it (`adb logcat -s
+     * ForgeSpeech`), without the page and without listening. A release build ignores the extra.
+     */
+    private fun speechCheck(intent: Intent?) {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        val locale = intent?.getStringExtra("forge.speechCheck") ?: return
+        SpeechCheck.run(this, Handler(Looper.getMainLooper()), locale) {}
     }
 }

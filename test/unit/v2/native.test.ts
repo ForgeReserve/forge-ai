@@ -186,6 +186,49 @@ describe('cross-origin isolation in the app', () => {
   });
 });
 
+describe("Hold to talk through ForgeSpeech, the phone's on-device recogniser", () => {
+  it('asks whether the recogniser has the language, and reads a broken bridge as no', async () => {
+    const ok = fakeCapacitor({ 'ForgeSpeech.available': () => ({ onDevice: true, reason: null, locale: 'en-US' }) });
+    expect(await N.createNative(ok.win).speech.available({ locale: 'en-GB' })).toEqual({ onDevice: true, reason: null, locale: 'en-US' });
+    expect(ok.calls).toEqual([['ForgeSpeech', 'available', { locale: 'en-GB' }]]);
+    const no = fakeCapacitor({ 'ForgeSpeech.available': () => ({ onDevice: false, reason: 'no-on-device-recognizer', locale: 'en-US' }) });
+    expect((await N.createNative(no.win).speech.available({ locale: 'en-US' })).onDevice).toBe(false);
+    const broken = fakeCapacitor({
+      'ForgeSpeech.available': () => {
+        throw new Error('"ForgeSpeech" plugin is not implemented on android');
+      },
+    });
+    expect(await N.createNative(broken.win).speech.available({ locale: 'en-US' })).toMatchObject({ onDevice: false, locale: 'en-US' });
+  });
+
+  it('hands each press its own events, and none after it was cancelled', async () => {
+    const f = fakeCapacitor();
+    const speech = N.createNative(f.win).speech;
+    const a: any[] = [];
+    const b: any[] = [];
+    const sa = await speech.start({ locale: 'en-US', onEvent: (ev: any) => a.push(ev.type) });
+    const sb = await speech.start({ locale: 'en-US', onEvent: (ev: any) => b.push(ev.type) });
+    expect(sa.id).not.toBe(sb.id);
+    const fire = f.listeners.find(([p, e]) => p === 'ForgeSpeech' && e === 'speech')![2] as (ev: any) => void;
+    fire({ id: sa.id, type: 'partial', text: 'hi' });
+    fire({ id: sb.id, type: 'final', text: 'there' });
+    sa.cancel();
+    fire({ id: sa.id, type: 'end' });
+    expect(a).toEqual(['partial']);
+    expect(b).toEqual(['final']);
+    expect(f.calls.map(([p, m, o]) => `${p}.${m}:${o.id === sa.id ? 'a' : 'b'}`)).toEqual(['ForgeSpeech.start:a', 'ForgeSpeech.start:b', 'ForgeSpeech.cancel:a']);
+  });
+
+  it('a refused start keeps its code', async () => {
+    const f = fakeCapacitor({
+      'ForgeSpeech.start': () => {
+        throw Object.assign(new Error('Already listening.'), { code: 'busy' });
+      },
+    });
+    await expect(N.createNative(f.win).speech.start({ locale: 'en-US' })).rejects.toMatchObject({ code: 'busy' });
+  });
+});
+
 describe('the native natural voice through ForgeVoice', () => {
   it('says whether this phone runs it, once, and asks again after the thread count changes', async () => {
     let asked = 0;

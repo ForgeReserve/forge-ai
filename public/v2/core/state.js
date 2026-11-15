@@ -27,8 +27,9 @@ export function pickModel(models, settings) {
 export const hiddenCount = (models, settings) => visibleModels(models, { privateOnly: false }).length - visibleModels(models, settings).length;
 
 /**
- * voiceIn: 'engine' (default; the engine's speech to text) or 'device' (the browser's recogniser, never
- * with Private only on). voiceOut: 'auto' (the natural voice made on the phone where it runs, else the
+ * voiceIn: 'auto' (default; the phone's own on-device recogniser in the Android app where it has the
+ * language, else the engine's speech to text), 'phone', 'engine' or 'device' (the browser's recogniser,
+ * never with Private only on). voiceOut: 'auto' (the natural voice made on the phone where it runs, else the
  * phone's own voice, else the engine's), 'phonon', 'engine', 'device' or 'off'. Voice questions are read
  * aloud unless voiceOut is 'off'.
  */
@@ -46,17 +47,31 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * answer is read by the phone's own voice, core/voicepace.js). voicePace: how fast this phone makes the
  * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day' });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day' });
 
 /**
- * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's
- * recogniser is never used with Private only on, since the browser may send the sound to its maker.
- * mods: {engine, device}, each a module instance or undefined.
+ * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the
+ * default), the phone's own on-device recogniser (Android app only) when it has the language, else the
+ * engine's; with 'engine' chosen, the engine's first. The browser's recogniser is never used with
+ * Private only on, since the browser may send the sound to its maker, and never unless chosen.
+ * mods: {phone, engine, device}, each a module instance or undefined.
  */
 export function pickVoiceIn(mods, settings) {
   const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
   if (settings.voiceIn === 'device' && ok(mods.device)) return mods.device;
-  return ok(mods.engine) ? mods.engine : null;
+  const order = settings.voiceIn === 'engine' ? [mods.engine, mods.phone] : [mods.phone, mods.engine];
+  return order.find(ok) ?? null;
+}
+
+/**
+ * The settings from what was saved. Until 'auto' came (with the phone's own recogniser), 'engine' was
+ * the default and was saved with any other setting, so a saved 'engine' is 'auto' unless the person
+ * picked it in More, Voice since then (voiceInPicked).
+ */
+export function loadedSettings(saved) {
+  const s = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
+  if (s.voiceIn === 'engine' && !s.voiceInPicked) s.voiceIn = 'auto';
+  return s;
 }
 
 /**
