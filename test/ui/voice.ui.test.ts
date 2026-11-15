@@ -409,7 +409,7 @@ describe('hold to talk on this phone (the Android app)', () => {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
-    expect(await page.textContent('.listen-route')).toBe('This phone turns it into words. Your voice does not leave the phone.');
+    expect(await page.textContent('.listen-route')).toBe('Stays on this phone. This phone turns it into words. Your voice does not leave the phone.');
     await expect.poll(() => page.textContent('.listen-text'), { timeout: 4000 }).toBe('What should I bring');
     await page.mouse.up();
     await page.waitForSelector('[data-screen=answer]');
