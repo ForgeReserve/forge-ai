@@ -145,8 +145,9 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     const inUsed = v.talk.route;
     const engineSub = (kind) => (voice.audio.model(kind)?.tier === 'enclave' ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
     const inRows = [];
-    // The phone's own recogniser, in the Android app where it has the language: free, and the sound stays on the phone.
-    if (ins.phone?.available()) inRows.push(option('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone' }));
+    // On this phone: Forge Private Voice's own speech to text, else the phone's own recogniser in the Android
+    // app where it has the language. Free, and the sound stays on the phone. One row for either.
+    if (ins.bundled?.available() || ins.phone?.available()) inRows.push(option('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone' }));
     if (ins.engine?.available()) inRows.push(option('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine') }));
     if (ins.device?.available()) {
       const blocked = !!S.settings.privateOnly;

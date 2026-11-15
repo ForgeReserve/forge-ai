@@ -21,8 +21,23 @@ android {
             // Files and dirs to omit from the packaged assets dir (Capacitor's default).
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
             // The natural voice's model and voices go in uncompressed: they barely compress, and the
-            // web view reads them straight from the APK without inflating 65 MB first.
-            noCompress 'gguf', 'safetensors'
+            // web view reads them straight from the APK without inflating 65 MB first. So does Forge
+            // Private Voice's speech to text model (.ort), which sherpa-onnx reads from the APK in place.
+            noCompress 'gguf', 'safetensors', 'ort'
+        }
+    }
+    // Two APKs from one app (docs/ANDROID.md, Two APKs): universal is today's Forge; privatevoice is Forge
+    // Private Voice, the same app plus its own speech to text (Moonshine tiny through sherpa-onnx,
+    // src/privatevoice/, scripts/asr-model.ts), for phones with no on-device recogniser such as
+    // GrapheneOS. Its own application id, so both can be installed side by side.
+    flavorDimensions 'voice'
+    productFlavors {
+        universal {
+            dimension 'voice'
+        }
+        privatevoice {
+            dimension 'voice'
+            applicationIdSuffix '.privatevoice'
         }
     }
     buildTypes {
@@ -69,3 +84,17 @@ def webAssets = tasks.register('forgeWebAssets', Exec) {
     outputs.file(file('src/main/assets/capacitor.plugins.json'))
 }
 preBuild.dependsOn webAssets
+
+// Forge Private Voice's speech to text (the sherpa-onnx library and the Moonshine model), fetched at build
+// time when missing and checked against scripts/asr/lock.json, for privatevoice builds only.
+def asrFiles = tasks.register('forgeAsrFiles', Exec) {
+    workingDir repoRoot
+    commandLine 'node', 'scripts/asr-model.ts'
+    inputs.file(new File(repoRoot, 'scripts/asr-model.ts'))
+    inputs.file(new File(repoRoot, 'scripts/asr/lock.json'))
+    outputs.dir(file('src/privatevoice/jniLibs'))
+    outputs.dir(file('src/privatevoice/assets'))
+}
+tasks.configureEach { t ->
+    if (t.name ==~ /prePrivatevoice\w*Build/) t.dependsOn asrFiles
+}

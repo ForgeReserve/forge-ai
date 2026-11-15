@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          Forge Private Voice's speech to text (AsrPlugin, AsrService) in a process of its own: a crash in
+          native code ends only that process, and ending it gives all the model's memory back. Not exported.
+        -->
+        <service
+            android:name=".AsrService"
+            android:process=":asr"
+            android:exported="false" />
+    </application>
+</manifest>

@@ -173,6 +173,12 @@ export const EnvSchema = z.object({
    * the page says the app is coming.
    */
   FORGE_APK_PATH: z.string().optional().or(z.literal('').transform(() => undefined)),
+  /**
+   * The release APK of Forge Private Voice (the privatevoice flavour, for GrapheneOS: it hears Hold to
+   * talk with its own speech to text). Set, /download offers a choice between it and FORGE_APK_PATH's;
+   * unset (or no file there), that choice is hidden.
+   */
+  FORGE_APK_PRIVATE_VOICE_PATH: z.string().optional().or(z.literal('').transform(() => undefined)),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

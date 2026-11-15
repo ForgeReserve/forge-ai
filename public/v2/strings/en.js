@@ -737,6 +737,12 @@ export default {
   'download.update': 'To update, download the app again here and install it over the old one. Your balance and chats stay.',
   'download.coming': 'The Android app is coming soon. Forge works in this browser now.',
   'download.web': 'Open Forge in the browser',
+  'download.pick': 'Which app',
+  'download.android': 'Android',
+  'download.graphene': 'GrapheneOS',
+  'download.about': 'About {name}',
+  'download.androidInfo': 'Forge. For most phones.',
+  'download.grapheneInfo': 'Forge Private Voice. For GrapheneOS: it turns your voice into words on the phone. A bigger file.',
 
   'faucet.title': 'Free questions',
   'faucet.sub': 'Free questions for Forge AI. No name and no email: your phone works a short puzzle instead.',

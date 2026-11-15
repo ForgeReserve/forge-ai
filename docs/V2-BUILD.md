@@ -155,7 +155,7 @@ Tests: against a mock till that implements the documented routes and states (pai
 - `pnpm test`
 - `pnpm mint:up && pnpm test:e2e`
 - `pnpm test:ui` (from A1 on)
-- from C1 on: `cd android && ./gradlew assembleDebug testDebugUnitTest`
+- from C1 on: `cd android && ./gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest` (both APKs since Forge Private Voice, docs/ANDROID.md)
 
 ## What the pull request must list as not verified
 

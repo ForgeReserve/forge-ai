@@ -5,8 +5,8 @@
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
 // through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
 // voice made by native code: the answer's text goes to the app, which plays the sound itself),
-// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back) and
-// ForgeBars (the phone's status and navigation bars in the page's colour). The
+// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back),
+// ForgeAsr (Hold to talk heard by Forge Private Voice's own model, the same way) and ForgeBars (the phone's status and navigation bars in the page's colour). The
 // balance key and chats never pass through it; a card's answers carry its pieces, which only the page
 // reads.
 
@@ -90,6 +90,7 @@ export function createNative(win = globalThis) {
     till: nativeTill(call, on),
     voice: nativeVoice(call, on),
     speech: nativeSpeech(call, on),
+    asr: nativeAsr(call, on),
     /**
      * The phone's status and navigation bars in this colour (a plain hex colour), with light icons on a
      * dark one and dark icons on a light one (BarsPlugin.kt).
@@ -158,6 +159,51 @@ export function nativeSpeech(call, on) {
         cancel() {
           sessions.delete(id);
           call('ForgeSpeech', 'cancel', { id }).catch(() => {});
+        },
+      };
+    },
+  };
+}
+
+/**
+ * Hold to talk heard by Forge Private Voice's own speech to text through ForgeAsr (docs/VOICE.md,
+ * Bundled speech to text): Moonshine tiny in the app's own process, so the sound stays on the phone and
+ * only the words come over the bridge. Only the privatevoice APK carries the model; in the universal one
+ * available() says no. available() resolves {available, reason, language}; start({onEvent}) is
+ * nativeSpeech's, with the same events (started, level, partial, final, error, end).
+ */
+export function nativeAsr(call, on) {
+  const sessions = new Map(); // id -> onEvent
+  let wired = null;
+  const wire = () => (wired ??= Promise.resolve(on('ForgeAsr', 'asr', (ev) => sessions.get(ev?.id)?.(ev))));
+  let next = 0;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failure' });
+  return {
+    async available() {
+      const r = await call('ForgeAsr', 'available').catch((e) => ({ available: false, reason: e?.message ?? 'no speech to text in this app' }));
+      return { available: r?.available === true, reason: r?.reason ?? null, language: typeof r?.language === 'string' ? r.language : 'en' };
+    },
+    async start({ onEvent = () => {} } = {}) {
+      await wire();
+      next += 1;
+      const id = `asr-${Date.now().toString(36)}-${next}`;
+      // Before the call: the first events can come before it resolves.
+      sessions.set(id, (ev) => {
+        if (ev.type === 'end') sessions.delete(id);
+        onEvent(ev);
+      });
+      try {
+        await call('ForgeAsr', 'start', { id });
+      } catch (e) {
+        sessions.delete(id);
+        throw fail(e);
+      }
+      return {
+        id,
+        stop: () => call('ForgeAsr', 'stop', { id }).catch(() => {}),
+        cancel() {
+          sessions.delete(id);
+          call('ForgeAsr', 'cancel', { id }).catch(() => {});
         },
       };
     },

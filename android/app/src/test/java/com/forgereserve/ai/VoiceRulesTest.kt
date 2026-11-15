@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoiceRulesTest {
-    // /proc/cpuinfo on the Galaxy A16 5G (Dimensity 6300: 6 Cortex-A55, 2 Cortex-A76), one core shown per kind.
+    // /proc/cpuinfo on the Galaxy A16 5G (Exynos 1330, s5e8535: 6 Cortex-A55, 2 Cortex-A78), one core shown per kind.
     private val a16 = """
         processor	: 0
         Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp

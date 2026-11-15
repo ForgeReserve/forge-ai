@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Builds the Forge Android app's release APK and signs it with a keystore the owner supplies.
 #
-#   scripts/android-release.sh [--keystore <file>] [--alias <key alias>]
+#   scripts/android-release.sh [--keystore <file>] [--alias <key alias>] [--flavour universal|privatevoice]
+#
+# --flavour picks the APK (docs/ANDROID.md, Two APKs): universal (the default) is Forge, for every phone;
+# privatevoice is Forge Private Voice, the same app with its own speech to text, for GrapheneOS.
 #
 # It asks for the keystore file (unless --keystore is given) before it builds anything. apksigner then
 # asks for the keystore's password itself, on this terminal: the password never passes through this
@@ -9,21 +12,30 @@
 # keytool (docs/ANDROID.md) and keep it, and its password, outside this repository. Phones only accept an
 # update signed with the same key as the app they have.
 #
-# Output: dist/forge-<version>.apk, its SHA-256, and the signing certificate's SHA-256. Put the APK where
-# FORGE_APK_PATH points on the server and /download offers it.
+# Output: dist/forge-<version>.apk (or dist/forge-private-voice-<version>.apk), its SHA-256, and the signing
+# certificate's SHA-256. Put the APK where FORGE_APK_PATH (or FORGE_APK_PRIVATE_VOICE_PATH) points on the
+# server and /download offers it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 KEYSTORE=""
 ALIAS=""
+FLAVOUR="universal"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --keystore) KEYSTORE="${2:-}"; shift 2 ;;
     --alias) ALIAS="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --flavour) FLAVOUR="${2:-}"; shift 2 ;;
+    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+
+case "$FLAVOUR" in
+  universal) NAME="forge"; TASK="assembleUniversalRelease"; ENV_NAME="FORGE_APK_PATH" ;;
+  privatevoice) NAME="forge-private-voice"; TASK="assemblePrivatevoiceRelease"; ENV_NAME="FORGE_APK_PRIVATE_VOICE_PATH" ;;
+  *) echo "Unknown flavour: $FLAVOUR (universal or privatevoice)" >&2; exit 2 ;;
+esac
 
 if [[ -z "$KEYSTORE" ]]; then
   read -r -p "Keystore file (.jks or .keystore): " KEYSTORE
@@ -52,16 +64,17 @@ if [[ -z "$BT" || ! -x "$BT/apksigner" || ! -x "$BT/zipalign" ]]; then
 fi
 
 VERSION="$(node -p "require('$ROOT/package.json').version")"
-echo "Building the release APK (version $VERSION)."
-(cd "$ROOT/android" && ./gradlew --console=plain -q clean assembleRelease)
-UNSIGNED="$ROOT/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+echo "Building the $FLAVOUR release APK (version $VERSION)."
+(cd "$ROOT/android" && ./gradlew --console=plain -q clean "$TASK")
+UNSIGNED="$ROOT/android/app/build/outputs/apk/$FLAVOUR/release/app-$FLAVOUR-release-unsigned.apk"
 [[ -f "$UNSIGNED" ]] || { echo "The build made no APK at $UNSIGNED." >&2; exit 1; }
 
 mkdir -p "$ROOT/dist"
-OUT="$ROOT/dist/forge-$VERSION.apk"
+OUT="$ROOT/dist/$NAME-$VERSION.apk"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-"$BT/zipalign" -p -f 4 "$UNSIGNED" "$WORK/aligned.apk"
+# Native libraries on 16 KB boundaries, so they load on phones with 16 KB pages (-p is only 4 KB).
+"$BT/zipalign" -P 16 -f 4 "$UNSIGNED" "$WORK/aligned.apk"
 
 SIGN=(--ks "$KEYSTORE")
 [[ -n "$ALIAS" ]] && SIGN+=(--ks-key-alias "$ALIAS")
@@ -77,5 +90,5 @@ echo "Size:         $(wc -c < "$OUT" | tr -d ' ') bytes"
 echo "SHA-256:      $SUM"
 echo "Certificate:  $CERT"
 echo
-echo "Put the APK where FORGE_APK_PATH points on the server. /download shows the same SHA-256."
+echo "Put the APK where $ENV_NAME points on the server. /download shows the same SHA-256."
 echo "Before the next release, raise versionCode in android/app/build.gradle."

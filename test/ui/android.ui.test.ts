@@ -322,6 +322,8 @@ describe('the /download page', () => {
         return { type: r.headers.get('content-type'), size: (await r.arrayBuffer()).byteLength };
       });
       expect(got).toEqual({ type: 'application/vnd.android.package-archive', size: bytes.length });
+      // One APK: no choice to make.
+      expect(await page.locator('.apk-pick').count()).toBe(0);
 
       // This gateway has no APK set.
       await page.goto(`${g.url}/download`);
@@ -333,6 +335,53 @@ describe('the /download page', () => {
     } finally {
       await ctx.close();
       await withApk.close();
+    }
+  }, 60_000);
+
+  it('with Forge Private Voice too, offers Android or GrapheneOS: an icon and a word each, the rest behind the info button', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'forge-apk-'));
+    const bytes = Buffer.from('PK\u0003\u0004'.padEnd(300_000, 'x'));
+    const pv = Buffer.from('PK\u0003\u0004'.padEnd(700_000, 'p'));
+    writeFileSync(join(dir, 'forge.apk'), bytes);
+    writeFileSync(join(dir, 'pv.apk'), pv);
+    const both = await startGateway({ env: { FORGE_APK_PATH: join(dir, 'forge.apk'), FORGE_APK_PRIVATE_VOICE_PATH: join(dir, 'pv.apk') } });
+    const ctx = await browser.newContext(PHONE);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    const hex = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+    try {
+      await page.goto(`${both.url}/download`);
+      await page.waitForSelector('.apk-pick');
+      expect(await page.textContent('#apk-android')).toBe('Android');
+      expect(await page.textContent('#apk-graphene')).toBe('GrapheneOS');
+      expect(await page.locator('#apk-android svg, #apk-graphene svg').count()).toBe(2);
+      // Android first and picked.
+      expect(await page.getAttribute('#apk-android', 'aria-checked')).toBe('true');
+      expect(await page.getAttribute('#downloadApk', 'href')).toBe('/download/forge.apk');
+      expect((await page.textContent('#downloadHash'))!.replaceAll(' ', '')).toBe(hex(bytes));
+      // The info stays hidden until asked for.
+      expect(await page.isVisible('#downloadAbout')).toBe(false);
+      await page.click('#apk-graphene-info');
+      expect(await page.textContent('#downloadAbout')).toBe('Forge Private Voice. For GrapheneOS: it turns your voice into words on the phone. A bigger file.');
+      await page.click('#apk-graphene-info');
+      expect(await page.isVisible('#downloadAbout')).toBe(false);
+      // GrapheneOS picked: its file, size and fingerprint.
+      await page.click('#apk-graphene');
+      expect(await page.getAttribute('#apk-graphene', 'aria-checked')).toBe('true');
+      expect(await page.getAttribute('#apk-android', 'aria-checked')).toBe('false');
+      expect(await page.getAttribute('#downloadApk', 'href')).toBe('/download/forge-private-voice.apk');
+      expect(await page.getAttribute('#downloadApk', 'download')).toBe('forge-private-voice.apk');
+      expect(await page.textContent('#downloadApk')).toBe('Download the app, 0.7 MB');
+      expect((await page.textContent('#downloadHash'))!.replaceAll(' ', '')).toBe(hex(pv));
+      const got = await page.evaluate(async () => (await (await fetch('/download/forge-private-voice.apk')).arrayBuffer()).byteLength);
+      expect(got).toBe(pv.length);
+      // Fits a phone's width: no sideways scrolling.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await ctx.close();
+      await both.close();
     }
   }, 60_000);
 });

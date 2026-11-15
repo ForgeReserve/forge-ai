@@ -42,8 +42,18 @@ describe('the release script', () => {
     expect(code).toMatch(/shasum -a 256/);
   });
 
+  it('builds either APK, aligned for 16 KB page phones', () => {
+    expect(src).toContain('universal) NAME="forge"; TASK="assembleUniversalRelease"; ENV_NAME="FORGE_APK_PATH"');
+    expect(src).toContain('privatevoice) NAME="forge-private-voice"; TASK="assemblePrivatevoiceRelease"; ENV_NAME="FORGE_APK_PRIVATE_VOICE_PATH"');
+    const other = run(['--flavour', 'other']);
+    expect(other.status).toBe(2);
+    expect(other.stderr).toContain('Unknown flavour: other');
+    expect(src).toMatch(/zipalign" -P 16 -f 4/);
+    expect(src).not.toMatch(/zipalign" -p /);
+  });
+
   it('writes the signed APK outside git (dist/)', () => {
-    expect(src).toContain('OUT="$ROOT/dist/forge-$VERSION.apk"');
+    expect(src).toContain('OUT="$ROOT/dist/$NAME-$VERSION.apk"');
     expect(readFileSync(resolve(ROOT, '.gitignore'), 'utf8')).toMatch(/^dist$/m);
   });
 });

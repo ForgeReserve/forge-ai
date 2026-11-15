@@ -120,6 +120,8 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_FAUCET_POW_BITS` / `FORGE_FAUCET_POW_MAX_BITS` | `22` / `28` | Proof of work per claim (SHA-256 leading zero bits); it rises one bit per doubling of claims over the drip, up to the most |
 | `FORGE_FAUCET_PER_ADDRESS` | `3` | Claims per address per day, counted in memory only (never stored or logged). `0`: off |
 | `FORGE_FAUCET_CHALLENGE_SECONDS` | `300` | How long a puzzle may be worked on |
+| `FORGE_APK_PATH` | unset | The signed Android APK `/download` offers ([docs/ANDROID.md](docs/ANDROID.md)). Unset: the page says the app is coming |
+| `FORGE_APK_PRIVATE_VOICE_PATH` | unset | The signed Forge Private Voice APK (for GrapheneOS). Set: `/download` offers Android or GrapheneOS. Unset: that choice is hidden |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys |
 
 ### Other mints (NIP-87 discovery)
@@ -317,7 +319,7 @@ First-load JavaScript is about 59 KB gzipped (page code and the Markdown librari
 - **Service worker:** `public/v2/sw.js`, scope `/v2/`, network first with a cached copy for offline. It also catches a photo shared to `/v2/share` and keeps it in its own cache only until the page takes it. v1's worker passes `/v2/` by. Only the worker's install creates its cache, so once Erase everything has removed it, nothing puts it back.
 - **Strings:** every word is in `public/v2/strings/en.js`, the printed notes' words too.
 - **Engine:** More, Engine sets the address questions and payments go to (HTTPS only; the engine must answer before the app switches). The website's default is its own engine.
-- **Android app:** `android/` wraps the v2 app in Capacitor, with its files in the APK, application id `com.forgereserve.ai`, Android 9 and up, no Google services. It takes photos shared from other apps into Share unseen and shares out through Android's share sheet. `scripts/android-release.sh` signs a release with the owner's keystore, and `/download` offers the APK set in `FORGE_APK_PATH` with its SHA-256. See [docs/ANDROID.md](docs/ANDROID.md).
+- **Android app:** `android/` wraps the v2 app in Capacitor, with its files in the APK, application id `com.forgereserve.ai`, Android 9 and up, no Google services. It takes photos shared from other apps into Share unseen and shares out through Android's share sheet. `scripts/android-release.sh` signs a release with the owner's keystore, and `/download` offers the APK set in `FORGE_APK_PATH` with its SHA-256. A second APK, **Forge Private Voice** (`com.forgereserve.ai.privatevoice`, the `privatevoice` flavour, 68 MB more), hears Hold to talk with its own speech to text on the phone (Moonshine tiny through sherpa-onnx), for GrapheneOS, which has no recogniser; `FORGE_APK_PRIVATE_VOICE_PATH` makes `/download` offer it beside the universal one. See [docs/ANDROID.md](docs/ANDROID.md) and [docs/VOICE.md](docs/VOICE.md).
 
 ### Printing free question vouchers
 
@@ -354,7 +356,7 @@ pnpm typecheck
 pnpm test                 # unit tests
 pnpm mint:up && pnpm test:e2e && pnpm mint:down    # end to end against real local Nutshell mints
 pnpm test:ui              # the v2 app in a 412 x 915 browser (installed Chrome, no download); needs pnpm mint:up
-cd android && ./gradlew assembleDebug testDebugUnitTest   # the Android app (Android SDK, JDK 17)
+cd android && ./gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest   # the Android apps (Android SDK, JDK 17)
 pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env if present)
 ```
 
