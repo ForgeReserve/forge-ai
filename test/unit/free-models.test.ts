@@ -322,7 +322,7 @@ describe('the catalog', () => {
     const raw = JSON.parse(readFileSync('config/models.json', 'utf8'));
     const c = loadConfig({ TOKENFACTORY_API_KEY: 'x', TINFOIL_API_KEY: 'x', FORGE_FOREIGN_DISCOVERY_RELAYS: '' } as NodeJS.ProcessEnv, raw);
     const tf = c.catalog.models.filter((m) => m.supplier === 'tokenfactory');
-    expect(tf.length).toBe(13);
+    expect(tf.length).toBe(11); // minimax-m3.1-flash and nemotron-3-super left Token Factory on 2026-11-15
     for (const m of tf) {
       expect(m.pricing).toBe('free');
       expect(m.free_reason).toMatch(/Token Factory beta/);

@@ -143,29 +143,9 @@
       "context_length": 917504
     },
     {
-      "id": "minimax-m3.1-flash",
-      "supplier": "tokenfactory",
-      "upstream": "minimax-m3.1-flash",
-      "pricing": "free",
-      "free_reason": "Token Factory beta: no charge to Forge (owner, 2026-11-15)",
-      "max_output_tokens": 8192,
-      "uncensored": false,
-      "context_length": 917504
-    },
-    {
       "id": "nemotron-3-ultra",
       "supplier": "tokenfactory",
       "upstream": "nemotron-3-ultra",
-      "pricing": "free",
-      "free_reason": "Token Factory beta: no charge to Forge (owner, 2026-11-15)",
-      "max_output_tokens": 8192,
-      "uncensored": false,
-      "context_length": 917504
-    },
-    {
-      "id": "nemotron-3-super",
-      "supplier": "tokenfactory",
-      "upstream": "nemotron-3-super",
       "pricing": "free",
       "free_reason": "Token Factory beta: no charge to Forge (owner, 2026-11-15)",
       "max_output_tokens": 8192,
