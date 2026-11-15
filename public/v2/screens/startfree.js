@@ -4,7 +4,7 @@
 // without that question. startFree() is the first run's invite sheet; startFreeScreen() is the Start
 // free card's own screen on Add money (AddFunds-C2 and C3 in docs/design/canvas). With a balance key
 // already (at $0) there is no invite field: the one button chooses a free model.
-import { el, icon, toast } from '../core/ui.js';
+import { el, icon, say, toast } from '../core/ui.js';
 import { listenButton, listenHeader } from './parts.js';
 import { cardArt } from './wallet-art.js';
 
@@ -27,9 +27,10 @@ export function startFree({ t, state, actions, wallet }, { id, field: given = nu
   const msg = el('p', { class: 'msg', id: `${id}FreeMsg`, role: 'status' });
   const go = el('button', { type: 'button', class: 'btn primary block', id: `${id}StartFree` }, icon('gift', 20), el('span', { text: t('startFree.go') }));
   const useModel = el('button', { type: 'button', class: 'btn primary block', id: `${id}UseFreeModel`, hidden: true }, icon('gift', 20), el('span', { text: t('startFree.useModel') }));
-  const useBtn = el('button', { type: 'button', class: 'btn primary', id: `${id}UseFree`, text: t('startFree.use') });
-  const keepBtn = el('button', { type: 'button', class: 'btn', id: `${id}KeepPrivate`, text: t('startFree.keep') });
-  const ask = el('div', { class: 'free-ask', id: `${id}FreeAsk`, role: 'group', 'aria-labelledby': `${id}FreeAskText`, hidden: true }, el('p', { id: `${id}FreeAskText`, text: t('startFree.ask') }), el('div', { class: 'row-btns' }, useBtn, keepBtn));
+  const useBtn = el('button', { type: 'button', class: 'btn primary', id: `${id}UseFree` }, icon('check', 20), el('span', { text: t('startFree.use') }));
+  const keepBtn = el('button', { type: 'button', class: 'btn', id: `${id}KeepPrivate` }, icon('lock', 20), el('span', { text: t('startFree.keep') }));
+  // The Private-only question, in the owner's words as they are (data-approved).
+  const ask = el('div', { class: 'free-ask', id: `${id}FreeAsk`, role: 'group', 'aria-labelledby': `${id}FreeAskText`, hidden: true }, el('p', { id: `${id}FreeAskText`, 'data-approved': '', text: t('startFree.ask') }), el('div', { class: 'row-btns' }, useBtn, keepBtn));
   const invite = given?.box ?? el('div', { class: 'field' }, el('label', { for: field.id, class: 'sr-only', text: t('invite.label') }), field);
   const node = el('div', { class: 'start-free', id: `${id}StartFreeBox` }, given ? null : invite, note, go, useModel, ask, msg);
 
@@ -37,16 +38,16 @@ export function startFree({ t, state, actions, wallet }, { id, field: given = nu
   // question; 'done': the result.
   let phase = 'form';
   /** The status line under the flow; kind 'ok' or 'err' colours it. */
-  const say = (text, kind = '') => {
-    msg.textContent = text;
+  const tell = (text, kind = '') => {
     msg.className = `msg ${kind}`.trim();
+    say(msg, text, kind);
   };
 
   /** Chooses the free model (Private only goes off: only after the question, or when it is off already). */
   const use = (wasOn) => {
     const m = actions.useFreeModels();
     const words = m ? t(wasOn ? 'startFree.using' : 'startFree.ready', { name: m.name ?? m.id }) : t('startFree.noModel');
-    say(words, m ? 'ok' : 'err');
+    tell(words, m ? 'ok' : 'err');
     phase = 'done';
     draw();
     after(words);
@@ -63,32 +64,32 @@ export function startFree({ t, state, actions, wallet }, { id, field: given = nu
   go.addEventListener('click', async () => {
     const code = field.value.trim();
     if (!code) {
-      say(t('invite.missing'), 'err');
+      tell(t('invite.missing'), 'err');
       field.focus();
       return;
     }
     go.disabled = true;
-    say(t('fund.invite.opening'));
+    tell(t('fund.invite.opening'), 'wait');
     // Busy from here: the key arrives before the answer does, and the screens keep showing this flow.
     phase = 'opening';
     try {
       await wallet.open(code);
-      say(t('startFree.opened'), 'ok');
+      tell(t('startFree.opened'), 'ok');
       next();
     } catch (e) {
       phase = 'form';
-      say(inviteError(e, t), 'err');
+      tell(inviteError(e, t), 'err');
     } finally {
       go.disabled = false;
     }
   });
   // A new code clears what was said about the last one.
-  field.addEventListener('input', () => phase === 'form' && say(''));
+  field.addEventListener('input', () => phase === 'form' && tell(''));
   useModel.addEventListener('click', next);
   useBtn.addEventListener('click', () => use(true));
   keepBtn.addEventListener('click', () => {
     const words = t('startFree.kept');
-    say(words, 'ok');
+    tell(words, 'ok');
     phase = 'done';
     draw();
     after(words);
@@ -131,9 +132,9 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
   let phase = 'form'; // 'form', 'opening', 'ask'
   let job = null;
   const msg = el('p', { class: 'msg', id: 'startFreeMsg', role: 'status' });
-  const say = (text, kind = '') => {
-    msg.textContent = text;
+  const tell = (text, kind = '') => {
     msg.className = `msg ${kind}`.trim();
+    say(msg, text, kind);
   };
 
   // The hero: the ticket, with the info button.
@@ -150,7 +151,7 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
   const setCode = (text) => {
     input.value = String(text ?? '').trim();
     wallet.setInvite(input.value);
-    if (phase === 'form') say('');
+    if (phase === 'form') tell('');
   };
   input.addEventListener('input', () => setCode(input.value));
   const paste = el('button', { type: 'button', class: 'btn sf-btn', id: 'startFreePaste' }, icon('paste', 22), el('span', { text: t('startFree.paste') }));
@@ -207,7 +208,7 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     { class: 'sf-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'startFreeAskText' },
     el('span', { class: 'sf-grabber', 'aria-hidden': 'true' }),
     el('div', { class: 'sf-choices' }, choice('lock', 'startFree.private', 'startFree.needsMoney', 'private'), choice('eye', 'startFree.standard', 'startFree.free', 'standard')),
-    el('p', { class: 'sf-callout', id: 'startFreeAskText' }, icon('eye', 24), el('span', { text: t('startFree.ask') })),
+    el('p', { class: 'sf-callout', id: 'startFreeAskText', 'data-approved': '' }, icon('eye', 24), el('span', { text: t('startFree.ask') })),
     el('div', { class: 'foot' }, useBtn, keepBtn),
   );
   const ask = el('div', { class: 'sf-ask', id: 'startFreeAsk', hidden: true }, opened, sheet);
@@ -232,7 +233,7 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     if (!m) {
       phase = 'form';
       draw();
-      return say(t('startFree.noModel'), 'err');
+      return tell(t('startFree.noModel'), 'err');
     }
     said = t(wasOn ? 'startFree.using' : 'startFree.ready', { name: m.name ?? m.id });
     backTo('funds');
@@ -250,20 +251,20 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     if (wallet.key()) return next(false);
     const code = input.value.trim();
     if (!code) {
-      say(t('invite.missing'), 'err');
+      tell(t('invite.missing'), 'err');
       input.focus();
       return;
     }
     go.disabled = true;
     phase = 'opening';
-    say(t('fund.invite.opening'));
+    tell(t('fund.invite.opening'), 'wait');
     try {
       await wallet.open(code);
-      say('');
+      tell('');
       next(true);
     } catch (e) {
       phase = 'form';
-      say(inviteError(e, t), 'err');
+      tell(inviteError(e, t), 'err');
     } finally {
       go.disabled = false;
     }

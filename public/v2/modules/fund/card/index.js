@@ -119,7 +119,7 @@ export function create(inputs) {
       // ------------------------------------------------------------ the website: no reader
 
       if (!nfc?.supported?.()) {
-        body.replaceChildren(...kids(art(), ui.el('p', { id: 'cardAppOnly', text: t('fund.card.appOnly') }), ui.el('p', { class: 'note', text: t('fund.card.what') })));
+        body.replaceChildren(...kids(art(), ui.sayEl('p', { id: 'cardAppOnly' }, t('fund.card.appOnly')), ui.sayEl('p', { class: 'note' }, t('fund.card.what'))));
         foot.replaceChildren(...kids(ui.el('a', { class: 'btn primary block', id: 'cardGetApp', href: '/download' }, ui.icon('download', 20), ui.el('span', { text: t('fund.card.getApp') }))));
         return { node, destroy() {} };
       }
@@ -127,7 +127,7 @@ export function create(inputs) {
       // ------------------------------------------------------------ the app
 
       const hold = (line = t('fund.card.keep')) => {
-        body.replaceChildren(...kids(art(), ui.el('p', { class: 'card-hold', id: 'cardHold', text: t('fund.card.hold') }), ui.el('p', { class: 'note', id: 'cardHoldLine', text: line }), msg, failedList()));
+        body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'card-hold', id: 'cardHold' }, t('fund.card.hold')), ui.sayEl('p', { class: 'note', id: 'cardHoldLine' }, line), msg, failedList()));
         foot.replaceChildren();
       };
 
@@ -146,8 +146,8 @@ export function create(inputs) {
             ui.el(
               'div',
               { class: 'card-failed', 'data-job': j.id },
-              ui.el('p', { text: t('fund.card.failedRow', { amount: format.units(j.outputs.reduce((s, o) => s + o.amount, 0), j.unit), mint: mintLabel(j.mint) }) }),
-              j.error ? ui.el('p', { class: 'note mono', text: t('fund.card.failedWhy', { error: String(j.error).slice(0, 200) }) }) : null,
+              ui.sayEl('p', {}, t('fund.card.failedRow', { amount: format.units(j.outputs.reduce((s, o) => s + o.amount, 0), j.unit), mint: mintLabel(j.mint) })),
+              j.error ? ui.sayEl('p', { class: 'note mono' }, t('fund.card.failedWhy', { error: String(j.error).slice(0, 200) })) : null,
               btn({ class: 'btn block', onclick: () => retry(j.id) }, 'again', t('fund.card.tryAgain')),
             ),
           ),
@@ -201,11 +201,11 @@ export function create(inputs) {
         msg.set('');
         const s = await nfc.status();
         if (!s.available) {
-          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'cardNoNfc', text: t('fund.card.noNfc') })));
+          body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'cardNoNfc' }, t('fund.card.noNfc'), 'err')));
           return;
         }
         if (!s.enabled) {
-          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'cardNfcOff', text: t('fund.card.nfcOff') })));
+          body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'cardNfcOff' }, t('fund.card.nfcOff'), 'err')));
           foot.replaceChildren(...kids(btn({ class: 'btn primary block', id: 'cardRetry', onclick: startReading }, 'again', t('fund.card.tryAgain'))));
           return;
         }
@@ -245,7 +245,7 @@ export function create(inputs) {
           msg.set(words, 'err');
           return;
         }
-        body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'cardResult', role: 'status', text: words })));
+        body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'cardResult', role: 'status' }, words, 'err')));
         foot.replaceChildren(...kids(btn({ class: 'btn block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
       };
 
@@ -289,23 +289,23 @@ export function create(inputs) {
       };
 
       const showUnlisted = (e) => {
-        body.replaceChildren(...kids(art(), ui.el('div', { class: 'notice', id: 'cardUnlisted' }, ui.el('p', { text: t('fund.othermint.unlisted') }), ui.el('p', { class: 'mono note', text: e.mint ?? '' }))));
+        body.replaceChildren(...kids(art(), ui.el('div', { class: 'notice', id: 'cardUnlisted' }, ui.sayEl('p', {}, t('fund.othermint.unlisted')), ui.sayEl('p', { class: 'mono note' }, e.mint ?? ''))));
         foot.replaceChildren(...kids(
-          btn({ class: 'btn primary block', id: 'cardGoOn', onclick: () => ((acceptUnlisted = true), (next = 'read'), hold(t('fund.card.holdAgain'))) }, null, t('fund.othermint.goOn')),
+          btn({ class: 'btn primary block', id: 'cardGoOn', onclick: () => ((acceptUnlisted = true), (next = 'read'), hold(t('fund.card.holdAgain'))) }, 'next', t('fund.othermint.goOn')),
         ));
       };
 
       const pinField = (id) => {
         if (summary.pinState !== 'set') return { node: null, value: () => '' };
         const input = ui.el('input', { id, class: 'field-input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '8', pattern: '[0-9]*' });
-        const tries = summary.triesLeft < 3 ? ui.el('p', { class: 'note', id: 'cardTries', text: summary.triesLeft === 1 ? t('fund.card.tryLeft') : t('fund.card.triesLeft', { count: summary.triesLeft }) }) : null;
+        const tries = summary.triesLeft < 3 ? ui.sayEl('p', { class: 'note', id: 'cardTries' }, summary.triesLeft === 1 ? t('fund.card.tryLeft') : t('fund.card.triesLeft', { count: summary.triesLeft })) : null;
         return { node: ui.el('div', { class: 'field' }, ui.el('label', { for: id, class: 'label', text: t('fund.card.pinLabel') }), input, tries), value: () => input.value.trim(), input };
       };
 
       /** A card left something unfinished with this phone: its PIN, then a tap, finishes it. */
       const showFinish = () => {
         const pin = pinField('cardFinishPin');
-        body.replaceChildren(...kids(art(format.units(summary.balance, summary.unit)), ui.el('p', { id: 'cardToFinish', text: t('fund.card.toFinish') }), pin.node, msg));
+        body.replaceChildren(...kids(art(format.units(summary.balance, summary.unit)), ui.sayEl('p', { id: 'cardToFinish' }, t('fund.card.toFinish')), pin.node, msg));
         foot.replaceChildren(...kids(
           btn(
             {
@@ -356,7 +356,7 @@ export function create(inputs) {
           plan = null;
           const a = amount();
           if (!Number.isSafeInteger(a) || a < 1 || a > summary.max) {
-            preview.replaceChildren(...kids(ui.el('p', { class: 'note', text: t('fund.card.badAmount', { amount: format.units(summary.max, unit) }) })));
+            preview.replaceChildren(...kids(ui.sayEl('p', { class: 'note' }, t('fund.card.badAmount', { amount: format.units(summary.max, unit) }))));
             moveBtn.disabled = true;
             moveBtn.lastChild.textContent = t('fund.card.move', { amount: '' }).trim();
             return;
@@ -364,7 +364,7 @@ export function create(inputs) {
           try {
             plan = cards.flow.plan(summary, info, a);
           } catch (e) {
-            preview.replaceChildren(...kids(ui.el('p', { class: 'msg err', text: wordsFor(e, t) })));
+            preview.replaceChildren(...kids(ui.sayEl('p', { class: 'msg err' }, wordsFor(e, t), 'err')));
             moveBtn.disabled = true;
             return;
           }
@@ -372,9 +372,9 @@ export function create(inputs) {
           preview.replaceChildren(...kids(
             // Another mint's eCash still goes through Other mint, which shows its own price: what is
             // known here is only what reaches this phone.
-            ui.el('p', { class: 'card-get', id: 'cardGet', text: t(route === 'othermint' ? 'fund.card.toPhone' : 'fund.card.youGet', { amount: format.units(plan.receive, unit) }) }),
-            plan.fee ? ui.el('p', { class: 'note', id: 'cardFee', text: t('fund.card.fee', { amount: format.units(plan.fee, unit) }) }) : null,
-            back ? ui.el('p', { class: 'note', id: 'cardBack', text: t('fund.card.backToCard', { amount: format.units(back, unit) }) }) : null,
+            ui.sayEl('p', { class: 'card-get', id: 'cardGet' }, t(route === 'othermint' ? 'fund.card.toPhone' : 'fund.card.youGet', { amount: format.units(plan.receive, unit) })),
+            plan.fee ? ui.sayEl('p', { class: 'note', id: 'cardFee' }, t('fund.card.fee', { amount: format.units(plan.fee, unit) })) : null,
+            back ? ui.sayEl('p', { class: 'note', id: 'cardBack' }, t('fund.card.backToCard', { amount: format.units(back, unit) })) : null,
           ));
           moveBtn.disabled = false;
           moveBtn.lastChild.textContent = t('fund.card.move', { amount: format.units(plan.amount, unit) });
@@ -392,10 +392,10 @@ export function create(inputs) {
         const invite = route === 'topup' ? inviteField(inputs) : { node: null, missing: () => false };
         body.replaceChildren(...kids(
           art(format.units(summary.balance, unit)),
-          ui.el('p', { class: 'note note-mint', id: 'cardMint', text: t('fund.card.from', { mint: mintLabel(summary.mint) }) }),
-          summary.max < summary.balance ? ui.el('p', { class: 'note', id: 'cardPart', text: t('fund.card.partOnly', { amount: format.units(summary.max, unit) }) }) : null,
+          ui.sayEl('p', { class: 'note note-mint', id: 'cardMint' }, t('fund.card.from', { mint: mintLabel(summary.mint) })),
+          summary.max < summary.balance ? ui.sayEl('p', { class: 'note', id: 'cardPart' }, t('fund.card.partOnly', { amount: format.units(summary.max, unit) })) : null,
           invite.node,
-          ui.el('div', { class: 'field' }, ui.el('p', { class: 'label', id: 'cardHowMuch', text: t('fund.card.howMuch') }), ui.el('div', { class: 'seg', role: 'radiogroup', 'aria-labelledby': 'cardHowMuch' }, all, some), amountInput),
+          ui.el('div', { class: 'field' }, ui.sayEl('p', { class: 'label', id: 'cardHowMuch' }, t('fund.card.howMuch')), ui.el('div', { class: 'seg', role: 'radiogroup', 'aria-labelledby': 'cardHowMuch' }, all, some), amountInput),
           pin.node,
           preview,
           msg,

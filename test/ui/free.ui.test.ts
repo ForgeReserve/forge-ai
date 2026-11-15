@@ -129,11 +129,11 @@ describe('free questions in a phone-sized browser', () => {
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
     await page.waitForSelector('#otherWays:not([hidden])');
-    expect(await page.textContent('#otherWays')).toBe('Free questions used up. See the ways forward');
+    expect(await page.textContent('#otherWays')).toBe('Free questions used up');
     expect(await ring(page, 'data-free')).toBe(0);
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('#typeNotice:not([hidden])');
-    expect(await page.textContent('#typeNotice')).toContain('Your free questions are used up.');
+    expect(await page.textContent('#typeNotice')).toContain('Free questions used up.');
     expect(await page.isDisabled('#sendBtn')).toBe(true);
     await page.click('#noticeBtn');
     await page.waitForSelector('[data-screen=freeOut]');

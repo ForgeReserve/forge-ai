@@ -170,7 +170,8 @@ describe('the natural voice', () => {
     await page.waitForSelector('[data-screen=voice]');
     await page.waitForSelector('#voiceOut-phonon');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFree. Made on this phone, so the answer is not sent anywhere. Downloads once, the first time.');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeStays here');
+    expect(await page.getAttribute('#voiceOut-phonon', 'aria-description')).toBe('Free. Made on this phone, so the answer is not sent anywhere. Downloads once, the first time.');
     // The other ways are still there.
     expect(await page.isVisible('#voiceOut-engine')).toBe(true);
     expect(await page.isVisible('#voiceOut-off')).toBe(true);

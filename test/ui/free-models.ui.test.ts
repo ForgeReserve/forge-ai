@@ -55,9 +55,10 @@ describe('free models in the v2 app', () => {
     if ((await page.getAttribute('#privateOnly', 'aria-checked')) === 'true') await page.click('#privateOnly');
     const freeCard = page.locator('[data-model="free-echo"]');
     expect(await freeCard.locator('.tag.free').textContent()).toBe('Free');
-    expect(await freeCard.textContent()).toContain('Free to use. Needs a balance, even with nothing on it.');
+    // What it costs is behind the card's info button (reading load): the card shows the Free tag.
+    expect(await page.locator('.opt', { has: freeCard }).locator('.info-more').textContent()).toContain('Free to use. Needs a balance, even with nothing on it.');
     expect(await page.locator('[data-model="mock-echo"] .tag.free').count()).toBe(0);
-    expect(await page.locator('[data-model="mock-echo"]').textContent()).toMatch(/in, .* out per 1M/);
+    expect(await page.locator('.opt', { has: page.locator('[data-model="mock-echo"]') }).locator('.info-more').textContent()).toMatch(/in, .* out per 1M/);
     await freeCard.click();
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
@@ -74,8 +75,8 @@ describe('free models in the v2 app', () => {
     await page.fill('#startFreeCode', createInvite(g));
     await page.click('#startFreeGo');
     await page.waitForSelector('[data-screen=funds]');
-    expect(await page.textContent('#fundsSaid')).toBe('You are using Free Echo, a free model.');
-    await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
+    expect(await page.textContent('#fundsSaid')).toBe('Using Free Echo, a free model.');
+    await expect.poll(() => page.textContent('#fundsNote')).toBe('This model is free.');
     const key = await page.evaluate(() => localStorage.getItem('forge.balanceKey'));
     expect(key).toMatch(/^sk-forge-/);
 
@@ -179,7 +180,7 @@ describe('Start free on the first run', () => {
     expect(await page.textContent('#introFreeMsg')).toBe('Enter your invite code first.');
     await page.fill('#introInvite', 'not-a-code');
     await page.click('#introStartFree');
-    await expect.poll(() => page.textContent('#introFreeMsg')).toBe('This invite code does not work. Check it and try again.');
+    await expect.poll(() => page.textContent('#introFreeMsg')).toBe('Code does not work. This invite code does not work. Check it and try again.');
     await page.fill('#introInvite', createInvite(g));
     await page.waitForTimeout(250); // the sheet's rise has ended
     await shot(page, '3-start-free-sheet.png', SHOTS_LAST);
@@ -355,7 +356,7 @@ describe('Start free on the first run', () => {
 });
 
 describe('Start free and the funds notice', () => {
-  it('at $0, Start free has no code to ask; "Use a free model instead" next to Add funds asks while Private only is on, then Type sends free', async () => {
+  it('at $0, Start free has no code to ask; "Use a free model" next to Add funds asks while Private only is on, then Type sends free', async () => {
     const { ctx, page, errors } = await phone({ seen: true });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const key = await zeroKey();
@@ -375,9 +376,9 @@ describe('Start free and the funds notice', () => {
     // Type: the funds notice, with the free model next to Add funds.
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('#typeNotice:not([hidden])');
-    expect(await page.textContent('#typeNotice p')).toBe('Add funds to ask a question.');
-    expect(await page.textContent('#noticeBtn')).toBe('Add funds');
-    expect(await page.textContent('#noticeFreeBtn')).toBe('Use a free model instead');
+    expect(await page.textContent('#typeNotice p')).toBe('No funds. Add money to ask a question.');
+    expect(await page.textContent('#noticeBtn')).toBe('Add money');
+    expect(await page.textContent('#noticeFreeBtn')).toBe('Use a free model');
     const small = await page.locator('#typeNotice button').evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()).filter((r) => r.width < 48 || r.height < 48).length);
     expect(small).toBe(0);
     await shot(page, '5-funds-notice.png');
@@ -407,7 +408,7 @@ describe('Start free and the funds notice', () => {
     await ctx.close();
   }, 60_000);
 
-  it('with Private only off already, "Use a free model instead" chooses it without asking', async () => {
+  it('with Private only off already, "Use a free model" chooses it without asking', async () => {
     const { ctx, page } = await phone({ seen: true });
     const key = await zeroKey();
     await page.goto(`${g.url}/v2/`);
@@ -420,7 +421,7 @@ describe('Start free and the funds notice', () => {
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('#noticeFreeBtn');
     await page.click('#noticeFreeBtn');
-    await expect.poll(() => page.textContent('#toast')).toBe('You are using GLM Flash, a free model.');
+    await expect.poll(() => page.textContent('#toast')).toBe('Using GLM Flash, a free model.');
     expect(await page.locator('#typeFreeAsk').count()).toBe(0);
     await expect.poll(() => page.isVisible('#typeNotice')).toBe(false);
     await ctx.close();

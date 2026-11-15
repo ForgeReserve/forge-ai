@@ -7,7 +7,8 @@
 import { countKinds, dragBox, hitCover, tapBox, alignBox } from '../core/covers.js';
 import { changeRows, runFilters, withId } from '../core/filters.js';
 import { closePhoto, drawCovered, makeFile, openPhoto, shareOrSave, takeShared } from '../core/photo.js';
-import { backHeader, el, icon } from '../core/ui.js';
+import { el, icon, msgLine, say, sayEl } from '../core/ui.js';
+import { listenHeader, screenListen } from './parts.js';
 
 const STATE_TEXT = { removed: 'photo.state.removed', covered: 'photo.state.covered', none: 'photo.state.none', failed: 'photo.state.failed', uncovered: 'photo.state.uncovered' };
 const STEP_TEXT = { running: 'photo.stepState.running', done: 'photo.stepState.done', failed: 'photo.stepState.failed', waiting: 'photo.stepState.waiting' };
@@ -21,7 +22,7 @@ const TAP_SLOP = 10;
  * ForgeShareIn plugin in the Android app). forget: in the app, removes the photo files the app wrote
  * (a photo the camera took for this screen) once the screen closes.
  */
-export function photoScreen({ t, ui, back, actions, params = {}, filters, share, take = takeShared, forget = null }) {
+export function photoScreen({ t, ui, back, actions, reader, params = {}, filters, share, take = takeShared, forget = null }) {
   let photo = null;
   let result = null; // {steps, covers}
   let covers = [];
@@ -33,7 +34,8 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
   let confirmedFailed = false;
 
   const main = el('main', { class: 'screen sub photo', 'data-screen': 'photo' });
-  const head = backHeader(t('photo.title'), back, t('common.back'));
+  const listen = screenListen({ t, reader, id: 'photoListen', root: () => main });
+  const head = listenHeader(t('photo.title'), back, t('common.back'), listen.node);
   const body = el('div', { class: 'scroll' });
   const foot = el('div', { class: 'foot' });
   main.append(head, body, foot);
@@ -50,12 +52,12 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
     });
 
   function drawStart(alertKey = null) {
-    const alert = alertKey ? [el('div', { class: 'error-box', role: 'alert', id: 'photoAlert' }, el('p', { text: t(alertKey) }))] : [];
+    const alert = alertKey ? [el('div', { class: 'error-box', role: 'alert', id: 'photoAlert' }, sayEl('p', { id: 'photoAlertText' }, t(alertKey), 'err'))] : [];
     // The phone already sent the shared photo to the server (photo.sent), so "it does not leave this
     // phone" is not said there.
-    const free = alertKey === 'photo.sent' ? [] : [el('p', { class: 'note', id: 'photoFree', text: t('photo.free') })];
+    const free = alertKey === 'photo.sent' ? [] : [sayEl('p', { class: 'note', id: 'photoFree' }, t('photo.free'), '', 'gift')];
     body.replaceChildren(
-      el('p', { class: 'lead', id: 'photoLead', text: t('photo.lead') }),
+      sayEl('p', { class: 'lead', id: 'photoLead' }, t('photo.lead'), '', 'shield'),
       ...alert,
       el(
         'div',
@@ -126,12 +128,12 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
   const seg = el('div', { class: 'seg', role: 'radiogroup', 'aria-label': t('photo.view'), id: 'photoView' });
   const hint = el('p', { class: 'hint', id: 'photoHint' });
   const changes = el('ul', { class: 'changes', id: 'photoChanges' });
-  const failedNote = el('p', { class: 'note warn-text', id: 'photoFailed', text: t('photo.failedNote'), hidden: true });
+  const failedNote = sayEl('p', { class: 'note warn-text', id: 'photoFailed', hidden: true }, t('photo.failedNote'), '', 'alert');
 
   function drawSeg() {
     seg.replaceChildren(
       ...['after', 'before'].map((v) =>
-        el('button', { type: 'button', role: 'radio', 'aria-checked': String(showing === v), id: `photo-${v}`, onclick: () => ((showing = v), drawPicture()), text: t(`photo.${v}`) }),
+        el('button', { type: 'button', role: 'radio', 'aria-checked': String(showing === v), id: `photo-${v}`, onclick: () => ((showing = v), drawPicture()) }, icon(v === 'after' ? 'shield' : 'eye', 16), el('span', { text: t(`photo.${v}`) })),
       ),
     );
   }
@@ -147,13 +149,13 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
       layer.replaceChildren();
       stage.dataset.view = 'before';
       stage.setAttribute('aria-label', t('photo.beforeLabel'));
-      hint.textContent = t('photo.beforeNote');
+      say(hint, t('photo.beforeNote'), '', 'eye');
       return;
     }
     drawCovered(photo, covers, view);
     stage.dataset.view = 'after';
     stage.setAttribute('aria-label', t('photo.afterLabel'));
-    hint.textContent = t('photo.hint');
+    say(hint, t('photo.hint'), '', 'hand');
     // One button per block, over the painted block: tap (or Enter) takes it away.
     layer.replaceChildren(
       ...covers.map((c) => {
@@ -228,7 +230,8 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
   stage.addEventListener('pointercancel', (e) => endPress(e, true));
 
   const addBlock = el('button', { type: 'button', class: 'btn small', id: 'photoAddBlock', onclick: () => addCover(tapBox(photo.width / 2, photo.height / 2, photo.width, photo.height)) }, icon('plus', 18), el('span', { text: t('photo.addBlock') }));
-  const status = el('p', { class: 'msg', role: 'status', id: 'photoStatus' });
+  const status = msgLine();
+  status.id = 'photoStatus';
 
   /** The new file, made fresh from the photo and the blocks as they are now. */
   async function file() {
@@ -239,18 +242,15 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
     if (busy || !photo) return;
     if (result?.steps.some((s) => !s.ok) && !confirmedFailed) {
       confirmedFailed = true;
-      status.textContent = t('photo.confirmFailed');
-      status.className = 'msg err';
+      status.set(t('photo.confirmFailed'), 'err');
       return;
     }
     busy = true;
-    status.textContent = '';
-    status.className = 'msg';
+    status.set('');
     try {
       await fn();
     } catch (e) {
-      status.textContent = t(ERRORS[e?.code] ?? 'photo.shareFailed');
-      status.className = 'msg err';
+      status.set(t(ERRORS[e?.code] ?? 'photo.shareFailed'), 'err');
     } finally {
       busy = false;
     }
@@ -289,20 +289,19 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
   const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (closePhoto(photo), (photo = null), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
 
   function drawReview() {
-    status.textContent = '';
-    status.className = 'msg';
+    status.set('');
     body.replaceChildren(
-      el('p', { class: 'lead', id: 'photoReviewLead', text: t('photo.reviewLead') }),
+      sayEl('p', { class: 'lead', id: 'photoReviewLead' }, t('photo.reviewLead'), '', 'hand'),
       seg,
       stage,
       hint,
       el('div', { class: 'row-btns' }, addBlock, another),
       el('h2', { class: 'caps', text: t('photo.changes') }),
       changes,
-      el('p', { class: 'note', id: 'photoMiss', text: t('photo.miss') }),
+      sayEl('p', { class: 'note', id: 'photoMiss' }, t('photo.miss'), '', 'eye'),
       failedNote,
     );
-    foot.replaceChildren(status, shareBtn, el('div', { class: 'row-btns' }, askBtn, saveBtn), el('p', { class: 'note centre-text', text: t('photo.freeShort') }));
+    foot.replaceChildren(status, shareBtn, el('div', { class: 'row-btns' }, askBtn, saveBtn), sayEl('p', { class: 'note centre-text', id: 'photoFreeShort' }, t('photo.freeShort'), '', 'gift'));
     drawPicture();
     drawChanges();
     main.querySelector('h1')?.focus?.({ preventScroll: true });
@@ -323,11 +322,13 @@ export function photoScreen({ t, ui, back, actions, params = {}, filters, share,
   // Start loading the face model now, so the check is quicker once a photo is picked.
   setTimeout(() => !gone && filters.forEach((f) => f.prepare?.().catch(() => {})), 300);
 
+  listen.update();
   return {
     node: main,
     focus: main.querySelector('h1'),
     destroy() {
       gone = true;
+      listen.destroy();
       forget?.();
       closePhoto(photo);
       photo = null;

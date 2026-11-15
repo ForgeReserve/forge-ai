@@ -9,7 +9,7 @@ import { pastFirstRun } from './firstrun-seen.ts';
 // questions are used up, the app says so plainly, before recording and when the engine refuses one.
 // The microphone is Chrome's fake capture device; the engine is a local gateway with mock audio models.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
-const USED_UP = 'Free voice questions are used up for today. Type instead, or add funds.';
+const USED_UP = 'No free voice today. Free voice questions are used up for today. Type instead, or add funds.';
 
 let g: Gateway;
 let browser: Browser;
@@ -133,7 +133,7 @@ describe('free voice questions', () => {
     await page.mouse.up();
     await page.waitForSelector('[data-screen=answer]');
     await expect.poll(() => page.textContent('#answerError'), { timeout: 8000 }).toContain(USED_UP);
-    expect(await page.textContent('#nextStep')).toBe('Add funds');
+    expect(await page.textContent('#nextStep')).toBe('Add money');
     expect(transcriptions).toHaveLength(1);
     expect(g.deps.ledger.get(id)!.balance_msub).toBe(0);
     expect(errors).toEqual([]);

@@ -117,7 +117,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .back-head h1 { margin: 0; text-align: center; font-size: 18px; font-weight: 700; }
 .back-head h1:focus { outline: none; }
 .round { width: 48px; height: 48px; border-radius: 24px; border: 0; background: var(--surface); box-shadow: var(--shadow-raised-sm); display: flex; align-items: center; justify-content: center; color: var(--ink); }
-.round.small { width: 44px; height: 44px; }
+.round.small { width: 48px; height: 48px; }
 .scroll { flex: 1; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
 .foot { display: flex; flex-direction: column; gap: 10px; }
 .pad { padding: 16px; }
@@ -139,7 +139,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: 16px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; }
 .btn.primary { min-height: 56px; background: var(--primary); color: var(--primary-ink); border: 0; box-shadow: var(--shadow-primary); font-size: 16px; }
 .btn.soft { background: var(--surface-2); border: 0; }
-.btn.small { min-height: 44px; font-size: 14px; }
+.btn.small { min-height: 48px; font-size: 14px; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 .btn.block { width: 100%; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -170,7 +170,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; max-width: 100%; }
 .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip-x { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 22px; display: flex; align-items: center; justify-content: center; }
+.chip-x { width: 48px; height: 48px; border: 0; background: transparent; border-radius: 22px; display: flex; align-items: center; justify-content: center; }
 .notice { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--gold-callout); background: var(--surface); }
 .notice p { margin: 0; }
 
@@ -232,7 +232,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .qr svg { width: 100%; height: 100%; display: block; }
 .keyline { text-align: center; }
 .seg { display: flex; gap: 4px; }
-.seg button { flex: 1; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.seg button { flex: 1; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
 .seg button[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); }
 .scanner video { width: 100%; border-radius: 16px; background: #000; }
 .note-view .scanner video { aspect-ratio: 1; object-fit: cover; }
@@ -398,6 +398,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .cover-layer { position: absolute; inset: 0; pointer-events: none; }
 .photo-stage[data-view="before"] .cover-layer { display: none; }
 .cover-box { position: absolute; padding: 0; margin: 0; border: 2px solid var(--gold); border-radius: 4px; background: transparent; pointer-events: auto; min-width: 12px; min-height: 12px; }
+.cover-box::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 48px); height: max(100%, 48px); transform: translate(-50%, -50%); }
 .cover-box:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
 .cover-draft { position: absolute; border: 2px dashed var(--gold); background: rgba(0, 0, 0, 0.35); pointer-events: none; }
 .changes { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
@@ -527,8 +528,9 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .voicelab th, .voicelab td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
 
 /* Listen in a sub screen's header (AddFunds-C1 to C4): back, the centred title, Listen. */
-.listen-head { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
-.listen-head h1 { white-space: nowrap; }
+/* Back, the title, Listen: a long title wraps rather than run under Listen. */
+.listen-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+.listen-head h1 { line-height: 1.2; overflow-wrap: anywhere; }
 .listen-slot { justify-self: end; display: flex; }
 .listen-chip { min-height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--teal-line); background-color: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 600; line-height: 1; }
 
@@ -671,3 +673,29 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .chip-free { min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; border-radius: 24px; border: 1px solid var(--teal-line); background: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 700; }
 .chip-free-name { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip-free-tag { flex: none; padding: 4px 8px; border-radius: 12px; background: var(--memory); color: var(--primary-ink); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
+
+/* Reading load (owner, 2026-11-15): a message shows its first sentence with an icon; the detail opens
+   under it from a round info button (core/ui.js say, infoToggle), and Listen and screen readers read it all. */
+.say { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+.say > .ico { flex: none; }
+.say > .say-head { flex: 1 1 0; min-width: 0; }
+.say.centre-text, .status-line.say { justify-content: center; }
+.status-line.say > .say-head, .centre-text.say > .say-head { flex: 0 1 auto; }
+.say > .info-btn { margin: -12px -10px -12px 0; }
+.say > .info-more { flex-basis: 100%; order: 5; }
+.info-btn { flex: none; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; opacity: .85; }
+.info-btn[aria-expanded="true"] { opacity: 1; background: var(--surface-2); }
+.info-more { display: block; margin: 0; font-size: 15px; font-weight: 400; line-height: 1.4; color: var(--text-body); text-align: left; }
+.info-more p { margin: 0 0 6px; }
+.info-more[hidden] { display: none; }
+.with-info { display: flex; align-items: center; gap: 4px; }
+.with-info > :first-child { flex: 1; min-width: 0; }
+.opt { display: flex; flex-direction: column; gap: 6px; }
+.opt-row { display: flex; align-items: stretch; gap: 6px; }
+.opt-row > .model-card { flex: 1; min-width: 0; }
+.opt-row > .info-btn { align-self: center; }
+.opt > .info-more { padding: 0 6px 6px; }
+.goes li { display: flex; align-items: center; gap: 10px; list-style: none; min-height: 32px; }
+.goes { padding-left: 0; }
+.seg button .ico { vertical-align: -3px; margin-right: 4px; }
+.ib { display: inline-flex; align-items: center; gap: 6px; }

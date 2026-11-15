@@ -135,7 +135,7 @@ describe('Tap a card', () => {
     expect(await page.locator('#wayInfo-card p').allTextContents()).toEqual(['Hold the card to the back of the phone. It cannot be linked to you.', 'Cards work in the Android app.']);
     await page.click('#wayGo');
     await page.waitForSelector('#cardAppOnly');
-    expect(await page.textContent('#cardAppOnly')).toBe('Cards work in the Forge app for Android. A web page cannot talk to a card.');
+    expect(await page.textContent('#cardAppOnly')).toBe('Android app only. Cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#cardGetApp', 'href')).toBe('/download');
     // The page did not fetch the curve library: nothing is loaded for cards on the website.
     expect(await page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('/vendor/noble.js')))).toBe(false);
@@ -147,7 +147,7 @@ describe('Tap a card', () => {
     await provision(card, await mintSigner(MINT_A), [64, 32, 4]);
     const { ctx, page, errors } = await appWithCard(card);
     await openCard(page);
-    expect(await page.textContent('#cardHold')).toBe('Hold the card to the back of your phone');
+    expect(await page.textContent('#cardHold')).toBe('Hold the card to the phone. Hold it to the back of your phone.');
     await tap(page, card);
     await page.waitForSelector('#cardMove', { timeout: 20_000 });
     expect(await page.textContent('.card-art-amount')).toBe('100 sat');
@@ -161,7 +161,7 @@ describe('Tap a card', () => {
 
     await page.fill('#cardPin', '1111');
     await page.click('#cardMove');
-    await expect.poll(() => page.textContent('.card-view .msg')).toBe('Wrong PIN. 2 tries left.');
+    await expect.poll(() => page.textContent('.card-view .msg')).toBe('Wrong PIN, 2 tries left.');
     expect(card.balance()).toBe(100);
     // The card is lifted and held again before a new PIN is typed: the card is only read, and the
     // wrong PIN is never sent again on its own.
@@ -218,14 +218,14 @@ describe('Tap a card', () => {
     // Erase everything warns that a card payment is not finished; its button leads back to the card.
     await page.goto(`${app}/#/more/erase`);
     await page.waitForSelector('#eraseCards');
-    expect(await page.textContent('#eraseCards')).toBe('A card payment is not finished on this phone. Finish it in Tap a card first, or that money is lost.');
+    expect(await page.textContent('#eraseCards')).toBe('A card payment is open. A card payment is not finished on this phone. Finish it in Tap a card first, or that money is lost.');
     await page.click('#eraseSaveFirst');
     await page.waitForSelector('[data-fund=card] #cardHold');
 
     await tap(page, card);
     // A new screen does not have the PIN: the card's payment waits for it.
     await page.waitForSelector('#cardFinish', { timeout: 20_000 });
-    expect(await page.textContent('#cardToFinish')).toBe('This card has a payment to finish.');
+    expect(await page.textContent('#cardToFinish')).toBe('A payment to finish.');
     await page.fill('#cardFinishPin', '1234');
     await page.click('#cardFinish');
     // The card is still there: it gives its signature again, the swap is made, the change goes back on it.
@@ -270,7 +270,7 @@ describe('Tap a card', () => {
     await page.waitForSelector('#cardMove', { timeout: 20_000 });
     // No PIN on this card: no PIN field.
     expect(await page.locator('#cardPin').count()).toBe(0);
-    expect(await page.textContent('#cardFee')).toBe('The card mint takes 1 sat to move it.');
+    expect(await page.textContent('#cardFee')).toBe('Fee: 1 sat. The card mint takes 1 sat to move it.');
     // Other mint charges its own price after this: the card screen says only what comes to the phone.
     expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 95 sat. Other mint shows its price next.');
     await page.click('#cardMove');
@@ -307,14 +307,14 @@ describe('Tap a card', () => {
     });
     await page.click('#cardMove');
     await page.waitForSelector('#cardResult', { timeout: 30_000 });
-    expect(await page.textContent('#cardResult')).toBe('The card mint refused this payment. Its details are kept on this phone.');
+    expect(await page.textContent('#cardResult')).toBe('Card mint refused it. The card mint refused this payment. Its details are kept on this phone.');
     expect((await cardStore(page))[0]).toMatchObject({ state: 'failed', error: 'Witness is missing or invalid' });
     // Erase counts it, and its button leads to the card screen, which lists it.
     await page.goto(`${app}/#/more/erase`);
     await page.waitForSelector('#eraseCards');
     await page.click('#eraseSaveFirst');
     await page.waitForSelector('[data-fund=card] #cardFailed');
-    expect(await page.textContent('#cardFailedHead')).toBe('Card payments that did not go through');
+    expect(await page.textContent('#cardFailedHead')).toBe('Card payments not done');
     expect(await page.textContent('#cardFailed .card-failed p')).toBe('48 sat from 127.0.0.1:3338');
     expect(await page.textContent('#cardFailed')).toContain('Reason: Witness is missing or invalid');
     await page.click('#cardFailed .card-failed button');
@@ -345,7 +345,7 @@ describe('Tap a card', () => {
       expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 49 sat. Other mint shows its price next.');
       await page.click('#cardSome');
       await page.fill('#cardAmount', '60');
-      expect(await page.textContent('#cardPreview')).toBe('Enter a whole number of sats, up to 50 sat.');
+      expect(await page.textContent('#cardPreview')).toBe('Use a whole number up to 50 sat.');
       expect(await page.isDisabled('#cardMove')).toBe(true);
       expect(card.balance()).toBe(96);
       expect(errors).toEqual([]);

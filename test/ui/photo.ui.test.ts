@@ -396,7 +396,7 @@ describe('Share unseen', () => {
     });
     await page.waitForURL(/#\/photo\/sent$/);
     await page.waitForSelector('#photoAlert');
-    expect(await page.textContent('#photoAlert')).toBe('The app was not ready, so the phone sent this photo to the Forge server. The server dropped it without reading or keeping it. Share it again, or pick it here.');
+    expect(await page.textContent('#photoAlert')).toBe('Photo not kept. The app was not ready, so the phone sent this photo to the Forge server. The server dropped it without reading or keeping it. Share it again, or pick it here.');
     // The photo did leave the phone, so "it does not leave this phone" is not said here.
     expect(await page.locator('#photoFree').count()).toBe(0);
     expect(await page.isVisible('#photoPick')).toBe(true);
@@ -404,7 +404,7 @@ describe('Share unseen', () => {
     // "Did not reach Forge" stays for the worker's own failure, where it is true.
     await page.goto(`${g.url}/v2/#/photo/missed`);
     await page.waitForSelector('#photoAlert');
-    expect(await page.textContent('#photoAlert')).toBe('The shared photo did not reach Forge. Share it again, or pick it here.');
+    expect(await page.textContent('#photoAlert')).toBe('Photo did not arrive. The shared photo did not reach Forge. Share it again, or pick it here.');
     expect(await page.locator('#photoFree').count()).toBe(1);
     await ctx.close();
   }, 60_000);

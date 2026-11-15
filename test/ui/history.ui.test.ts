@@ -316,7 +316,7 @@ describe('Balance key', () => {
     const { ctx, page } = await phone();
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
-    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add money');
     const key = await fundedKey();
     await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
     await page.goto(`${g.url}/v2/#/funds`);
@@ -374,19 +374,19 @@ describe('Auto-delete', () => {
     expect(all).toContain('marker-india-92');
     await openHistory(page);
     expect(await page.getAttribute('#auto-hour', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#historyIntro')).toBe('Each conversation is kept until its timer runs out, then it is gone.');
+    expect(await page.textContent('#historyIntro')).toBe('Kept until its timer ends. Each conversation is kept until its timer runs out, then it is gone.');
     await expect.poll(() => historyWords(page)).toEqual(['New marker-juliet-93', 'Soon marker-india-92']);
     expect(await page.locator('.burn-timer.soon').count()).toBe(1);
     // While open: the next one goes when its hour is up, and the open History screen follows.
     await expect.poll(() => historyWords(page), { timeout: 15_000 }).toEqual(['New marker-juliet-93']);
-    await expect.poll(() => page.textContent('#toast')).toBe('Conversations past their time were removed.');
+    await expect.poll(() => page.textContent('#toast')).toBe('Old ones removed. Conversations past their time were removed.');
     all = await dump(page);
     expect(all).not.toContain('marker-india-92');
     expect(all).toContain('marker-juliet-93');
 
     // On close: everything goes when the app is closed or reloaded.
     await page.click('#auto-close');
-    expect(await page.textContent('#historyIntro')).toBe('Each conversation is removed when Forge is closed or reloaded. If the phone stops Forge first, it is removed the next time Forge opens.');
+    expect(await page.textContent('#historyIntro')).toBe('Removed when Forge closes. Each conversation is removed when Forge is closed or reloaded. If the phone stops Forge first, it is removed the next time Forge opens.');
     expect(await page.locator('.burn-timer').count()).toBe(0);
     await page.waitForTimeout(300);
     await page.reload();
@@ -401,7 +401,7 @@ describe('Auto-delete', () => {
     await page.reload();
     await page.waitForSelector('[data-screen=history]');
     await expect.poll(() => historyWords(page)).toEqual(['Ancient marker-kilo-94']);
-    expect(await page.textContent('#historyIntro')).toBe('Each conversation is kept on this phone until you burn it.');
+    expect(await page.textContent('#historyIntro')).toBe('Kept until you burn it. Each conversation is kept on this phone until you burn it.');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
@@ -459,7 +459,7 @@ describe('Erase everything', () => {
 
     // A tap, by finger or keyboard, erases nothing.
     await page.click('#eraseHold');
-    await expect.poll(() => page.textContent('.foot .msg')).toBe('Hold the button down to erase. A tap does nothing.');
+    await expect.poll(() => page.textContent('.foot .msg')).toBe('Hold it down to erase. A tap does nothing.');
     await page.focus('#eraseHold');
     await page.keyboard.down('Enter');
     await page.waitForTimeout(400);
@@ -476,7 +476,7 @@ describe('Erase everything', () => {
     await page.mouse.up();
     await page.waitForSelector('[data-screen=erased]');
     expect(await page.getAttribute('[data-screen=erased]', 'data-ok')).toBe('true');
-    expect(await page.textContent('#erasedBody')).toBe("Forge's conversations, settings, eCash and balance key are gone from this browser.");
+    expect(await page.textContent('#erasedBody')).toBe("All gone from this browser. Forge's conversations, settings, eCash and balance key are gone from this browser.");
     const empty = { localStorage: 0, sessionStorage: 0, databases: [], caches: [], workers: 0 };
     expect(await leftovers(page)).toEqual(empty);
     // Nothing is written back afterwards by work that was still under way.
@@ -486,7 +486,7 @@ describe('Erase everything', () => {
     // Opened again, it starts from nothing: no balance, no conversation.
     await page.click('#erasedAgain');
     await page.waitForSelector('[data-screen=home]');
-    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add money');
     await openHistory(page);
     await page.waitForSelector('#historyEmpty');
     expect(errors).toEqual([]);
@@ -520,9 +520,9 @@ describe('Erase everything', () => {
     await page.goto(`${g.url}/v2/#/more/erase`);
     await page.reload();
     await page.waitForSelector('[data-screen=erase]');
-    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Money on its way to this balance is lost');
+    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Money on its way is lost');
     expect(await page.isVisible('#eraseMoney')).toBe(true);
-    expect(await page.textContent('#eraseMoney p')).toBe('A payment that has not arrived yet goes to this balance. Wait until it arrives, then take it out.');
+    expect(await page.textContent('#eraseMoney p')).toBe('Wait for it first. A payment that has not arrived yet goes to this balance. Wait until it arrives, then take it out.');
     expect(await page.textContent('#eraseTakeOut')).toBe('Take funds out first');
     await page.click('#eraseTakeOut');
     await page.waitForSelector('[data-screen=takeOut]');
@@ -538,8 +538,8 @@ describe('Erase everything', () => {
     await page.goto(`${g.url}/v2/#/more/erase`);
     await page.reload();
     await page.waitForSelector('[data-screen=erase]');
-    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Any balance on this phone is lost');
-    expect(await page.textContent('#eraseMoney p')).toBe('There is no account to recover it. Take your funds out first as eCash.');
+    await expect.poll(() => page.textContent('#eraseMoney b')).toBe('Any balance here is lost');
+    expect(await page.textContent('#eraseMoney p')).toBe('It cannot be recovered. There is no account to recover it. Take your funds out first as eCash.');
     expect(await page.textContent('#eraseTakeOut')).toBe('Take funds out first');
     // The key is kept: a balance that cannot be read is not a balance that is gone.
     expect(await page.evaluate(() => localStorage.getItem('forge.balanceKey'))).toBe('sk-forge-unreadable-test-key');
@@ -560,7 +560,7 @@ describe('Erase everything', () => {
     await page.waitForSelector('[data-screen=erase]');
     expect(await page.isVisible('#eraseUnsaved')).toBe(true);
     expect(await page.textContent('#eraseUnsaved b')).toBe('eCash not saved yet');
-    expect(await page.textContent('#eraseUnsaved p')).toBe('There is eCash on this phone that is not in a wallet yet. Save it first, or it is lost.');
+    expect(await page.textContent('#eraseUnsaved p')).toBe('Save it, or it is lost. There is eCash on this phone that is not in a wallet yet. Save it first, or it is lost.');
     expect(await page.isVisible('#eraseMoney')).toBe(false); // no balance key here
     await page.click('#eraseSaveFirst');
     await page.waitForSelector('[data-screen=takeOut]');

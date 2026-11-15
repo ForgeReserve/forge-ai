@@ -5,7 +5,7 @@
 // Works with a finger, a mouse, and the keyboard (hold Space or Enter; Escape cancels).
 import { clock, inside } from '../core/talk.js';
 import { priceLine } from '../core/price.js';
-import { el } from '../core/ui.js';
+import { el, say } from '../core/ui.js';
 
 const BARS = 9;
 const SHAPE = [0.45, 0.7, 0.9, 0.6, 1, 0.65, 0.85, 0.55, 0.4];
@@ -166,7 +166,8 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
       time.textContent = tk.inside ? t('talk.recording', { time: clock(ms) }) : t('talk.leaving', { time: clock(ms) });
       heard.hidden = !tk.text;
       heard.textContent = tk.text;
-      route.textContent = t({ phone: 'talk.routePhone', 'engine-private': 'talk.routePrivate', 'engine-standard': 'talk.routeStandard', device: 'talk.routeDevice' }[tk.route] ?? 'talk.routeStandard');
+      // Where the sound goes, headline first with its picture; the detail behind info (core/ui.js say).
+      say(route, t({ phone: 'talk.routePhone', 'engine-private': 'talk.routePrivate', 'engine-standard': 'talk.routeStandard', device: 'talk.routeDevice' }[tk.route] ?? 'talk.routeStandard'), '', { phone: 'phone', device: 'globe' }[tk.route] ?? 'ear');
       route.dataset.route = tk.route ?? '';
       // The engine's speech to text is paid, so a voice question reads as free only when the phone (or the browser) hears it.
       const p = priceLine(tk.priceMsub, tk.unit, tk.freeOk ? v.free : null);

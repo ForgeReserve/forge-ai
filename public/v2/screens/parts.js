@@ -1,6 +1,6 @@
 // Parts shared by the screens: the status bar, the rings and the bottom row.
 import { dash, dashAfter, GEOMETRY } from '../core/rings.js';
-import { el, icon } from '../core/ui.js';
+import { el, icon, sayEl } from '../core/ui.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs) => {
@@ -158,7 +158,8 @@ export function statusBar({ t, state, nav }) {
     // With no paid balance, free questions left are what the pill shows.
     const freeText = !v.balanceText && v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'status.freeOne' : 'status.free', { count: v.freeLeft }) : null;
     const text = v.balanceText ?? freeText ?? (v.online ? t('status.noBalance') : t('status.offline'));
-    bal.replaceChildren(el('span', { class: 'dot', 'aria-hidden': 'true' }), el('span', { text, id: 'balanceText' }));
+    // With nothing to show, the pill is Add money: its plus in place of the dot.
+    bal.replaceChildren(v.balanceText || freeText ? el('span', { class: 'dot', 'aria-hidden': 'true' }) : icon(v.online ? 'plus' : 'alert', 16), el('span', { text, id: 'balanceText' }));
     bal.setAttribute('aria-label', v.balanceText ? t('status.balance', { amount: v.balanceText }) : freeText ? t('status.freeLabel', { free: freeText }) : t('status.noBalanceLabel'));
   };
   update();
@@ -193,7 +194,7 @@ export function bottomRow({ t, nav, open = null }) {
 export function searchSwitch({ t, state, actions, id }) {
   const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id, 'aria-labelledby': `${id}Label` }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
   sw.addEventListener('click', () => actions.setSearch(!state.view().search.on));
-  const note = el('p', { class: 'search-note', id: `${id}Note`, hidden: true, text: t('search.note') });
+  const note = sayEl('p', { class: 'search-note', id: `${id}Note`, hidden: true }, t('search.note'), '', 'eye');
   const node = el('div', { class: 'search-box', hidden: true }, el('div', { class: 'search-row' }, icon('globe', 20), el('span', { id: `${id}Label`, text: t('search.label') }), sw), note);
   const update = () => {
     const s = state.view().search;
@@ -244,6 +245,31 @@ export function listenButton({ t, reader, pieces, id }) {
       synth?.removeEventListener?.('voiceschanged', draw);
     },
   };
+}
+
+/**
+ * Listen for a whole sub screen (reading load, owner 2026-11-15): reads the title, then every message in
+ * full (the words in view and the detail behind its info button: core/ui.js say), and each choice with
+ * its info. `root()` is the screen's node. Returns listenButton's {node, update, stop, destroy}.
+ */
+export function screenListen({ t, reader, id, root }) {
+  const pieces = () => {
+    let r = null;
+    try {
+      r = root();
+    } catch {
+      /* the screen is still being built */
+    }
+    if (!r) return [];
+    const out = [r.querySelector('h1')?.textContent];
+    for (const n of r.querySelectorAll('.say, .opt')) {
+      if (n.closest('[hidden]') || n.parentElement?.closest('.opt')) continue;
+      if (n.matches('.opt')) out.push([n.querySelector('b')?.textContent, n.querySelector('.info-more')?.textContent].filter(Boolean).join('. '));
+      else out.push(n.textContent);
+    }
+    return out.filter((x) => x?.trim());
+  };
+  return listenButton({ t, reader, id, pieces });
 }
 
 /** A sub screen's header with Listen on the right: back, the centred title, Listen. */

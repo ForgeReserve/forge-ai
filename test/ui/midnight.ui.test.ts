@@ -339,7 +339,7 @@ describe('every screen reads well in Midnight', () => {
     await page.waitForSelector('[data-screen=startFree]');
     await page.fill('#startFreeCode', 'not-a-code');
     await page.click('#startFreeGo');
-    await expect.poll(() => page.textContent('#startFreeMsg')).toBe('This invite code does not work. Check it and try again.');
+    await expect.poll(() => page.textContent('#startFreeMsg')).toBe('Code does not work. This invite code does not work. Check it and try again.');
     expect(await lowContrast(page)).toEqual([]);
     await shot(page, 'start-free-wrong-code.png');
     await page.fill('#startFreeCode', createInvite(g));

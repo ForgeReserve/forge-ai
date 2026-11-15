@@ -3,7 +3,7 @@
 // but this site.
 import { t } from '../core/i18n.js';
 import { applyPageLook } from '../core/pagelook.js';
-import { el, icon } from '../core/ui.js';
+import { el, icon, sayEl } from '../core/ui.js';
 import { apkView } from './view.js';
 
 applyPageLook();
@@ -11,13 +11,13 @@ document.title = t('download.title');
 
 const root = document.getElementById('download');
 const body = el('div', { class: 'download-body', id: 'downloadBody', 'aria-live': 'polite' });
-root.replaceChildren(el('main', { class: 'screen download-page', 'data-screen': 'download' }, el('h1', { text: t('download.title') }), el('p', { class: 'lead', text: t('download.lead') }), body));
+root.replaceChildren(el('main', { class: 'screen download-page', 'data-screen': 'download' }, el('h1', { text: t('download.title') }), sayEl('p', { class: 'lead' }, t('download.lead')), body));
 
 const webApp = () => el('a', { class: 'btn block', href: '/v2/', id: 'openWeb' }, icon('external', 20), el('span', { text: t('download.web') }));
 
 function draw(v) {
   if (!v.available) {
-    body.replaceChildren(el('p', { class: 'note', id: 'downloadComing', text: t('download.coming') }), webApp());
+    body.replaceChildren(sayEl('p', { class: 'note', id: 'downloadComing' }, t('download.coming')), webApp());
     return;
   }
   body.replaceChildren(
@@ -25,14 +25,14 @@ function draw(v) {
       'div',
       { class: 'apk-box' },
       el('a', { class: 'btn primary block', href: v.url, download: 'forge.apk', id: 'downloadApk' }, icon('download', 20), el('span', { text: t('download.get', { mb: v.mb }) })),
-      el('p', { class: 'note', text: t('download.noGoogle') }),
+      sayEl('p', { class: 'note' }, t('download.noGoogle')),
       el('h2', { class: 'caps', text: t('download.hash') }),
       el('p', { class: 'hash', id: 'downloadHash', text: v.hash }),
-      el('p', { class: 'note', text: t('download.hashSub') }),
+      sayEl('p', { class: 'note' }, t('download.hashSub')),
     ),
     el('h2', { class: 'caps', text: t('download.steps') }),
-    el('ol', { id: 'downloadSteps' }, ...['download.step1', 'download.step2', 'download.step3', 'download.step4'].map((k) => el('li', { text: t(k) }))),
-    el('p', { class: 'note', text: t('download.update') }),
+    el('ol', { id: 'downloadSteps' }, ...['download.step1', 'download.step2', 'download.step3', 'download.step4'].map((k) => el('li', {}, sayEl('span', {}, t(k))))),
+    sayEl('p', { class: 'note' }, t('download.update')),
     webApp(),
   );
 }

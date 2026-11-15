@@ -213,11 +213,11 @@ describe('errors in plain words', () => {
     const streamErr = { code: 'upstream_error' }; // a StreamError: no HTTP status
     const httpErr = { code: 'upstream_error', status: 502 }; // refused before any answer
     // An error in the stream, then the engine's final event with a partial charge.
-    expect(words('upstream_error', { charged_msub: 1234 }, streamErr)).toEqual({ key: 'error.modelCharged', text: 'The model stopped early. That cost 1234 msub.' });
+    expect(words('upstream_error', { charged_msub: 1234 }, streamErr)).toEqual({ key: 'error.modelCharged', text: 'Stopped early, cost 1234 msub. The model stopped before the answer was done.' });
     // An empty answer the engine charged for (a reasoning model spent its output on reasoning).
     expect(words('stream_failed', { charged_msub: 50 }, null).key).toBe('error.modelCharged');
     // The engine said it charged nothing.
-    expect(words('upstream_error', { charged_msub: 0 }, streamErr)).toEqual({ key: 'error.model', text: 'The model did not answer. You were not charged.' });
+    expect(words('upstream_error', { charged_msub: 0 }, streamErr)).toEqual({ key: 'error.model', text: 'No answer, not charged. The model did not answer, so you were not charged.' });
     // An HTTP upstream error before any stream: the engine charges nothing for that.
     expect(words('upstream_error', null, httpErr).key).toBe('error.model');
     // No final event (the encrypted path, or a cut connection): no claim either way.

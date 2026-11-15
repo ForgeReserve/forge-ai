@@ -102,8 +102,8 @@ describe('hold to talk', () => {
     await page.mouse.down();
     await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
     expect(await page.textContent('#talkBtn')).toContain('Let go to send');
-    await expect.poll(() => page.textContent('#talkTime'), { timeout: 4000 }).toMatch(/^0:01\. Slide your finger off the button to cancel\.$/);
-    expect(await page.textContent('.listen-route')).toBe('Goes through the engine to a private model. The engine could hear it on the way. Not saved.');
+    await expect.poll(() => page.textContent('#talkTime'), { timeout: 4000 }).toMatch(/^0:01\. Slide off to cancel\.$/);
+    expect(await page.textContent('.listen-route')).toBe('Engine could hear it. It goes through the engine to a private model. The engine could hear it on the way. Not saved.');
     expect(await page.textContent('#talkPrice')).toMatch(/^(Under|Up to) \$\d+\.\d\d$/);
     // The level bars move with the (fake) microphone.
     await expect.poll(() => page.locator('#talkBtn .bar').first().evaluate((b) => Number((b as HTMLElement).style.getPropertyValue('--h')))).toBeGreaterThan(0.12);
@@ -200,7 +200,7 @@ describe('hold to talk', () => {
   it('a tap explains the button, sliding off cancels, and neither sends anything', async () => {
     const { ctx, page, errors, calls } = await phone();
     await hold(page, '#talkBtn', 80);
-    await expect.poll(() => page.textContent('#toast')).toBe('Hold the button down while you talk. Let go to send. Slide off the button to cancel.');
+    await expect.poll(() => page.textContent('#toast')).toBe('Hold to talk. Hold the button down while you talk. Let go to send. Slide off the button to cancel.');
     expect(await page.getAttribute('#talkBtn', 'data-phase')).toBe('idle');
 
     const box = (await page.locator('#talkBtn').boundingBox())!;
@@ -209,7 +209,7 @@ describe('hold to talk', () => {
     await page.waitForTimeout(700);
     await page.mouse.move(box.x + box.width / 2, box.y - 150, { steps: 4 });
     await expect.poll(() => page.textContent('#talkBtn')).toContain('Let go to cancel');
-    expect(await page.textContent('#talkTime')).toMatch(/Let go now to cancel\.$/);
+    expect(await page.textContent('#talkTime')).toMatch(/Let go to cancel\.$/);
     await page.mouse.up();
     await expect.poll(() => page.textContent('#toast')).toBe('Cancelled. No question was asked.');
     expect(await page.getAttribute('#talkBtn', 'data-phase')).toBe('idle');
@@ -252,7 +252,7 @@ describe('hold to talk', () => {
     await page.waitForSelector('[data-screen=answer]');
     await page.waitForSelector('#answerError:not([hidden])');
     expect(await page.textContent('.asked')).toBe('Your voice question');
-    expect(await page.textContent('#answerError')).toBe('The model did not answer. You were not charged.Hold the button to say it again.');
+    expect(await page.textContent('#answerError')).toBe('No answer, not charged. The model did not answer, so you were not charged.Hold to say it again.');
     await page.goto(`${g.url}/v2/#/`);
     await expect.poll(() => balance(page)).toBe(before);
     expect(errors).toEqual([]);
@@ -356,7 +356,9 @@ describe('hold to talk on this phone (the Android app)', () => {
     await page.goto(`${g.url}/v2/#/more/voice`);
     await page.waitForSelector('#voiceIn-phone');
     expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#voiceIn-phone')).toBe('On this phoneFree and private. This phone turns your voice into words. Your voice does not leave the phone.');
+    // The choice reads at a glance (its tags); the full line is behind its info button and read to screen readers.
+    expect(await page.textContent('#voiceIn-phone')).toBe('On this phoneFreeStays here');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-description')).toBe('Free and private. This phone turns your voice into words. Your voice does not leave the phone.');
     // The engine is still there to pick.
     expect(await page.getAttribute('#voiceIn-engine', 'aria-checked')).toBe('false');
     expect(await page.locator('#voiceInHead + .model-list .model-card').first().getAttribute('id')).toBe('voiceIn-phone');
@@ -369,7 +371,7 @@ describe('hold to talk on this phone (the Android app)', () => {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
-    expect(await page.textContent('.listen-route')).toBe('This phone turns it into words. Your voice does not leave the phone.');
+    expect(await page.textContent('.listen-route')).toBe('Stays on this phone. This phone turns it into words. Your voice does not leave the phone.');
     // The words as the phone hears them, and the level bars move with its level.
     await expect.poll(() => page.textContent('.listen-text'), { timeout: 4000 }).toBe('What should I bring');
     await expect.poll(() => page.locator('#talkBtn .bar').first().evaluate((b) => Number((b as HTMLElement).style.getPropertyValue('--h')))).toBeGreaterThan(0.12);

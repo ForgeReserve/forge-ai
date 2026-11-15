@@ -7,7 +7,7 @@
 // The Add and More sheets open over it (ZAdd, ZMore): the rings fade and a floating card sits above
 // the bottom row, whose button turns dark and reads Close. The sheet covers the whole home, the talk
 // button included, and the bottom row stays fixed in view, so Close never needs a scroll.
-import { el, icon } from '../core/ui.js';
+import { el, icon, say } from '../core/ui.js';
 import { bottomRow, rings, searchSwitch, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
@@ -65,7 +65,7 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     search.update();
     // A search is paid from the balance (never a free question): with no funds the home keeps its empty state.
     if (recording || v.noFunds || v.fundsBlock) search.node.hidden = true;
-    held.textContent = v.pendingCount ? t('home.attached', { count: v.pendingCount }) : '';
+    say(held, v.pendingCount ? t('home.attached', { count: v.pendingCount }) : '', '', 'file');
   };
   update();
   return { node: main, update, destroy: hold.destroy, focus: sheet ? sheet.querySelector('button') : talk };

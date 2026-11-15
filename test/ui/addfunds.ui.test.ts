@@ -339,7 +339,7 @@ describe('Add money as wallet cards', () => {
     expect(await page.textContent('#startFreeMsg')).toBe('Enter your invite code first.');
     await page.fill('#startFreeCode', 'not-a-code');
     await page.click('#startFreeGo');
-    await expect.poll(() => page.textContent('#startFreeMsg')).toBe('This invite code does not work. Check it and try again.');
+    await expect.poll(() => page.textContent('#startFreeMsg')).toBe('Code does not work. This invite code does not work. Check it and try again.');
     // Paste puts the copied code in the field.
     await page.evaluate((c) => navigator.clipboard.writeText(c), createInvite(g));
     await page.fill('#startFreeCode', '');

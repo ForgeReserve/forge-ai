@@ -8,7 +8,7 @@ import { createEngine } from '../core/engine.js';
 import { faucetLine, faucetRefusal, faucetStatus, getVoucher } from '../core/faucet.js';
 import { t } from '../core/i18n.js';
 import { applyPageLook } from '../core/pagelook.js';
-import { copy, el, icon, msgLine, toast } from '../core/ui.js';
+import { copy, el, icon, msgLine, say, sayEl, toast } from '../core/ui.js';
 import { createVault } from '../core/vault.js';
 
 applyPageLook();
@@ -21,7 +21,7 @@ const root = document.getElementById('free');
 const today = el('p', { class: 'free-today', id: 'freeToday', role: 'status' });
 const msg = msgLine();
 const ring = el('div', { class: 'pow-ring', id: 'freeWork', role: 'progressbar', 'aria-label': t('fund.free.working'), 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', hidden: true }, el('span', { class: 'pow-pct' }));
-const working = el('p', { class: 'note', id: 'freeWorking', hidden: true, text: t('fund.free.working') });
+const working = sayEl('p', { class: 'note', id: 'freeWorking', hidden: true }, t('fund.free.working'));
 const get = el('button', { type: 'button', class: 'btn primary block no-print', id: 'freeGet', disabled: true }, icon('gift', 20), el('span', { text: t('fund.free.getSome') }));
 const stop = el('button', { type: 'button', class: 'btn block no-print', id: 'freeStop', hidden: true, text: t('fund.free.stop') });
 const out = el('div', { id: 'voucherBox' });
@@ -29,7 +29,7 @@ const main = el(
   'main',
   { class: 'screen free-page', 'data-screen': 'free' },
   el('h1', { text: t('faucet.title') }),
-  el('p', { class: 'lead no-print', text: t('faucet.sub') }),
+  sayEl('p', { class: 'lead no-print' }, t('faucet.sub')),
   el('div', { class: 'no-print' }, today),
   ring,
   working,
@@ -57,11 +57,11 @@ async function refresh() {
   try {
     const s = await faucetStatus(engine.call);
     const l = faucetLine(s);
-    today.textContent = t(l.key, l);
+    say(today, t(l.key, l));
     get.querySelector('span').textContent = t('fund.free.get', { count: s.questions });
     get.disabled = !(s.available_now > 0);
   } catch (e) {
-    today.textContent = '';
+    say(today, '');
     get.disabled = true;
     msg.set(t(faucetRefusal(e), { time: time(e?.nextAt) }), 'err');
   }
@@ -88,7 +88,7 @@ function showVoucher(v) {
       { class: 'voucher', id: 'voucher', 'data-token': v.token },
       el('b', { text: t('faucet.voucher', { count: v.questions }) }),
       box,
-      el('p', { class: 'note', text: t('faucet.keep') }),
+      sayEl('p', { class: 'note' }, t('faucet.keep')),
       add,
       el(
         'div',

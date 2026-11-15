@@ -1,8 +1,8 @@
 // Funds and memory (ZBoth, with the add area of AddFunds-C4), one funding method (a fund module), and
 // Take funds out (refund as eCash, kept on the phone until the person says they saved it). Add money
 // itself is the wallet cards (screens/wallet.js).
-import { backHeader, copy, el, icon, msgLine, toast } from '../core/ui.js';
-import { cardRing, listenButton, listenHeader } from './parts.js';
+import { backHeader, copy, el, icon, msgLine, say, sayEl, toast } from '../core/ui.js';
+import { cardRing, listenButton, listenHeader, screenListen } from './parts.js';
 import { takeSaid } from './startfree.js';
 import { fundsRing } from './wallet-art.js';
 import { cardStack } from './wallet.js';
@@ -12,7 +12,7 @@ export function fundsScreen(ctx) {
   const S = state.S;
   // What Start free said when it chose the free model (AddFunds-C4), once.
   const said = takeSaid();
-  const done = el('div', { class: 'funds-said', id: 'fundsSaid', role: 'status', hidden: !said }, el('span', { class: 'funds-said-ico' }, icon('check', 16, 3)), el('p', { text: said ?? '' }));
+  const done = el('div', { class: 'funds-said', id: 'fundsSaid', role: 'status', hidden: !said }, el('span', { class: 'funds-said-ico' }, icon('check', 16, 3)), sayEl('p', { id: 'fundsSaidText' }, said ?? ''));
   const fr = fundsRing();
   const mr = cardRing('memory-track', 'memory');
   const amount = el('div', { class: 'big', id: 'fundsAmount' });
@@ -23,7 +23,7 @@ export function fundsScreen(ctx) {
   const refundable = el('p', { class: 'note', id: 'refundable' });
   // Free questions (credits): counted apart from the money, and never taken out as money.
   const freeNote = el('p', { class: 'note free-note', id: 'fundsFree', hidden: true });
-  const freeModel = el('button', { type: 'button', class: 'btn small', id: 'fundsUseFree', hidden: true, onclick: () => actions.useFreeModel() }, el('span', { text: t('funds.useFreeModel') }));
+  const freeModel = el('button', { type: 'button', class: 'btn small', id: 'fundsUseFree', hidden: true, onclick: () => actions.useFreeModel() }, icon('gift', 18), el('span', { text: t('funds.useFreeModel') }));
   const memFree = el('div', { class: 'big', id: 'memoryFree' });
   const memNote = el('p', { class: 'note', id: 'memoryNote' });
   const items = el('ul', { class: 'held', id: 'heldItems' });
@@ -79,23 +79,22 @@ export function fundsScreen(ctx) {
           'div',
           { class: `vault-row ${refused ? 'refused' : 'waiting'}`, 'data-vault-in': e.id },
           el('b', { text: title }),
-          el('p', { text: sub }),
+          sayEl('p', {}, sub),
           el(
             'div',
             { class: 'row-btns' },
-            taken ? null : el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.token)) ? t('answer.copied') : t('answer.copyFailed')), text: t('funds.copyToken') }),
+            taken ? null : el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.token)) ? t('answer.copied') : t('answer.copyFailed')) }, icon('copy', 18), el('span', { text: t('funds.copyToken') })),
             refused
               ? el('button', {
                   type: 'button',
                   class: 'btn small danger',
-                  text: t('funds.removeToken'),
                   onclick: () => {
                     if (window.confirm(t('funds.removeConfirm'))) {
                       vault.discard(e.id);
                       update();
                     }
                   },
-                })
+                }, icon('trash', 18), el('span', { text: t('funds.removeToken') }))
               : null,
           ),
         ),
@@ -108,8 +107,8 @@ export function fundsScreen(ctx) {
           { class: 'vault-row waiting', 'data-vault-out': o.id },
           // eCash that came back from another mint has no amount the phone knows.
           el('b', { text: o.amount == null ? t('funds.returned') : t('funds.unsaved') }),
-          el('p', { text: o.amount == null ? t('funds.unsavedSubReturned') : t('funds.unsavedSub', { amount: format.units(o.amount, o.unit) }) }),
-          el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn small', onclick: () => nav('takeOut'), text: t('out.title') })),
+          sayEl('p', {}, o.amount == null ? t('funds.unsavedSubReturned') : t('funds.unsavedSub', { amount: format.units(o.amount, o.unit) })),
+          el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn small', onclick: () => nav('takeOut') }, icon('takeout', 18), el('span', { text: t('out.title') }))),
         ),
       );
     }
@@ -127,7 +126,7 @@ export function fundsScreen(ctx) {
     ringBox.classList.toggle('free', freeZero);
     askBtn.hidden = !(freeZero && v.hasKey);
     // A free model costs nothing: never "not enough" for it.
-    fundsNote.textContent = !v.hasKey ? (v.freeLeft > 0 ? '' : v.modelFree ? t('funds.needKey') : t('funds.empty')) : v.modelFree ? t('funds.modelFree') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
+    say(fundsNote, !v.hasKey ? (v.freeLeft > 0 ? '' : v.modelFree ? t('funds.needKey') : t('funds.empty')) : v.modelFree ? t('funds.modelFree') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough'));
     fundsNote.hidden = !fundsNote.textContent;
     freeNote.hidden = !(v.freeLeft > 0) && v.fundsBlock !== 'freeOut';
     freeNote.textContent = v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'funds.freeLeftOne' : 'funds.freeLeft', { count: v.freeLeft }) : v.fundsBlock === 'freeOut' ? t('funds.freeUsed') : '';
@@ -167,12 +166,12 @@ let handoff = null;
  * Hosts one fund module's view. The module builds its own body from the inputs it was given.
  * open(id, {token}) switches to another fund module and hands it the token.
  */
-export function fundScreen({ t, state, nav, back, backTo, registry }, { id }) {
+export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { id }) {
   const given = handoff?.id === id ? handoff : null;
   handoff = null;
   const entry = registry.list('fund').find((x) => x.instance.id === id);
   if (!entry || !entry.instance.available(state.S.methods)) {
-    const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('ways.title'), back, t('common.back')), el('p', { class: 'hint pad', text: t('addFunds.unavailable') }));
+    const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('ways.title'), back, t('common.back')), sayEl('p', { class: 'hint pad' }, t('addFunds.unavailable'), '', 'alert'));
     return { node: main, focus: main.querySelector('h1') };
   }
   const open = (to, { token } = {}) => {
@@ -180,11 +179,13 @@ export function fundScreen({ t, state, nav, back, backTo, registry }, { id }) {
     nav('fund', { id: to }, { replace: true });
   };
   const view = entry.instance.view({ done: () => backTo('funds'), open, token: given?.token });
-  const main = el('main', { class: 'screen sub fund', 'data-screen': 'fund', 'data-fund': id }, backHeader(t(`fund.${id}.name`), back, t('common.back')), view.node);
-  return { node: main, update: view.update, destroy: view.destroy, focus: main.querySelector('h1') };
+  const listen = screenListen({ t, reader, id: 'fundListen', root: () => main });
+  const main = el('main', { class: 'screen sub fund', 'data-screen': 'fund', 'data-fund': id }, listenHeader(t(`fund.${id}.name`), back, t('common.back'), listen.node), view.node);
+  listen.update();
+  return { node: main, update: () => (view.update?.(), listen.update()), destroy: () => (view.destroy?.(), listen.destroy()), focus: main.querySelector('h1') };
 }
 
-export function takeOutScreen({ t, state, back, actions, format, vault, qr, wallet }) {
+export function takeOutScreen({ t, state, back, actions, format, vault, qr, wallet, reader }) {
   const S = state.S;
   const msg = msgLine();
   const out = el('div', { class: 'token-out', id: 'tokenOut' });
@@ -194,8 +195,8 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
   const form = el(
     'div',
     { class: 'form' },
-    el('p', { text: t('out.what') }),
-    lock ? el('p', { class: 'note', id: 'outLocked', text: t('out.locked', { key: `${lock.slice(0, 10)}...${lock.slice(-6)}` }) }) : null,
+    sayEl('p', { id: 'outWhat' }, t('out.what'), '', 'coins'),
+    lock ? sayEl('p', { class: 'note', id: 'outLocked' }, t('out.locked', { key: `${lock.slice(0, 10)}...${lock.slice(-6)}` }), '', 'lock') : null,
     el('p', { class: 'note', id: 'outAll' }),
     el('label', { for: 'outAmount', class: 'label', text: t('out.amountLabel') }),
     input,
@@ -210,15 +211,15 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     const box = el('div', { class: 'qr', role: 'img', 'aria-label': t('out.qr') });
     const parts = el('p', { class: 'note' });
     const long = o.token.length > qr.STATIC_MAX;
-    (long ? qr.playAnimatedQR(box, o.token).then((p) => (players.push(p), (parts.textContent = t('out.parts', { count: p.parts })))) : qr.renderQR(box, o.token, 'L')).catch(() => {});
+    (long ? qr.playAnimatedQR(box, o.token).then((p) => (players.push(p), say(parts, t('out.parts', { count: p.parts }), '', 'qr'))) : qr.renderQR(box, o.token, 'L')).catch(() => {});
     return el(
       'div',
       { class: 'token-card', 'data-token-id': o.id },
       el('b', { text: o.amount == null ? t('out.readyReturned') : t('out.ready', { amount: format.units(o.amount, o.unit) }) }),
       box,
       parts,
-      el('p', { class: 'note', text: t('out.keep') }),
-      el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn', onclick: async () => toast((await copy(o.token)) ? t('out.copied') : t('answer.copyFailed')) }, icon('copy', 18), el('span', { text: t('out.copy') })), el('button', { type: 'button', class: 'btn primary', 'data-saved': o.id, onclick: () => (vault.saved(o.id), draw()), text: t('out.saved') })),
+      sayEl('p', { class: 'note' }, t('out.keep'), '', 'phone'),
+      el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn', onclick: async () => toast((await copy(o.token)) ? t('out.copied') : t('answer.copyFailed')) }, icon('copy', 18), el('span', { text: t('out.copy') })), el('button', { type: 'button', class: 'btn primary', 'data-saved': o.id, onclick: () => (vault.saved(o.id), draw()) }, icon('check', 20), el('span', { text: t('out.saved') }))),
       el('textarea', { class: 'field-input mono', readonly: true, rows: '3', 'aria-label': t('out.copy'), text: o.token }),
     );
   };
@@ -263,6 +264,8 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     }
   });
   draw();
-  const main = el('main', { class: 'screen sub take-out', 'data-screen': 'takeOut' }, backHeader(t('out.title'), back, t('common.back')), el('div', { class: 'scroll' }, out, form), el('div', { class: 'foot' }, go));
-  return { node: main, update: draw, destroy: stopPlayers, focus: main.querySelector('h1') };
+  const listen = screenListen({ t, reader, id: 'outListen', root: () => main });
+  const main = el('main', { class: 'screen sub take-out', 'data-screen': 'takeOut' }, listenHeader(t('out.title'), back, t('common.back'), listen.node), el('div', { class: 'scroll' }, out, form), el('div', { class: 'foot' }, go));
+  listen.update();
+  return { node: main, update: draw, destroy: () => (stopPlayers(), listen.destroy()), focus: main.querySelector('h1') };
 }

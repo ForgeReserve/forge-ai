@@ -42,9 +42,9 @@ export function create(inputs) {
         }
       });
       // The question, once the balance is open and Private only is on.
-      const useBtn = ui.el('button', { type: 'button', class: 'btn primary', id: 'openUseFree', text: t('startFree.use') });
-      const keepBtn = ui.el('button', { type: 'button', class: 'btn', id: 'openKeepPrivate', text: t('startFree.keep') });
-      const ask = ui.el('div', { class: 'free-ask', id: 'openFreeAsk', role: 'group', 'aria-labelledby': 'openFreeAskText', hidden: true }, ui.el('p', { id: 'openFreeAskText', text: t('startFree.ask') }), ui.el('div', { class: 'row-btns' }, useBtn, keepBtn));
+      const useBtn = ui.el('button', { type: 'button', class: 'btn primary', id: 'openUseFree' }, ui.icon('check', 20), ui.el('span', { text: t('startFree.use') }));
+      const keepBtn = ui.el('button', { type: 'button', class: 'btn', id: 'openKeepPrivate' }, ui.icon('lock', 20), ui.el('span', { text: t('startFree.keep') }));
+      const ask = ui.el('div', { class: 'free-ask', id: 'openFreeAsk', role: 'group', 'aria-labelledby': 'openFreeAskText', hidden: true }, ui.el('p', { id: 'openFreeAskText', 'data-approved': '', text: t('startFree.ask') }), ui.el('div', { class: 'row-btns' }, useBtn, keepBtn));
       /** Says what was chosen, then back to Funds. used: the free models (Private only goes off, after a yes). */
       function finish(wasOn, used = true) {
         const m = used ? wallet.useFreeModels() : null;
@@ -56,7 +56,7 @@ export function create(inputs) {
       useBtn.addEventListener('click', () => finish(true));
       keepBtn.addEventListener('click', () => finish(true, false));
       const field = ui.el('div', { class: 'field' }, ui.el('label', { for: 'openInvite', class: 'label', text: t('invite.label') }), input);
-      const body = ui.el('div', { class: 'scroll fund-body' }, ui.el('p', { text: t('fund.invite.what') }), field, ask, msg, ui.el('p', { class: 'note', text: t('fund.invite.later') }));
+      const body = ui.el('div', { class: 'scroll fund-body' }, ui.sayEl('p', {}, t('fund.invite.what')), field, ask, msg, ui.sayEl('p', { class: 'note' }, t('fund.invite.later')));
       const node = ui.el('div', { class: 'fund-view' }, body, ui.el('div', { class: 'foot' }, go));
       return { node };
     },

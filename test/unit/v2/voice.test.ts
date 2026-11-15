@@ -272,7 +272,7 @@ describe('the engine client audio calls', () => {
     const used = E.createEngine({ fetch: async () => new Response(JSON.stringify({ error: { code: 'free_voice_limit', message: 'used up' }, free_voice: { left: 0 } }), { status: 402 }) });
     await expect(used.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).rejects.toMatchObject({ code: 'free_voice_limit', status: 402 });
     expect(ERR.errorView('free_voice_limit', 'used up')).toEqual({ key: 'talk.freeVoiceOut', next: 'addFunds' });
-    expect(EN['talk.freeVoiceOut']).toBe('Free voice questions are used up for today. Type instead, or add funds.');
+    expect(EN['talk.freeVoiceOut']).toBe('No free voice today. Free voice questions are used up for today. Type instead, or add funds.');
   });
 
   it('turns a refused or failed audio request into an EngineError, and answers proof of work', async () => {

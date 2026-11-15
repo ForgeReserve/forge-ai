@@ -52,7 +52,7 @@ describe('Search the web', () => {
     const off = Number(await page.getAttribute('#priceLine', 'data-msub'));
     await page.click('#searchSwitch');
     expect(await page.getAttribute('#searchSwitch', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#searchSwitchNote')).toBe('The private model sends the search to a search service, which sees the search but not who asked.');
+    expect(await page.textContent('#searchSwitchNote')).toBe('A search service sees it. The private model sends the search to a search service, which sees the search but not who asked.');
     const on = Number(await page.getAttribute('#priceLine', 'data-msub'));
     // The fee, plus the bytes the search options add to the question (82 bytes, 41 input tokens at the
     // test catalog's 100 USD per million, 10 msub each).

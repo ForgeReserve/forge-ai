@@ -140,13 +140,13 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.isVisible('#engineDefault')).toBe(false);
     await page.fill('#engineAddress', 'http://ai.example.org');
     await page.click('#engineUse');
-    expect(await page.textContent('#engineMsg')).toBe('Use an address that starts with https.');
+    expect(await page.textContent('#engineMsg')).toBe('Needs https. Use an address that starts with https.');
     await page.fill('#engineAddress', 'https://ai.forge-reserve.com/');
     await page.click('#engineUse');
     expect(await page.textContent('#engineMsg')).toBe('Forge already uses this engine.');
     await page.fill('#engineAddress', 'https://ai.example.org');
     await page.click('#engineUse');
-    await expect.poll(() => page.textContent('#engineMsg')).toBe('That engine did not answer. Check the address and try again.');
+    await expect.poll(() => page.textContent('#engineMsg')).toBe('No answer from it. That engine did not answer. Check the address and try again.');
     await page.fill('#engineAddress', `${g.url}/`);
     await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
     await page.waitForSelector('[data-screen=home]');
@@ -192,7 +192,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await Promise.all([page.waitForEvent('load'), page.click('#engineDefault')]);
     await page.waitForSelector('[data-screen=home]');
     await page.unroute(`${PROD}/v1/models`);
-    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add money');
     expect(outside.slice(before).every((u) => u.startsWith(`${PROD}/`))).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
@@ -205,7 +205,8 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
     await page.waitForSelector('#voiceOut-phonon');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFree. Made on this phone, so the answer is not sent anywhere.');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeStays here');
+    expect(await page.getAttribute('#voiceOut-phonon', 'aria-description')).toBe('Free. Made on this phone, so the answer is not sent anywhere.');
     // The voice lab, one way only: the model loads from the bundle on several threads.
     await page.goto(`${app}/#/voice-lab`);
     await page.waitForSelector('[data-screen=voiceLab]');
@@ -273,7 +274,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
       for (const l of w.__native.listeners) if (l.event === 'shared') l.fn();
     });
     await page.waitForSelector('#photoAlert');
-    expect(await page.textContent('#photoAlert')).toContain('No photo came with that share.');
+    expect(await page.textContent('#photoAlert')).toContain('No photo in that share.');
     await ctx.close();
   }, 60_000);
 

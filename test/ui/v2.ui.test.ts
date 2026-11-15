@@ -61,7 +61,7 @@ describe('v2 in a phone-sized browser', () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
-    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add money');
     await expect.poll(() => page.textContent('#privacyPill')).toContain('Private');
     expect(await page.textContent('#talkBtn')).toContain('Hold to talk');
 
@@ -163,7 +163,7 @@ describe('v2 in a phone-sized browser', () => {
     await page.fill('#question', 'Will this work?');
     await page.click('#sendBtn');
     await page.waitForSelector('#answerError:not([hidden])');
-    expect(await page.textContent('#answerError')).toContain('The model did not answer. You were not charged.');
+    expect(await page.textContent('#answerError')).toContain('No answer, not charged. The model did not answer, so you were not charged.');
     expect(await page.textContent('#nextStep')).toBe('Try again');
     await ctx.close();
   }, 60_000);
@@ -195,7 +195,7 @@ describe('v2 in a phone-sized browser', () => {
     await expect.poll(() => page.textContent('#balanceText')).toBe('$0.20');
     await page.click('#btn-type');
     await page.fill('#question', 'And on Sunday?');
-    await expect.poll(() => page.textContent('#typeNotice')).toContain('Not enough funds for this question.');
+    await expect.poll(() => page.textContent('#typeNotice')).toContain('Not enough funds. This question costs more than your funds can hold for it.');
     expect(await page.isDisabled('#sendBtn')).toBe(true);
     await page.click('#noticeBtn');
     await page.waitForSelector('[data-screen=addFunds]');
@@ -217,7 +217,7 @@ describe('v2 in a phone-sized browser', () => {
     expect(await page.locator('#addSheet .row').count()).toBe(2); // Photo and File only
     await page.setInputFiles('#fileInput', { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Bring water and a paper map.') });
     await page.waitForSelector('#heldLine:not([hidden])');
-    expect(await page.textContent('#heldLine')).toBe('1 added for the next question');
+    expect(await page.textContent('#heldLine')).toBe('1 added to your question');
     await tapRing(page);
     await page.waitForSelector('[data-screen=funds]');
     expect(await page.textContent('#heldItems')).toContain('notes.txt');
@@ -320,21 +320,21 @@ describe('v2 money paths in a phone-sized browser', () => {
     };
     // Charged: the engine's final event came after the error.
     let words = await ask('First?');
-    expect(words).toMatch(/^The model stopped early\. That cost 1\.23 cents\./);
+    expect(words).toMatch(/^Stopped early, cost 1\.23 cents\. The model stopped before the answer was done\./);
     expect(words).not.toContain('not charged');
     // Not charged: the engine said 0.
     reply = sseBody(errorEvent, forgeEvent(0));
     words = await ask('Second?');
-    expect(words).toContain('The model did not answer. You were not charged.');
+    expect(words).toContain('No answer, not charged. The model did not answer, so you were not charged.');
     // No final event at all: no claim either way.
     reply = sseBody(errorEvent);
     words = await ask('Third?');
-    expect(words).toContain('The model did not answer. Check your funds.');
+    expect(words).toContain('No answer. The model did not answer. Check your funds.');
     expect(words).not.toContain('not charged');
     // An empty answer the engine charged for (a reasoning model that spent it all on reasoning).
     reply = sseBody(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { reasoning_content: 'thinking' } }] })}\n\n`, 'data: [DONE]\n\n', forgeEvent(500).replace(',"partial":true', ''));
     words = await ask('Fourth?');
-    expect(words).toMatch(/^The model stopped early\. That cost 0\.500 cents\./);
+    expect(words).toMatch(/^Stopped early, cost 0\.500 cents\. /);
 
     // The answer screen's button reads Hold to talk, with the same hint as the home button.
     expect(await page.textContent('#replyBtn')).toContain('Hold to talk');
@@ -424,7 +424,7 @@ describe('v2 money paths in a phone-sized browser', () => {
       expect(w.balance_msub).toBeGreaterThan(0);
       await page.goto(`${gf.url}/v2/#/funds/out`);
       await page.waitForSelector('.token-card');
-      expect(await page.textContent('.token-card b')).toBe('Here is the eCash that came back.');
+      expect(await page.textContent('.token-card b')).toBe('eCash that came back.');
       // The only console error is the browser logging the stubbed 409.
       expect(errors.filter((e) => !e.includes('status of 409'))).toEqual([]);
     } finally {
@@ -476,7 +476,7 @@ describe('v2 money paths in a phone-sized browser', () => {
       await usd.page.goto(`${go.url}/v2/#/funds/add`);
       await openWay(usd.page, 'onchain');
       await usd.page.waitForSelector('[data-fund=onchain]');
-      expect(await usd.page.textContent('[data-fund=onchain] .fund-body')).toBe('On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.');
+      expect(await usd.page.textContent('[data-fund=onchain] .fund-body')).toBe('Not for dollar funds. On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.');
       expect(await usd.page.locator('#onchainGet').count()).toBe(0);
       await usd.ctx.close();
     } finally {

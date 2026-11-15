@@ -19,7 +19,9 @@ const sats = (msat) => Math.ceil(msat / 1000);
 export function wordsFor(out, t) {
   switch (out?.code) {
     case 'wrong_pin':
-      return t('fund.fedimint.wrongPin', { tries: out.triesLeft === 1 ? t('fund.fedimint.tryLeft') : out.triesLeft == null ? '' : t('fund.fedimint.triesLeft', { count: out.triesLeft }) }).trim();
+      // The tries left stay in view, after a comma: "Wrong PIN, 2 tries left." Unknown: "Wrong PIN."
+      if (out.triesLeft == null) return t('fund.fedimint.wrongPinOnly');
+      return t('fund.fedimint.wrongPin', { tries: out.triesLeft === 1 ? t('fund.fedimint.tryLeft') : t('fund.fedimint.triesLeft', { count: out.triesLeft }) });
     case 'pin_blocked':
       return t('fund.fedimint.pinBlocked');
     case 'pin_required':
@@ -126,7 +128,7 @@ export function create(inputs) {
       // ------------------------------------------------------------ the website: no reader, no till
 
       if (!ready()) {
-        body.replaceChildren(...kids(art(), ui.el('p', { id: 'fedAppOnly', text: t('fund.fedimint.appOnly') }), ui.el('p', { class: 'note', text: t('fund.fedimint.what') })));
+        body.replaceChildren(...kids(art(), ui.sayEl('p', { id: 'fedAppOnly' }, t('fund.fedimint.appOnly')), ui.sayEl('p', { class: 'note' }, t('fund.fedimint.what'))));
         foot.replaceChildren(ui.el('a', { class: 'btn primary block', id: 'fedGetApp', href: '/download' }, ui.icon('download', 20), ui.el('span', { text: t('fund.card.getApp') })));
         return { node, destroy() {} };
       }
@@ -138,7 +140,7 @@ export function create(inputs) {
         want = null;
         const paste = ui.el('textarea', { id: 'fedPairText', rows: '3', class: 'field-input mono', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
         const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
-        const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.el('p', { class: 'note', text: t('fund.scanHint') }));
+        const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
         let job = null;
         const stopScan = () => {
           job?.stop();
@@ -180,8 +182,8 @@ export function create(inputs) {
         body.replaceChildren(
           ...kids(
             art(),
-            ui.el('p', { id: 'fedNeedTill', text: t('fund.fedimint.needTill') }),
-            why ? ui.el('p', { class: 'msg err', text: why }) : null,
+            ui.sayEl('p', { id: 'fedNeedTill' }, t('fund.fedimint.needTill')),
+            why ? ui.sayEl('p', { class: 'msg err' }, why, 'err') : null,
             scanBtn,
             box,
             ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPairText', class: 'label', text: t('fund.fedimint.pasteLabel') }), paste),
@@ -206,13 +208,13 @@ export function create(inputs) {
         return ui.el(
           'section',
           { class: 'till-box', id: 'fedTill', 'aria-labelledby': 'fedTillHead' },
-          ui.el('p', { class: 'label', id: 'fedTillHead', text: t('fund.fedimint.tillLabel') }),
-          ui.el('p', { class: 'mono', id: 'fedTillUrl', text: tillLabel(s.url) }),
+          ui.sayEl('p', { class: 'label', id: 'fedTillHead' }, t('fund.fedimint.tillLabel')),
+          ui.sayEl('p', { class: 'mono', id: 'fedTillUrl' }, tillLabel(s.url)),
           ui.el(
             'details',
             { class: 'till-margin' },
             ui.el('summary', { text: t('fund.fedimint.marginHead') }),
-            ui.el('p', { class: 'note', text: t('fund.fedimint.marginNote') }),
+            ui.sayEl('p', { class: 'note' }, t('fund.fedimint.marginNote')),
             ui.el('label', { for: 'fedMarginSats', class: 'label', text: t('fund.fedimint.marginSats') }),
             fixed,
             ui.el('label', { for: 'fedMarginPercent', class: 'label', text: t('fund.fedimint.marginPercent') }),
@@ -234,7 +236,7 @@ export function create(inputs) {
             ),
             note,
           ),
-          tied ? ui.el('p', { class: 'note', id: 'fedTillBusy', text: t('fund.fedimint.tillBusy') }) : null,
+          tied ? ui.sayEl('p', { class: 'note', id: 'fedTillBusy' }, t('fund.fedimint.tillBusy')) : null,
           ui.el(
             'div',
             { class: 'row-btns' },
@@ -267,7 +269,7 @@ export function create(inputs) {
         const row = (p) => {
           // Made through another till than the paired one: only that till can finish it.
           if (p.till && p.till !== paired)
-            return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state, 'data-other-till': '' }, ui.el('p', { text: thrownWords('other_till', t, p) }));
+            return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state, 'data-other-till': '' }, ui.sayEl('p', {}, thrownWords('other_till', t, p)));
           const words = { sent: 'fund.fedimint.rowSent', undecided: 'fund.fedimint.rowUndecided', paid: 'fund.fedimint.rowPaid', pay_failed: 'fund.fedimint.rowFailed' }[p.state] ?? 'fund.fedimint.rowSent';
           const amount = p.state === 'pay_failed' ? format.units(sats(p.refundOwedMsat ?? p.receivedMsat ?? p.priceMsat), 'sat') : amountOf(p);
           const action =
@@ -276,7 +278,7 @@ export function create(inputs) {
               : p.state === 'sent' && !p.payId
                 ? btn({ class: 'btn block', 'data-finish': p.id, onclick: () => priceView(p) }, 'card', t('fund.fedimint.finish'))
                 : btn({ class: 'btn block', 'data-check': p.id, onclick: () => settle(p.id).then(() => home()) }, 'again', t('fund.fedimint.checkNow'));
-          return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state }, ui.el('p', { text: t(words, { amount }) }), action);
+          return ui.el('div', { class: 'card-failed', 'data-till-pay': p.id, 'data-state': p.state }, ui.sayEl('p', {}, t(words, { amount })), action);
         };
         return ui.el('section', { class: 'notice', id: 'fedWaiting', 'aria-labelledby': 'fedWaitingHead' }, ui.el('b', { id: 'fedWaitingHead', text: t('fund.fedimint.waitingHead') }), ...list.map(row));
       };
@@ -415,10 +417,10 @@ export function create(inputs) {
             ui.el(
               'div',
               { class: 'card-preview', id: 'fedPrice' },
-              ui.el('p', { class: 'card-get', id: 'fedYouGet', text: t('fund.fedimint.youGet', { amount: amountOf(rec) }) }),
-              ui.el('p', { class: 'till-most', id: 'fedCardPays', text: t(known ? 'fund.fedimint.cardPays' : 'fund.fedimint.cardPaysPlusMargin', { amount: most }) }),
-              ui.el('p', { class: 'note', id: 'fedSplit', text: t(known ? 'fund.fedimint.split' : 'fund.fedimint.splitPlusMargin', { invoice: format.units(sats(rec.invoiceMsat), 'sat'), fee: format.units(sats(rec.tillMsat), 'sat') }) }),
-              ui.el('p', { class: 'note', text: t('fund.fedimint.feeKept') }),
+              ui.sayEl('p', { class: 'card-get', id: 'fedYouGet' }, t('fund.fedimint.youGet', { amount: amountOf(rec) })),
+              ui.sayEl('p', { class: 'till-most', id: 'fedCardPays' }, t(known ? 'fund.fedimint.cardPays' : 'fund.fedimint.cardPaysPlusMargin', { amount: most })),
+              ui.sayEl('p', { class: 'note', id: 'fedSplit' }, t(known ? 'fund.fedimint.split' : 'fund.fedimint.splitPlusMargin', { invoice: format.units(sats(rec.invoiceMsat), 'sat'), fee: format.units(sats(rec.tillMsat), 'sat') })),
+              ui.sayEl('p', { class: 'note' }, t('fund.fedimint.feeKept')),
             ),
             ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPin', class: 'label', text: t('fund.fedimint.pinLabel') }), pin),
             msg,
@@ -469,7 +471,7 @@ export function create(inputs) {
       /** Waits for the card, or goes on with the one already on the phone. */
       const holdFor = (w) => {
         want = w;
-        body.replaceChildren(...kids(art(), ui.el('p', { class: 'card-hold', id: 'fedHold', text: t('fund.fedimint.hold') }), ui.el('p', { class: 'note', text: t('fund.fedimint.keep') }), msg));
+        body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'card-hold', id: 'fedHold' }, t('fund.fedimint.hold')), ui.sayEl('p', { class: 'note' }, t('fund.fedimint.keep')), msg));
         foot.replaceChildren();
         if (current) run();
       };
@@ -606,7 +608,7 @@ export function create(inputs) {
         body.replaceChildren(
           ...kids(
             art(owed),
-            ui.el('section', { class: 'notice', id: 'fedFailed' }, ui.el('b', { text: t('fund.fedimint.failedHead') }), ui.el('p', { id: 'fedFailedLine', text: t('fund.fedimint.failed', { amount: owed }) })),
+            ui.el('section', { class: 'notice', id: 'fedFailed' }, ui.el('b', { text: t('fund.fedimint.failedHead') }), ui.sayEl('p', { id: 'fedFailedLine' }, t('fund.fedimint.failed', { amount: owed }))),
             msg,
           ),
         );
@@ -658,11 +660,11 @@ export function create(inputs) {
         const s = await nfc.status();
         if (gone) return;
         if (!s.available) {
-          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'fedNoNfc', text: t('fund.card.noNfc') })));
+          body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'fedNoNfc' }, t('fund.card.noNfc'), 'err')));
           return;
         }
         if (!s.enabled) {
-          body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'fedNfcOff', text: t('fund.card.nfcOff') })));
+          body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'fedNfcOff' }, t('fund.card.nfcOff'), 'err')));
           foot.replaceChildren(btn({ class: 'btn primary block', id: 'fedRetry', onclick: start }, 'again', t('fund.card.tryAgain')));
           return;
         }

@@ -90,8 +90,9 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   fill(art, shownLit ?? 0, LIT[step]);
   shownLit = LIT[step];
 
-  const lead = el('p', { class: 'fr-lead', id: 'introLead' });
-  const text = el('div', { class: 'fr-text' }, el('h1', { class: 'intro-title', tabindex: '-1', text: t(`intro.${step}.title`) }), lead);
+  // The titles and lines are the owner's, approved as they are (2026-11-14), and Listen reads them.
+  const lead = el('p', { class: 'fr-lead', id: 'introLead', 'data-approved': '' });
+  const text = el('div', { class: 'fr-text' }, el('h1', { class: 'intro-title', tabindex: '-1', 'data-approved': '', text: t(`intro.${step}.title`) }), lead);
 
   const nextBtn = el('button', { type: 'button', class: 'fr-next', id: 'introNext', 'aria-label': t(next ? 'intro.next' : 'intro.start'), onclick: () => (next ? go(next) : finish()) }, svg(next ? SVG.next : SVG.start));
   const linkBtn = (id, ico, key, sheet) => el('button', { type: 'button', class: 'fr-link', id, 'aria-haspopup': 'dialog', onclick: () => open(sheet) }, svg(SVG[ico]), el('span', { text: t(key) }));
@@ -254,7 +255,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       finish();
     };
     const free = startFree({ t, state, actions, wallet }, { id: 'intro', field: { input, box }, after: answered });
-    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()), text: t('startFree.money') });
+    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()) }, icon('coins', 20), el('span', { text: t('startFree.money') }));
     const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
     const title = s.querySelector('h2');
     const label = el('span', { text: t('intro.inviteLink') });

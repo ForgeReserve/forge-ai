@@ -16,7 +16,7 @@ export function create(inputs) {
       const msg = ui.msgLine();
       const today = ui.el('p', { class: 'free-today', id: 'freeToday', role: 'status' });
       const ring = ui.el('div', { class: 'pow-ring', id: 'freeWork', role: 'progressbar', 'aria-label': t('fund.free.working'), 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', hidden: true }, ui.el('span', { class: 'pow-pct' }));
-      const working = ui.el('p', { class: 'note', id: 'freeWorking', hidden: true, text: t('fund.free.working') });
+      const working = ui.sayEl('p', { class: 'note', id: 'freeWorking', hidden: true }, t('fund.free.working'));
       const get = ui.el('button', { type: 'button', class: 'btn primary block', id: 'freeGet' }, ui.icon('gift', 20), ui.el('span', { text: t('fund.free.getSome') }));
       const stop = ui.el('button', { type: 'button', class: 'btn block', id: 'freeStop', hidden: true, text: t('fund.free.stop') });
       let ctrl = null;
@@ -37,7 +37,7 @@ export function create(inputs) {
       const showStatus = (s) => {
         questions = s.questions;
         const l = faucetLine(s);
-        today.textContent = t(l.key, l);
+        ui.say(today, t(l.key, l));
         get.querySelector('span').textContent = t('fund.free.get', { count: s.questions });
         get.disabled = !(s.available_now > 0);
       };
@@ -83,7 +83,7 @@ export function create(inputs) {
       });
       stop.addEventListener('click', () => ctrl?.abort());
 
-      const body = ui.el('div', { class: 'scroll fund-body' }, ui.el('p', { text: t('fund.free.what') }), today, ring, working, msg, ui.el('p', { class: 'note', text: t('fund.free.notMoney') }));
+      const body = ui.el('div', { class: 'scroll fund-body' }, ui.sayEl('p', {}, t('fund.free.what')), today, ring, working, msg, ui.sayEl('p', { class: 'note' }, t('fund.free.notMoney')));
       const node = ui.el('div', { class: 'fund-view' }, body, ui.el('div', { class: 'foot' }, get, stop));
       return { node, destroy: () => ctrl?.abort() };
     },

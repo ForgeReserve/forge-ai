@@ -1,7 +1,7 @@
 // Type: a text field, what is attached, the price before sending, and Send. The canvas draws no typing
 // screen (Decision 5), so this one is built from its tokens: back header, one field, one primary button.
 import { priceLine } from '../core/price.js';
-import { backHeader, el, icon, toast } from '../core/ui.js';
+import { backHeader, el, icon, sayEl, toast } from '../core/ui.js';
 import { searchSwitch } from './parts.js';
 
 export function typeScreen({ t, state, nav, back, actions }) {
@@ -48,6 +48,8 @@ export function typeScreen({ t, state, nav, back, actions }) {
     update();
   };
 
+  // Each next step's picture, beside its word.
+  const BTN_ICON = { 'type.addFunds': 'plus', 'type.chooseModel': 'grid', 'type.openBalance': 'gift', 'type.freeOutBtn': 'gift', 'type.useFreeModel': 'gift' };
   const blocker = (v) => {
     if (!v.online) return { key: 'type.offline' };
     if (!v.model) return v.noFunds ? { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') } : { key: 'type.noModel', btn: 'type.chooseModel', go: () => nav('model') };
@@ -84,16 +86,17 @@ export function typeScreen({ t, state, nav, back, actions }) {
     if (!free) asking = false;
     if (b && asking) {
       notice.replaceChildren(
-        el('p', { id: 'typeFreeAsk', text: t('startFree.ask') }),
-        el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn primary', id: 'typeUseFree', onclick: () => useFree(true), text: t('startFree.use') }), el('button', { type: 'button', class: 'btn', id: 'typeKeepPrivate', onclick: keepPrivate, text: t('startFree.keep') })),
+        // The Private-only question, in the owner's words as they are.
+        el('p', { id: 'typeFreeAsk', 'data-approved': '', text: t('startFree.ask') }),
+        el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn primary', id: 'typeUseFree', onclick: () => useFree(true) }, icon('check', 20), el('span', { text: t('startFree.use') })), el('button', { type: 'button', class: 'btn', id: 'typeKeepPrivate', onclick: keepPrivate }, icon('lock', 20), el('span', { text: t('startFree.keep') }))),
       );
       notice.hidden = false;
     } else if (b) {
-      const btns = [b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : null, free ? el('button', { type: 'button', class: 'btn', id: 'noticeFreeBtn', onclick: freeInstead }, icon('gift', 20), el('span', { text: t('startFree.useModel') })) : null].filter(Boolean);
-      notice.replaceChildren(el('p', { text: t(b.key) }), btns.length > 1 ? el('div', { class: 'row-btns' }, ...btns) : (btns[0] ?? ''));
+      const btns = [b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go }, icon(BTN_ICON[b.btn] ?? 'next', 20), el('span', { text: t(b.btn) })) : null, free ? el('button', { type: 'button', class: 'btn', id: 'noticeFreeBtn', onclick: freeInstead }, icon('gift', 20), el('span', { text: t('startFree.useModel') })) : null].filter(Boolean);
+      notice.replaceChildren(sayEl('p', { id: 'typeNoticeText' }, t(b.key), '', 'alert'), btns.length > 1 ? el('div', { class: 'row-btns' }, ...btns) : (btns[0] ?? ''));
       notice.hidden = false;
     } else if (problem) {
-      notice.replaceChildren(el('p', { text: t(problem) }));
+      notice.replaceChildren(sayEl('p', { id: 'typeNoticeText' }, t(problem), '', 'alert'));
       notice.hidden = false;
     } else notice.hidden = true;
     const p = priceLine(est.costMsub, est.unit, est.free);

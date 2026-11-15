@@ -151,7 +151,7 @@ describe('paper notes in a phone-sized browser', () => {
     expect(await page.textContent('#noteAmount')).toBe('$1.00');
     await page.click('#noteAdd');
     await page.waitForSelector('#noteResult');
-    expect(await page.textContent('#noteResult')).toBe('This note has already been used. It cannot be added.');
+    expect(await page.textContent('#noteResult')).toBe('Already used. This note has already been used. It cannot be added.');
     expect(await page.isVisible('#noteScanAgain')).toBe(true);
     expect(await foot(page)).toBe('Scan another'); // one button, and no stray text beside it
     expect(await foot(page)).not.toContain('null');
@@ -167,7 +167,7 @@ describe('paper notes in a phone-sized browser', () => {
     await page.waitForSelector('#noteResult', { timeout: 20_000 });
     expect(await page.textContent('#noteAmount')).toBe('$1.00');
     expect(await page.textContent('#noteMint')).toBe('From 127.0.0.1:3339');
-    expect(await page.textContent('#noteResult')).toBe('This note is from a mint this engine does not take. It can be added through Other mint.');
+    expect(await page.textContent('#noteResult')).toBe('From another mint. This note is from a mint this engine does not take. It can be added through Other mint.');
     expect(await page.locator('#noteAdd').count()).toBe(0); // never sent to the engine as a top-up
     await page.click('#noteOtherMint');
     await page.waitForSelector('[data-fund=othermint]');
@@ -188,14 +188,14 @@ describe('paper notes in a phone-sized browser', () => {
     // v1's scanner reads only eCash codes: another code is passed over and the camera keeps looking.
     await page.waitForTimeout(2000);
     expect(await page.locator('#noteResult, #noteAmount').count()).toBe(0);
-    expect(await page.textContent('.note-hint')).toBe('Point the camera at the code on the note.');
+    expect(await page.textContent('.note-hint')).toBe('Point the camera at the code.');
     // Paste instead: the camera stops.
     await page.click('#notePaste');
     await expect.poll(() => page.evaluate(() => document.querySelector('video') === null)).toBe(true);
     await page.fill('#noteText', 'https://example.com/not-a-note');
     await page.click('#noteRead');
     await page.waitForSelector('#noteResult');
-    expect(await page.textContent('#noteResult')).toBe('This code is not an eCash note.');
+    expect(await page.textContent('#noteResult')).toBe('Not an eCash note.');
     expect(await foot(page)).not.toContain('null');
     await page.click('#noteScanAgain');
     await page.click('#notePaste');
@@ -218,7 +218,7 @@ describe('paper notes in a phone-sized browser', () => {
       await page.goto(`${g.url}/v2/#/funds/add/note`);
       await page.waitForSelector('#noteNoCamera');
       await page.waitForSelector('#noteText');
-      expect(await foot(page)).toBe('Read the code');
+      expect(await foot(page)).toBe('Read it');
       expect(await page.locator('#noteScanAgain').count()).toBe(0);
       // The engine lists the other address of its mint, and the phone keeps it.
       await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('forge2.models') ?? '{}').mint_aliases)).toEqual([ALIAS_A]);
@@ -228,7 +228,7 @@ describe('paper notes in a phone-sized browser', () => {
       await page.fill('#noteText', msat);
       await page.click('#noteRead');
       await page.waitForSelector('#noteResult');
-      expect(await page.textContent('#noteResult')).toBe('This note is in another unit. These funds cannot hold it. Keep the note.');
+      expect(await page.textContent('#noteResult')).toBe('Other currency. This note is in another unit. These funds cannot hold it. Keep the note.');
       expect(await page.locator('#noteAmount, #noteAdd').count()).toBe(0);
       expect(await page.textContent('#noteMint')).toBe('From 127.0.0.1:3338');
       expect(await foot(page)).toBe('Paste another');

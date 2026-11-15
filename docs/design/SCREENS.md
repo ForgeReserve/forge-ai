@@ -797,3 +797,91 @@ Each item names the version on the Default mode page.
 16. **Share unseen (photo protection with before and after)** is not in the canvas. The nearest is Photo check (`DPhoto`), which shows cover boxes on one image, not a before and after pair.
 17. **Dark and Midnight** exist only as thumbnails in `XThemes` and as the Classic and experiment screens. No Default mode screen is drawn in Dark or Midnight.
 18. **Duplicate screens across pages.** Most `D*` files in Default mode are Light copies of Classic files (for example `DAddFunds` and `AddFunds`). Build from the `D*` version.
+
+## 6. Reading load
+
+The owner's rule (2026-11-15): the app is made end to end for people who read with difficulty or whose English is weak. Fewer words, more icons. Icons and pictures carry the meaning. One short word or label per element. No paragraphs on screen. Explanations sit behind an info button or are spoken by Listen. Targets are 48 px.
+
+How the screens keep it:
+
+- **Headline first.** Every message is written so its first sentence says what happened in a few words ("No answer, not charged.", "Code does not work.", "It cannot be recovered."). `say()` in `core/ui.js` shows that sentence with an icon (alert for an error, check for done, an hourglass for a step under way, or the message's own picture) and puts the rest behind a round info button, which opens it under the line. Screen readers read the whole message in place, and the element's text is the message as written, so nothing honest is lost: it moved behind info.
+- **Choices read at a glance.** A model or a voice is a card with its name and small picture tags (Private or Standard, Free, Paid, Stays here, Engine hears, Maker may hear). What it costs and who can read or hear it is behind the info button beside the card.
+- **Every button has a picture**, or is one word. A next step after an error is one button with its icon: Try again, Add money, Models, Start fresh, Take out, Get more.
+- **Listen on every sub screen.** Funds, Add money and Start free had Listen; History, Erase, Engine, Choose a model, Voice, Take funds out, the ways to add money, Free questions used up and Share unseen have it now. It reads the title and every message in full, the detail behind info included, and each choice with its info.
+- **Kept exactly as approved:** the first run's titles and lines (`data-approved`), the Private-only question with Use free models and Keep Private only. The first run's sheets (Learn more, See the full list) are detail behind a button already.
+- **48 px targets:** small round buttons, chips' remove buttons, segment buttons and small buttons are 48 px; a block over a photo keeps its size and reaches 48 px with its hit area.
+
+`test/ui/literacy.ui.test.ts` opens every state below in Midnight at 412 by 915, photographs it under `.tmp/literacy/after/` (`LITERACY_PHASE=before` for the old screens), and fails when a run of text over 8 words shows outside an info panel, a first run sheet, the answer, the question asked or the approved words; when a button has neither an icon nor a one-word label; or when a target is under 48 px. Words are counted as a person sees them: a word has a letter in it, so amounts and times are not counted.
+
+| Screen | Words before | Words after | What changed |
+| --- | ---: | ---: | --- |
+| home-no-funds | 11 | 11 | Balance pill: plus icon and "Add money" (was a text-only "Add funds") |
+| home-money | 10 | 10 | No change needed |
+| sheet-add | 29 | 19 | Row lines cut to 3 words ("Cleaned on this phone", "Its text only") |
+| sheet-more | 56 | 49 | Row lines cut ("Talk and Listen", "Remove all from this phone", "Paying, limits, Private only") |
+| home-talking | 39 | 21 | Time line 4 words; where the voice goes is one line with an ear, phone or globe icon, detail behind info |
+| type | 10 | 6 | No change needed |
+| answer | 38 | 38 | Cost line with a coin or gift icon |
+| home-memory-low | 15 | 12 | "Memory nearly full" chip |
+| funds | 28 | 28 | Notes headline first; Use free model has an icon |
+| answer-error | 35 | 25 | Error: alert icon, "No answer, not charged.", icon on Try again, detail behind info; toast shows the headline |
+| take-out | 35 | 20 | "You get eCash." with a coin icon; how to save it behind info |
+| take-out-token | 69 | 38 | "Kept here until saved." and "Moving code in N parts." headlines; I saved it has a check icon |
+| funds-ecash-kept | 44 | 37 | Waiting eCash rows headline first; Copy, Remove and Take out have icons |
+| erase-money | 136 | 71 | "This cannot be undone." and "It cannot be recovered." headlines with icons; what is removed is an icon list; the rest behind info |
+| home-free-model | 15 | 15 | Balance pill plus icon |
+| funds-free-model | 31 | 23 | "Needs a balance." headline |
+| type-need-balance | 28 | 13 | Notice: alert icon and "Needs a balance."; button with a gift icon |
+| type-no-funds | 18 | 13 | Notice "No funds."; Add money and Use a free model with icons |
+| type-private-question | 27 | 27 | The owner's question kept as it is; the two answers have check and lock icons |
+| funds-zero | 22 | 21 | Notes headline first |
+| add-money | 13 | 13 | Already pictures and one word (wallet cards) |
+| add-money-info | 25 | 25 | Unchanged (the info panel is the allowed place) |
+| add-money-more | 24 | 24 | Unchanged |
+| start-free | 15 | 15 | Unchanged |
+| start-free-wrong-code | 26 | 19 | "Code does not work." with an alert icon, the rest behind info |
+| start-free-question | 46 | 46 | The owner's question kept as it is |
+| funds-start-free | 38 | 28 | The note Start free leaves is headline first ("Private only is off now.") |
+| fund-note | 14 | 12 | Camera line "Point the camera at the code."; errors headline first |
+| fund-ecash | 14 | 11 | "Paste eCash"; Add button with a plus |
+| fund-lightning | 5 | 6 | Unchanged |
+| fund-othermint | 31 | 16 | "Converted to your funds." headline; Check eCash with an icon |
+| fund-free | 46 | 18 | "Free every day." headline; the puzzle and "not money" behind info |
+| fund-card | 40 | 17 | "Android app only." headline (website) |
+| fund-fedimint | 57 | 18 | "Android app only." and "A till pays from the card." headlines (website) |
+| fund-ecash-error | 20 | 13 | "Not eCash." with an alert icon |
+| fund-lightning-invoice | 9 | 10 | Unchanged |
+| free-out | 52 | 40 | Lines cut ("Ways to keep asking.", "Still free: Share unseen, History, Erase.") |
+| model | 45 | 16 | Each model: name and picture tags; price and who can read it behind its info button; Private only line "Nobody else can read." |
+| look | 36 | 34 | "Phone setting" with a phone icon |
+| voice | 160 | 43 | Each way: name and tags (Free or Paid, Stays here, Engine hears, Maker may hear); the full line behind info |
+| history-empty | 77 | 30 | Lines headline first with icons; Never, On close and timed choices have icons |
+| erase | 81 | 47 | As erase-money |
+| engine | 43 | 21 | "Where questions go." and "Balances stay behind." headlines; Use this and Default with icons |
+| photo | 53 | 15 | "Take or pick a photo." and "Free." headlines; the rest behind info |
+| photo-missed | 67 | 19 | "Photo did not arrive." with an alert icon |
+| photo-none | 66 | 20 | "No photo in that share." with an alert icon |
+| photo-sent | 68 | 17 | "Photo not kept." with an alert icon; what the server did behind info |
+| engine-error | 50 | 23 | "Needs https." headline |
+| erase-tapped | 91 | 52 | "Hold it down to erase." with an alert icon |
+| photo-review | 99 | 62 | Headlines with icons; After and Before have icons; blocks reach 48 px |
+| history | 92 | 51 | As history-empty; "Burn removes it from this phone." with the rest behind info |
+| history-burn-all | 103 | 57 | Question with a flame; Keep with an icon |
+| intro-welcome | 17 | 17 | Owner-approved words kept |
+| intro-pay | 16 | 16 | Owner-approved words kept |
+| intro-pay-sheet | 84 | 84 | Sheet behind Learn more (allowed) |
+| intro-limits | 25 | 25 | Owner-approved words kept |
+| intro-limits-sheet | 234 | 234 | Sheet behind See the full list (allowed) |
+| intro-private | 21 | 21 | Owner-approved words kept |
+| intro-private-sheet | 103 | 103 | Sheet behind the info button (allowed) |
+| intro-invite | 41 | 41 | Answer buttons and "I'll add money instead" have icons |
+| free-page | 26 | 14 | Lines headline first |
+| download-page | 45 | 16 | Lead "For Android 9 and up."; install steps cut |
+| erased | 16 | 9 | "All gone from this browser." with a check; Open Forge again with an icon |
+| **All 63 states** | **2930** | **1915** | |
+
+Breaks of the rule the check finds: 161 before (88 runs of text over 8 words, 30 buttons with no icon and several words, 43 targets under 48 px), 0 after.
+
+Words are what a person sees on that state, sheets and the screen under them together; the detail behind info buttons is not counted, since it shows only when asked for. Before: `addfunds-c` (ebbd51d). The pictures: `.tmp/literacy/before/` and `.tmp/literacy/after/`, same names.
+
+Not made shorter, and why: the first run's titles and lines and the Private-only question (the owner's approved words); the answer and the question asked (the person's own content); a model's name (data from the engine, shown as it is); a mint or till address and a file's SHA-256 (shown where a person must compare them); the first run's sheets (detail already behind Learn more and See the full list). The Tap a card and Tap a Fedimint card flows work only in the Android app, so their states were rewritten headline first and checked in the unit and card tests, not photographed here; on the website they show Android app only.

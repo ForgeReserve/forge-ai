@@ -1,7 +1,18 @@
 // Mode and look (XThemes) and Choose a model (DPrivateOnly), both reached from More.
 import { isFreeModel } from '../core/price.js';
 import { isPrivate, visibleModels } from '../core/state.js';
-import { backHeader, el, icon } from '../core/ui.js';
+import { backHeader, el, icon, infoToggle, sayEl } from '../core/ui.js';
+import { listenHeader, screenListen } from './parts.js';
+
+/**
+ * A choice that reads at a glance (reading load, owner 2026-11-15): the radio card holds the name and
+ * small picture tags, and the round info button beside it opens the full words under it.
+ */
+function option(card, info, label) {
+  if (!info) return card;
+  const more = el('div', {}, ...[].concat(info).filter(Boolean).map((x) => el('p', { text: x })));
+  return el('div', { class: 'opt' }, el('div', { class: 'opt-row' }, card, infoToggle(more, label, card.id ? `${card.id}Info` : null)), more);
+}
 
 export function lookScreen({ t, state, back, actions, registry, native = null }) {
   const S = state.S;
@@ -20,7 +31,7 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
     return s;
   };
   const group = el('div', { class: 'look-list', role: 'radiogroup', 'aria-label': t('look.look') });
-  const follow = el('button', { type: 'button', class: 'setting-row', id: 'followSystem', role: 'switch' });
+  const follow = el('button', { type: 'button', class: 'setting-row', id: 'followSystem', role: 'switch', 'aria-label': t('look.followLabel') });
   const draw = () => {
     group.replaceChildren(
       ...looks.map(({ instance }) => {
@@ -35,7 +46,7 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
       }),
     );
     follow.setAttribute('aria-checked', String(!!S.settings.followSystem));
-    follow.replaceChildren(el('span', { text: t('look.follow') }), el('span', { class: 'value', text: S.settings.followSystem ? t('look.on') : t('look.off') }));
+    follow.replaceChildren(el('span', {}, icon('phone', 20), el('span', { text: t('look.follow') })), el('span', { class: 'value', text: S.settings.followSystem ? t('look.on') : t('look.off') }));
   };
   follow.addEventListener('click', () => actions.setFollowSystem(!S.settings.followSystem));
   draw();
@@ -60,12 +71,13 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
 
-export function modelScreen({ t, state, back, actions, format }) {
+export function modelScreen({ t, state, back, actions, format, reader }) {
   const S = state.S;
   const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id: 'privateOnly', 'aria-label': t('model.privateOnly') }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
   sw.addEventListener('click', () => actions.setPrivateOnly(!S.settings.privateOnly));
   const list = el('div', { class: 'model-list', role: 'radiogroup', 'aria-label': t('model.title') });
-  const hidden = el('div', { class: 'dashed-box', id: 'hiddenNote' }, el('b', { text: t('model.hidden') }), el('p', { text: t('model.hiddenSub') }));
+  const hiddenMore = el('p', { text: t('model.hiddenSub') });
+  const hidden = el('div', { class: 'dashed-box', id: 'hiddenNote' }, el('div', { class: 'with-info' }, el('b', { class: 'ib' }, icon('eye', 18), el('span', { text: t('model.hidden') })), infoToggle(hiddenMore, t('model.info', { name: t('model.hidden') }), 'hiddenInfo')), hiddenMore);
   const tag = (ico, text, cls = '') => el('span', { class: `tag ${cls}`.trim() }, icon(ico, 14), el('span', { text }));
   const draw = () => {
     sw.setAttribute('aria-checked', String(!!S.settings.privateOnly));
@@ -79,7 +91,8 @@ export function modelScreen({ t, state, back, actions, format }) {
             // A free model (core/price.js isFreeModel) shows Free in place of a price.
             const free = isFreeModel(m);
             const p = free ? null : format.modelPrice(m);
-            return el(
+            // The card: the name and its tags. What it costs and who can read it: behind its info button.
+            const card = el(
               'button',
               { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, onclick: () => actions.chooseModel(m.id) },
               el('b', { text: m.name ?? m.id }),
@@ -92,28 +105,29 @@ export function modelScreen({ t, state, back, actions, format }) {
                 m.capabilities?.vision ? tag('image', t('model.images')) : null,
                 m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
               ),
-              free ? el('small', { class: 'free-text', text: t('model.freeSub') }) : p ? el('small', { text: t('model.price', p) }) : null,
-              priv ? null : el('small', { class: 'warn-text', text: t('model.standardWarn') }),
             );
+            return option(card, [free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
           })
         : [el('p', { class: 'hint', text: t('model.none') })]),
     );
     hidden.hidden = !(S.settings.privateOnly && v.hiddenCount > 0);
   };
   draw();
+  const listen = screenListen({ t, reader, id: 'modelListen', root: () => main });
   const main = el(
     'main',
     { class: 'screen sub model', 'data-screen': 'model' },
-    backHeader(t('model.title'), back, t('common.back')),
+    listenHeader(t('model.title'), back, t('common.back'), listen.node),
     el(
       'div',
       { class: 'scroll' },
-      el('div', { class: 'teal-panel' }, el('span', {}, el('b', { text: t('model.privateOnly') }), el('small', { text: t('model.privateOnlySub') })), sw),
+      el('div', { class: 'teal-panel' }, el('span', {}, el('b', { class: 'ib' }, icon('lock', 18), el('span', { text: t('model.privateOnly') })), sayEl('small', { id: 'privateOnlySub' }, t('model.privateOnlySub'))), sw),
       list,
       hidden,
     ),
   );
-  return { node: main, update: draw, focus: main.querySelector('h1') };
+  listen.update();
+  return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };
 }
 
 /**
@@ -121,14 +135,21 @@ export function modelScreen({ t, state, back, actions, format }) {
  * are listed (On this phone only in the Android app, where its recogniser has the language); the
  * browser's recogniser is shown but cannot be chosen while Private only is on.
  */
-export function voiceScreen({ t, state, back, actions, voice, native = null }) {
+export function voiceScreen({ t, state, back, actions, voice, reader, native = null }) {
   const S = state.S;
-  const option = (group, id, title, sub, { on, disabled = false } = {}) =>
-    el(
-      'button',
-      { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'aria-disabled': String(disabled), disabled, id: `${group}-${id}`, onclick: () => (group === 'voiceIn' ? actions.setVoiceIn(id) : actions.setVoiceOut(id)) },
-      el('b', { text: title }),
-      el('small', { text: sub }),
+  // Each way's tags: what it costs and who can hear it, as pictures with one or two words.
+  const TAG = { free: ['gift', 'voice.tag.free', ''], paid: ['coins', 'voice.tag.paid', ''], phone: ['phone', 'voice.tag.phone', 'teal'], engine: ['ear', 'voice.tag.engine', 'warn'], provider: ['ear', 'voice.tag.provider', 'warn'], maker: ['globe', 'voice.tag.maker', 'warn'], blocked: ['lock', 'voice.tag.blocked', ''] };
+  const tagsOf = (keys) => el('span', { class: 'tags' }, ...keys.map((k) => el('span', { class: `tag ${TAG[k][2]}`.trim() }, icon(TAG[k][0], 14), el('span', { text: t(TAG[k][1]) }))));
+  const choice = (group, id, title, sub, { on, disabled = false, tags = [] } = {}) =>
+    option(
+      el(
+        'button',
+        { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'aria-disabled': String(disabled), 'aria-description': sub, disabled, id: `${group}-${id}`, onclick: () => (group === 'voiceIn' ? actions.setVoiceIn(id) : actions.setVoiceOut(id)) },
+        el('b', { text: title }),
+        tags.length ? tagsOf(tags) : null,
+      ),
+      sub,
+      t('voice.info', { name: title }),
     );
   const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
@@ -137,56 +158,66 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
   // Keep the natural voice on a phone that makes it slowly (answers then wait longer before they start).
   const prefer = el('button', { type: 'button', class: 'setting-row', id: 'preferNatural', role: 'switch', hidden: true });
   prefer.addEventListener('click', () => actions.setPreferNatural(!S.settings.preferNatural));
-  const preferSub = el('p', { class: 'hint', id: 'preferNaturalSub', hidden: true, text: t('voice.preferNaturalSub') });
+  const preferSub = el('p', { class: 'hint', id: 'preferNaturalSub', text: t('voice.preferNaturalSub') });
+  const preferInfo = infoToggle(preferSub, t('voice.info', { name: t('voice.preferNatural') }), 'preferNaturalInfo');
+  const preferRow = el('div', { class: 'with-info', hidden: true }, prefer, preferInfo);
   const draw = () => {
     const v = state.view();
     const ins = voice.inMods();
     const outs = voice.outMods();
     const inUsed = v.talk.route;
-    const engineSub = (kind) => (voice.audio.model(kind)?.tier === 'enclave' ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
+    const enclave = (kind) => voice.audio.model(kind)?.tier === 'enclave';
+    const engineSub = (kind) => (enclave(kind) ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
+    const engineTags = (kind) => ['paid', enclave(kind) ? 'engine' : 'provider'];
     const inRows = [];
     // The phone's own recogniser, in the Android app where it has the language: free, and the sound stays on the phone.
-    if (ins.phone?.available()) inRows.push(option('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone' }));
-    if (ins.engine?.available()) inRows.push(option('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine') }));
+    if (ins.phone?.available()) inRows.push(choice('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone', tags: ['free', 'phone'] }));
+    if (ins.engine?.available()) inRows.push(choice('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine'), tags: engineTags('transcription') }));
     if (ins.device?.available()) {
       const blocked = !!S.settings.privateOnly;
-      inRows.push(option('voiceIn', 'device', t('voice.in.device'), blocked ? t('voice.in.deviceOff') : t('voice.in.deviceSub'), { on: inUsed === 'device', disabled: blocked }));
+      inRows.push(choice('voiceIn', 'device', t('voice.in.device'), blocked ? t('voice.in.deviceOff') : t('voice.in.deviceSub'), { on: inUsed === 'device', disabled: blocked, tags: blocked ? ['blocked', 'maker'] : ['free', 'maker'] }));
     }
-    inList.replaceChildren(...(inRows.length ? inRows : [el('p', { class: 'hint', id: 'voiceInNone', text: t('voice.in.none') })]));
+    inList.replaceChildren(...(inRows.length ? inRows : [sayEl('p', { class: 'hint', id: 'voiceInNone' }, t('voice.in.none'), '', 'alert')]));
     // Automatic (the setting until one is picked) shows as the voice it reads with: the natural voice
     // where this phone runs it, else the phone's own voice, else the engine's.
-    const choice = (S.settings.voiceOut ?? 'auto') === 'auto' ? (voice.outUsed?.() ?? 'auto') : S.settings.voiceOut;
+    const picked = (S.settings.voiceOut ?? 'auto') === 'auto' ? (voice.outUsed?.() ?? 'auto') : S.settings.voiceOut;
     const outRows = [];
-    if (outs.phonon?.available()) outRows.push(option('voiceOut', 'phonon', t('voice.out.phonon'), native ? t('voice.out.phononSubApp') : t('voice.out.phononSub'), { on: choice === 'phonon' }));
-    if (outs.device?.available()) outRows.push(option('voiceOut', 'device', t('voice.out.device'), t('voice.out.deviceSub'), { on: choice === 'device' }));
-    if (outs.engine?.available()) outRows.push(option('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: choice === 'engine' }));
-    outRows.push(option('voiceOut', 'off', t('voice.out.off'), t('voice.out.offSub'), { on: choice === 'off' }));
+    if (outs.phonon?.available()) outRows.push(choice('voiceOut', 'phonon', t('voice.out.phonon'), native ? t('voice.out.phononSubApp') : t('voice.out.phononSub'), { on: picked === 'phonon', tags: ['free', 'phone'] }));
+    if (outs.device?.available()) outRows.push(choice('voiceOut', 'device', t('voice.out.device'), t('voice.out.deviceSub'), { on: picked === 'device', tags: ['free', 'phone'] }));
+    if (outs.engine?.available()) outRows.push(choice('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: picked === 'engine', tags: engineTags('speech') }));
+    outRows.push(choice('voiceOut', 'off', t('voice.out.off'), t('voice.out.offSub'), { on: picked === 'off' }));
     outList.replaceChildren(...outRows);
     // Which speaker the natural voice reads with, while it is the voice in use: Maeve or Freya.
-    const speakers = choice === 'phonon' && outs.phonon?.available() ? (voice.natural?.voices() ?? []) : [];
-    const picked = voice.natural?.picked();
+    const speakers = picked === 'phonon' && outs.phonon?.available() ? (voice.natural?.voices() ?? []) : [];
+    const speaker = voice.natural?.picked();
     naturalHead.hidden = naturalList.hidden = speakers.length < 2;
-    const naturalOn = choice === 'phonon' && !!outs.phonon?.available();
-    prefer.hidden = preferSub.hidden = !naturalOn;
+    const naturalOn = picked === 'phonon' && !!outs.phonon?.available();
+    prefer.hidden = preferRow.hidden = !naturalOn;
+    if (!naturalOn) preferSub.hidden = true;
     prefer.setAttribute('aria-checked', String(!!S.settings.preferNatural));
-    prefer.replaceChildren(el('span', { text: t('voice.preferNatural') }), el('span', { class: 'value', text: S.settings.preferNatural ? t('look.on') : t('look.off') }));
+    prefer.replaceChildren(el('span', {}, icon('speaker', 20), el('span', { text: t('voice.preferNatural') })), el('span', { class: 'value', text: S.settings.preferNatural ? t('look.on') : t('look.off') }));
     naturalList.replaceChildren(
       ...(speakers.length < 2 ? [] : speakers).map((v) =>
-        el(
-          'button',
-          { type: 'button', class: `model-card${v.name === picked ? ' on' : ''}`, role: 'radio', 'aria-checked': String(v.name === picked), id: `naturalVoice-${v.name}`, onclick: () => actions.setNaturalVoice(v.name) },
-          el('b', { text: v.name }),
-          el('small', { text: t(`voice.natural.${v.name}`) }),
+        option(
+          el(
+            'button',
+            { type: 'button', class: `model-card${v.name === speaker ? ' on' : ''}`, role: 'radio', 'aria-checked': String(v.name === speaker), 'aria-description': t(`voice.natural.${v.name}`), id: `naturalVoice-${v.name}`, onclick: () => actions.setNaturalVoice(v.name) },
+            el('b', { class: 'ib' }, icon('speaker', 18), el('span', { text: v.name })),
+          ),
+          t(`voice.natural.${v.name}`),
+          t('voice.info', { name: v.name }),
         ),
       ),
     );
   };
   draw();
+  const listen = screenListen({ t, reader, id: 'voiceListen', root: () => main });
   const main = el(
     'main',
     { class: 'screen sub voice', 'data-screen': 'voice' },
-    backHeader(t('voice.title'), back, t('common.back')),
-    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, prefer, preferSub),
+    listenHeader(t('voice.title'), back, t('common.back'), listen.node),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, preferRow, preferSub),
   );
-  return { node: main, update: draw, focus: main.querySelector('h1') };
+  listen.update();
+  return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };
 }

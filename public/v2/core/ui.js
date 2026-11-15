@@ -1,6 +1,7 @@
 // DOM helpers for the v2 screens. `el` and the storage helpers come from v1's ui.js; the icons are the
 // canvas icons (24 px grid, stroke 2), drawn inline so nothing is fetched.
 import { el, load, store } from '../../js/ui.js';
+import { t as tr } from './i18n.js';
 
 export { el, load, store };
 
@@ -57,6 +58,10 @@ const PATHS = {
   noName: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M3 3l18 18"/>',
   noEmail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/><path d="M3 3l18 18"/>',
   noMoney: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M3 3l18 18"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/>',
+  wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
+  ear: '<path d="M7 9a5 5 0 0 1 10 0c0 3-3 4-3 7a3 3 0 0 1-5.5 1.6"/><path d="M10 9.5a2 2 0 0 1 4 0"/>',
+  pin: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 15h.01M12 15h.01M16 15h.01"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
 };
 
 export const ICONS = Object.keys(PATHS);
@@ -79,15 +84,83 @@ export function icon(name, size = 20, stroke = 2) {
   return s;
 }
 
+/**
+ * Reading load (owner, 2026-11-15): a message is written headline first. The first sentence says what
+ * happened in a few words; the rest is the detail. headOf splits the two: [head, rest], where rest keeps
+ * the space before it, so head + rest is the text as written.
+ */
+export function headOf(text) {
+  const s = String(text ?? '');
+  const m = s.match(/^(.+?[.?!])(\s+\S[\s\S]*)$/);
+  return m ? [m[1], m[2]] : [s, ''];
+}
+
+const SAY_ICON = { err: 'alert', ok: 'check', wait: 'wait' };
+let sayN = 0;
+
+/**
+ * Writes `text` into `node` headline first: an icon (by kind: 'err', 'ok', 'wait', or `ico`), the first
+ * sentence in view, and the rest behind a round info button, which shows it under the line. Screen
+ * readers and Listen read the whole text in place (it sits in the line, visually hidden until the info
+ * button opens it), and node.textContent stays the text as written. An empty text empties the node.
+ */
+export function say(node, text, kind = '', ico = null) {
+  // Screens redraw many times a second (a recording's level): the same words keep their open info.
+  node.classList.add('say');
+  node.classList.toggle('has-ico', !!(text && (ico ?? SAY_ICON[kind])));
+  const key = `${kind}|${ico}|${text}`;
+  if (node._said === key && node.isConnected) return node;
+  node._said = key;
+  if (!text) return (node.replaceChildren(), node);
+  const [head, rest] = headOf(text);
+  const name = ico ?? SAY_ICON[kind];
+  const kids = [name ? icon(name, 18) : null, el('span', { class: 'say-head', text: head })];
+  if (rest) {
+    const id = node.id ? `${node.id}More` : `sayMore${++sayN}`;
+    const more = el('span', { class: 'say-rest sr-only', id, text: rest });
+    const btn = el('button', { type: 'button', class: 'info-btn', 'aria-label': tr('common.info'), 'aria-expanded': 'false', 'aria-controls': id }, icon('info', 20));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = more.classList.contains('sr-only');
+      more.className = open ? 'say-rest info-more' : 'say-rest sr-only';
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    kids.push(more, btn);
+  }
+  node.replaceChildren(...kids.filter(Boolean));
+  return node;
+}
+
+/** An element holding `text` headline first (say). */
+export const sayEl = (tag, attrs, text, kind = '', ico = null) => say(el(tag, attrs), text, kind, ico);
+
+/**
+ * A round info button that shows and hides `panel` (its words, which then count as opened detail).
+ * label: what the button is about, for screen readers.
+ */
+export function infoToggle(panel, label, id = null) {
+  panel.hidden = true;
+  panel.classList.add('info-more');
+  if (!panel.id) panel.id = `infoPanel${++sayN}`;
+  const btn = el('button', { type: 'button', class: 'info-btn', id, 'aria-label': label, 'aria-expanded': 'false', 'aria-controls': panel.id }, icon('info', 20));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    btn.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  return btn;
+}
+
 let toastTimer;
-/** A short message at the bottom of the screen, also read out by screen readers. */
+/** A short message at the bottom of the screen: its first sentence in view, the whole read out by screen readers. */
 export function toast(text, ms = 2600) {
   let t = document.getElementById('toast');
   if (!t) {
     t = el('div', { id: 'toast', class: 'toast', role: 'status', 'aria-live': 'polite' });
     document.body.append(t);
   }
-  t.textContent = text;
+  const [head, rest] = headOf(text);
+  t.replaceChildren(el('span', { text: head }), rest ? el('span', { class: 'sr-only', text: rest }) : '');
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
@@ -154,12 +227,16 @@ export function meterBar({ id, label }) {
   return node;
 }
 
-/** A status line under a form: role=status, with a kind of '', 'err' or 'ok'. */
+/**
+ * A status line under a form: role=status, with a kind of '', 'err', 'ok' or 'wait'. The words go in
+ * headline first, with the kind's icon (say). A message without a kind that ends in no full stop is a
+ * step under way ("Adding your eCash"): it shows the wait icon.
+ */
 export function msgLine() {
   const p = el('p', { class: 'msg', role: 'status' });
   p.set = (text, kind = '') => {
-    p.textContent = text;
     p.className = 'msg ' + kind;
+    say(p, text, kind || (text && !/[.?!]$/.test(text) ? 'wait' : ''));
   };
   return p;
 }

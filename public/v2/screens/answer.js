@@ -18,7 +18,7 @@ const loadMarkdown = () =>
   ));
 import { errorView } from '../core/errors.js';
 import { priceLine } from '../core/price.js';
-import { el, icon } from '../core/ui.js';
+import { el, icon, say, sayEl } from '../core/ui.js';
 import { bottomRow, rings, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
@@ -43,6 +43,9 @@ export function answer({ t, state, nav, actions, format }) {
   const ringBtn = el('button', { type: 'button', class: 'ring-hit', onclick: () => nav('funds'), 'aria-label': t('funds.title') });
   const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), hold.info, hint, bottomRow({ t, nav }));
 
+  /** The next step's button: its picture and its word. */
+  const NEXT_ICON = { addFunds: 'plus', retry: 'again', chooseModel: 'grid', startFresh: 'trash', takeOut: 'takeout', freeOut: 'gift' };
+  const nextBtn = (next, go) => el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go }, icon(NEXT_ICON[next] ?? 'next', 20), el('span', { text: t(`next.${next}`) }));
   let shownText = null;
   let shownState = null;
   const tile = (id, ico, label, fn, sub = null) => el('button', { type: 'button', class: 'action-tile', id, onclick: fn }, icon(ico, 22), el('span', { text: label }), sub ? el('small', { class: 'tile-sub', text: sub }) : null);
@@ -76,7 +79,7 @@ export function answer({ t, state, nav, actions, format }) {
     }
     // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
     speakVia.hidden = !(on && v.speak.viaEngine);
-    speakVia.textContent = speakVia.hidden ? '' : t('speak.viaEngine');
+    say(speakVia, speakVia.hidden ? '' : t('speak.viaEngine'), '', 'eye');
   };
   const update = () => {
     const v = state.view();
@@ -91,7 +94,7 @@ export function answer({ t, state, nav, actions, format }) {
       shownState = null;
       asked.textContent = tk.phase === 'sending' ? t('talk.hearing') : t('talk.notHeard');
       body.replaceChildren(el('p', { class: 'thinking', text: tk.phase === 'sending' ? t('answer.thinking') : '' }));
-      note.textContent = '';
+      say(note, '');
       if (tk.phase === 'sending') {
         errBox.hidden = true;
         tiles.replaceChildren(tile('stopBtn', 'stop', t('answer.stop'), () => actions.talkCancel()));
@@ -99,12 +102,12 @@ export function answer({ t, state, nav, actions, format }) {
       }
       tiles.replaceChildren();
       if (tk.error.key) {
-        errBox.replaceChildren(el('p', { text: t(tk.error.key) }));
+        errBox.replaceChildren(sayEl('p', { id: 'answerErrorText' }, t(tk.error.key), 'err'), sayEl('p', { class: 'hint' }, t('talk.holdAgain'), '', 'mic'));
       } else {
         const ev = errorView(tk.error.code, tk.error.message, tk.error.charged);
         const go = { addFunds: () => nav('addFunds'), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut') }[ev.next];
         // Trying again means holding the button again: the recording was not kept.
-        errBox.replaceChildren(el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, tk.unit) : '' }) }), go ? el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }) : el('p', { class: 'hint', text: t('talk.holdAgain') }));
+        errBox.replaceChildren(sayEl('p', { id: 'answerErrorText' }, t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, tk.unit) : '' }), 'err'), go ? nextBtn(ev.next, go) : sayEl('p', { class: 'hint' }, t('talk.holdAgain'), '', 'mic'));
       }
       errBox.hidden = false;
       return;
@@ -112,9 +115,9 @@ export function answer({ t, state, nav, actions, format }) {
     const ex = v.lastExchange;
     if (!ex) {
       asked.textContent = '';
-      body.replaceChildren(el('p', { text: t('answer.none') }));
+      body.replaceChildren(sayEl('p', {}, t('answer.none')));
       tiles.replaceChildren();
-      note.textContent = '';
+      say(note, '');
       errBox.hidden = true;
       return;
     }
@@ -135,7 +138,7 @@ export function answer({ t, state, nav, actions, format }) {
     body.setAttribute('aria-busy', String(streaming));
     if (streaming) {
       tiles.replaceChildren(tile('stopBtn', 'stop', t('answer.stop'), () => actions.stop()));
-      note.textContent = '';
+      say(note, '');
       errBox.hidden = true;
       return;
     }
@@ -154,8 +157,8 @@ export function answer({ t, state, nav, actions, format }) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
       errBox.replaceChildren(
-        el('p', { text: t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }) }),
-        el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go, text: t(`next.${ev.next}`) }),
+        sayEl('p', { id: 'answerErrorText' }, t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }), 'err'),
+        nextBtn(ev.next, go),
         // Trying again asks the model again: a paid question, with its price before the tap.
         ev.next === 'retry' ? el('p', { class: 'price-line', id: 'retryPrice' }, el('span', { class: 'cap', text: t('price.label') }), el('span', { class: 'amount', text: againPrice })) : null,
       );
@@ -169,7 +172,7 @@ export function answer({ t, state, nav, actions, format }) {
     // A free model's answer says it was free (the engine charged it 0).
     const modelFree = !!a.meta?.freeModel && !(a.meta?.cost > 0);
     // A failed answer says its cost in the error box, so the note stays empty then.
-    note.textContent = a.meta?.stopped
+    const noteText = a.meta?.stopped
       ? t('answer.stopped')
       : a.meta?.partial
         ? freeNote
@@ -180,6 +183,7 @@ export function answer({ t, state, nav, actions, format }) {
         : a.meta?.error
           ? ''
           : (freeNote ?? (modelFree ? t('answer.freeModel') : cost ? t('answer.cost', { amount: cost }) : ''));
+    say(note, noteText, '', a.meta?.free || modelFree ? 'gift' : cost ? 'coins' : null);
   };
   update();
   // Once markdown is in, the answer is drawn again with it.
