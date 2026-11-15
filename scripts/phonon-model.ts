@@ -35,7 +35,7 @@ export interface LockVoice {
   gender: string;
   age: string;
   description: string;
-  /** Lab voices only: what they are for. Only 'accent-test' is known. */
+  /** Lab voices only: what they are for: 'lab-only' (another voice to compare by ear) or 'accent-test'. */
   use?: string;
 }
 export interface Lock {
@@ -43,7 +43,7 @@ export interface Lock {
   voiceRepo: { repo: string; revision: string; license: string; dir: string };
   defaultVoice: string;
   voices: LockVoice[];
-  /** Voices the voice lab offers and the app never does (docs/VOICE.md, accent test). */
+  /** Voices the voice lab offers and the app never does (docs/VOICE.md): other en-GB voices and the accent test. */
   labVoices?: LockVoice[];
   files: LockFile[];
 }
@@ -53,6 +53,9 @@ export const LOCK_PATH = join(ROOT, 'scripts', 'phonon', 'lock.json');
 export const OUT_DIR = join(ROOT, 'public', 'v2', 'voice', 'phonon');
 const STAGE = join(ROOT, '.tmp', 'phonon-download');
 const HF = /^https:\/\/huggingface\.co\/gradium\/phonon-(31m-en|voices)\/resolve\/[0-9a-f]{40}\//;
+
+/** What a lab voice may be for: another voice to compare by ear, or the accent test. */
+export const LAB_USES = ['lab-only', 'accent-test'];
 
 /** Checks the lock's shape: pinned Hugging Face URLs only, safe relative paths, a default voice that exists. */
 export function checkLock(lock: Lock): string[] {
@@ -75,7 +78,7 @@ export function checkLock(lock: Lock): string[] {
   }
   for (const v of lock.labVoices ?? []) {
     if (!seen.has(v.file)) errors.push(`${v.name}: lab voice file not in files`);
-    if (v.use !== 'accent-test') errors.push(`${v.name}: a lab voice must say what it is for (use: accent-test)`);
+    if (!LAB_USES.includes(v.use ?? '')) errors.push(`${v.name}: a lab voice must say what it is for (use: ${LAB_USES.join(' or ')})`);
     if (!v.file.startsWith(`${lock.voiceRepo.dir}/`)) errors.push(`${v.name}: a lab voice must come from the pinned voice repo`);
   }
   if (!lock.voices?.some((v) => v.name === lock.defaultVoice)) errors.push(`default voice ${lock.defaultVoice} is not in voices`);
@@ -90,8 +93,9 @@ export function appIndex(lock: Lock) {
   return {
     model: { name: lock.model.name, revision: lock.model.revision, license: lock.model.license, weights: lock.model.weights, tokenizer: lock.model.tokenizer, config: lock.model.config },
     voices: lock.voices.map((v) => ({ name: v.name, file: v.file, locale: v.locale, size: size(v.file) })),
-    // The voice lab's accent test: other locales' speakers read by the English model. Not in voices, so
-    // the app never offers them (core/phonon.js modelSpec takes them only when asked for the lab).
+    // The voice lab's own voices: the other en-GB voices (lab-only) and the accent test (other locales'
+    // speakers read by the English model). Not in voices, so the app never offers them (core/phonon.js
+    // modelSpec takes them only when asked for the lab).
     labVoices: (lock.labVoices ?? []).map((v) => ({ name: v.name, file: v.file, locale: v.locale, size: size(v.file), use: v.use, description: v.description })),
     defaultVoice: lock.defaultVoice,
     // Bytes the phone fetches the first time: the model and the default voice (other voices load when used).

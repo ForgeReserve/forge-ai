@@ -212,7 +212,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
     await page.selectOption('#labLines', '3');
     await page.click('#labRun');
-    await page.waitForSelector('#labSave:not([hidden])', { timeout: 120_000 });
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
     expect(await page.textContent('#labResults')).toMatch(/several threads/);
     expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
     // Read straight from the bundle: no copy in Cache Storage, and nothing fetched from elsewhere.

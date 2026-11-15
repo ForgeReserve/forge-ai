@@ -109,8 +109,20 @@ if (native) setAdapter('share', native.share);
 const engineBase = () => S.settings.engine || defaultEngine(native);
 
 // The natural voice made on the phone (core/phonon.js). Its files are on this app's own address, or in
-// the APK in the Android app, where there is nothing to download.
-const phonon = createPhonon({ native: !!native });
+// the APK in the Android app, where there is nothing to download. It runs on the graphics chip or the
+// processor (core/phonon.js chooseVoiceDevice); a WebGPU failure is remembered in the settings
+// (voiceDevice), so the next start goes straight to the processor.
+const phonon = createPhonon({
+  native: !!native,
+  voice: () => S.settings.naturalVoice || null,
+  memory: {
+    get: () => S.settings.voiceDevice || null,
+    set: (v) => {
+      S.settings.voiceDevice = v;
+      saveSettings();
+    },
+  },
+});
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
@@ -1080,6 +1092,11 @@ const actions = {
     saveSettings();
     store.set({});
   },
+  setNaturalVoice: (name) => {
+    S.settings.naturalVoice = name;
+    saveSettings();
+    store.set({});
+  },
   setVoiceOut: (id) => {
     S.settings.voiceOut = id;
     if (id === 'off') talk.stopSpeaking();
@@ -1304,7 +1321,7 @@ function screenFor(name, params) {
     case 'model':
       return modelScreen(ctx);
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':
       return historyScreen(ctx);
     case 'voiceLab':
@@ -1323,7 +1340,7 @@ function screenFor(name, params) {
             if (currentName === 'voiceLab') render();
           },
         );
-        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.loading') })) };
+        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.opening') })) };
       }
       try {
         return voiceLab({ ...ctx, phonon, speaker: adapters.speaker });
@@ -1508,6 +1525,9 @@ async function start() {
 
   // Which natural-voice files this app has (a small index, read once); the voice is offered once it is in.
   phonon.init().then((x) => x && store.set({}));
+  // The phone's own voices are often listed only a while after the page opens (iOS Safari): the Phone
+  // voice is offered once they are.
+  globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => store.set({}));
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,

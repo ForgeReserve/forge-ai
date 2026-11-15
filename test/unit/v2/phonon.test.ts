@@ -25,15 +25,21 @@ describe('the pinned voice files', () => {
     expect(LOCK.model.repo).toBe('gradium/phonon-31m-en');
     expect(LOCK.model.revision).toMatch(/^[0-9a-f]{40}$/);
     expect(LOCK.voiceRepo.revision).toMatch(/^[0-9a-f]{40}$/);
-    expect(LOCK.voices.map((v) => v.name)).toEqual(['Maeve', 'Freya', 'Pippa', 'Elodie-Rose', 'Imogen', 'Lottie', 'Bryony']);
-    for (const v of LOCK.voices) expect([v.locale, v.gender]).toEqual(['en-gb', 'female']);
+    // The app offers two: Maeve (the default) and Freya. The other five en-GB voices are the lab's.
+    expect(LOCK.voices.map((v) => v.name)).toEqual(['Maeve', 'Freya']);
+    expect(LOCK.defaultVoice).toBe('Maeve');
+    const others = (LOCK.labVoices ?? []).filter((v) => v.use === 'lab-only');
+    expect(others.map((v) => v.name)).toEqual(['Pippa', 'Elodie-Rose', 'Imogen', 'Lottie', 'Bryony']);
+    for (const v of [...LOCK.voices, ...others]) expect([v.locale, v.gender]).toEqual(['en-gb', 'female']);
+    // Every voice's file still ships: Freya's for the picker, the rest for the lab.
+    for (const v of [...LOCK.voices, ...(LOCK.labVoices ?? [])]) expect(INDEX.files.map((f) => f.path), v.name).toContain(v.file);
     for (const f of LOCK.files) expect(f.url).toContain(f.path.startsWith('31m') ? LOCK.model.revision : LOCK.voiceRepo.revision);
     // The weights file the model card names: 64.5 MB, 8-bit.
     expect(LOCK.files.find((f) => f.path === LOCK.model.weights)!.size).toBe(64_512_352);
   });
 
   it('pins the accent-test speakers for the voice lab alone: female es-MX, es-ES, pt-BR and fr-FR, from the same voice commit', () => {
-    const lab = LOCK.labVoices ?? [];
+    const lab = (LOCK.labVoices ?? []).filter((v) => v.use === 'accent-test');
     expect(lab.map((v) => [v.name, v.locale])).toEqual([
       ['Regina', 'es-mx'],
       ['Ximena', 'es-mx'],
@@ -50,17 +56,20 @@ describe('the pinned voice files', () => {
     }
     // The app's voices are what they were: the accent test is not among them.
     expect(INDEX.voices.map((v) => v.name)).not.toContain('Regina');
-    expect(INDEX.labVoices.map((v) => v.name)).toEqual(lab.map((v) => v.name));
+    expect(INDEX.labVoices.filter((v) => v.use === 'accent-test').map((v) => v.name)).toEqual(lab.map((v) => v.name));
     expect(INDEX.files.map((f) => f.path)).toEqual(expect.arrayContaining(lab.map((v) => v.file)));
   });
 
   it('refuses a lab voice that does not say what it is for, comes from elsewhere, or reuses a name', () => {
     const bad = structuredClone(LOCK);
-    bad.labVoices![0]!.use = 'app';
-    bad.labVoices![1]!.name = 'Maeve';
-    bad.labVoices![2]!.file = '31m-en-92741c5/x.safetensors';
+    const at = (n: string) => bad.labVoices!.find((v) => v.name === n)!;
+    at('Regina').use = 'app';
+    delete at('Pippa').use;
+    at('Ximena').name = 'Maeve';
+    at('Alba').file = '31m-en-92741c5/x.safetensors';
     const errors = checkLock(bad).join('\n');
-    expect(errors).toMatch(/Regina: a lab voice must say what it is for/);
+    expect(errors).toMatch(/Regina: a lab voice must say what it is for \(use: lab-only or accent-test\)/);
+    expect(errors).toMatch(/Pippa: a lab voice must say what it is for/);
     expect(errors).toMatch(/Maeve: voice name listed twice/);
     expect(errors).toMatch(/Alba: lab voice file not in files/);
     expect(errors).toMatch(/Alba: a lab voice must come from the pinned voice repo/);
@@ -81,7 +90,7 @@ describe('the pinned voice files', () => {
     const size = (p: string) => LOCK.files.find((f) => f.path === p)!.size;
     const def = LOCK.voices.find((v) => v.name === LOCK.defaultVoice)!;
     expect(INDEX.firstBytes).toBe(size(LOCK.model.weights) + size(LOCK.model.tokenizer) + size(LOCK.model.config) + size(def.file));
-    expect(INDEX.voices).toHaveLength(7);
+    expect(INDEX.voices).toHaveLength(2);
     expect(JSON.stringify(INDEX)).not.toMatch(/huggingface/);
   });
 
@@ -125,15 +134,19 @@ describe('the model as phonon-tts takes it', () => {
     const spec = P.modelSpec(INDEX, BASE);
     expect(spec.weights.q8).toBe(`${BASE}${LOCK.model.weights}`);
     expect(spec.defaultVoice).toBe(LOCK.defaultVoice);
-    expect(Object.keys(spec.voices)).toHaveLength(7);
+    expect(Object.keys(spec.voices)).toEqual(['Maeve', 'Freya']);
     expect(P.sameOrigin(spec, 'https://app.test')).toBe(true);
     expect(P.sameOrigin(spec, 'https://other.test')).toBe(false);
-    expect(P.modelSpec(INDEX, BASE, 'Bryony').defaultVoice).toBe('Bryony');
+    expect(P.modelSpec(INDEX, BASE, 'Freya').defaultVoice).toBe('Freya');
+    // A lab-only voice is not the app's to start with.
+    expect(P.modelSpec(INDEX, BASE, 'Bryony').defaultVoice).toBe(LOCK.defaultVoice);
+    expect(P.modelSpec(INDEX, BASE, 'Bryony', { lab: true }).defaultVoice).toBe('Bryony');
     expect(P.modelSpec(INDEX, BASE, 'Nobody').defaultVoice).toBe(LOCK.defaultVoice);
   });
 
-  it('hands the accent-test voices to the voice lab only', () => {
+  it('hands the other en-GB voices and the accent-test voices to the voice lab only', () => {
     expect(Object.keys(P.modelSpec(INDEX, BASE).voices)).not.toContain('Regina');
+    expect(Object.keys(P.modelSpec(INDEX, BASE).voices)).not.toContain('Bryony');
     const lab = P.modelSpec(INDEX, BASE, null, { lab: true });
     expect(Object.keys(lab.voices)).toEqual([...INDEX.voices.map((v: any) => v.name), ...INDEX.labVoices.map((v: any) => v.name)]);
     expect(lab.defaultVoice).toBe(LOCK.defaultVoice);
@@ -163,19 +176,39 @@ describe('the model as phonon-tts takes it', () => {
   });
 });
 
-/** A fake phonon-tts: records how it was loaded and streams the chunks given. */
-function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new Float32Array(1920).fill(0.2)]) {
+/**
+ * A fake phonon-tts: records how it was loaded and streams the chunks given. gpu: what a load asking for
+ * WebGPU ('webgpu' or 'auto') ends up on, and how its streams go: 'ok', 'start' (WebGPU fails to start,
+ * so 'auto' runs on the processor), 'error' (the first stream throws), 'silent' (it ends with no sound)
+ * or 'hang' (no sound ever comes).
+ */
+function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new Float32Array(1920).fill(0.2)], { gpu = 'ok' }: { gpu?: string } = {}) {
   const loads: any[] = [];
+  const made: any[] = [];
   const lib = {
     PhononTTS: {
       load: async (opts: any) => {
         loads.push(opts);
         opts.onProgress?.({ file: 'weights', loaded: 50, total: 100, cached: false });
-        return {
+        const wantsGpu = opts.device === 'webgpu' || opts.device === 'auto';
+        const device = wantsGpu && !(gpu === 'start' && opts.device === 'auto') ? 'webgpu' : 'cpu';
+        const onGpu = device === 'webgpu';
+        let disposed = false;
+        const tts = {
           sampleRate: 24000,
-          dispose: vi.fn(),
-          stream: (text: string, { signal }: any = {}) => ({
+          device,
+          deviceReason: device === 'cpu' && wantsGpu ? 'WebGPU failed to start: fake' : 'requested',
+          streams: [] as string[],
+          dispose: vi.fn(() => (disposed = true)),
+          stream: (text: string, { signal, voice }: any = {}) => ({
             async *[Symbol.asyncIterator]() {
+              tts.streams.push(`${voice ?? ''}:${text}`);
+              if (onGpu && gpu === 'error') throw new Error('fake GPU error');
+              if (onGpu && gpu === 'silent') return;
+              if (onGpu && gpu === 'hang') {
+                while (!disposed) await new Promise((r) => setTimeout(r, 2));
+                throw new Error('this PhononTTS has been disposed');
+              }
               for (const c of chunks) {
                 if (signal?.aborted) return;
                 await new Promise((r) => setTimeout(r, 1));
@@ -184,22 +217,41 @@ function fakeLib(chunks: Float32Array[] = [new Float32Array(1920).fill(0.1), new
             },
           }),
         };
+        made.push(tts);
+        return tts;
       },
     },
   };
-  return { lib, loads };
+  return { lib, loads, made };
 }
 
-function engine({ index = INDEX as any, native = false, cached = false, lib = fakeLib().lib } = {}) {
+/** A browser's global object as the engine reads it: WebGPU's adapter, if any, and isolation. */
+function browserEnv({ vendor = null as string | null, fallback = false, isolated = true } = {}) {
+  const adapter = vendor == null ? null : { info: { vendor, architecture: vendor === 'arm' ? 'valhall' : 'metal-3', isFallbackAdapter: fallback }, features: new Set() };
+  return { Worker: function () {}, WebAssembly, crossOriginIsolated: isolated, navigator: { gpu: { requestAdapter: async () => adapter } } };
+}
+
+function engine({ index = INDEX as any, native = false, cached = false, lib = fakeLib().lib, env = { Worker: function () {}, WebAssembly } as any, memory = undefined as any, voice = undefined as any, firstSoundMs = undefined as any } = {}) {
   const fetched: string[] = [];
   const fetch = async (url: string) => {
     fetched.push(url);
     return index ? new Response(JSON.stringify(index)) : new Response('', { status: 404 });
   };
   const caches = { open: async () => ({ match: async (u: string) => (cached && u.endsWith('model.q8.gguf') ? new Response('x') : undefined) }) };
-  const env = { Worker: function () {}, WebAssembly };
-  return { ph: P.createPhonon({ base: BASE, native, importLib: async () => lib, fetch, caches, env }), fetched };
+  return { ph: P.createPhonon({ base: BASE, native, importLib: async () => lib, fetch, caches, env, memory, voice, firstSoundMs }), fetched };
 }
+
+/** Settings kept the way the app keeps them: a value per key. */
+function memoryStore(initial: string | null = null) {
+  const m = { value: initial, writes: 0, get: () => m.value, set: (v: string) => ((m.value = v), m.writes++) };
+  return m;
+}
+
+const readAll = async (tts: any, text: string, opts: any = {}) => {
+  const got: Float32Array[] = [];
+  for await (const pcm of tts.stream(text, opts)) got.push(pcm);
+  return got;
+};
 
 describe('the download meter', () => {
   const size = (p: string) => LOCK.files.find((f) => f.path === p)!.size;
@@ -253,7 +305,7 @@ describe('the phone Phonon engine', () => {
 
   it('loads the model from this app only, kept in the cache on the website and read from the APK in the app', async () => {
     const web = fakeLib();
-    const a = engine({ lib: web.lib });
+    const a = engine({ lib: web.lib, env: browserEnv() });
     const tts = await a.ph.load();
     expect(await a.ph.load()).toBe(tts); // loaded once
     expect(web.loads).toHaveLength(1);
@@ -266,27 +318,167 @@ describe('the phone Phonon engine', () => {
     expect(app.loads[0]).toMatchObject({ cache: false, device: 'webgpu', threads: 1 });
   });
 
-  it('loads the lab model with the accent-test voices apart from the app model, which never has them', async () => {
+  it('loads the lab model with the lab voices apart from the app model, which never has them', async () => {
     const f = fakeLib();
     const a = engine({ lib: f.lib });
-    const app = await a.ph.load();
-    const lab = await a.ph.load({ lab: true });
-    expect(lab).not.toBe(app);
+    await a.ph.load();
+    const lab = await a.ph.load({ device: 'cpu', lab: true });
+    expect(lab).toBe(f.made[1]);
     expect(Object.keys(f.loads[0].model.voices)).not.toContain('Regina');
     expect(Object.keys(f.loads[1].model.voices)).toContain('Regina');
-    await a.ph.unload({ lab: true });
+    await a.ph.unload({ device: 'cpu', lab: true });
     expect(lab.dispose).toHaveBeenCalled();
-    expect(app.dispose).not.toHaveBeenCalled();
+    expect(f.made[0].dispose).not.toHaveBeenCalled();
   });
 
   it('frees a model when asked, and loads it again after', async () => {
     const f = fakeLib();
     const a = engine({ lib: f.lib });
-    const first = await a.ph.load();
+    await a.ph.load();
     await a.ph.unload();
-    expect(first.dispose).toHaveBeenCalled();
-    expect(await a.ph.load()).not.toBe(first);
+    expect(f.made[0].dispose).toHaveBeenCalled();
+    await a.ph.load();
     expect(f.loads).toHaveLength(2);
+    await a.ph.load({ device: 'webgpu' });
+    await a.ph.unload({ device: 'webgpu' });
+    expect(f.made[2].dispose).toHaveBeenCalled();
+  });
+});
+
+describe('where the natural voice runs (measured on phones, docs/VOICE.md)', () => {
+  const apple = { vendor: 'apple', architecture: 'metal-3', fallback: false };
+  it("uses the graphics chip when WebGPU's adapter is Apple's (iPhone: RTF 0.045 against 0.147 on the processor)", () => {
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true })).toMatchObject({ device: 'webgpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: { ...apple, vendor: 'Apple' }, isolated: false })).toMatchObject({ device: 'webgpu' });
+  });
+  it('uses the processor with threads on an Arm Mali (valhall), where WebGPU was 5 times slower (Pixel 8 Pro)', () => {
+    expect(P.chooseVoiceDevice({ gpu: { vendor: 'arm', architecture: 'valhall', fallback: false }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: { vendor: 'nvidia', architecture: '', fallback: false }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+  });
+  it('never uses a software fallback adapter, even one that says Apple', () => {
+    expect(P.chooseVoiceDevice({ gpu: { ...apple, fallback: true }, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+  });
+  it('uses the processor with no WebGPU', () => {
+    expect(P.chooseVoiceDevice({ gpu: null, isolated: true })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice()).toMatchObject({ device: 'cpu', threads: 1 });
+  });
+  it('uses one thread on a page that is not cross-origin isolated', () => {
+    const c = P.chooseVoiceDevice({ gpu: { vendor: 'arm', fallback: false }, isolated: false });
+    expect(c).toMatchObject({ device: 'cpu', threads: 1 });
+    expect(c.reason).toMatch(/not cross-origin isolated/);
+  });
+  it('goes straight to the processor once WebGPU failed on this phone', () => {
+    expect(P.GPU_FAILED).toBe('cpu');
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true, remembered: 'cpu' })).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: false, remembered: 'cpu' })).toMatchObject({ device: 'cpu', threads: 1 });
+    expect(P.chooseVoiceDevice({ gpu: apple, isolated: true, remembered: '' })).toMatchObject({ device: 'webgpu' });
+  });
+  it("reads the adapter's vendor, architecture, fallback flag and subgroups", async () => {
+    expect(await P.gpuInfo(browserEnv({ vendor: 'apple' }))).toMatchObject({ vendor: 'apple', architecture: 'metal-3', fallback: false, subgroups: false });
+    expect(await P.gpuInfo(browserEnv())).toBeNull();
+    expect(await P.gpuInfo({ navigator: { gpu: { requestAdapter: async () => { throw new Error('off'); } } } })).toBeNull();
+    expect(await P.gpuInfo({})).toBeNull();
+  });
+});
+
+describe("the app's natural voice on the graphics chip, and its fallback to the processor", () => {
+  it("asks phonon-tts for WebGPU on Apple's chip, and keeps it when it makes sound", async () => {
+    const f = fakeLib();
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    expect(f.loads[0]).toMatchObject({ device: 'auto', threads: 'auto' });
+    expect(tts.device).toBe('webgpu');
+    expect(await readAll(tts, 'One.')).toHaveLength(2);
+    expect(await readAll(tts, 'Two.')).toHaveLength(2);
+    expect(f.loads).toHaveLength(1);
+    expect(mem.writes).toBe(0);
+    expect(await ph.device()).toMatchObject({ device: 'webgpu' });
+  });
+
+  it('runs on the processor on an Arm Mali, and on one thread on a page that is not isolated', async () => {
+    const a = fakeLib();
+    await engine({ lib: a.lib, env: browserEnv({ vendor: 'arm' }) }).ph.load();
+    expect(a.loads[0]).toMatchObject({ device: 'cpu', threads: 'auto' });
+    const b = fakeLib();
+    await engine({ lib: b.lib, env: browserEnv({ vendor: 'apple', isolated: false, fallback: true }) }).ph.load();
+    expect(b.loads[0]).toMatchObject({ device: 'cpu', threads: 1 });
+  });
+
+  it('when WebGPU fails to start, reads on the processor phonon-tts fell back to, and remembers it', async () => {
+    const f = fakeLib(undefined, { gpu: 'start' });
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    expect(tts.device).toBe('cpu');
+    expect(tts.deviceReason).toMatch(/WebGPU failed to start/);
+    expect(mem.value).toBe('cpu');
+    expect(await readAll(tts, 'One.')).toHaveLength(2);
+    expect(f.loads).toHaveLength(1);
+  });
+
+  for (const [how, what] of [
+    ['error', 'errors'],
+    ['silent', 'ends with no sound'],
+    ['hang', 'makes no sound in time'],
+  ] as const) {
+    it(`when WebGPU ${what} on first use, reads the line again on the processor, for the rest of the session, and remembers it`, async () => {
+      const f = fakeLib(undefined, { gpu: how });
+      const mem = memoryStore();
+      const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem, firstSoundMs: 30 });
+      const tts = await ph.load();
+      expect(tts.device).toBe('webgpu');
+      expect(await readAll(tts, 'First line.')).toHaveLength(2);
+      expect(f.made[0].dispose).toHaveBeenCalled();
+      expect(f.loads.map((l) => l.device)).toEqual(['auto', 'cpu']);
+      expect(f.made[1].streams).toEqual([`${LOCK.defaultVoice}:First line.`]);
+      expect(mem.value).toBe('cpu');
+      expect(tts.device).toBe('cpu');
+      expect(tts.deviceReason).toMatch(/WebGPU failed on first use/);
+      // The rest of the session stays on the processor.
+      expect(await readAll(tts, 'Second line.')).toHaveLength(2);
+      expect(f.loads).toHaveLength(2);
+    });
+  }
+
+  it('the next start remembers the failure and goes straight to the processor, without asking for an adapter', async () => {
+    const f = fakeLib();
+    let asked = 0;
+    const env: any = browserEnv({ vendor: 'apple' });
+    const real = env.navigator.gpu.requestAdapter;
+    env.navigator.gpu.requestAdapter = () => (asked++, real());
+    const { ph } = engine({ lib: f.lib, env, memory: memoryStore('cpu') });
+    const tts = await ph.load();
+    expect(f.loads[0]).toMatchObject({ device: 'cpu', threads: 'auto' });
+    expect(tts.device).toBe('cpu');
+    expect(asked).toBe(0);
+  });
+
+  it('reads with the voice the person picked when the app offers it, else the default', async () => {
+    const f = fakeLib();
+    let picked: string | null = 'Freya';
+    const { ph } = engine({ lib: f.lib, voice: () => picked });
+    const tts = await ph.load();
+    expect(f.loads[0].model.defaultVoice).toBe('Freya');
+    await readAll(tts, 'One.');
+    picked = 'Bryony'; // a lab-only voice: not the app's
+    await readAll(tts, 'Two.');
+    picked = null;
+    await readAll(tts, 'Three.');
+    expect(f.made[0].streams).toEqual(['Freya:One.', 'Maeve:Two.', 'Maeve:Three.']);
+    expect(ph.voice()).toBe('Maeve');
+  });
+
+  it('a stop while WebGPU starts its first line is not taken for a failure', async () => {
+    const f = fakeLib(Array.from({ length: 20 }, () => new Float32Array(1920)));
+    const mem = memoryStore();
+    const { ph } = engine({ lib: f.lib, env: browserEnv({ vendor: 'apple' }), memory: mem });
+    const tts = await ph.load();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    expect(await readAll(tts, 'Stopped.', { signal: ctrl.signal })).toEqual([]);
+    expect(mem.writes).toBe(0);
+    expect(f.loads).toHaveLength(1);
   });
 });
 
@@ -616,11 +808,202 @@ describe('the voice lab', () => {
       { firstMs: 20, rtf: 0.2, underruns: 0, nan: 0, silent: true, clipped: 1 },
       { error: 'boom' },
     ]);
-    expect(s).toEqual({ items: 4, failed: 1, firstMs: { median: 20, p90: 30 }, rtf: { median: 0.2, p90: 0.3 }, underruns: 2, nanRuns: 1, silentRuns: 1, clippedRuns: 1 });
+    expect(s).toEqual({ items: 4, failed: 1, firstMs: { median: 20, p90: 30 }, rtf: { median: 0.2, p90: 0.3 }, underruns: 2, nanRuns: 1, silentRuns: 1, clippedRuns: 1, timedOutRuns: 0 });
     const rep = LAB.report({ env: { cores: 8 }, voice: 'Maeve', candidates: [{ id: 'phonon-cpu-threads', rows: [] }, { id: 'phone-voice', error: 'none' }] });
     expect(rep).toMatchObject({ kind: 'forge-voice-lab', corpusVersion: LAB.CORPUS_VERSION, voice: 'Maeve', env: { cores: 8 } });
     expect(rep.candidates[1].summary).toBeNull();
     expect(LAB.CANDIDATES.map((c: any) => c.id)).toEqual(['phonon-cpu-threads', 'phonon-cpu-single', 'phonon-webgpu', 'phone-voice']);
+  });
+
+  it("counts the phone's own English voices that run on it, as iOS lists them (en-GB, en_US, all local)", () => {
+    const v = (name: string, lang: string, localService = true, def = false) => ({ name, lang, localService, default: def });
+    // iOS Safari: every voice local, BCP 47 languages; older WebKit writes en_US.
+    const ios = [v('Samantha', 'en-US', true, true), v('Amélie', 'fr-CA'), v('Daniel', 'en-GB'), v('Karen', 'en_AU'), v('Moira', 'en-IE')];
+    expect(LAB.phoneVoices(ios).map((x: any) => x.name)).toEqual(['Daniel', 'Samantha', 'Karen', 'Moira']);
+    // Chrome on a desktop: the Google voices send the text out and do not count.
+    expect(LAB.phoneVoices([v('Google UK English Female', 'en-GB', false), v('Alex', 'en-US')]).map((x: any) => x.name)).toEqual(['Alex']);
+    expect(LAB.phoneVoices([v('Thomas', 'fr-FR'), v('English?', 'eng')])).toEqual([]);
+    expect(LAB.phoneVoices([])).toEqual([]);
+    expect(LAB.voiceLang({ lang: 'en_GB' })).toBe('en-gb');
+  });
+
+  /** A speechSynthesis whose list starts empty and fills after `after` ms, with or without the event. */
+  function lateSynth(voices: any[], { after = 30, event = true } = {}) {
+    const target = new EventTarget();
+    let list: any[] = [];
+    setTimeout(() => {
+      list = voices;
+      if (event) target.dispatchEvent(new Event('voiceschanged'));
+    }, after);
+    return Object.assign(target, { getVoices: () => list });
+  }
+
+  it('waits for the voice list, which is often empty at first (iOS Safari), rather than say there is none', async () => {
+    const daniel = { name: 'Daniel', lang: 'en-GB', localService: true };
+    expect(await LAB.waitForVoices(lateSynth([daniel]), 2000)).toEqual([daniel]);
+    // Filled without the event: found by looking again.
+    expect(await LAB.waitForVoices(lateSynth([daniel], { event: false }), 2000, 10)).toEqual([daniel]);
+    // A list that is there at once is not waited for.
+    const now = Date.now();
+    expect(await LAB.waitForVoices({ getVoices: () => [daniel], addEventListener() {}, removeEventListener() {} }, 2000)).toEqual([daniel]);
+    expect(Date.now() - now).toBeLessThan(50);
+  });
+
+  it('still finds no voice on a phone without a speech engine (GrapheneOS), after the wait', async () => {
+    const t0 = Date.now();
+    expect(await LAB.waitForVoices(lateSynth([], { after: 10 }), 120, 10)).toEqual([]);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(100);
+    expect(await LAB.waitForVoices(undefined)).toEqual([]);
+  });
+
+  /** A loaded model as the lab reads it: each stream goes as `how` says. */
+  const labTts = (how: 'ok' | 'silent' | 'empty' | 'error' | 'hang' | 'stall') => ({
+    sampleRate: 24000,
+    stream: (_: string, { signal }: any = {}) => ({
+      async *[Symbol.asyncIterator]() {
+        if (how === 'error') throw new Error('GPU device lost');
+        if (how === 'empty') return;
+        if (how === 'hang') return void (await new Promise(() => {}));
+        for (let i = 0; i < 3; i++) {
+          if (signal?.aborted) return;
+          await new Promise((r) => setTimeout(r, 1));
+          yield how === 'silent' ? new Float32Array(1920) : new Float32Array(1920).fill(0.1);
+          if (how === 'stall') await new Promise(() => {});
+        }
+      },
+    }),
+  });
+
+  it('reads a line and times each piece of sound', async () => {
+    const r = await LAB.readLine(labTts('ok'), 'Hello.');
+    expect(r.chunks).toHaveLength(3);
+    expect(r.arrivals).toHaveLength(3);
+    expect(r.durations).toEqual([80, 80, 80]);
+    expect(r.stopped).toBe(false);
+    // Silence that arrives is still sound the model made: the silence check (soundCheck) counts it.
+    expect((await LAB.readLine(labTts('silent'), 'x')).chunks).toHaveLength(3);
+  });
+
+  it('fails a line that ends with no sound and no error, as WebGPU did on desktop Safari, rather than count nothing', async () => {
+    await expect(LAB.readLine(labTts('empty'), 'x')).rejects.toMatchObject({ code: 'no-sound', message: /no sound and no error/ });
+    await expect(LAB.readLine(labTts('error'), 'x')).rejects.toThrow('GPU device lost');
+  });
+
+  it('fails a line that hangs, at its start or between two pieces, instead of holding the run', async () => {
+    await expect(LAB.readLine(labTts('hang'), 'x', { stallMs: 20 })).rejects.toMatchObject({ code: 'stalled', message: 'no sound for 0 s' });
+    await expect(LAB.readLine(labTts('stall'), 'x', { stallMs: 20 })).rejects.toMatchObject({ code: 'stalled', message: /after 1 pieces/ });
+  });
+
+  it('a Stop is not a failure: the line ends, stopped', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    expect(await LAB.readLine(labTts('ok'), 'x', { signal: ctrl.signal })).toMatchObject({ stopped: true, chunks: [] });
+  });
+
+  it('names why a way of reading gave nothing to read: its error, no line, or every line failed', () => {
+    expect(LAB.candidateError({ error: 'load failed', rows: [] })).toBe('load failed');
+    expect(LAB.candidateError({ rows: [] })).toBe('no line was read, and no error was given');
+    expect(LAB.candidateError({ rows: [] }, { stopped: true })).toBeNull();
+    expect(LAB.candidateError({ rows: [{ error: 'the model ended the line with no sound and no error' }, { error: 'x' }] })).toBe('every line failed: the model ended the line with no sound and no error');
+    expect(LAB.candidateError({ rows: [{ error: 'x' }, { firstMs: 20 }] })).toBeNull();
+  });
+
+  it('Stop ends a line at once even when the model never answers again', async () => {
+    const ctrl = new AbortController();
+    const p = LAB.readLine(labTts('hang'), 'x', { signal: ctrl.signal, stallMs: 60_000 });
+    setTimeout(() => ctrl.abort(), 5);
+    expect(await p).toMatchObject({ stopped: true });
+    const c2 = new AbortController();
+    const w = LAB.untilAborted(new Promise(() => {}), c2.signal);
+    c2.abort();
+    await expect(w).rejects.toMatchObject({ name: 'AbortError' });
+    expect(await LAB.untilAborted(Promise.resolve(3), new AbortController().signal)).toBe(3);
+  });
+
+  it("cuts a line for the phone's voice at sentence ends into pieces of at most 200 characters", () => {
+    const long = LAB.CORPUS.find((c: any) => c.kind === 'long').text;
+    const pieces = LAB.splitForSpeech(long);
+    expect(pieces.length).toBeGreaterThan(2);
+    for (const p of pieces) expect(p.length).toBeLessThanOrEqual(200);
+    for (const p of pieces.slice(0, -1)) expect(p).toMatch(/[.!?]$/);
+    expect(pieces.join(' ')).toBe(long);
+    expect(LAB.splitForSpeech('Yes.')).toEqual(['Yes.']);
+    // One sentence longer than 200: cut at a comma or a space, never mid-word.
+    const one = Array.from({ length: 60 }, (_, i) => `word${i}`).join(' ') + '.';
+    const cut = LAB.splitForSpeech(one);
+    for (const p of cut) expect(p.length).toBeLessThanOrEqual(200);
+    expect(cut.join(' ')).toBe(one);
+    // 2.5 times the spoken length at 16 characters a second, plus 5 s.
+    expect(LAB.speechDeadlineMs('x'.repeat(160))).toBe(30_000);
+    expect(LAB.speechDeadlineMs('')).toBe(5000);
+  });
+
+  /** A speechSynthesis that starts each utterance, and ends it or not. */
+  function fakeSpeech({ ends = true, starts = true, error = null as string | null } = {}) {
+    const said: string[] = [];
+    let cancels = 0;
+    class Utterance {
+      text: string;
+      voice: any = null;
+      lang = '';
+      onstart: any = null;
+      onend: any = null;
+      onerror: any = null;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    const synth = {
+      speak(u: any) {
+        said.push(u.text);
+        if (starts) setTimeout(() => u.onstart?.(), 1);
+        if (error) setTimeout(() => u.onerror?.({ error }), 2);
+        else if (ends) setTimeout(() => u.onend?.(), 3);
+      },
+      cancel: () => cancels++,
+    };
+    return { synth, Utterance, said, cancels: () => cancels };
+  }
+
+  it("says a line with the phone's voice piece by piece, and times it", async () => {
+    const f = fakeSpeech();
+    const long = LAB.CORPUS.find((c: any) => c.kind === 'long').text;
+    const r = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: long });
+    expect(r).toMatchObject({ started: true, timedOut: false, stopped: false, error: null });
+    expect(r.pieces).toBe(f.said.length);
+    expect(f.said.length).toBeGreaterThan(2);
+    expect(r.firstMs).not.toBeNull();
+  });
+
+  it('cancels a piece whose end never comes (iOS) at its deadline, marks the line timed out, and goes on', async () => {
+    const f = fakeSpeech({ ends: false });
+    const deadline = () => 20;
+    const a = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: LAB.CORPUS.find((c: any) => c.kind === 'long').text, deadline, settleMs: 1 });
+    expect(a).toMatchObject({ started: true, timedOut: true, stopped: false });
+    expect(f.said).toHaveLength(1); // the rest of that line is skipped
+    expect(f.cancels()).toBe(1);
+    const b = await LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: 'Next line.', deadline, settleMs: 1 });
+    expect(b.timedOut).toBe(true);
+    expect(f.said).toHaveLength(2);
+    // Never started at all: timed out and not started, which the lab takes as the voice not working.
+    const n = fakeSpeech({ ends: false, starts: false });
+    expect(await LAB.speakLine({ synth: n.synth, Utterance: n.Utterance, text: 'x', deadline, settleMs: 1 })).toMatchObject({ started: false, timedOut: true });
+  });
+
+  it('Stop ends a line at once, with the voice cancelled, whatever the voice does', async () => {
+    const f = fakeSpeech({ ends: false });
+    const ctrl = new AbortController();
+    const p = LAB.speakLine({ synth: f.synth, Utterance: f.Utterance, text: 'Hello there.', signal: ctrl.signal, deadline: () => 60_000 });
+    setTimeout(() => ctrl.abort(), 5);
+    expect(await p).toMatchObject({ stopped: true });
+    expect(f.cancels()).toBe(1);
+  });
+
+  it('an error fails the line; a cancel does not', async () => {
+    const e = fakeSpeech({ error: 'synthesis-failed' });
+    expect((await LAB.speakLine({ synth: e.synth, Utterance: e.Utterance, text: 'x' })).error).toBe('synthesis-failed');
+    const c = fakeSpeech({ error: 'interrupted' });
+    expect((await LAB.speakLine({ synth: c.synth, Utterance: c.Utterance, text: 'x' })).error).toBeNull();
   });
 
   it('is reachable only by its address: no menu or screen links to it', async () => {

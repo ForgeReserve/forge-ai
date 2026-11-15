@@ -1,6 +1,8 @@
 The natural voice's model and voices (public/v2/voice/phonon, put in place at build time by
 scripts/phonon-model.ts; pinned in scripts/phonon/lock.json). Both are licensed under the Apache
-License, Version 2.0, as their model cards state. The text of the licence follows.
+License, Version 2.0, as their model cards state. The first run's Listen clips (public/v2/voice/en) are
+recorded with them (Phonon 31m English, voice Maeve; scripts/record-voice/record.py). The text of the
+licence follows.
 
 ==== Phonon 31m (English), Gradium
 https://huggingface.co/gradium/phonon-31m-en at commit 92741c5b07d085ff840e26fea8ce43110b87852f

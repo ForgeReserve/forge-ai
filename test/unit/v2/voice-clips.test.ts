@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The first run's Listen clips (F5): recorded once with Kokoro, voice Emma (scripts/record-voice), from
+// The first run's Listen clips (F5): recorded once in the app's natural voice, Phonon 31m English with
+// the default voice Maeve (scripts/record-voice), from
 // the exact words Listen reads (core/firstrun.js SPOKEN). A copy edit to those words without recording
 // again fails here, so stale audio cannot ship. The app checks the same thing at run time and falls back
 // to the phone's own voice.
@@ -14,6 +15,7 @@ const CLIPS: any = await import('../../../public/v2/core/clips.js' as string);
 const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
 const sha = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
 const REGENERATE = '.tmp/voice/venv/bin/python scripts/record-voice/record.py';
+const LOCK = JSON.parse(readFileSync(join(import.meta.dirname, '../../../scripts/phonon/lock.json'), 'utf8'));
 
 const recorded = existsSync(join(DIR, 'manifest.json'));
 if (!recorded) console.warn(`The first run's Listen clips are not recorded yet (no public/v2/voice/en/manifest.json): their checks are skipped and Listen uses the phone's own voice. Record them with: ${REGENERATE}`);
@@ -35,8 +37,14 @@ describe.skipIf(!recorded)('Listen clips match the first run words', () => {
     });
   }
 
-  it('is the Emma voice, and the service worker keeps every clip for offline use', () => {
-    expect(manifest.voice).toBe('bf_emma');
+  it("is the app's default natural voice on the pinned model, and the service worker keeps every clip for offline use", () => {
+    expect(manifest.engine).toBe('phonon');
+    expect(manifest.voice).toBe(LOCK.defaultVoice);
+    expect(manifest.voice).toBe('Maeve');
+    expect(manifest.model).toBe(`${LOCK.model.repo}@${LOCK.model.revision}`);
+    expect(manifest.voice_file).toBe(LOCK.voices.find((v: any) => v.name === LOCK.defaultVoice).file);
+    expect(manifest.voices).toBe(`${LOCK.voiceRepo.repo}@${LOCK.voiceRepo.revision}`);
+    for (const c of Object.values(manifest.clips) as any[]) expect([c.voice, c.model]).toEqual([manifest.voice, manifest.model]);
     const sw = readFileSync(join(PUBLIC, 'v2/sw.js'), 'utf8');
     const listed = JSON.parse(/const VOICE = (\[[^\]]*\]);/.exec(sw)![1]!.replace(/'/g, '"'));
     expect(new Set(listed)).toEqual(new Set(['/v2/voice/en/manifest.json', ...Object.values(manifest.clips).map((c: any) => `/v2/voice/en/${c.file}`)]));
@@ -99,7 +107,8 @@ describe('Listen clips', () => {
     expect(bad.clips.play('welcome', ['Other words.'])).toBeNull();
   });
 
-  it("ships Kokoro's licence", () => {
+  it('ships the licences of the voices that made the clips: Phonon and its voices, and Kokoro (still a recording path)', () => {
+    expect(readFileSync(join(PUBLIC, 'vendor/licenses/phonon-models.txt'), 'utf8')).toMatch(/Apache License/);
     expect(readFileSync(join(PUBLIC, 'vendor/licenses/kokoro.txt'), 'utf8')).toMatch(/Apache License[\s\S]*Version 2\.0/);
   });
 });

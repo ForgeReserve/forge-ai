@@ -127,6 +127,8 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     );
   const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
+  const naturalHead = el('h2', { class: 'caps', id: 'naturalVoiceHead', text: t('voice.natural'), hidden: true });
+  const naturalList = el('div', { class: 'model-list', role: 'radiogroup', id: 'naturalVoices', 'aria-labelledby': 'naturalVoiceHead', hidden: true });
   const draw = () => {
     const v = state.view();
     const ins = voice.inMods();
@@ -149,13 +151,27 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     if (outs.engine?.available()) outRows.push(option('voiceOut', 'engine', t('voice.out.engine'), engineSub('speech'), { on: choice === 'engine' }));
     outRows.push(option('voiceOut', 'off', t('voice.out.off'), t('voice.out.offSub'), { on: choice === 'off' }));
     outList.replaceChildren(...outRows);
+    // Which speaker the natural voice reads with, while it is the voice in use: Maeve or Freya.
+    const speakers = choice === 'phonon' && outs.phonon?.available() ? (voice.natural?.voices() ?? []) : [];
+    const picked = voice.natural?.picked();
+    naturalHead.hidden = naturalList.hidden = speakers.length < 2;
+    naturalList.replaceChildren(
+      ...(speakers.length < 2 ? [] : speakers).map((v) =>
+        el(
+          'button',
+          { type: 'button', class: `model-card${v.name === picked ? ' on' : ''}`, role: 'radio', 'aria-checked': String(v.name === picked), id: `naturalVoice-${v.name}`, onclick: () => actions.setNaturalVoice(v.name) },
+          el('b', { text: v.name }),
+          el('small', { text: t(`voice.natural.${v.name}`) }),
+        ),
+      ),
+    );
   };
   draw();
   const main = el(
     'main',
     { class: 'screen sub voice', 'data-screen': 'voice' },
     backHeader(t('voice.title'), back, t('common.back')),
-    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList),
   );
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }

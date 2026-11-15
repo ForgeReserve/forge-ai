@@ -3,9 +3,9 @@
 // sound, the real-time factor, gaps a listener would hear, and broken sound (NaN or silence), plus the
 // model's load time and the memory the browser reports. The results are saved as a JSON file the owner
 // sends on. Nothing here is sent anywhere.
-import { meterNumbers, soundCheck } from '../core/phonon.js';
+import { gpuInfo, meterNumbers, soundCheck } from '../core/phonon.js';
 import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
-import { CANDIDATES, CORPUS, report, summarize, virtualUnderruns } from '../core/voicelab.js';
+import { CANDIDATES, CORPUS, candidateError, phoneVoices, readLine, report, speakLine, summarize, untilAborted, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
 
 const now = () => performance.now();
 const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
@@ -21,14 +21,17 @@ async function pageMemory() {
   return { jsHeapBytes: heap, pageBytes: total };
 }
 
-async function gpuInfo() {
+/** Speaks a silent utterance inside a tap, as iOS wants before a page may speak later; asks for the voice list. */
+function unlockSpeech() {
   try {
-    const a = await navigator.gpu?.requestAdapter();
-    if (!a) return null;
-    const i = a.info ?? {};
-    return { vendor: i.vendor ?? '', architecture: i.architecture ?? '', fallback: !!(i.isFallbackAdapter ?? a.isFallbackAdapter) };
+    const synth = globalThis.speechSynthesis;
+    if (!synth || typeof SpeechSynthesisUtterance !== 'function') return;
+    synth.getVoices();
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    synth.speak(u);
   } catch {
-    return null;
+    /* no speech here */
   }
 }
 
@@ -38,10 +41,10 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   const voiceSel = el('select', { id: 'labVoice', class: 'lab-select', 'aria-label': t('lab.voice') });
   // Under the list: what an accent-test voice is, with its description from the voice catalog.
   const voiceNote = el('p', { class: 'hint', id: 'labVoiceNote', hidden: true });
-  /** The lab voice picked (index.labVoices), or null for one of the app's voices. */
+  /** The lab voice picked (index.labVoices: lab-only or accent-test), or null for one of the app's voices. */
   const labVoice = () => phonon.index()?.labVoices?.find((v) => v.name === voiceSel.value) ?? null;
   const showVoiceNote = () => {
-    const v = labVoice();
+    const v = labVoice()?.use === 'accent-test' ? labVoice() : null;
     voiceNote.hidden = !v;
     voiceNote.textContent = v ? t('lab.accentNote', { locale: t(`lab.locale.${v.locale}`), description: v.description }) : '';
   };
@@ -72,6 +75,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   (async () => {
     const index = await phonon.init().catch(() => null);
     const gpu = await gpuInfo();
+    // Where the app itself reads with the natural voice on this phone (core/phonon.js chooseVoiceDevice).
+    const appDevice = await phonon.device?.().catch(() => null);
     env = {
       userAgent: navigator.userAgent,
       app: native ? 'android' : 'web',
@@ -79,6 +84,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       cores: navigator.hardwareConcurrency ?? null,
       deviceMemoryGb: navigator.deviceMemory ?? null,
       webgpu: gpu,
+      appDevice: appDevice ?? null,
       phononFiles: index ? { revision: index.model.revision, firstBytes: index.firstBytes } : null,
       kokoro: 'not in this build',
     };
@@ -87,6 +93,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('li', { text: t('lab.cores', { value: env.cores ?? t('lab.unknown') }) }),
       el('li', { text: t('lab.memory', { value: env.deviceMemoryGb ?? t('lab.unknown') }) }),
       el('li', { text: t('lab.webgpu', { value: yes(!!gpu && !gpu.fallback) }) }),
+      appDevice ? el('li', { id: 'labAppDevice', text: t('lab.appDevice', { value: t(appDevice.device === 'webgpu' ? 'lab.dev.webgpu' : appDevice.threads === 1 ? 'lab.dev.single' : 'lab.dev.threads') }) }) : null,
       el('li', { text: index ? t('lab.files', { size: Math.round(index.firstBytes / 1e6) }) : t('lab.none') }),
       el('li', { text: t('lab.kokoro') }),
     );
@@ -94,19 +101,29 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     // only this page offers.
     const appVoices = (index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice }));
     const accent = (index?.labVoices ?? []).filter((v) => v.use === 'accent-test');
+    const others = (index?.labVoices ?? []).filter((v) => v.use === 'lab-only');
     voiceSel.replaceChildren(
       el('optgroup', { label: t('lab.voicesApp') }, ...appVoices),
+      others.length ? el('optgroup', { label: t('lab.voicesOther'), 'data-group': 'other' }, ...others.map((v) => el('option', { value: v.name, text: v.name }))) : null,
       accent.length ? el('optgroup', { label: t('lab.voicesAccent'), 'data-group': 'accent' }, ...accent.map((v) => el('option', { value: v.name, text: t('lab.accentVoice', { name: v.name, locale: t(`lab.locale.${v.locale}`) }) }))) : null,
     );
     showVoiceNote();
-    runBtn.disabled = !index && !(globalThis.speechSynthesis?.getVoices().length > 0);
+    runBtn.disabled = !index && !phoneVoices(await waitForVoices(globalThis.speechSynthesis)).length;
   })().catch((e) => (status.textContent = t('lab.failed', { message: message(e) })));
 
-  async function runPhonon(c, voice, signal, onRow) {
-    const out = { id: c.id, device: c.device, threads: c.threads, rows: [] };
-    // An accent-test voice is only in the model the lab loads for itself (lab: true).
-    const opts = { device: c.device, threads: c.threads, lab: !!labVoice() };
-    await phonon.unload(opts);
+  /** The lab's own model options for a candidate: a lab voice is only in the model the lab loads for itself. */
+  const phononOpts = (c) => ({ device: c.device, threads: c.threads, lab: !!labVoice() });
+
+  /**
+   * One natural-voice candidate, filling out (already in the results, so what is done so far can be
+   * saved at any time). Every wait gives way to Stop (untilAborted, readLine): Stop never waits on a
+   * load, a sound or a model that does not answer.
+   */
+  async function runPhonon(c, voice, signal, onRow, out) {
+    Object.assign(out, { device: c.device, threads: c.threads });
+    const opts = phononOpts(c);
+    const wait = (p) => untilAborted(p, signal);
+    await wait(phonon.unload(opts));
     let tts;
     let downloaded = false;
     const amount = (m) => t('dl.amount', meterNumbers(m));
@@ -115,30 +132,34 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       meter.hidden = false;
       meter.set({ fraction: 0, text: amount({ total: phonon.index()?.firstBytes ?? 0 }), phase: t('dl.downloading') });
       let t0 = now();
-      tts = await phonon.load({
-        ...opts,
-        onProgress: (p) => p.cached === false && (downloaded = true),
-        onMeter: (m) => meter.set({ fraction: m.fraction, text: amount(m), phase: t(m.fraction >= 1 ? 'dl.ready' : 'dl.downloading') }),
-      });
+      tts = await wait(
+        phonon.load({
+          ...opts,
+          onProgress: (p) => p.cached === false && (downloaded = true),
+          onMeter: (m) => meter.set({ fraction: m.fraction, text: amount(m), phase: t(m.fraction >= 1 ? 'dl.ready' : 'dl.downloading') }),
+        }),
+      );
       out.loadColdMs = Math.round(now() - t0);
       out.downloaded = downloaded;
       meter.set({ fraction: 1, phase: t('dl.ready') });
       // phonon-tts keeps a download in the cache once the model has it, without waiting: give it a
       // moment, so the second load reads from the phone rather than downloading it all again.
-      if (downloaded) await inCache(30_000);
-      await phonon.unload(opts);
+      if (downloaded) await inCache(30_000, signal);
+      await wait(phonon.unload(opts));
       t0 = now();
-      tts = await phonon.load(opts);
+      tts = await wait(phonon.load(opts));
       out.loadWarmMs = Math.round(now() - t0);
     } catch (e) {
+      if (signal.aborted) throw e;
       out.error = message(e);
-      return out;
+      out.loadFailed = true;
+      return;
     }
     out.got = { device: tts.device, deviceReason: tts.deviceReason, threads: tts.threads, threadsReason: tts.threadsReason, features: tts.features };
     // The Run tap unlocked the sound (speaker.unlock). If the phone still keeps it off, measure without
     // playing and say so, rather than wait for sound that never ends.
     let playing = play.checked;
-    if (playing && speaker.ready && !(await speaker.ready(1500))) {
+    if (playing && speaker.ready && !(await wait(speaker.ready(1500)))) {
       playing = false;
       out.audioBlocked = true;
       blockedNote.hidden = false;
@@ -146,22 +167,17 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     for (const [i, item] of lines.entries()) {
       if (signal.aborted) break;
       meter.set({ phase: t('dl.reading', { n: i + 1, total: lines.length }) });
-      const s0 = now();
-      const arrivals = [];
-      const durations = [];
-      const chunks = [];
       const sp = playing ? speaker.stream({ sampleRate: tts.sampleRate }) : null;
+      const silence = () => sp?.stop();
+      signal.addEventListener('abort', silence, { once: true });
       let row;
       try {
-        for await (const pcm of tts.stream(item.text, { voice, signal })) {
-          arrivals.push(now() - s0);
-          durations.push((pcm.length / tts.sampleRate) * 1000);
-          chunks.push(pcm);
-          sp?.push(pcm);
-        }
-        const totalMs = now() - s0;
+        // Fails a line that stalls or ends with no sound and no error, rather than hang or count it
+        // as a silent line (core/voicelab.js readLine).
+        const { arrivals, durations, chunks, totalMs, stopped } = await readLine(tts, item.text, { voice, signal, now, onPcm: (pcm) => sp?.push(pcm) });
+        if (stopped) break;
         sp?.end();
-        if (sp) await sp.done;
+        if (sp) await wait(sp.done);
         const chk = soundCheck(chunks);
         const audioS = chk.samples / tts.sampleRate;
         const v = virtualUnderruns(arrivals, durations);
@@ -183,52 +199,69 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
         };
       } catch (e) {
         sp?.stop();
-        if (signal.aborted) break;
-        row = { id: item.id, kind: item.kind, error: message(e) };
+        if (signal.aborted && e?.name === 'AbortError') break;
+        // Kept even after Stop: an error is a result, and dropping it left a run with no rows and no
+        // error to show.
+        row = { id: item.id, kind: item.kind, error: message(e), ...(e?.code ? { code: e.code } : {}) };
+      } finally {
+        signal.removeEventListener('abort', silence);
       }
       out.rows.push(row);
       onRow(out.rows.length);
+      // A model that stalled may never answer again: the lines after it would only queue behind it.
+      if (row.code === 'stalled') {
+        out.stalled = true;
+        break;
+      }
     }
-    out.memory = await pageMemory();
-    await phonon.unload(opts);
-    return out;
+    if (signal.aborted) return;
+    out.memory = await wait(pageMemory());
+    await wait(phonon.unload(opts));
   }
 
-  /** The phone's own voice (speechSynthesis, voices that run on the phone): time to the first sound only. */
-  async function runPhoneVoice(signal, onRow) {
-    const out = { id: 'phone-voice', rows: [] };
-    const voices = (globalThis.speechSynthesis?.getVoices() ?? []).filter((v) => v.localService && v.lang?.toLowerCase().startsWith('en'));
+  /**
+   * The phone's own voice (speechSynthesis, voices that run on the phone): time to the first sound only.
+   * The list is often empty until the browser has loaded it (iOS Safari): wait for it before saying
+   * there is none. Each line is said in pieces of at most 200 characters, and a piece whose end never
+   * comes (iOS often drops it) is cancelled at its deadline and its line marked timedOut
+   * (core/voicelab.js speakLine), so the run always ends.
+   */
+  async function runPhoneVoice(signal, onRow, out) {
+    const synth = globalThis.speechSynthesis;
+    const all = await untilAborted(waitForVoices(synth), signal);
+    const voices = phoneVoices(all);
+    // What the browser listed, to see why a voice did or did not count (name, language, local).
+    out.listed = all.slice(0, 40).map((v) => ({ name: v.name, lang: v.lang, localService: v.localService, default: v.default }));
     if (!voices.length) {
-      out.error = 'no voice of the phone runs on the phone';
-      return out;
+      out.error = all.length ? 'no English voice of the phone runs on the phone' : 'no voice of the phone runs on the phone';
+      return;
     }
     out.voice = `${voices[0].name} (${voices[0].lang})`;
     for (const item of lines) {
       if (signal.aborted) break;
-      const row = await new Promise((resolve) => {
-        const u = new SpeechSynthesisUtterance(item.text);
-        u.voice = voices[0];
-        u.lang = voices[0].lang;
-        const s0 = now();
-        let start = null;
-        const stop = () => speechSynthesis.cancel();
-        signal.addEventListener('abort', stop, { once: true });
-        u.onstart = () => (start = now() - s0);
-        u.onend = () => resolve({ id: item.id, kind: item.kind, chars: item.text.length, firstMs: r1(start), totalMs: r1(now() - s0), audioS: start == null ? null : r1((now() - s0 - start) / 1000), rtf: null });
-        u.onerror = (e) => resolve({ id: item.id, kind: item.kind, error: String(e.error ?? 'error') });
-        speechSynthesis.speak(u);
-      });
+      const r = await speakLine({ synth, Utterance: globalThis.SpeechSynthesisUtterance, voice: voices[0], text: item.text, signal, now });
+      // A line Stop cut short is not a result.
+      if (r.stopped) break;
+      const row = { id: item.id, kind: item.kind, chars: item.text.length, pieces: r.pieces, firstMs: r1(r.firstMs), totalMs: r1(r.totalMs), audioS: r.timedOut || r.firstMs == null ? null : r1((r.totalMs - r.firstMs) / 1000), rtf: null };
+      if (r.timedOut) row.timedOut = true;
+      if (r.error) row.error = r.error;
       out.rows.push(row);
       onRow(out.rows.length);
+      // A voice that never even started (sound blocked, or no engine behind the list) will not start
+      // on the next line either.
+      if (r.timedOut && !r.started) {
+        out.error = 'the phone voice did not start';
+        break;
+      }
     }
-    return out;
   }
 
   const fmt = (x, unit = '') => (x == null ? '-' : `${x}${unit}`);
   function draw(cands) {
     const head = el('tr', {}, ...['lab.col.voice', 'lab.col.loadCold', 'lab.col.loadWarm', 'lab.col.first', 'lab.col.rtf', 'lab.col.gaps', 'lab.col.bad'].map((k) => el('th', { text: t(k) })));
     const rows = cands.map((c) => {
-      if (c.error) return el('tr', { 'data-candidate': c.id }, el('td', { text: t(`lab.c.${c.id}`) }), el('td', { colspan: '6', text: t('lab.failed', { message: c.error }) }));
+      const why = c.error ? t(c.loadFailed || !c.rows?.length ? 'lab.failed' : 'lab.readFailed', { message: c.error }) : !c.rows?.length && c.stopped ? t('lab.stoppedEarly') : null;
+      if (why) return el('tr', { 'data-candidate': c.id, class: c.error ? 'lab-failed' : '' }, el('td', { text: t(`lab.c.${c.id}`) }), el('td', { colspan: '6', text: why }));
       const s = summarize(c.rows);
       return el(
         'tr',
@@ -245,40 +278,83 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     table.replaceChildren(el('table', {}, el('thead', {}, head), el('tbody', {}, ...rows)), el('p', { class: 'hint', text: t('lab.legend') }));
   }
 
-  /** Resolves once the model is in the phone's cache (phonon.download says nothing is needed), or after ms. */
-  async function inCache(ms) {
+  /** Resolves once the model is in the phone's cache (phonon.download says nothing is needed), or after ms or Stop. */
+  async function inCache(ms, signal) {
     const end = now() + ms;
-    while (now() < end) {
-      if (!(await phonon.download().catch(() => ({ needed: false }))).needed) return true;
+    while (now() < end && !signal?.aborted) {
+      if (!(await untilAborted(phonon.download().catch(() => ({ needed: false })), signal)).needed) return true;
       await new Promise((r) => setTimeout(r, 250));
     }
     return false;
+  }
+
+  /** The results of the run, whole or so far: every candidate started, with the rows it has. */
+  let live = null; // {voice, done}
+  const currentReport = () => {
+    if (!live) return result;
+    const lv = labVoice();
+    return report({ env, voice: live.voice, voiceLocale: lv?.locale ?? phonon.index()?.voices?.find((v) => v.name === live.voice)?.locale ?? null, accentTest: lv?.use === 'accent-test', candidates: live.done });
+  };
+
+  /** Stop: ends the run at once, whatever it waits on, and frees what it started. */
+  function stopRun() {
+    if (!ctrl) return;
+    ctrl.abort();
+    try {
+      globalThis.speechSynthesis?.cancel();
+    } catch {
+      /* no speech here */
+    }
   }
 
   async function run() {
     // First, before any await: iPhone Safari starts sound only inside the tap itself.
     speaker.unlock?.();
     if (ctrl) return;
+    // The phone's own voice too: iOS lets a page speak only once it spoke inside a tap, so a silent
+    // utterance now lets the lines spoken minutes later (after the natural voice's runs) be heard.
+    if (boxes['phone-voice']?.checked) unlockSpeech();
     blockedNote.hidden = true;
     errorLine.hidden = retryBtn.hidden = true;
     ctrl = new AbortController();
     const signal = ctrl.signal;
     runBtn.hidden = true;
     stopBtn.hidden = false;
-    saveBtn.hidden = copyBtn.hidden = true;
+    // What is done so far can be saved while it runs.
+    saveBtn.textContent = t('lab.saveSoFar');
+    copyBtn.textContent = t('lab.copySoFar');
+    saveBtn.hidden = copyBtn.hidden = false;
     const voice = voiceSel.value || null;
     lines = CORPUS.slice(0, Number(linesSel.value) || CORPUS.length);
     const chosen = CANDIDATES.filter((c) => boxes[c.id].checked);
     const done = [];
+    live = { voice, done };
     for (const c of chosen) {
       if (signal.aborted) break;
-      const onRow = (n) => (status.textContent = t('lab.progress', { done: n, total: lines.length, name: t(`lab.c.${c.id}`) }));
-      done.push(c.engine === 'phonon' ? await runPhonon(c, voice, signal, onRow) : await runPhoneVoice(signal, onRow));
+      // In the results from its start: its rows are kept as each one finishes.
+      const out = { id: c.id, rows: [] };
+      done.push(out);
+      const onRow = (n) => {
+        status.textContent = t('lab.progress', { done: n, total: lines.length, name: t(`lab.c.${c.id}`) });
+        draw(done);
+      };
+      try {
+        // untilAborted: the run goes on (or ends) at Stop even if the candidate never returns.
+        await untilAborted(c.engine === 'phonon' ? runPhonon(c, voice, signal, onRow, out) : runPhoneVoice(signal, onRow, out), signal);
+      } catch (e) {
+        if (!signal.aborted) out.error = message(e);
+      }
+      if (signal.aborted) {
+        out.stopped = true;
+        // A model left waiting is freed, so a hung worker does not keep running.
+        if (c.engine === 'phonon') phonon.unload(phononOpts(c)).catch(() => {});
+      }
+      const failed = candidateError(out, { stopped: !!out.stopped });
+      if (failed) out.error = failed;
       draw(done);
       // A failed load says why at once, with Try again, rather than only in the table at the end.
-      const failed = done.at(-1);
-      if (failed.error && c.engine === 'phonon' && !signal.aborted) {
-        errorLine.textContent = t('dl.failed', { message: failed.error });
+      if (out.loadFailed && !signal.aborted) {
+        errorLine.textContent = t('dl.failed', { message: out.error });
         errorLine.hidden = retryBtn.hidden = false;
         meter.set({ phase: '' });
         // The other ways read the same files: stop here, and Try again starts the run over.
@@ -286,34 +362,43 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       }
     }
     if (errorLine.hidden) meter.hidden = true;
-    const lv = labVoice();
-    result = report({ env, voice, voiceLocale: lv?.locale ?? phonon.index()?.voices?.find((v) => v.name === voice)?.locale ?? null, accentTest: !!lv, candidates: done });
+    result = currentReport();
+    live = null;
     status.textContent = signal.aborted ? t('lab.stopped') : errorLine.hidden ? t('lab.done') : t('lab.notDone');
     ctrl = null;
     runBtn.hidden = false;
     stopBtn.hidden = true;
+    saveBtn.textContent = t('lab.save');
+    copyBtn.textContent = t('lab.copy');
     saveBtn.hidden = copyBtn.hidden = false;
   }
   runBtn.addEventListener('click', run);
   retryBtn.addEventListener('click', run);
-  stopBtn.addEventListener('click', () => ctrl?.abort());
+  stopBtn.addEventListener('click', stopRun);
   saveBtn.addEventListener('click', () => {
-    if (!result) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }));
-    const a = el('a', { href: url, download: `forge-voice-lab-${result.at.replace(/[:.]/g, '-')}.json`, hidden: true });
+    const r = currentReport();
+    if (!r) return;
+    if (live) r.partial = true;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }));
+    const a = el('a', { href: url, download: `forge-voice-lab-${r.at.replace(/[:.]/g, '-')}.json`, hidden: true });
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   });
-  copyBtn.addEventListener('click', async () => result && toast((await copy(JSON.stringify(result))) ? t('lab.copied') : t('lab.copyFailed')));
+  copyBtn.addEventListener('click', async () => {
+    const r = currentReport();
+    if (!r) return;
+    if (live) r.partial = true;
+    toast((await copy(JSON.stringify(r))) ? t('lab.copied') : t('lab.copyFailed'));
+  });
 
   const label = (input, text) => el('label', { class: 'lab-check' }, input, el('span', { text }));
   const main = el(
     'main',
     { class: 'screen sub voicelab', 'data-screen': 'voiceLab' },
     backHeader(t('lab.title'), () => {
-      ctrl?.abort();
+      stopRun();
       back();
     }, t('common.back')),
     el(
