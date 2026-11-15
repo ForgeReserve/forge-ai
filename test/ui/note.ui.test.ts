@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInvite, type Gateway, MINT_A, MINT_B, mintProofs, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay, wayOrder } from './ways.ts';
 
 // Paper notes in a phone-sized browser. The camera is Chrome's fake camera playing a video of the
 // note's QR code, so the app's own camera adapter and v1's scanner read it as they would on a phone.
@@ -51,28 +52,32 @@ const vault = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getIte
 const ringFill = (page: Page) => page.locator('.home-rings .rings-svg').getAttribute('data-funds').then(Number);
 
 describe('paper notes in a phone-sized browser', () => {
-  it('with no funds the gold ring invites a scan; the note shows its amount and mint and adds on one tap', async () => {
+  it('with no funds the gold ring invites Add money, where Scan a note is the first card; the note shows its amount and mint and adds on one tap', async () => {
     const token = await note(MINT_A, 300);
     const { page, errors } = await phoneWithCamera([token]);
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
-    // The ring invites a scan.
-    await page.waitForSelector('#scanNote:not([hidden])');
-    expect(await page.textContent('#scanNote')).toBe('Scan a note to add funds');
+    // The ring breathes, and Add money sits right under it.
+    await page.waitForSelector('#addMoney:not([hidden])');
     expect(await page.getAttribute('.home-rings', 'class')).toContain('invite');
     // Right under the ring, so it is the next thing the eye and thumb reach.
     const ring = (await page.locator('.home-rings').boundingBox())!;
-    const chip = (await page.locator('#scanNote').boundingBox())!;
+    const chip = (await page.locator('#addMoney').boundingBox())!;
     expect(chip.y - (ring.y + ring.height)).toBeLessThan(40);
-    // The ring itself opens Funds and memory, where Scan a note comes first while there are no funds.
+    // The ring itself opens Funds and memory, with Add money there too.
     const box = (await page.locator('#ringsBtn').boundingBox())!;
     await page.locator('#ringsBtn').click({ position: { x: 16, y: box.height / 2 } });
     await page.waitForSelector('[data-screen=funds]');
-    await page.waitForSelector('#fundsScanNote:not([hidden])');
+    await page.waitForSelector('#addFundsBtn');
     await page.click('.back-head .round');
     await page.waitForSelector('[data-screen=home]');
 
-    await page.click('#scanNote');
+    // Add money: Scan a note is the first card, and its button scans.
+    await page.click('#addMoney');
+    await page.waitForSelector('#tab-note');
+    expect((await wayOrder(page))[0]).toBe('note');
+    expect(await page.textContent('#wayGo')).toBe('Scan');
+    await page.click('#wayGo');
     await page.waitForSelector('[data-fund=note]');
     // The camera reads the note: amount and mint, before anything is sent.
     await page.waitForSelector('#noteAmount', { timeout: 20_000 });
@@ -97,15 +102,12 @@ describe('paper notes in a phone-sized browser', () => {
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
     await expect.poll(() => ringFill(page)).toBe(942);
-    expect(await page.isHidden('#scanNote')).toBe(true);
+    expect(await page.isHidden('#addMoney')).toBe(true);
     expect(await page.getAttribute('.home-rings', 'class')).not.toContain('invite');
-    await page.goto(`${g.url}/v2/#/funds`);
-    await page.waitForSelector('[data-screen=funds]');
-    expect(await page.isHidden('#fundsScanNote')).toBe(true);
     expect(errors).toEqual([]);
   }, 90_000);
 
-  it('reads an animated code; Scan a note is first in Add funds', async () => {
+  it('reads an animated code; Scan a note is the first card in Add money', async () => {
     const token = await note(MINT_A, 200);
     // The parts of an animated code, made by the same encoder the app uses to show one.
     const p = await plain.newPage();
@@ -127,10 +129,10 @@ describe('paper notes in a phone-sized browser', () => {
 
     const { page, errors } = await phoneWithCamera(parts);
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    expect(await page.locator('.fund-groups .row').first().getAttribute('id')).toBe('fund-note');
-    expect(await page.textContent('#fund-note')).toContain('Scan a note');
-    await page.click('#fund-note');
+    await page.waitForSelector('#tab-note');
+    expect((await wayOrder(page))[0]).toBe('note');
+    expect(await page.getAttribute('#tab-note', 'aria-label')).toBe('Scan a note');
+    await openWay(page, 'note');
     await page.waitForSelector('#noteAmount', { timeout: 30_000 });
     expect(await page.textContent('#noteAmount')).toBe('$2.00');
     await page.click('#noteAdd');

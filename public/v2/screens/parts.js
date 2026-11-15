@@ -137,3 +137,55 @@ export function searchSwitch({ t, state, actions, id }) {
   update();
   return { node, update };
 }
+
+/**
+ * Listen on a screen: reads `pieces()` aloud with the phone's own voice (the reader the first run uses,
+ * free and on the phone). Shown only where the phone has such a voice. Returns {node, update, destroy}.
+ */
+export function listenButton({ t, reader, pieces, id }) {
+  const btn = el('button', { type: 'button', class: 'listen-chip', id, hidden: true });
+  let speech = null;
+  const draw = () => {
+    btn.hidden = !reader?.available(null, pieces());
+    btn.setAttribute('aria-pressed', String(!!speech));
+    btn.replaceChildren(icon(speech ? 'stop' : 'speaker', 18), el('span', { text: t(speech ? 'intro.listenStop' : 'intro.listen') }));
+  };
+  const stop = () => {
+    const s = speech;
+    speech = null;
+    s?.stop();
+    draw();
+  };
+  btn.addEventListener('click', () => {
+    if (speech) return stop();
+    const s = reader.read(pieces().filter(Boolean), null);
+    if (!s) return;
+    speech = s;
+    draw();
+    s.done.catch(() => {}).finally(() => speech === s && ((speech = null), draw()));
+  });
+  // The phone's voices can load after the screen is drawn.
+  const synth = globalThis.speechSynthesis;
+  synth?.addEventListener?.('voiceschanged', draw);
+  draw();
+  return {
+    node: btn,
+    update: draw,
+    stop,
+    destroy: () => {
+      stop();
+      synth?.removeEventListener?.('voiceschanged', draw);
+    },
+  };
+}
+
+/** A sub screen's header with Listen on the right: back, the centred title, Listen. */
+export function listenHeader(title, onBack, backLabel, listen) {
+  return el(
+    'header',
+    { class: 'back-head listen-head' },
+    el('button', { type: 'button', class: 'round', 'aria-label': backLabel, onclick: onBack }, icon('back', 22)),
+    el('h1', { text: title, tabindex: '-1' }),
+    el('span', { class: 'listen-slot' }, listen),
+  );
+}

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // The first run (slice A6, the design approved 2026-11-14: C-Welcome, C-Pay, C-Limits, C-Private) in a
 // phone-sized Chrome on a clean profile: Welcome, How you pay, What it hides, Private only, then the
@@ -555,23 +556,18 @@ describe('empty states and the price before sending', () => {
     const { ctx, page, errors } = await phone({ seen: true });
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
-    // Home with no funds: scan a note, or every other way in.
-    await page.waitForSelector('#otherWays:not([hidden])');
-    expect(await page.textContent('#otherWays')).toBe('Other ways to add funds');
-    expect(await page.isVisible('#scanNote')).toBe(true);
-    await page.click('#otherWays');
+    // Home with no funds: one Add money button, opening the wallet cards.
+    await page.waitForSelector('#addMoney:not([hidden])');
+    expect(await page.textContent('#addMoney')).toBe('Add money');
+    await page.click('#addMoney');
     await page.waitForSelector('[data-screen=addFunds]');
 
-    // Funds with no funds: what is free, each way by its icon, and no dead Take out button.
+    // Funds with no funds: Add money as the fanned cards, and no dead Take out button.
     await page.goto(`${g.url}/v2/#/funds`);
     await page.waitForSelector('[data-screen=funds]');
-    expect(await page.textContent('#fundsEmptySub')).toBe('Questions need funds. Share unseen, History and Erase are free.');
-    await page.waitForSelector('#fundsWays:not([hidden])');
-    expect(await page.isVisible('#way-ecash')).toBe(true);
-    expect(await page.isVisible('#way-note')).toBe(false); // Scan a note has its own button above
-    expect(await page.isVisible('#fundsScanNote')).toBe(true);
     expect(await page.isVisible('#takeOutBtn')).toBe(false);
-    await page.click('#way-ecash');
+    await page.click('#addFundsBtn');
+    await openWay(page, 'ecash');
     await page.waitForSelector('[data-fund=ecash]');
 
     // History with nothing in it: what will be kept here, and a way to ask.
@@ -597,12 +593,10 @@ describe('empty states and the price before sending', () => {
     await page.reload();
     await page.waitForSelector('[data-screen=home]');
     await expect.poll(() => page.textContent('#balanceText')).toBe('$2.00');
-    expect(await page.isVisible('#otherWays')).toBe(false);
+    expect(await page.isVisible('#addMoney')).toBe(false);
     await page.goto(`${g.url}/v2/#/funds`);
     await page.waitForSelector('[data-screen=funds]');
     await expect.poll(() => page.isVisible('#takeOutBtn')).toBe(true);
-    expect(await page.isVisible('#fundsWays')).toBe(false);
-    expect(await page.isVisible('#fundsEmptySub')).toBe(false);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);

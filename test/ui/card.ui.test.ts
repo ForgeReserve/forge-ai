@@ -10,6 +10,7 @@ import { type Gateway, MINT_A, MINT_C, mintsUp, startGateway } from '../e2e/help
 import { mintSigner, provision } from '../support/cards.ts';
 import { CardSim } from '../support/cardsim.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay, wayOrder } from './ways.ts';
 
 // Tap a card in a phone-sized browser (slice A13). On the website the row says a page cannot read
 // cards. In the Android app's bundle (served from its own origin as Capacitor serves it), a stand-in for
@@ -115,22 +116,24 @@ const vault = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getIte
 
 async function openCard(page: Page) {
   await page.goto(`${app}/#/funds/add`);
-  await page.waitForSelector('[data-screen=addFunds]');
-  await page.click('#fund-card');
+  await openWay(page, 'card');
   await page.waitForSelector('#cardHold');
 }
 
 describe('Tap a card', () => {
-  it('on the website: listed after Scan a note, and says only the app can read cards', async () => {
+  it('on the website: a wallet card of its own that says the app reads cards, and its screen says so too', async () => {
     const ctx = await browser.newContext(PHONE);
     await pastFirstRun(ctx);
     const page = await ctx.newPage();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    const ids = await page.locator('.fund-groups .row').evaluateAll((rows) => rows.map((r) => r.id));
-    expect(ids.indexOf('fund-card')).toBe(ids.indexOf('fund-note') + 1);
-    expect(await page.textContent('#fund-card')).toContain('Tap a card');
-    await page.click('#fund-card');
+    await page.waitForSelector('#tab-card');
+    expect(await wayOrder(page)).toEqual(['note', 'lightning', 'card', 'ecash', 'more']);
+    expect(await page.getAttribute('#tab-card', 'aria-label')).toBe('Tap a card');
+    expect(await page.getAttribute('#way-card .way-badge', 'aria-label')).toBe('Android app');
+    await page.click('#tab-card');
+    await page.click('#wayInfoBtn-card');
+    expect(await page.locator('#wayInfo-card p').allTextContents()).toEqual(['Hold the card to the back of the phone. It cannot be linked to you.', 'Cards work in the Android app.']);
+    await page.click('#wayGo');
     await page.waitForSelector('#cardAppOnly');
     expect(await page.textContent('#cardAppOnly')).toBe('Cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#cardGetApp', 'href')).toBe('/download');

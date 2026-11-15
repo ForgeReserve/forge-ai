@@ -9,6 +9,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from 'playwrig
 import { readConfig, writeBundle } from '../../scripts/lib/android-web.ts';
 import { type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // The web app as the Android app carries it: the bundle the Gradle build writes into the APK
 // (scripts/android-web.ts), served from its own origin the way Capacitor serves it at https://localhost
@@ -157,7 +158,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await page.click('#balanceText');
     await page.waitForSelector('[data-screen=funds]');
     await page.click('#addFundsBtn');
-    await page.click('#fund-ecash');
+    await openWay(page, 'ecash');
     await page.fill('#ecashToken', await mintToken(MINT_A, 'usd', 500));
     await page.click('#ecashAdd');
     await page.waitForSelector('[data-screen=funds]');

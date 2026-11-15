@@ -64,7 +64,7 @@ describe('funds on a free model', () => {
   it('says plainly what the engine\'s refusal means, with Add funds as the next step', () => {
     const v = ERR.errorView('balance_key_required', 'x');
     expect(v).toEqual({ key: 'error.needKey', next: 'addFunds' });
-    for (const k of ['error.needKey', 'type.needKey', 'type.openBalance', 'funds.needKey', 'funds.modelFree', 'model.free', 'model.freeSub', 'home.openBalance']) expect(en[k], k).toBeTruthy();
+    for (const k of ['error.needKey', 'type.needKey', 'type.openBalance', 'funds.needKey', 'funds.modelFree', 'model.free', 'model.freeSub', 'home.free', 'home.freeChip']) expect(en[k], k).toBeTruthy();
   });
 });
 

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { wayOrder } from './ways.ts';
 
 // Free models (docs/PAYMENTS.md, Free models) in the v2 app: the model list shows a Free badge, a phone
 // with no balance key is sent to open one with an invite code, and then a question at a $0 balance
@@ -67,12 +68,13 @@ describe('free models in the v2 app', () => {
     await expect.poll(() => page.textContent('#typeNotice')).toContain('This model is free, but it needs a balance.');
     expect(await page.textContent('#priceLine')).toBe('PriceFree');
     await page.click('#noticeBtn');
-    await page.waitForSelector('[data-fund=invite]');
-    await page.click('#openBalance');
-    expect(await page.textContent('[role=status].msg')).toContain('invite code');
-    await page.fill('#openInvite', createInvite(g));
-    await page.click('#openBalance');
+    await page.waitForSelector('[data-screen=startFree]');
+    await page.click('#startFreeGo');
+    expect(await page.textContent('#startFreeMsg')).toContain('invite code');
+    await page.fill('#startFreeCode', createInvite(g));
+    await page.click('#startFreeGo');
     await page.waitForSelector('[data-screen=funds]');
+    expect(await page.textContent('#fundsSaid')).toBe('You are using Free Echo, a free model.');
     await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
     const key = await page.evaluate(() => localStorage.getItem('forge.balanceKey'));
     expect(key).toMatch(/^sk-forge-/);
@@ -252,13 +254,13 @@ describe('Start free on the first run', () => {
     expect(await page.getAttribute('[data-screen=intro]', 'data-step')).toBe('private');
     expect(await page.evaluate(() => localStorage.getItem('forge2.firstRun'))).toBeNull();
     expect(await page.evaluate(() => localStorage.getItem('forge.balanceKey'))).toBeNull();
-    // The code is the one the funding screens use, and the Start free card on Funds has it too.
+    // The code is the one the funding screens use, and Start free on Add money has it too.
     await page.goto(`${g.url}/v2/#/funds/add/ecash`);
     await page.waitForSelector('[data-fund=ecash]');
     expect(await page.inputValue('#invite')).toBe(code);
-    await page.goto(`${g.url}/v2/#/funds`);
-    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
-    expect(await page.inputValue('#fundsFreeInvite')).toBe(code);
+    await page.goto(`${g.url}/v2/#/funds/start-free`);
+    await page.waitForSelector('[data-screen=startFree]');
+    expect(await page.inputValue('#startFreeCode')).toBe(code);
 
     // Back on the first run, the sheet still has it: Start free, then Keep Private only.
     await page.goto(`${g.url}/v2/#/start/private`);
@@ -338,9 +340,9 @@ describe('Start free on the first run', () => {
       expect(await page.isVisible('#introInviteHint')).toBe(true);
       expect(await page.isVisible('#introInviteDone')).toBe(true);
       expect((await (await fetch(`${plain.url}/v1/wallet/fund/methods`)).json()).open).toEqual({ enabled: false, free_models: [] });
-      await page.goto(`${plain.url}/v2/#/funds`);
-      await page.waitForSelector('[data-screen=funds]');
-      expect(await page.isVisible('#fundsStartFreeCard')).toBe(false);
+      await page.goto(`${plain.url}/v2/#/funds/add`);
+      await page.waitForSelector('#tab-note');
+      expect(await page.locator('#tab-start').count()).toBe(0);
       await page.goto(`${plain.url}/v2/#/type`);
       await page.waitForSelector('#typeNotice:not([hidden])');
       expect(await page.isVisible('#noticeBtn')).toBe(true);
@@ -352,50 +354,8 @@ describe('Start free on the first run', () => {
   }, 60_000);
 });
 
-describe('Start free on Funds, Add funds and the funds notice', () => {
-  it('the Funds card opens a $0 balance with the invite, asks, and the free model answers', async () => {
-    const { ctx, page, errors } = await phone({ seen: true });
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    // Add funds: the card on top, and the Start free row is left out while it shows.
-    await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('#addFundsStartFreeCard:not([hidden])');
-    expect(await page.textContent('#addFundsStartFreeCap')).toBe('Start free');
-    expect(await page.isVisible('#fund-invite')).toBe(false);
-    expect(await page.isVisible('#fund-ecash')).toBe(true);
-
-    await page.goto(`${g.url}/v2/#/funds`);
-    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
-    // At the top, above the funds card.
-    const [card, funds] = await Promise.all([page.locator('#fundsStartFreeCard').boundingBox(), page.locator('#fundsCap').boundingBox()]);
-    expect(card!.y).toBeLessThan(funds!.y);
-    expect(await page.textContent('#fundsStartFreeCap')).toBe('Start free');
-    expect(await page.textContent('#fundsFreeNote')).toBe('Free models answer at no cost. Add money later for private models.');
-    expect(await page.isVisible('#fundsUseFreeModel')).toBe(false);
-    // Its way in the empty state's grid is left out: the card is that way.
-    await page.waitForSelector('#fundsWays:not([hidden])');
-    expect(await page.isVisible('#way-invite')).toBe(false);
-    await page.fill('#fundsFreeInvite', createInvite(g));
-    await shot(page, '4-funds-card.png');
-    await page.click('#fundsStartFree');
-    await page.waitForSelector('#fundsFreeAsk:not([hidden])');
-    expect(await page.textContent('#fundsFreeAsk p')).toBe('Free models are Standard models: the company running them can read what you type. Use them?');
-    await page.click('#fundsUseFree');
-    await expect.poll(() => page.textContent('#fundsFreeMsg')).toBe('Private only is off now. You are using GLM Flash, a free model.');
-    // The card stays to say so; the funds card says questions are free.
-    expect(await page.isVisible('#fundsStartFreeCard')).toBe(true);
-    await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
-    // Opened again, with the free model in use, there is no card.
-    await page.waitForTimeout(300); // the settings are written to IndexedDB
-    await page.reload();
-    await page.waitForSelector('[data-screen=funds]');
-    await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
-    expect(await page.isVisible('#fundsStartFreeCard')).toBe(false);
-    expect(await privateOnly(page)).toBe('false');
-    expect(errors).toEqual([]);
-    await ctx.close();
-  }, 60_000);
-
-  it('"Use a free model instead" next to Add funds at $0: asks while Private only is on, then Type sends free', async () => {
+describe('Start free and the funds notice', () => {
+  it('at $0, Start free has no code to ask; "Use a free model instead" next to Add funds asks while Private only is on, then Type sends free', async () => {
     const { ctx, page, errors } = await phone({ seen: true });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const key = await zeroKey();
@@ -404,12 +364,13 @@ describe('Start free on Funds, Add funds and the funds notice', () => {
     await page.reload();
     await page.waitForSelector('[data-screen=home]');
 
-    // Funds with a $0 key on a paid (private) model: the card has one button, no invite field.
-    await page.goto(`${g.url}/v2/#/funds`);
-    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
-    expect(await page.isVisible('#fundsUseFreeModel')).toBe(true);
-    expect(await page.textContent('#fundsUseFreeModel')).toBe('Use a free model instead');
-    expect(await page.isVisible('#fundsFreeInvite')).toBe(false);
+    // Add money with a $0 key on a paid (private) model: Start free first, and its screen asks no code.
+    await page.goto(`${g.url}/v2/#/funds/add`);
+    await page.waitForSelector('#tab-start');
+    expect((await wayOrder(page))[0]).toBe('start');
+    await page.click('#wayGo');
+    await page.waitForSelector('[data-screen=startFree]');
+    expect(await page.isVisible('#startFreeField')).toBe(false);
 
     // Type: the funds notice, with the free model next to Add funds.
     await page.goto(`${g.url}/v2/#/type`);

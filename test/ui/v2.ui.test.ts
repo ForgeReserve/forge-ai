@@ -1,8 +1,11 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, MINT_C, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { startOnchainMock } from '../e2e/onchain-mock.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // The v2 app driven in a phone-sized browser: the installed Chrome (channel 'chrome', no browser
 // download), a local gateway with the mock supplier, and the local test mints (pnpm mint:up).
@@ -81,9 +84,7 @@ describe('v2 in a phone-sized browser', () => {
     await tapRing(page);
     await page.waitForSelector('[data-screen=funds]');
     await page.click('#addFundsBtn');
-    await page.waitForSelector('[data-screen=addFunds]');
-    expect(await page.locator('#fund-ecash').isVisible()).toBe(true);
-    await page.click('#fund-ecash');
+    await openWay(page, 'ecash');
     const token = await mintToken(MINT_A, 'usd', 500);
     let vaultInFlight: string | null = null;
     await page.route('**/v1/wallet/topup', async (route) => {
@@ -228,8 +229,7 @@ describe('v2 in a phone-sized browser', () => {
   it('adds funds with Lightning: invoice, payment seen, credited', async () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    await page.click('#fund-lightning');
+    await openWay(page, 'lightning');
     await page.waitForSelector('[data-fund=lightning]');
     await page.fill('#invite', createInvite(g));
     await page.fill('#lnAmount', '1.00');
@@ -385,8 +385,7 @@ describe('v2 money paths in a phone-sized browser', () => {
     const { ctx, page, errors } = await phone();
     try {
       await page.goto(`${gf.url}/v2/#/funds/add`);
-      await page.waitForSelector('#fund-othermint');
-      await page.click('#fund-othermint');
+      await openWay(page, 'othermint');
       await page.waitForSelector('[data-fund=othermint]');
       await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 1000));
       await page.click('#foreignCheck');
@@ -440,8 +439,14 @@ describe('v2 money paths in a phone-sized browser', () => {
     try {
       const { ctx, page, errors } = await phone();
       await page.goto(`${go.url}/v2/#/funds/add`);
-      await page.waitForSelector('#fund-onchain');
-      await page.click('#fund-onchain');
+      // Bitcoin waits on the More card, as a tile (a screenshot for the owner: .tmp/addfunds-c/).
+      await page.waitForSelector('#more-onchain', { state: 'attached' });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.click('#tab-more');
+      mkdirSync(join(import.meta.dirname, '../../.tmp/addfunds-c'), { recursive: true });
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(import.meta.dirname, '../../.tmp/addfunds-c/card-7-more-with-bitcoin.png') });
+      await openWay(page, 'onchain');
       await page.waitForSelector('#onchainGet');
       const created = page.waitForResponse((r) => r.url().endsWith('/v1/wallet/fund/onchain') && r.request().method() === 'POST');
       await page.click('#onchainGet');
@@ -469,7 +474,7 @@ describe('v2 money paths in a phone-sized browser', () => {
       await usd.page.goto(`${go.url}/v2/#/`);
       await expect.poll(() => usd.page.textContent('#balanceText')).toBe('$1.00');
       await usd.page.goto(`${go.url}/v2/#/funds/add`);
-      await usd.page.click('#fund-onchain');
+      await openWay(usd.page, 'onchain');
       await usd.page.waitForSelector('[data-fund=onchain]');
       expect(await usd.page.textContent('[data-fund=onchain] .fund-body')).toBe('On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.');
       expect(await usd.page.locator('#onchainGet').count()).toBe(0);

@@ -39,7 +39,9 @@ import { engineScreen } from './screens/engine.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
-import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { startFreeScreen } from './screens/startfree.js';
+import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
 import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
@@ -1036,9 +1038,9 @@ async function resumeCards() {
   }
 }
 
-/** Where a person with no balance key goes to open one for a free model: the invite module, else Add funds. */
+/** Where a person with no balance key goes to open one for a free model: Start free, else Add money. */
 function openBalance() {
-  if (registry?.list('fund').some((x) => x.instance.id === 'invite' && x.instance.available(S.methods))) return nav('fund', { id: 'invite' });
+  if (S.methods?.open?.enabled) return nav('startFree');
   return nav('addFunds');
 }
 
@@ -1266,6 +1268,12 @@ const actions = {
     store.set({});
     return m;
   },
+  /** Keeps the way to add money used last on this phone, so Add money shows its card first ('' for none). */
+  setLastWay: (id) => {
+    if (S.settings.lastWay === id) return;
+    S.settings.lastWay = id;
+    saveSettings();
+  },
   /** Chooses the first free model Private only allows (Funds and Type offer it when free questions are left). */
   useFreeModel: () => {
     const m = (S.free?.models ?? []).map((id) => S.models.find((x) => x.id === id)).find((x) => x && pickModel([x], { ...S.settings, model: x.id }));
@@ -1399,7 +1407,7 @@ function labErrorScreen(e) {
 
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
-  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
+  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, reader, scan: adapters.camera, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
   switch (name) {
     case 'add':
       return mode.home({ sheet: addSheet(ctx), open: 'add' });
@@ -1412,7 +1420,9 @@ function screenFor(name, params) {
     case 'funds':
       return fundsScreen(ctx);
     case 'addFunds':
-      return addFundsScreen(ctx);
+      return walletScreen(ctx);
+    case 'startFree':
+      return startFreeScreen(ctx);
     case 'fund':
       return fundScreen(ctx, params);
     case 'takeOut':

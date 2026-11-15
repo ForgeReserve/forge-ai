@@ -11,6 +11,8 @@ export const ROUTES = {
   addFunds: 'funds/add',
   fund: 'funds/add/:id',
   takeOut: 'funds/out',
+  // Start free, from its wallet card on Add money (screens/startfree.js).
+  startFree: 'funds/start-free',
   // Free questions used up: the ways forward (screens/free.js).
   freeOut: 'funds/free-out',
   look: 'more/look',
@@ -71,5 +73,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

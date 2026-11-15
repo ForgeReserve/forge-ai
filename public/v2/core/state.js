@@ -47,7 +47,7 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * answer is read by the phone's own voice, core/voicepace.js). voicePace: how fast this phone makes the
  * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day' });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '' });
 
 /**
  * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the

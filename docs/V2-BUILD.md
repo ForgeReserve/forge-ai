@@ -53,14 +53,14 @@ The `/v2/` shell, service worker and manifest; the module registry; the engine c
 - **Type:** a text field, the price line before send, send. **Answer screen:** the streamed answer with markdown, stop, copy, ask again, follow-up. Errors in plain words with one next step.
 - **Add:** Photo and File attach to the next question (reuse v1's files and extract code and limits). Link and Guide wait for their slices and are not shown.
 - **More:** History (A4), Mode and look (the three looks; Classic opens v1 at `/`). Only entries that work.
-- **Funds and memory:** balance, refundable amount, Add funds, Take funds out (refund as eCash, with the token kept on the phone until the person confirms they saved it), and the memory meter with Start fresh. Add funds lists the `fund` modules: eCash (paste), Lightning, on-chain, another mint. Each wraps the existing endpoints and v1's proven flows.
+- **Funds and memory:** balance, refundable amount, Add funds, Take funds out (refund as eCash, with the token kept on the phone until the person confirms they saved it), and the memory meter with Start fresh. Add money (since 2026-11-15 the wallet cards, docs/design/SCREENS.md) shows the `fund` modules: eCash (paste), Lightning, on-chain, another mint. Each wraps the existing endpoints and v1's proven flows.
 - **Model choice** lives in More, not on the home. Private only is on by default and hides models that are not private.
 
 Tests: registry (kind isolation, bad manifest refused), engine client (stream parsing, 402 and 428 handling, token kept until credited), ring maths, and a `test:ui` run: open `/v2/`, fund with a test token, ask a typed question, read the streamed answer, see the gold ring move.
 
 ### A2. Paper notes
 
-- A `fund` module, first in the Add funds list: **Scan a note.** The camera opens, reads a QR code (single or animated, through v1's scanner), shows the amount and the mint, and adds it on one tap. A note from a mint the engine does not take says so and offers the other-mint path. A spent note says it has been used.
+- A `fund` module, the first wallet card on Add money: **Scan a note.** The camera opens, reads a QR code (single or animated, through v1's scanner), shows the amount and the mint, and adds it on one tap. A note from a mint the engine does not take says so and offers the other-mint path. A spent note says it has been used.
 - The home's gold ring is the fastest way in: with a zero balance, the ring invites a scan.
 - `scripts/print-notes.ts`: makes a batch of notes for printing. It asks the trusted mint for a Lightning invoice for the batch, shows it, waits until the owner pays it, mints the tokens, and writes one printable HTML file (a sheet of notes, each a QR code with its amount, a short how-to line and a serial with no meaning) with file mode 0600. Tokens never go to the terminal or a log. A `--mint` flag lets the tests use the local mint.
 
@@ -115,7 +115,7 @@ Build FREE-TIER.md, steps 1 to 4, plus a minimal issuing tool.
 - **Credit mint:** a second local mint in `docker-compose.test.yml` for the tests, and deployment files under `deploy/credit-mint/` (compose file, nginx location blocks that expose only info, keys, keysets, swap and checkstate, and a README with the steps). Nothing is deployed in this run. Confirm what unit the mint can use and record the answer.
 - **Gateway:** a credit mint setting; a balance funded with credits is a free balance; it pays only for the free model list with the caps; change and refunds come back as credits; expired keysets are refused. A free balance can never be refunded as money, and money can never be converted to credits by a user.
 - **Faucet:** `/free` page and its API: challenge, verify, claim. Daily budget, hourly drip, proof of work with rising difficulty, an in-memory per-address limit that is never written to disk or logged, and a clear "more at ..." state when empty. The voucher appears as a QR code with Add to Forge.
-- **App:** Free questions as the first row of Add funds; the gold ring shows free questions as a lighter segment used first; the price line says "Free, 2 of 3 left"; when they run out, the three ways forward.
+- **App:** Free questions as a tile on Add money's More card; the gold ring shows free questions as a lighter segment used first; the price line says "Free, 2 of 3 left"; when they run out, the three ways forward.
 - **Issuing tool:** `scripts/issue-credits.ts`, localhost only, writes vouchers to a 0600 file for printing with the note layout from A2.
 - All settings off by default, so deploying this branch changes nothing until the owner turns the faucet on.
 

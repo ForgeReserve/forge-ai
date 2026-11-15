@@ -28,7 +28,11 @@ Canvas note: "Default mode: Walkie Kit". All screens use the Light look.
 | Core | `XThemes.dc.html` | 6. Mode and look |
 | Core | `ZMore.dc.html` | 7. More |
 | Core | `ZAdd.dc.html` | 8. Add |
-| Money and protection | `DAddFunds.dc.html` | Add funds, ranked by privacy |
+| Money (built, chosen 2026-11-15: direction C) | `AddFunds-C1.dc.html` | Add money: the wallet cards |
+| Money (built, chosen 2026-11-15) | `AddFunds-C2.dc.html` | Start free: the code |
+| Money (built, chosen 2026-11-15) | `AddFunds-C3.dc.html` | Start free: the one question |
+| Money (built, chosen 2026-11-15) | `AddFunds-C4.dc.html` | Funds at $0 on a free model |
+| Money and protection (superseded by the AddFunds-C boards) | `DAddFunds.dc.html` | Add funds, ranked by privacy |
 | Money and protection | `DCard.dc.html` | Tap your card |
 | Money and protection | `DFunded.dc.html` | After the tap |
 | Money and protection | `DPrivateOnly.dc.html` | Private only |
@@ -193,7 +197,9 @@ Top to bottom:
      - "This conversation", speech bubble icon on `#E8E0FF` (violet `#5B3FC4`), bar 12 percent.
    - Two buttons: "Add" (plus icon, light) and "Clear memory" (trash icon, dark primary).
 
-Navigation: funds Add goes to Add funds (`DAddFunds`). Spending goes to `XSpendingLight`. Take out exports the balance as eCash. Memory Add opens the Add sheet (`ZAdd`). Each "x" removes one item. Clear memory empties memory.
+As built (2026-11-15), the funds card follows `AddFunds-C4`: the ring sits in the middle, 180 px, drawn as the first run draws its rings (a gold arc with its glow and lit tip over the track), with the amount inside it; on a free model at $0 the centre turns teal and says FREE, and a big dark "Ask now" button (mic icon) goes to the home. Take out is a 48 px icon button at the card's top right, shown only when there is something to take out. The add area is one button, "Add money": a fanned stack of the first three wallet cards (their pictures), opening Add money. After Start free, a teal line at the top says what it chose. Listen in the header reads the amount and its lines.
+
+Navigation: funds Add goes to Add money (`AddFunds-C1`). Spending goes to `XSpendingLight`. Take out exports the balance as eCash. Memory Add opens the Add sheet (`ZAdd`). Each "x" removes one item. Clear memory empties memory.
 
 ### Listening (`XListenLight.dc.html`)
 
@@ -298,7 +304,38 @@ Same overlay as More. Rows:
 
 Bottom row: Type, then a dark "Close" in the Add slot, then More.
 
-### Add funds (`DAddFunds.dc.html`)
+### Add money: the wallet cards (`AddFunds-C1.dc.html`, built)
+
+Chosen by the owner on 2026-11-15 ("the less words and more icons the better"; the app is made for someone who has difficulty reading). Replaces `DAddFunds` as the Add funds screen (`#/funds/add`, `public/v2/screens/wallet.js`).
+
+Top to bottom, with nothing that scrolls at 360 x 640 or 412 x 915:
+1. Header: 48 px back, title "Add money", and Listen (teal chip) on the right. Listen reads the card on show: its word and its info line, with the phone's own voice.
+2. The balance chip: a small gold ring (empty at $0) and the amount.
+3. The cards, one per way, 300 x 420 at most (the card takes the height left), with the neighbours peeking at the sides, smaller. Each card is one picture, a privacy badge (an icon: a shield for "Cannot be linked to you", an eye for "Others can see this payment", a phone for "Android app"), and one word. A 48 px info button at the top right shows the way's one honest line under the word. Pictures are drawn to the first run's standard (`screens/wallet-art.js`): a gift box (Start free), a printed paper note in the camera frame (Note), the Lightning bolt as a lit gold object (Lightning), a Cashu card at a phone (Card), the C-Pay coin stack (eCash). Card colours: teal, cream, near black, gold, light gold, white (More).
+4. Icon tabs, 52 px (48 at least), one per card, the one on show ringed in ink (3 px). Arrow keys move between them.
+5. A hand that moves side to side: swipe for the other cards (still with reduced motion).
+6. The one big button, 64 px, dark, with the card's word for what it does: Start, Scan, Pay, Tap, Paste. Tapping the picture does the same.
+
+Card words: Free (Start free), Note, Lightning, Card, eCash, More; a way from More used last gets its own card: Mint, Bitcoin, Gift (free questions), Fedimint. The More card is a grid of tiles, one per other way, each a small picture and one word; the big button waits (hidden) on it.
+
+Order: Start free first while it is wanted (free models, and no key or a $0 balance on a paid model), then the way used last on this phone (a setting), then Note, Lightning, Card, eCash, then More. Ways the engine turns off get no card. Each card opens the way's own screen, unchanged.
+
+### Start free (`AddFunds-C2.dc.html` and `AddFunds-C3.dc.html`, built)
+
+`#/funds/start-free`, `public/v2/screens/startfree.js` `startFreeScreen`.
+1. Header: back, "Start free", Listen.
+2. The teal card with the gift box, and its info button: "Free models answer at no cost. Add money later for private models."
+3. "Invite code", a 64 px field (2 px ink border), and Paste and Scan (56 px). With a balance key already the field is not shown.
+4. Three icon tiles: No name, No email, No money.
+5. The one button, "Start free".
+
+The question (C3) comes over the screen while Private only is on: "Your balance is open." drops in at the top when a balance was just opened; the sheet shows two tiles, Private (Needs money) and Standard (Free, ringed), then the question in the same words as the first run's (`startFree.ask`), then "Use free models" (64 px) and "Keep Private only" (56 px). Use goes to Funds (C4) with what it chose; Keep goes back with a toast.
+
+### Home at no funds (built 2026-11-15, after `AddFunds-C4`)
+
+On a paid model at $0, one dark "Add money" button under the rings, opening Add money. On a free model at $0, a teal chip with a gift icon, the model's name and a FREE tag (it opens Start free without a key, else Choose a model) and beside it Add money as a 48 px icon button. Free questions used up keeps its own chip ("Free questions used up. See the ways forward").
+
+### Add funds (`DAddFunds.dc.html`, superseded by `AddFunds-C1`)
 
 Bottom sheet. Title "Add funds" with a close "x" button (44 px).
 

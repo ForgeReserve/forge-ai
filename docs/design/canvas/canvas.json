@@ -1,6 +1,38 @@
 {
   "attachments": {},
   "boards": {
+    "AddFunds-C1.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Add money: wallet cards (C1, chosen 2026-11-15)",
+      "w": 390,
+      "x": 0,
+      "y": 9100
+    },
+    "AddFunds-C2.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Start free, the code (C2)",
+      "w": 390,
+      "x": 470,
+      "y": 9100
+    },
+    "AddFunds-C3.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Start free, the one question (C3)",
+      "w": 390,
+      "x": 940,
+      "y": 9100
+    },
+    "AddFunds-C4.dc.html": {
+      "h": 844,
+      "page": "wk",
+      "title": "Funds at $0 on a free model (C4)",
+      "w": 390,
+      "x": 1410,
+      "y": 9100
+    },
     "AddFunds.dc.html": {
       "h": 844,
       "page": "flows",
@@ -1189,7 +1221,11 @@
     "WReview.dc.html",
     "SHome.dc.html",
     "STravel.dc.html",
-    "SAnswer.dc.html"
+    "SAnswer.dc.html",
+    "AddFunds-C1.dc.html",
+    "AddFunds-C2.dc.html",
+    "AddFunds-C3.dc.html",
+    "AddFunds-C4.dc.html"
   ],
   "pages": [
     {

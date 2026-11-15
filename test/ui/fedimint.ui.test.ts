@@ -173,9 +173,10 @@ const tillPays = (page: Page) => page.evaluate(() => JSON.parse(localStorage.get
 /** Opens Tap a Fedimint card, pairs with the mock till by pasting its pay code, and sees the price. */
 async function pairAndPrice(page: Page) {
   await page.goto(`${app}/#/funds/add`);
-  await page.waitForSelector('[data-screen=addFunds]');
-  expect(await page.textContent('#fund-fedimint')).toContain('Needs a till. Scan the pay code the till shows.');
-  await page.click('#fund-fedimint');
+  await page.waitForSelector('#tab-more');
+  await page.click('#tab-more');
+  expect(await page.textContent('#more-fedimint')).toBe('Fedimint');
+  await page.click('#more-fedimint');
   await page.waitForSelector('#fedNeedTill');
   // A till's own POS code is refused.
   await page.fill('#fedPairText', `fedimintcard-till:${till.url}?t=${till.posToken}`);
@@ -194,16 +195,15 @@ async function pairAndPrice(page: Page) {
 }
 
 describe('Tap a Fedimint card', () => {
-  it('on the website: listed after Tap a card, and says only the app can do it', async () => {
+  it('on the website: a tile on the More card, and its screen says only the app can do it', async () => {
     const ctx = await browser.newContext(PHONE);
     await pastFirstRun(ctx);
     const page = await ctx.newPage();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    const ids = await page.locator('.fund-groups .row').evaluateAll((rows) => rows.map((r) => r.id));
-    expect(ids.indexOf('fund-fedimint')).toBe(ids.indexOf('fund-card') + 1);
-    expect(await page.textContent('#fund-fedimint')).toContain('Tap a Fedimint card');
-    await page.click('#fund-fedimint');
+    await page.waitForSelector('#tab-more');
+    await page.click('#tab-more');
+    expect(await page.getAttribute('#more-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
+    await page.click('#more-fedimint');
     await page.waitForSelector('#fedAppOnly');
     expect(await page.textContent('#fedAppOnly')).toBe('Fedimint cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#fedGetApp', 'href')).toBe('/download');
