@@ -101,3 +101,10 @@ jobs:
       - name: Debug build and JVM tests
         working-directory: android
         run: ./gradlew assembleDebug testDebugUnitTest
+
+      - name: Native libraries load on 16 KB page phones
+        # Android 15+ phones can use 16 KB pages; each stored .so must sit on a 16 KB boundary in the APK.
+        working-directory: android
+        run: |
+          ZA=$(ls "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)
+          "$ZA" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk | grep -E 'lib/|Verification'
