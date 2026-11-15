@@ -31,6 +31,7 @@ import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
+import { createUpdater } from './core/updates.js';
 import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
@@ -1495,6 +1496,8 @@ function screenFor(name, params) {
 
 function render() {
   if (erased) return;
+  // A new build took over while the person was busy: it loads now, on the way to the next screen.
+  if (updater?.screenChanged()) return;
   // A balance key stored after this page read it (the Classic app in another tab, say) is picked up here.
   if (!S.key && registry) {
     const k = ui.load(keyStore());
@@ -1770,10 +1773,61 @@ async function resumeTillPays() {
 }
 
 let workerReg = null;
+let updater = null;
+
+/**
+ * Whether the person is mid-way, so a new build waits for the next screen (core/updates.js): Listen
+ * playing (the first run's or a screen's), words typed and not sent, a recording, a question being
+ * sent or answered, or an answer read aloud.
+ */
+function busyForUpdate() {
+  const v = state.view();
+  if (v.talk.phase === 'recording' || v.talk.phase === 'sending' || v.streaming) return true;
+  if (v.speak.current && v.speak.state !== 'idle') return true;
+  if (document.querySelector('.fr-listen[aria-pressed="true"], .listen-chip[aria-pressed="true"]')) return true;
+  return [...document.querySelectorAll('input:not([readonly]):not([type=file]), textarea:not([readonly])')].some((f) => f.value !== f.defaultValue);
+}
+
 function registerWorker() {
   // The Android app has its files in the APK, so it needs no offline copy and no worker.
   if (erased || native || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
-  workerReg = navigator.serviceWorker.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
+  const sw = navigator.serviceWorker;
+  let storage = null;
+  try {
+    storage = sessionStorage;
+  } catch {
+    /* no session storage: the updater never reloads on its own */
+  }
+  updater = createUpdater({ storage, hadController: !!sw.controller, busy: busyForUpdate, reload: () => location.reload() });
+  // A new worker (a new build: its script carries the build id) took over: reload once into its files.
+  sw.addEventListener('controllerchange', () => {
+    if (!erased) updater.controllerChanged();
+    showBuild();
+  });
+  workerReg = sw.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
+  // A tab brought back (from the background, or restored from the back-forward cache) asks for a newer
+  // build; one left waiting is told to take over, which fires controllerchange above.
+  const check = async () => {
+    const reg = await workerReg;
+    if (!reg || erased) return;
+    await reg.update().catch(() => {});
+    reg.waiting?.postMessage({ type: 'skipWaiting' });
+  };
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
+  addEventListener('pageshow', (e) => e.persisted && check());
+  showBuild();
+  check();
+}
+
+/** Puts the build id of the worker that serves this page on <html data-build>, so a stale page can be told apart. */
+function showBuild() {
+  const c = navigator.serviceWorker?.controller;
+  if (!c || typeof MessageChannel !== 'function') return;
+  const ch = new MessageChannel();
+  ch.port1.onmessage = (e) => {
+    if (e.data?.version) document.documentElement.dataset.build = e.data.version;
+  };
+  c.postMessage({ type: 'version' }, [ch.port2]);
 }
 
 /** Waits (a few seconds at most) for a worker that is still installing, so it cannot fill a cache after Erase. */

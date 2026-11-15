@@ -4,6 +4,10 @@
 // key or eCash are never cached or touched. The cache name does not start with "forge-", which v1's
 // worker treats as its own and clears.
 const CACHE = 'forge2-runtime-v1';
+// The build id: a hash of the v2 app's files, filled in when the gateway serves this script (src/sw.ts),
+// so every deploy makes this file new and the browser installs the new worker, which takes over at once.
+// The page asks for it (a 'version' message) and keeps it on <html data-build>.
+const VERSION = '__FORGE_V2_VERSION__';
 // A photo shared in waits in its own cache (see the share target below). A new worker activating must
 // not delete it before the page has taken it.
 const SHARE = 'forge2-share';
@@ -27,6 +31,12 @@ self.addEventListener('install', (event) => {
       await self.skipWaiting();
     })(),
   );
+});
+
+// The page asks for the build id, or (a worker left waiting) asks it to take over now.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'version') event.ports?.[0]?.postMessage({ version: VERSION });
+  if (event.data?.type === 'skipWaiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

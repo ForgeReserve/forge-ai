@@ -31,6 +31,31 @@ export function serviceWorkerScript(publicDir: string): () => { body: string; ve
   };
 }
 
+/**
+ * The v2 app's worker (public/v2/sw.js) with its build id filled in: a SHA-256 over the v2 app's own
+ * files (its pages, scripts, styles, strings and icons; not the vendored libraries or the voice files,
+ * which carry their versions in their paths). Each deploy that changes the app changes the script, so
+ * the browser installs the new worker and the page reloads into the new files (public/v2/core/updates.js).
+ */
+export function v2WorkerScript(publicDir: string): () => { body: string; version: string } {
+  const root = join(publicDir, 'v2');
+  let cacheKey = '';
+  let cached: { body: string; version: string } | undefined;
+  return () => {
+    const files = walk(root).filter((f) => {
+      const rel = relative(root, f).split(sep).join('/');
+      return !rel.startsWith('vendor/') && !rel.startsWith('voice/') && /\.(html|js|css|json|svg|png|webmanifest)$/.test(rel);
+    });
+    const key = files.map((f) => `${f}:${stat(f)}`).join('|');
+    if (cached && key === cacheKey) return cached;
+    const version = hashFiles(root, files);
+    const body = readFileSync(join(root, 'sw.js'), 'utf8').replace("'__FORGE_V2_VERSION__'", JSON.stringify(version));
+    cacheKey = key;
+    cached = { body, version };
+    return cached;
+  };
+}
+
 /** URL paths of the app shell: the page, its scripts and styles, icons, manifest and offline page. */
 export function shellFiles(publicDir: string): string[] {
   const top = readdirSync(publicDir, { withFileTypes: true })

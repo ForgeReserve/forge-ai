@@ -30,7 +30,7 @@ import { audioCostNanoUsd, costNanoUsd, displayPrice, estimateTokensFromBytes, f
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
-import { serviceWorkerScript } from './sw.ts';
+import { serviceWorkerScript, v2WorkerScript } from './sw.ts';
 
 export interface Deps {
   config: Config;
@@ -1203,8 +1203,14 @@ export function createApp(d: Deps) {
       const { body, version } = sw();
       return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version });
     });
-    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js).
+    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js), whose
+    // build id changes with every deploy of the app (src/sw.ts).
     app.get('/v2', (c) => c.redirect('/v2/', 301));
+    const sw2 = v2WorkerScript(d.publicDir);
+    app.get('/v2/sw.js', (c) => {
+      const { body, version } = sw2();
+      return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version, ...ISOLATION_HEADERS });
+    });
     // A photo shared into the v2 app is caught by its service worker (public/v2/sw.js) and never sent.
     // When that worker is not running, the phone posts it here instead: it is dropped unread and the
     // page opens saying the phone sent it to the server, which dropped it (photo/sent, not photo/missed:
