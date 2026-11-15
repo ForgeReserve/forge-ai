@@ -118,7 +118,8 @@ export function modelScreen({ t, state, back, actions, format }) {
 
 /**
  * Voice (from More): how talking becomes words, and how answers are read aloud. Only ways that work here
- * are listed; the browser's recogniser is shown but cannot be chosen while Private only is on.
+ * are listed (On this phone only in the Android app, where its recogniser has the language); the
+ * browser's recogniser is shown but cannot be chosen while Private only is on.
  */
 export function voiceScreen({ t, state, back, actions, voice, native = null }) {
   const S = state.S;
@@ -144,6 +145,8 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     const inUsed = v.talk.route;
     const engineSub = (kind) => (voice.audio.model(kind)?.tier === 'enclave' ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
     const inRows = [];
+    // The phone's own recogniser, in the Android app where it has the language: free, and the sound stays on the phone.
+    if (ins.phone?.available()) inRows.push(option('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone' }));
     if (ins.engine?.available()) inRows.push(option('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine') }));
     if (ins.device?.available()) {
       const blocked = !!S.settings.privateOnly;

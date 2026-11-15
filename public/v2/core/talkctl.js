@@ -139,7 +139,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
         return;
       }
       dispatch({ type: 'failed' });
-      set({ error: { code: e?.code ?? 'other', message: e?.message ?? String(e), charged: e?.status > 0 ? 0 : null } });
+      // A voice-in module may name the words for its own failure (key); else the engine's error says it.
+      set({ error: e?.key ? { key: e.key } : { code: e?.code ?? 'other', message: e?.message ?? String(e), charged: e?.status > 0 ? 0 : null } });
       refresh();
     }
   }

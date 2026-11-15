@@ -3,8 +3,9 @@
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
-// through: its pay requests and card link, with its token kept by the app) and ForgeVoice (the natural
-// voice made by native code: the answer's text goes to the app, which plays the sound itself). The
+// through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
+// voice made by native code: the answer's text goes to the app, which plays the sound itself) and
+// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back). The
 // balance key and chats never pass through it; a card's answers carry its pieces, which only the page
 // reads.
 
@@ -87,6 +88,54 @@ export function createNative(win = globalThis) {
     nfc: nativeNfc(call, on),
     till: nativeTill(call, on),
     voice: nativeVoice(call, on),
+    speech: nativeSpeech(call, on),
+  };
+}
+
+/**
+ * Hold to talk heard by the phone's own on-device speech recogniser through ForgeSpeech (docs/VOICE.md,
+ * Speech input). The sound stays on the phone: only the words come over the bridge. available({locale})
+ * resolves {onDevice, reason, locale}: onDevice only when the on-device recogniser has the language now,
+ * and locale is the one to listen with. start({locale, onEvent}) resolves {id, stop(), cancel()} once
+ * it listens, or rejects with {code} permission, busy or unavailable; onEvent gets {type}: started,
+ * level {level}, partial {text}, final {text}, error {code}, and end, always last.
+ */
+export function nativeSpeech(call, on) {
+  const sessions = new Map(); // id -> onEvent
+  let wired = null;
+  const wire = () => (wired ??= Promise.resolve(on('ForgeSpeech', 'speech', (ev) => sessions.get(ev?.id)?.(ev))));
+  let next = 0;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failure' });
+  return {
+    supported: () => true,
+    async available({ locale } = {}) {
+      const r = await call('ForgeSpeech', 'available', { locale }).catch((e) => ({ onDevice: false, reason: e?.message ?? 'no on-device speech in this app' }));
+      return { onDevice: r?.onDevice === true, reason: r?.reason ?? null, locale: typeof r?.locale === 'string' ? r.locale : (locale ?? null) };
+    },
+    async start({ locale, onEvent = () => {} } = {}) {
+      await wire();
+      next += 1;
+      const id = `ask-${Date.now().toString(36)}-${next}`;
+      // Before the call: the first events can come before it resolves.
+      sessions.set(id, (ev) => {
+        if (ev.type === 'end') sessions.delete(id);
+        onEvent(ev);
+      });
+      try {
+        await call('ForgeSpeech', 'start', { id, locale });
+      } catch (e) {
+        sessions.delete(id);
+        throw fail(e);
+      }
+      return {
+        id,
+        stop: () => call('ForgeSpeech', 'stop', { id }).catch(() => {}),
+        cancel() {
+          sessions.delete(id);
+          call('ForgeSpeech', 'cancel', { id }).catch(() => {});
+        },
+      };
+    },
   };
 }
 

@@ -59,6 +59,8 @@ export default {
   'talk.routePrivate': 'Goes through the engine to a private model. The engine could hear it on the way. Not saved.',
   'talk.routeStandard': 'Sent to a standard model. The engine and the model provider can hear it.',
   'talk.routeDevice': 'Your browser turns it into words. It may send your voice to its maker.',
+  'talk.routePhone': 'This phone turns it into words. Your voice does not leave the phone.',
+  'talk.phoneFailed': 'This phone could not turn your voice into words. Hold the button and try again, or type your question.',
 
   // Reading answers aloud
   'speak.listen': 'Listen',
@@ -346,6 +348,8 @@ export default {
   // Voice
   'voice.title': 'Voice',
   'voice.in': 'When you talk',
+  'voice.in.phone': 'On this phone',
+  'voice.in.phoneSub': 'Free and private. This phone turns your voice into words. Your voice does not leave the phone.',
   'voice.in.engine': 'Engine',
   'voice.in.engineSub': 'Goes through the engine to a private model. The engine could hear it on the way. It is not saved. Paid per question.',
   'voice.in.engineStdSub': 'Sent to a standard model. The engine and the model provider can hear it. Paid per question.',

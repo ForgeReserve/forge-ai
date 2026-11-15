@@ -126,9 +126,9 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
       time.textContent = tk.inside ? t('talk.recording', { time: clock(ms) }) : t('talk.leaving', { time: clock(ms) });
       heard.hidden = !tk.text;
       heard.textContent = tk.text;
-      route.textContent = t({ 'engine-private': 'talk.routePrivate', 'engine-standard': 'talk.routeStandard', device: 'talk.routeDevice' }[tk.route] ?? 'talk.routeStandard');
+      route.textContent = t({ phone: 'talk.routePhone', 'engine-private': 'talk.routePrivate', 'engine-standard': 'talk.routeStandard', device: 'talk.routeDevice' }[tk.route] ?? 'talk.routeStandard');
       route.dataset.route = tk.route ?? '';
-      // The engine's speech to text is paid, so a voice question reads as free only when the phone hears it.
+      // The engine's speech to text is paid, so a voice question reads as free only when the phone (or the browser) hears it.
       const p = priceLine(tk.priceMsub, tk.unit, tk.freeOk ? v.free : null);
       price.textContent = t(p.key, p);
     }

@@ -31,7 +31,7 @@ import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
-import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
+import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -298,7 +298,8 @@ function talkView(model, unit) {
   return {
     available: !!inMod && !!model,
     // The engine's speech to text is paid from the paid balance, so a voice question is never all free.
-    freeOk: inMod?.id === 'device',
+    // The phone's own recogniser (or the browser's) costs nothing: the question can be a free one.
+    freeOk: inMod?.id === 'device' || inMod?.id === 'phone',
     phase: tk.phase,
     seconds: tk.seconds ?? 0,
     level: tk.level ?? 0,
@@ -308,8 +309,8 @@ function talkView(model, unit) {
     unit,
     maxSeconds: inMod?.maxSeconds() ?? 60,
     priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod) : null,
-    // Where the sound goes, for the line under the button: engine-private, engine-standard or device.
-    route: !inMod ? null : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
+    // Where the sound goes, for the line under the button: phone, engine-private, engine-standard or device.
+    route: !inMod ? null : inMod.id === 'phone' || inMod.id === 'device' ? inMod.id : inMod.private() ? 'engine-private' : 'engine-standard',
   };
 }
 
@@ -1148,6 +1149,7 @@ const actions = {
   stopSpeaking: () => talk.stopSpeaking(),
   setVoiceIn: (id) => {
     S.settings.voiceIn = id;
+    S.settings.voiceInPicked = true;
     saveSettings();
     store.set({});
   },
@@ -1581,7 +1583,7 @@ async function start() {
   onErasedElsewhere(erasedElsewhere);
   addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
   const saved = await kv.get('settings').catch(() => null);
-  S.settings = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
+  S.settings = loadedSettings(saved);
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   S.key = ui.load(keyStore());
   S.freeKey = ui.load(freeKeyStore());
@@ -1611,7 +1613,7 @@ async function start() {
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speech: native?.speech ?? null, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
   });
   // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
   // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
@@ -1646,6 +1648,8 @@ async function start() {
     await registry.loadAll(rest);
     store.set({});
   }
+  // The phone's own recogniser says whether it has the language a moment after the app opens: then Hold to talk uses it.
+  voiceMods('voice-in').phone?.checked?.then(() => store.set({}));
   if (registry.refused.length) console.warn('modules refused', registry.refused);
   document.documentElement.dataset.ready = '1';
 
