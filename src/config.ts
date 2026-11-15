@@ -16,6 +16,12 @@ const csv = z.string().transform((s) =>
     .filter(Boolean),
 );
 
+/** A SHA-256 certificate fingerprint as assetlinks.json wants it: upper-case hex pairs joined by colons. */
+export function certFingerprint(s: string): string {
+  const hex = s.replace(/[:\s]/g, '').toUpperCase();
+  return /^[0-9A-F]{64}$/.test(hex) ? hex.match(/../g)!.join(':') : s;
+}
+
 export const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
   HOST: z.string().default('0.0.0.0'),
@@ -179,6 +185,13 @@ export const EnvSchema = z.object({
    * unset (or no file there), that choice is hidden.
    */
   FORGE_APK_PRIVATE_VOICE_PATH: z.string().optional().or(z.literal('').transform(() => undefined)),
+  /**
+   * The SHA-256 fingerprints of the certificates the Android APKs are signed with, comma separated
+   * (`keytool -list -v` prints them as 32 colon-separated hex pairs; plain hex works too). They go into
+   * /.well-known/assetlinks.json for both apps, so Android opens an event link (`/j#<pass>`) straight in
+   * the app (App Links). Unset: that file answers 404 and such links open in the browser.
+   */
+  FORGE_ANDROID_CERT_SHA256: csv.pipe(z.array(z.string().transform(certFingerprint).pipe(z.string().regex(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/, 'FORGE_ANDROID_CERT_SHA256: each entry must be a SHA-256 certificate fingerprint')))).default([]),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

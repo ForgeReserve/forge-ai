@@ -166,6 +166,12 @@ export function toast(text, ms = 2600) {
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
+/** Hides the toast now (a wait it said is over, and the screen says what came of it). */
+export function hideToast() {
+  clearTimeout(toastTimer);
+  document.getElementById('toast')?.classList.remove('show');
+}
+
 export async function copy(text) {
   try {
     await navigator.clipboard.writeText(text);

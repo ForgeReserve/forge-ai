@@ -14,6 +14,7 @@ import { createSweeper, lastUsed } from './core/history.js';
 import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
 import { createNative, defaultEngine, followBars, reloadForIsolation } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
+import { isJoinHash, joinPlan, passFrom } from './core/join.js';
 import { readNote } from './core/note.js';
 import { createTillPays, createTillSettings } from './core/till.js';
 import { chargedFor, errorView } from './core/errors.js';
@@ -41,7 +42,7 @@ import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
 import { fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
-import { startFreeScreen } from './screens/startfree.js';
+import { inviteError, startFreeScreen } from './screens/startfree.js';
 import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
@@ -1379,12 +1380,66 @@ function leave(name) {
 }
 
 function onPop() {
+  // An event link opened while this page was open (only the address's #join=<pass> changed): the pass
+  // leaves the address and is used, as on a fresh open.
+  if (isJoinHash(location.hash)) {
+    const pass = passFrom(location.hash);
+    history.replaceState(history.state, '', location.pathname + location.search);
+    if (live) joinWith(pass);
+  }
   if (afterPop) {
     const name = afterPop;
     afterPop = null;
     history.replaceState({ forge2: 0 }, '', href(name));
   }
   render();
+}
+
+// ------------------------------------------------------------------ event links (core/join.js)
+
+// Set by joinWith for the Start free screen it opens: that screen starts on the question.
+let joinAsk = false;
+
+/**
+ * An event pass (/j#<pass> on an event's slide; docs/ANDROID.md, Event links), from the address
+ * (#join=<pass>) or from the Android app (ForgeJoin). With no balance key yet, it opens a free balance
+ * the way Start free does (wallet.open), the first run is over, and the person is asked, in Start free's
+ * words, before Private only is turned off for the free models; then the home. A phone that holds a key
+ * already keeps it and spends nothing. A refused pass (used up, expired) is said in a toast, and the
+ * phone goes on as on any first open: the first run, with its own Start free.
+ */
+async function joinWith(pass) {
+  if (erased) return;
+  const plan = joinPlan({ pass, hasKey: !!S.key });
+  if (plan !== 'open') return;
+  ui.toast(t('fund.invite.opening'), 8000);
+  try {
+    await wallet.open(pass);
+  } catch (e) {
+    ui.toast(inviteError(e, t), 5000);
+    if (ui.load(SEEN_KEY) !== SEEN_VALUE && currentName === 'home') nav(STEP_ROUTES.welcome, {}, { replace: true });
+    return;
+  }
+  keep(SEEN_KEY, SEEN_VALUE);
+  if (!S.settings.privateOnly) {
+    // Private only is off already: a free model is chosen, no question.
+    const m = actions.useFreeModels();
+    ui.toast(m ? t('startFree.ready', { name: m.name ?? m.id }) : t('startFree.opened'), 4000);
+    if (currentName !== 'home') leave('home');
+    else store.set({});
+    return;
+  }
+  // Start free's question says "Your balance is open." above itself.
+  ui.hideToast();
+  joinAsk = true;
+  if (currentName !== 'home') nav('home', {}, { replace: true });
+  nav('startFree');
+}
+
+/** The Android app was opened on an event link while it ran: the pass it holds is taken and used. */
+async function joinFromApp() {
+  const pass = await native?.join.take();
+  if (pass) await joinWith(pass);
 }
 
 /** First run: marks it seen (Skip or Start), then goes to the home. */
@@ -1430,8 +1485,12 @@ function screenFor(name, params) {
       return fundsScreen(ctx);
     case 'addFunds':
       return walletScreen(ctx);
-    case 'startFree':
-      return startFreeScreen(ctx);
+    case 'startFree': {
+      // Opened by an event link (joinWith): on the question, then home.
+      const joined = joinAsk;
+      joinAsk = false;
+      return startFreeScreen({ ...ctx, joined });
+    }
     case 'fund':
       return fundScreen(ctx, params);
     case 'takeOut':
@@ -1549,7 +1608,7 @@ async function eraseAll() {
   await workerSettled();
   // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, the web
   // view's own cache, and the till a Fedimint card pays through (its address and token).
-  if (native) await Promise.all([native.shareIn.clear(), native.forget(), native.till.forget()]);
+  if (native) await Promise.all([native.shareIn.clear(), native.join.clear(), native.forget(), native.till.forget()]);
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
@@ -1638,10 +1697,21 @@ async function start() {
   // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
   // other way, an old one that was never read is removed.
   if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
+  // An event link (core/join.js): the pass leaves the address at once, so it stays out of the history
+  // and any bookmark, and is used once the models are in (joinWith). In the Android app it comes from
+  // the link that opened the app (ForgeJoin).
+  let joinPass = null;
+  if (isJoinHash(location.hash)) {
+    joinPass = passFrom(location.hash);
+    history.replaceState(history.state, '', location.pathname + location.search);
+  }
+  if (native) joinPass ??= await native.join.take();
   // In the Android app a photo shared in waits in the app (ForgeShareIn), and opens Share unseen.
   if (native && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
-  // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js).
-  if (shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
+  // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js). A
+  // pass that will open a balance decides instead (joinWith).
+  const joining = joinPlan({ pass: joinPass, hasKey: !!S.key }) === 'open';
+  if (!joining && shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
   // An answer that was streaming when the tab was killed is kept as stopped.
@@ -1671,6 +1741,7 @@ async function start() {
 
   addEventListener('popstate', onPop);
   native?.shareIn.onShared(() => !erased && nav('photoShared'));
+  native?.join.onJoin(() => !erased && live && joinFromApp());
   addEventListener('online', () => {
     store.set({ online: true });
     retryAll().then((n) => n && refreshBalance());
@@ -1697,6 +1768,7 @@ async function start() {
 
   await loadModels();
   await refreshBalance();
+  await joinWith(joinPass);
   const n = await retryAll();
   if (n) await refreshBalance();
   await settleOtherMint();

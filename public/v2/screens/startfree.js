@@ -8,8 +8,22 @@ import { el, icon, say, toast } from '../core/ui.js';
 import { listenButton, listenHeader } from './parts.js';
 import { cardArt } from './wallet-art.js';
 
-/** What a refused invite code means, in words. */
-const inviteError = (e, t) => (e?.code === 'invite_used' ? t('fund.invite.used') : e?.code === 'invite_required' || e?.code === 'invite_invalid' ? t('fund.invite.bad') : t('fund.failed', { message: e?.message ?? String(e) }));
+/** What a refused invite code (or event pass) means, in words. */
+export function inviteError(e, t) {
+  switch (e?.code) {
+    case 'invite_used':
+      return t('fund.invite.used');
+    case 'pass_used_up':
+      return t('fund.invite.usedUp');
+    case 'pass_expired':
+      return t('fund.invite.expired');
+    case 'invite_required':
+    case 'invite_invalid':
+      return t('fund.invite.bad');
+    default:
+      return t('fund.failed', { message: e?.message ?? String(e) });
+  }
+}
 
 /**
  * ctx: t, state, actions, wallet. id: the prefix of the element ids ('intro', 'funds', 'addFunds').
@@ -126,10 +140,12 @@ export function takeSaid() {
  * (no name, no email, no money), and the one button. Then the question, over the screen, while Private
  * only is on, in the same words as everywhere else. A yes chooses the free model and goes to Funds,
  * which says so (AddFunds-C4); Keep Private only goes back.
+ * joined: an event link just opened the balance (app.js joinWith). The screen opens on the question,
+ * with "Your balance is open." above it, and either answer goes back to the home, its words in a toast.
  */
-export function startFreeScreen({ t, state, back, backTo, actions, wallet, reader, scan }) {
+export function startFreeScreen({ t, state, back, backTo, actions, wallet, reader, scan, joined = false }) {
   const S = state.S;
-  let phase = 'form'; // 'form', 'opening', 'ask'
+  let phase = joined ? 'ask' : 'form'; // 'form', 'opening', 'ask'
   let job = null;
   const msg = el('p', { class: 'msg', id: 'startFreeMsg', role: 'status' });
   const tell = (text, kind = '') => {
@@ -212,6 +228,7 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     el('div', { class: 'foot' }, useBtn, keepBtn),
   );
   const ask = el('div', { class: 'sf-ask', id: 'startFreeAsk', hidden: true }, opened, sheet);
+  opened.hidden = !joined;
 
   const listen = listenButton({ t, reader, id: 'startFreeListen', pieces: () => (phase === 'ask' ? [t('startFree.ask')] : [t('startFree.title'), t('startFree.note')]) });
   const main = el(
@@ -236,7 +253,9 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
       return tell(t('startFree.noModel'), 'err');
     }
     said = t(wasOn ? 'startFree.using' : 'startFree.ready', { name: m.name ?? m.id });
-    backTo('funds');
+    if (!joined) return backTo('funds');
+    toast(takeSaid(), 4000);
+    backTo('home');
   };
   /** Once there is a balance key: the question while Private only is on, else the model. */
   const next = (justOpened) => {

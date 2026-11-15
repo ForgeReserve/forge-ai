@@ -17,12 +17,12 @@ import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import { type Config, isFreeModel, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
-import { apkSource, PRIVATE_VOICE_APK_URL, registerDownloadRoutes } from './download.ts';
+import { apkSource, PRIVATE_VOICE_APK_URL, registerAppLinks, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
 import { type FreeVoice, FreeVoiceError } from './free-voice.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
-import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
+import { type Account, type Invites, type Ledger, LedgerError, type Passes } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
 import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
@@ -37,6 +37,8 @@ export interface Deps {
   db: DB;
   ledger: Ledger;
   invites: Invites;
+  /** Event passes: accepted by POST /v1/wallet/open only (src/accounts.ts openAccount). */
+  passes: Passes;
   wallet: GatewayWallet;
   rates: RateOracle;
   suppliers: Map<string, Supplier>;
@@ -134,7 +136,7 @@ interface SettleResult {
 const OPEN_POSTS = /^\/v1\/(free|wallet\/fund\/card)\//i;
 
 export function createApp(d: Deps) {
-  const { config, db, ledger, invites, wallet, rates, suppliers } = d;
+  const { config, db, ledger, invites, passes, wallet, rates, suppliers } = d;
   const env = config.env;
   const app = new Hono();
   const limiter = new RateLimiter(env.FORGE_RATE_LIMIT_RPM);
@@ -466,14 +468,15 @@ export function createApp(d: Deps) {
   // Opens a balance with an invite code and nothing on it (docs/PAYMENTS.md, Free models): its key uses
   // the free models at once and takes funds later like any balance. Always takes an invite, even when
   // FORGE_INVITE_ONLY is off, so a free model is never open to anyone without one. A key the gateway
-  // already knows is answered as it is, and its invite is not touched.
+  // already knows is answered as it is, and its invite is not touched. An event pass (src/ledger.ts
+  // Passes) works here and only here: each balance it opens counts one use, and a known key counts none.
   app.post('/v1/wallet/open', async (c) => {
     const body = await readJson(c).catch(() => ({}));
     const invite = typeof body?.invite === 'string' ? body.invite.trim() : c.req.header('x-forge-invite');
     const unit = unitOf(body?.unit);
     const known = bearer(c) ? ledger.findByKey(bearer(c)!) : undefined;
     if (known?.free) throw new LedgerError('wrong_balance', 'this is a free-question balance; open a balance without a key, with an invite code', 409);
-    const opened = known ? { account: known, created: false, generatedKey: undefined } : openAccount({ db, ledger, invites, inviteOnly: true }, { key: bearer(c), invite, unit });
+    const opened = known ? { account: known, created: false, generatedKey: undefined } : openAccount({ db, ledger, invites, passes, inviteOnly: true }, { key: bearer(c), invite, unit });
     // A balance opened here stays open at 0: the ledger line keeps releaseIfEmpty from deleting it when a
     // later funding of it expires (src/accounts.ts).
     if (opened.created) ledger.creditRaw(opened.account.id, 0, 'open', null);
@@ -1166,6 +1169,8 @@ export function createApp(d: Deps) {
 
   // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
   registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL));
+  // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
+  registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
@@ -1226,6 +1231,11 @@ export function createApp(d: Deps) {
     const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
+    // The event link (public/v2/join/), at /j: the QR code on a slide reads /j#<pass>. The pass stays in
+    // the fragment, so it never reaches this server or its logs; the page reads it on the phone.
+    const joinPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'join', 'index.html'), 'utf8'));
+    app.get('/j', joinPage);
+    app.get('/j/', joinPage);
     // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
     // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
     // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same

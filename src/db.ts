@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   unit TEXT NOT NULL,
   balance_msub INTEGER NOT NULL DEFAULT 0 CHECK (balance_msub >= 0),
   invite_id TEXT,
+  pass_id TEXT,                     -- the event pass that opened it (passes), if any
   created_at INTEGER NOT NULL,
   frozen_at INTEGER,                -- set by the operator: spending blocked, refunds allowed
   free INTEGER NOT NULL DEFAULT 0   -- 1: a free balance, funded with credits (docs/FREE-TIER.md); never money
@@ -110,6 +111,21 @@ CREATE TABLE IF NOT EXISTS invites (
   nut24_uses INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   redeemed_at INTEGER
+);
+
+-- Event passes (docs/ADMIN.md, Event passes): one code, shown as one QR code, that opens up to max_uses
+-- balances at 0 for the free models (POST /v1/wallet/open only) until expires_at. Unlike an invite it is
+-- never bound to one balance: each balance it opened carries its id in accounts.pass_id, and giving a
+-- balance back (releaseIfEmpty) gives its use back. Only a SHA-256 of the code is stored.
+CREATE TABLE IF NOT EXISTS passes (
+  id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL UNIQUE,
+  label TEXT,
+  status TEXT NOT NULL,             -- open | revoked
+  max_uses INTEGER NOT NULL CHECK (max_uses >= 1),
+  uses INTEGER NOT NULL DEFAULT 0 CHECK (uses >= 0),
+  expires_at INTEGER NOT NULL,      -- ms: refused from then on
+  created_at INTEGER NOT NULL
 );
 
 -- Funding a balance through the Forge mint: Lightning (NUT-04 bolt11), on-chain (NUT-30) or eCash
@@ -257,6 +273,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['fundings', 'f_unlisted', 'INTEGER NOT NULL DEFAULT 0'],
   ['accounts', 'free', 'INTEGER NOT NULL DEFAULT 0'],
   ['reservations', 'shortfall_msub', 'INTEGER'],
+  ['accounts', 'pass_id', 'TEXT'],
 ];
 
 export type DB = DatabaseSync;

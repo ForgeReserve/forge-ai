@@ -711,6 +711,8 @@ export default {
   'fund.invite.opening': 'Opening your balance',
   'fund.invite.used': 'Code already used.',
   'fund.invite.bad': 'Code does not work. This invite code does not work. Check it and try again.',
+  'fund.invite.usedUp': 'Code used up. This event code opened as many balances as it allows.',
+  'fund.invite.expired': 'Code expired. This event code has ended.',
   'fund.invite.later': 'Add money later. You can add funds to this balance later for the other models.',
   // The daily faucet: the Free questions module and the /free page
   // The /download page (the Android app)
@@ -734,6 +736,13 @@ export default {
   'download.about': 'About {name}',
   'download.androidInfo': 'Forge. For most phones.',
   'download.grapheneInfo': 'Forge Private Voice. For GrapheneOS: it turns your voice into words on the phone. A bigger file.',
+  // The event link, /j#<pass> (public/v2/join/): one QR code for everyone in the room.
+  'join.title': 'Join Forge',
+  'join.lead': 'Free to use. No money, no name, no email.',
+  'join.step1': 'Get the app',
+  'join.step2': 'Open the app',
+  'join.open': 'Open Forge',
+  'join.noApp': 'Get the app first. It is not on this phone yet. Download it, install it, then tap Open Forge.',
 
   'faucet.title': 'Free questions',
   'faucet.sub': 'Free questions for Forge AI. No name and no email: your phone works a short puzzle instead.',

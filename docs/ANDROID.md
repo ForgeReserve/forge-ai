@@ -14,6 +14,7 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 
 | | How |
 |---|---|
+| Event links | `https://ai.forge-reserve.com/j#<pass>`, the one QR code on an event's slide, opens the app on that pass (App Links; `JoinPlugin.kt`, `JoinRules.kt`, ForgeJoin), cold or while it runs. The web app then opens a free balance with it (Event links, below). |
 | Photos shared in | Another app's share sheet sends a photo to Forge. It opens Share unseen with it (`ShareInPlugin.kt`, `public/v2/core/native.js`). The photo is read into memory, never written to storage. |
 | Share out | Share unseen's Share opens Android's share sheet with the protected photo only. Save opens the system save screen, so no storage permission is needed (`SharePlugin.kt`). |
 | Back button | Walks back through the app's screens, then leaves. |
@@ -107,6 +108,15 @@ From a computer, for testing: `adb install -r app-debug.apk`.
 
 Installing the new APK over the old one keeps the balance, chats and settings. An APK signed with another key does not install over it.
 
+## Event links
+
+One QR code gets a room full of people into Forge with a free balance, on the web app or in the Android app, with no code to copy. The operator makes an event pass (`pnpm admin passes:create`, [ADMIN.md](ADMIN.md), Event passes), which prints its link: `https://ai.forge-reserve.com/j#<pass>`. That link goes in the QR code. The pass is in the fragment, so it never reaches the server or its logs.
+
+- **`/j`** (`public/v2/join/`, served by the gateway; not in the APK) reads the fragment on the phone. Not Android (an iPhone, a computer): it goes straight to `/v2/#join=<pass>`. Android: two big steps, **1 Get the app** (the `/download` page's APKs, with the Android or GrapheneOS choice when both are offered) and **2 Open the app**, plus a small **Use in browser**. No pass: `/download`. Android with no APK on the site: the web app.
+- **Open Forge** is a Chrome intent link, `intent://ai.forge-reserve.com/j#<pass>#Intent;scheme=https;package=<id>;S.browser_fallback_url=<encoded /j?app=none#<pass>>;end`. Android reads the intent from the last `#`, so the app receives `https://ai.forge-reserve.com/j#<pass>`. The package is the one picked in step 1 (`com.forgereserve.ai`, or `com.forgereserve.ai.privatevoice` for GrapheneOS), remembered on the phone. When that app is not installed, Chrome comes back to `/j?app=none#<pass>`, which says to get the app first, instead of going to an app store.
+- **App Links:** both apps have an `android:autoVerify="true"` VIEW filter for `https://ai.forge-reserve.com/j` (`AndroidManifest.xml`). Once Android has verified the site, a QR code scanned on a phone with the app opens the app directly and `/j` is never shown. Verification reads `/.well-known/assetlinks.json`, which the gateway serves for both package names with the certificate fingerprints in `FORGE_ANDROID_CERT_SHA256` (comma separated; `keytool -list -v -keystore <keystore>` prints them). Unset, that file answers 404 and the links open in the browser, where `/j` takes over. `ai.forgereserve.org` is left out: it only redirects to `ai.forge-reserve.com`, and Android does not verify through a redirect.
+- **In the app**, `JoinPlugin` takes the pass from the launch intent and from every new one (`MainActivity` is `singleTask`), keeps it in memory only, and hands it to the page once (`take`); a reopen from recent apps is ignored. **In the web app** (`/v2/#join=<pass>`, or the pass from ForgeJoin) the pass is removed from the address at once. With no balance key yet, `app.js` `joinWith` opens a free balance with it through the same path as Start free (`POST /v1/wallet/open`), marks the first run seen, and asks Start free's Private only question once (Use free models, or Keep Private only), then the home. A phone that already has a key keeps it and spends nothing. A used up or expired pass is said in a toast, and the phone goes on to the first run with its own Start free.
+
 ## The engine and CORS
 
 The app's pages come from `https://localhost` (Capacitor), so every engine call is cross-origin. The gateway allows any origin on `/v1/*`, `/attestation` and `/.well-known/*` (no cookies are used), the request headers the app sends (including `X-Bellows-Pow`), and exposes the answer headers it reads (including `X-Bellows-Pow-Challenge`). `test/unit/cors.test.ts` runs each route the way the app calls it.
@@ -114,12 +124,16 @@ The app's pages come from `https://localhost` (Capacitor), so every engine call 
 ## Tests
 
 - `cd android && ./gradlew testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest` (the same tests, once per flavour): Forge Private Voice's speech to text rules (`AsrRulesTest`, docs/VOICE.md), the bars' colour and icons (`BarRulesTest`), the share rules (what counts as a shared photo, size limits, the type read from the file's bytes, safe file names, base64 limits), the back button, the phone's speech recogniser rules (`SpeechRulesTest`: languages, availability, error codes, one press with pauses), and the native voice's rules (`VoiceRulesTest`: which processors, threads and cores, the model folder, the adb lab run; `VoicePaceTest`: the slow-phone start, with the web test's numbers).
+- `JoinRulesTest` (in both flavours' unit tests): which intents carry an event pass, including the data Android makes from the `/j` page's intent link.
+- `test/unit/passes.test.ts`, `test/ui/join.ui.test.ts`: event passes, `/j`, `assetlinks.json` and the web app's join; `test/ui/android.ui.test.ts` also opens the app on a pass through the ForgeJoin stand-in, cold and while it runs.
 - `test/unit/android.test.ts`: the manifest and Gradle files (app id, Android 9, no Google services, the permissions, optional features, no backups, no cleartext, the share filter and file paths), the bundle, and Forge Private Voice (the flavours, the `:asr` process, `scripts/asr/lock.json` and its refusals, the Kotlin API files, the licences the universal APK leaves out).
 - `test/unit/v2/native.test.ts`: the web side of the bridge and the engine address rules.
 - `test/ui/android.ui.test.ts`: the bundle served from its own origin with a stand-in for Capacitor's bridge, against a gateway on another origin: the default engine, switching engine, funding, a streamed answer, a photo shared in and shared out, the bars following the look, and the `/download` page.
 - `test/unit/download.test.ts` (both APKs, the choice shown only with both), `test/unit/android-release.test.ts` (both flavours, 16 KB alignment).
 
 ## Not verified
+
+- Event links on a phone: App Link verification needs `assetlinks.json` live on `ai.forge-reserve.com` with the release certificate's fingerprint, and the intent link from `/j` was checked against Android's parsing rules in tests, not tapped in Chrome on a phone.
 
 - Forge Private Voice: its debug APK was installed on both phones (2026-11-15) and synthetic clips heard through ForgeAsr's path (docs/VOICE.md, Bundled speech to text); Hold to talk with the microphone in its screen was not tried on either, nor a release build of it, nor two apps side by side in daily use.
 

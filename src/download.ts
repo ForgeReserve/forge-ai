@@ -81,3 +81,26 @@ export function registerDownloadRoutes(app: Hono, apk: ReturnType<typeof apkSour
   serve(apk, APK_URL, 'forge.apk');
   serve(privateVoice ?? apkSource(undefined, PRIVATE_VOICE_APK_URL), PRIVATE_VOICE_APK_URL, 'forge-private-voice.apk');
 }
+
+/** The two Android apps (docs/ANDROID.md, Two APKs): Forge, and Forge Private Voice. */
+export const ANDROID_PACKAGES = ['com.forgereserve.ai', 'com.forgereserve.ai.privatevoice'] as const;
+
+/** The Digital Asset Links statement for both apps: Android may open this site's links in them (App Links). */
+export function assetLinks(fingerprints: readonly string[]) {
+  return ANDROID_PACKAGES.map((package_name) => ({
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: { namespace: 'android_app', package_name, sha256_cert_fingerprints: [...fingerprints] },
+  }));
+}
+
+/**
+ * GET /.well-known/assetlinks.json (FORGE_ANDROID_CERT_SHA256): JSON, straight from here and never a
+ * redirect, as Android's verifier requires. With no fingerprint set it answers 404, so an event link
+ * (/j) opens in the browser rather than in an app the site cannot vouch for.
+ */
+export function registerAppLinks(app: Hono, fingerprints: readonly string[]) {
+  app.get('/.well-known/assetlinks.json', (c) => {
+    if (!fingerprints.length) return c.json({ error: { message: 'no Android app is linked to this site', type: 'not_found', code: 'not_found' } }, 404);
+    return c.json(assetLinks(fingerprints), 200, { 'Cache-Control': 'public, max-age=300' });
+  });
+}

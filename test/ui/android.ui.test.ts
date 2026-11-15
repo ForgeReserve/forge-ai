@@ -84,6 +84,13 @@ async function appPhone(): Promise<AppPhone> {
           w.__native.shared = null;
           return s ?? {};
         }
+        // ForgeJoin (JoinPlugin.kt): the event pass of the link that opened the app, handed over once.
+        if (plugin === 'ForgeJoin' && method === 'take') {
+          const pass = w.__native.joinPass ?? sessionStorage.getItem('test.joinPass');
+          w.__native.joinPass = null;
+          sessionStorage.removeItem('test.joinPass');
+          return pass ? { pass } : {};
+        }
         if (plugin === 'ForgeShare' && method === 'share') return { opened: true };
         if (plugin === 'ForgeShare' && method === 'save') return { saved: true };
         return undefined;
@@ -92,6 +99,11 @@ async function appPhone(): Promise<AppPhone> {
         w.__native.listeners.push({ plugin, event, fn });
         return { remove: async () => {} };
       },
+    };
+    // What ForgeJoin does when an event link opens Forge while it runs.
+    w.__join = (pass: string) => {
+      w.__native.joinPass = pass;
+      for (const l of w.__native.listeners) if (l.plugin === 'ForgeJoin' && l.event === 'join') l.fn();
     };
     // What ForgeShareIn does when another app shares a photo while Forge is open.
     w.__shareIn = (data: string) => {
@@ -277,6 +289,53 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.textContent('#photoAlert')).toContain('No photo in that share.');
     await ctx.close();
   }, 60_000);
+
+  it('opens a free balance with the event pass the app was opened on, cold or while it runs (ForgeJoin)', async () => {
+    const DAY = 24 * 3600 * 1000;
+    const pass = () => g.deps.passes.create({ maxUses: 5, expiresAt: Date.now() + DAY, label: 'app' });
+    const uses = (id: string) => (g.deps.db.prepare('SELECT uses FROM passes WHERE id = ?').get(id) as { uses: number }).uses;
+    /** A phone on the local engine (More, Engine), with no balance key there yet. */
+    const onLocalEngine = async () => {
+      const p = await appPhone();
+      await p.page.goto(`${app}/#/more/engine`);
+      await p.page.waitForSelector('[data-screen=engine]');
+      await p.page.fill('#engineAddress', `${g.url}/`);
+      await Promise.all([p.page.waitForEvent('load'), p.page.click('#engineUse')]);
+      await p.page.waitForSelector('[data-screen=home]');
+      return p;
+    };
+    const key = (page: Page) => page.evaluate((u) => localStorage.getItem(`forge.balanceKey@${u}`), g.url);
+
+    // Cold start on the link: the pass is taken at start and the balance opened.
+    const cold = await onLocalEngine();
+    const a = pass();
+    await cold.page.evaluate((code) => sessionStorage.setItem('test.joinPass', code), a.code);
+    await cold.page.reload();
+    await cold.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    expect(await key(cold.page)).toMatch(/^sk-forge-/);
+    expect(uses(a.id)).toBe(1);
+    await cold.page.click('#startFreeKeep');
+    await cold.page.waitForSelector('[data-screen=home]');
+    // A second link while it runs, with a balance already: nothing is spent and the key stays.
+    const had = await key(cold.page);
+    const b = pass();
+    await cold.page.evaluate((code) => (window as any).__join(code), b.code);
+    await cold.page.waitForTimeout(500);
+    expect(await key(cold.page)).toBe(had);
+    expect(uses(b.id)).toBe(0);
+    expect(cold.errors).toEqual([]);
+    await cold.ctx.close();
+
+    // The link opens the app while it runs, on a phone with no balance: opened as on a cold start.
+    const warm = await onLocalEngine();
+    const c = pass();
+    await warm.page.evaluate((code) => (window as any).__join(code), c.code);
+    await warm.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    expect(await key(warm.page)).toMatch(/^sk-forge-/);
+    expect(uses(c.id)).toBe(1);
+    expect(warm.errors).toEqual([]);
+    await warm.ctx.close();
+  }, 120_000);
 
   it('keeps the phone\'s bars the colour of the look: Midnight by default, light on the Light look', async () => {
     const { ctx, page, errors } = await appPhone();

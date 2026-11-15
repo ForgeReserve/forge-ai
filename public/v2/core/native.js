@@ -6,6 +6,7 @@
 // through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
 // voice made by native code: the answer's text goes to the app, which plays the sound itself),
 // ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back),
+// ForgeJoin (an event pass from the link that opened the app, /j#<pass>),
 // ForgeAsr (Hold to talk heard by Forge Private Voice's own model, the same way) and ForgeBars (the phone's status and navigation bars in the page's colour). The
 // balance key and chats never pass through it; a card's answers carry its pieces, which only the page
 // reads.
@@ -86,6 +87,19 @@ export function createNative(win = globalThis) {
       clear: () => call('ForgeShareIn', 'clear').catch(() => {}),
     },
     forget: () => call('ForgeShare', 'forget').catch(() => {}),
+    /**
+     * An event pass the app was opened on (https://ai.forge-reserve.com/j#<pass>, ForgeJoin), kept in
+     * the app's memory only. take() hands it over once (the pass, or null); onJoin(fn) calls fn when a
+     * link opens the app while it runs; clear() drops it (Erase everything).
+     */
+    join: {
+      take: async () => {
+        const r = await call('ForgeJoin', 'take').catch(() => null);
+        return typeof r?.pass === 'string' && r.pass ? r.pass : null;
+      },
+      onJoin: (fn) => on('ForgeJoin', 'join', () => fn()),
+      clear: () => call('ForgeJoin', 'clear').catch(() => {}),
+    },
     nfc: nativeNfc(call, on),
     till: nativeTill(call, on),
     voice: nativeVoice(call, on),

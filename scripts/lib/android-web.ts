@@ -2,7 +2,7 @@
  * The web app as the Android app bundles it (docs/ANDROID.md). The APK carries these files and loads
  * nothing else as code: the v2 app (public/v2), the shared modules it imports (public/js), the vendored
  * libraries with their licences (public/vendor) and the icons. Never v1, the admin page, the beta page,
- * the /free page or the /download page: those are the website's.
+ * the /free page, the /download page or the /j page: those are the website's.
  *
  * Capacitor serves the bundle at https://localhost/. Its index.html is the v2 page (every path in it is
  * absolute, so /v2/app.js and the rest load as they do on the website), and an address the bundle does
@@ -18,7 +18,7 @@ const KEEP = /^(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
  * the phone already), and the licences of the speech to text only Forge Private Voice carries (the
  * privatevoice flavour adds them itself, scripts/asr-model.ts).
  */
-const SKIP = /^(v2\/(free\/|download\/|sw\.js$)|vendor\/licenses\/(sherpa-onnx|onnxruntime|moonshine)\.txt$)/;
+const SKIP = /^(v2\/(free\/|download\/|join\/|sw\.js$)|vendor\/licenses\/(sherpa-onnx|onnxruntime|moonshine)\.txt$)/;
 
 export function inBundle(rel: string): boolean {
   const p = rel.split(sep).join('/');

@@ -5,7 +5,7 @@ import { CreditKeysets, freeRules, mintCredits } from './credits.ts';
 import { openDb } from './db.ts';
 import { Faucet } from './faucet.ts';
 import { FreeVoice } from './free-voice.ts';
-import { Invites, Ledger } from './ledger.ts';
+import { Invites, Ledger, Passes } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
 import { checkForeignMintUrl, type FundingFaults, FundingService } from './funding.ts';
 import { log } from './log.ts';
@@ -109,6 +109,7 @@ export function buildDeps(
     db,
     ledger,
     invites: new Invites(db),
+    passes: new Passes(db),
     wallet,
     rates,
     funding,

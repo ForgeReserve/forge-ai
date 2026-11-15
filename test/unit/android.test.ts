@@ -76,7 +76,7 @@ describe('the web bundle in the APK', () => {
       expect(existsSync(join(PUBLIC, p)), p).toBe(true);
       expect(inBundle(p), p).toBe(true);
     }
-    for (const p of ['index.html', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'beta/index.html', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/sw.js']) {
+    for (const p of ['index.html', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'beta/index.html', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/join/index.html', 'v2/join/join.js', 'v2/sw.js']) {
       expect(inBundle(p), p).toBe(false);
     }
     const files = bundleFiles(PUBLIC);

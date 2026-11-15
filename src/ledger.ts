@@ -247,3 +247,79 @@ export class Invites {
     return this.db.prepare('SELECT id, label, status, account_id, nut24_uses, created_at, redeemed_at FROM invites ORDER BY created_at').all();
   }
 }
+
+/**
+ * A pass's expiry as `pnpm admin passes:create --expires` takes it: a date alone (2026-12-05) is that
+ * day's start in UTC; a full ISO time is taken as given. Returns ms, or NaN when it is not a date.
+ */
+export function passExpiry(v: string | undefined): number {
+  if (!v) return NaN;
+  return Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T00:00:00Z` : v);
+}
+
+export interface Pass {
+  id: string;
+  label: string | null;
+  status: 'open' | 'revoked';
+  max_uses: number;
+  uses: number;
+  expires_at: number;
+  created_at: number;
+}
+
+/**
+ * Event passes (docs/ADMIN.md, Event passes): one code for a room full of people, behind one QR code
+ * (`/j#<code>`). Each use opens one balance at 0 for the free models, through POST /v1/wallet/open only:
+ * a pass never stands in for an invite on a funded top-up or a NUT-24 request. Refused once max_uses
+ * balances were opened with it, from expires_at on, and once revoked. Only a SHA-256 of the code is stored.
+ */
+export class Passes {
+  readonly db: DB;
+  constructor(db: DB) {
+    this.db = db;
+  }
+
+  create(p: { maxUses: number; expiresAt: number; label?: string }): { id: string; code: string; expires_at: number } {
+    if (!Number.isInteger(p.maxUses) || p.maxUses < 1) throw new LedgerError('invalid_request', 'a pass needs at least one use');
+    if (!Number.isFinite(p.expiresAt) || p.expiresAt <= now()) throw new LedgerError('invalid_request', 'a pass must expire in the future');
+    // 96 random bits, short enough that the QR code stays easy to scan from a projected slide.
+    const code = 'pass-' + randomBytes(12).toString('base64url');
+    const id = 'pass_' + randomUUID();
+    this.db
+      .prepare("INSERT INTO passes (id, code_hash, label, status, max_uses, uses, expires_at, created_at) VALUES (?, ?, ?, 'open', ?, 0, ?, ?)")
+      .run(id, sha256(code), p.label ?? null, p.maxUses, Math.floor(p.expiresAt), now());
+    return { id, code, expires_at: Math.floor(p.expiresAt) };
+  }
+
+  lookup(code: string): Pass | undefined {
+    return this.db.prepare('SELECT id, label, status, max_uses, uses, expires_at, created_at FROM passes WHERE code_hash = ?').get(sha256(code)) as Pass | undefined;
+  }
+
+  /** Why a pass opens nothing now, as a LedgerError, or null when it may open a balance. */
+  refusal(p: Pass): LedgerError | null {
+    if (p.status !== 'open') return new LedgerError('invite_invalid', 'invite code is not valid', 403);
+    if (now() >= p.expires_at) return new LedgerError('pass_expired', 'this event pass has expired', 403);
+    if (p.uses >= p.max_uses) return new LedgerError('pass_used_up', 'this event pass was used as many times as it allows', 403);
+    return null;
+  }
+
+  /**
+   * Counts one use, in one statement, so two opens at the cap cannot both pass. Caller provides the
+   * transaction (the balance is created in it). Throws the refusal when the pass opens nothing now.
+   */
+  useRaw(id: string): void {
+    const r = this.db.prepare("UPDATE passes SET uses = uses + 1 WHERE id = ? AND status = 'open' AND uses < max_uses AND expires_at > ?").run(id, now());
+    if (Number(r.changes) === 1) return;
+    const p = this.db.prepare('SELECT id, label, status, max_uses, uses, expires_at, created_at FROM passes WHERE id = ?').get(id) as Pass | undefined;
+    throw (p && this.refusal(p)) ?? new LedgerError('invite_invalid', 'invite code is not valid', 403);
+  }
+
+  revoke(idOrCode: string): boolean {
+    const r = this.db.prepare("UPDATE passes SET status = 'revoked' WHERE id = ? OR code_hash = ?").run(idOrCode, sha256(idOrCode));
+    return Number(r.changes) > 0;
+  }
+
+  list(): Pass[] {
+    return this.db.prepare('SELECT id, label, status, max_uses, uses, expires_at, created_at FROM passes ORDER BY created_at').all() as unknown as Pass[];
+  }
+}

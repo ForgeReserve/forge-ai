@@ -16,6 +16,7 @@ import com.getcapacitor.BridgeWebViewClient
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(ShareInPlugin::class.java)
+        registerPlugin(JoinPlugin::class.java)
         registerPlugin(SharePlugin::class.java)
         registerPlugin(NfcPlugin::class.java)
         registerPlugin(TillPlugin::class.java)
