@@ -66,17 +66,20 @@ export function flatCostNanoUsd(flat: FlatPricing, bodyBytes: number, maxOutputT
  * - pricing "metered": the model's own metered worst case, the input estimated from the body
  *   (bytes / bytesPerToken, rounded up) plus maxOut, at the model's prices with markup. A flat schedule on
  *   a metered supplier does not drive the hold (owner decision, 2026-11-14).
+ * - a free model (pricing "free"): 0. Nothing is held or charged (docs/PAYMENTS.md, Free models).
  * The app computes the same figure from GET /v1/models (`pricing.hold`, public/v2/core/price.js holdMsub).
  */
 export function holdNanoUsd(
   supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing },
-  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'>,
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'> & { pricing?: ModelConfig['pricing'] },
   bodyBytes: number,
   maxOut: number,
   markup: number,
   bytesPerToken: number,
   search?: WebSearchTerms,
 ): number {
+  // A free model (pricing "free") holds nothing, whatever its supplier's schedule.
+  if (model.pricing === 'free') return 0;
   if (supplier.pricing === 'flat') return flatCostNanoUsd(supplier.flat!, bodyBytes, maxOut, markup);
   return usageNanoUsd(model, worstUsage(bodyBytes, maxOut, bytesPerToken, search), markup, search);
 }
@@ -87,10 +90,13 @@ export function holdNanoUsd(
  */
 export function holdInfo(
   supplier: { pricing: 'metered' | 'flat'; flat?: FlatPricing; web_search?: WebSearchTerms },
-  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'> & { web_search?: boolean },
+  model: Pick<ModelConfig, 'input_usd_per_mtok' | 'output_usd_per_mtok'> & { web_search?: boolean; pricing?: ModelConfig['pricing'] },
   markup: number,
   bytesPerToken: number,
 ) {
+  // A free model: the metered shape with every figure 0, so a client that reads the old fields computes
+  // a hold of 0 too, whatever the supplier's schedule.
+  if (model.pricing === 'free') return { basis: 'metered' as const, bytes_per_token: bytesPerToken, input_nano_usd_per_token: 0, output_nano_usd_per_token: 0, web_search: null };
   if (supplier.pricing === 'flat') {
     return {
       basis: 'flat' as const,

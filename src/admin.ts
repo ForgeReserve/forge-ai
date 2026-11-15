@@ -102,6 +102,7 @@ switch (cmd) {
         [`in_${unit}_per_mtok`]: displayPrice(m.input_usd_per_mtok, config.env.FORGE_MARKUP, unit, rate)?.toFixed(unit === 'usd' ? 4 : 1),
         [`out_${unit}_per_mtok`]: displayPrice(m.output_usd_per_mtok, config.env.FORGE_MARKUP, unit, rate)?.toFixed(unit === 'usd' ? 4 : 1),
         verified: m.price_verified,
+        pricing: m.pricing,
         uncensored: m.uncensored,
       })),
     );

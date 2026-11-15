@@ -53,12 +53,15 @@ export const freeMaxTokens = (info, maxTokens) => (info?.maxOut ? Math.min(info.
 
 /**
  * What the person can do when a question cannot be asked for lack of funds.
+ *   'needKey': the chosen model is a free model (core/price.js isFreeModel) and there is no balance key
+ *     yet: one opened with an invite code, even with nothing on it, is all it takes.
  *   'freeOut': free questions were used up and there is no paid balance: the three ways forward.
  *   'freeModel': free questions are left but the chosen model is not free, and there is no paid balance.
  *   'addFunds': nothing yet.
- *   null: the question can be paid.
+ *   null: the question can be paid (or costs nothing: a free model with a balance key, even at 0).
  */
-export function fundsBlock({ paidMsub, freeLeft: left, freeTotal, freeUsable }) {
+export function fundsBlock({ paidMsub, freeLeft: left, freeTotal, freeUsable, freeModel = false, hasKey = false }) {
+  if (freeModel) return hasKey ? null : 'needKey';
   if (paidMsub > 0) return null;
   if (left > 0) return freeUsable ? null : 'freeModel';
   return freeTotal > 0 ? 'freeOut' : 'addFunds';

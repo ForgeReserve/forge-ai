@@ -81,7 +81,39 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     // funding screens, as they keep it.
     const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
     input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-    const invite = el('div', { class: 'field', id: 'introInviteField', hidden: true }, el('label', { for: 'introInvite', class: 'label', text: t('invite.label') }), input, el('p', { class: 'note', text: t('invite.hint') }));
+    // Start free: the invite code alone opens a balance with nothing on it, for the free models
+    // (docs/PAYMENTS.md, Free models). Offered while the engine has free models and there is no key.
+    const freeMsg = el('p', { class: 'msg', id: 'introFreeMsg', role: 'status' });
+    const startFree = el('button', { type: 'button', class: 'btn soft block', id: 'introStartFree', hidden: true }, icon('gift', 20), el('span', { text: t('intro.startFree') }));
+    const freeNote = el('p', { class: 'note', id: 'introFreeNote', hidden: true, text: t('intro.startFreeSub') });
+    startFree.addEventListener('click', async () => {
+      const code = input.value.trim();
+      if (!code) {
+        freeMsg.textContent = t('invite.missing');
+        input.focus();
+        return;
+      }
+      startFree.disabled = true;
+      freeMsg.textContent = t('fund.invite.opening');
+      try {
+        const r = await wallet.open(code);
+        freeMsg.textContent = t(r?.freeShown === false ? 'fund.invite.openedHidden' : 'fund.invite.opened');
+        update();
+      } catch (e) {
+        freeMsg.textContent = e?.code === 'invite_used' ? t('fund.invite.used') : e?.code === 'invite_required' || e?.code === 'invite_invalid' ? t('fund.invite.bad') : t('fund.failed', { message: e?.message ?? String(e) });
+      } finally {
+        startFree.disabled = false;
+      }
+    });
+    const invite = el(
+      'div',
+      { class: 'field', id: 'introInviteField', hidden: true },
+      el('label', { for: 'introInvite', class: 'label', text: t('invite.label') }),
+      input,
+      el('p', { class: 'note', id: 'introInviteHint', text: t('invite.hint') }),
+      freeNote,
+      startFree,
+    );
     const node = el(
       'div',
       { class: 'intro-content' },
@@ -93,6 +125,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       ]),
       ...head('intro.welcome.title', 'intro.welcome.lead'),
       invite,
+      freeMsg,
       learnMore(
         el(
           'ul',
@@ -104,7 +137,13 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
         ),
       ),
     );
-    return { body: node, update: () => (invite.hidden = !!wallet.key() || !wallet.inviteOnly()) };
+    const update = () => {
+      const free = !!S.methods?.open?.enabled;
+      invite.hidden = !!wallet.key() || !(wallet.inviteOnly() || free);
+      invite.querySelector('#introInviteHint').hidden = !wallet.inviteOnly();
+      startFree.hidden = freeNote.hidden = !free || !!wallet.key();
+    };
+    return { body: node, update };
   }
 
   function pay() {

@@ -750,6 +750,9 @@ export function createAdminRouter(d: Deps): Hono {
         supplier: m.supplier,
         tier: tierOf(m.supplier),
         uncensored: m.uncensored,
+        // A free model (pricing "free") costs users nothing; its prices below are 0.
+        pricing: m.pricing,
+        free_reason: m.free_reason ?? null,
         verified: m.price_verified,
         max_output_tokens: m.max_output_tokens,
         cost_usd_per_mtok: { input: m.input_usd_per_mtok, output: m.output_usd_per_mtok },
@@ -777,7 +780,8 @@ export interface ModelCost {
   cost_nusd: number;
   supplier_reported: number;
   /** Our catalog cost per million tokens (before markup). */
-  catalog: { input: number; output: number; verified: boolean };
+  /** free: a free model (pricing "free"), charged nothing; its catalog prices are 0 on purpose. */
+  catalog: { input: number; output: number; verified: boolean; free: boolean };
   /** Per-million prices fitted to the supplier's reported costs, when there is enough data. */
   derived: { input: number; output: number; samples: number } | null;
   /** Fitted price differs from the catalog by more than 10% (either way). */
@@ -817,7 +821,7 @@ export function supplierCosts(db: DB, config: Config, days: number) {
         if (a >= 0 && b >= 0) derived = { input: a / 1000, output: b / 1000, samples: rep.length };
       }
     }
-    const catalog = { input: m?.input_usd_per_mtok ?? 0, output: m?.output_usd_per_mtok ?? 0, verified: !!m?.price_verified };
+    const catalog = { input: m?.input_usd_per_mtok ?? 0, output: m?.output_usd_per_mtok ?? 0, verified: !!m?.price_verified, free: m?.pricing === 'free' };
     const off = (d: number, c: number) => (c === 0 ? d > 0 : Math.abs(d - c) / c > 0.1);
     models.push({
       model: id,
