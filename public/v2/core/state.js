@@ -41,7 +41,12 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * autoDelete: when conversations are removed from this phone ('off', 'close', 'hour', 'day', 'week';
  * core/history.js). One day by default, as the canvas shows it (DProtect, DErase).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', autoDelete: 'day' });
+/**
+ * preferNatural: keep the natural voice even where this phone makes it too slowly (otherwise such an
+ * answer is read by the phone's own voice, core/voicepace.js). voicePace: how fast this phone makes the
+ * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day' });
 
 /**
  * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's

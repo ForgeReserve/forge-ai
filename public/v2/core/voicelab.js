@@ -74,13 +74,42 @@ export const CORPUS = Object.freeze([
   ['long', 'To add funds with a paper note, open the gold ring and choose Scan a note. Hold the phone over the code until it reads it. The app shows the amount and the mint, and adds it with one tap. If the note was already used, it says so, and nothing is taken. If it comes from a mint the engine does not take, the app offers another way to add it. Your balance goes up as soon as the engine confirms the note. Until then the note stays on this phone, so it is never lost on the way.'],
 ].map(([kind, text], i) => Object.freeze({ id: `c${String(i + 1).padStart(2, '0')}`, kind, text })));
 
-/** The ways of reading the corpus a phone may have, in the order the lab runs them. */
+/**
+ * The ways of reading the corpus a phone may have, in the order the lab runs them. The native ones
+ * (engine 'native': the Android app's native voice, core/native.js nativeVoice) exist only in the app,
+ * on a phone that runs it; each thread count is its own voice process, measured without playing.
+ */
 export const CANDIDATES = Object.freeze([
+  { id: 'native-2', engine: 'native', threads: 2 },
+  { id: 'native-4', engine: 'native', threads: 4 },
+  { id: 'native-6', engine: 'native', threads: 6 },
   { id: 'phonon-cpu-threads', engine: 'phonon', device: 'cpu', threads: 'auto' },
   { id: 'phonon-cpu-single', engine: 'phonon', device: 'cpu', threads: 1 },
   { id: 'phonon-webgpu', engine: 'phonon', device: 'webgpu', threads: 'auto' },
   { id: 'phone-voice', engine: 'device' },
 ]);
+
+/** One native bench ({firstMs, audioS, genMs, rtf, nan, peak, clipped}) as a lab row. */
+export function nativeRow(item, r) {
+  const r1 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 10) / 10);
+  const audioS = Number(r?.audioS) || 0;
+  return {
+    id: item.id,
+    kind: item.kind,
+    chars: item.text.length,
+    firstMs: r?.firstMs >= 0 ? r1(r.firstMs) : null,
+    totalMs: r1(r?.genMs),
+    audioS: r1(audioS),
+    rtf: audioS > 0 ? Math.round((r.genMs / 1000 / audioS) * 1000) / 1000 : null,
+    // Not played: no gaps to count (the native voice's own gaps are counted when it reads answers).
+    underruns: null,
+    played: false,
+    nan: r?.nan ?? 0,
+    silent: !(audioS > 0) || !(r?.peak >= 1e-4),
+    clipped: r?.clipped ?? 0,
+    peak: r?.peak == null ? null : Math.round(r.peak * 1000) / 1000,
+  };
+}
 
 /**
  * Gaps a listener would hear, from when each piece of sound arrived (ms) and how long each lasts (ms):

@@ -29,7 +29,8 @@ export const INPUTS = {
  * takes money out. Burn (remove this conversation from the phone) is one of the answer actions.
  * A voice module gets the engine's audio calls for its direction only, which the app makes with the
  * balance key the module never sees. A voice-out module also gets the phone's own Phonon engine
- * (core/phonon.js): whether it can run, what a first use downloads, and the loaded model.
+ * (core/phonon.js): whether it can run, what a first use downloads, the loaded model, the native voice
+ * in the Android app, the voice picked, and how fast this phone makes it (core/voicepace.js).
  */
 export const PROJECTIONS = {
   mode: {
@@ -37,7 +38,7 @@ export const PROJECTIONS = {
     actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'] },
-  'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load'] },
+  'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load', 'native', 'nativeFailed', 'voice', 'paceKey', 'pace', 'notePace', 'preferNatural'] },
 };
 
 /** Permissions a manifest may ask for in this release. None: a module that asks for one is refused. */

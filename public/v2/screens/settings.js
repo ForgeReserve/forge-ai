@@ -133,6 +133,10 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
   const naturalHead = el('h2', { class: 'caps', id: 'naturalVoiceHead', text: t('voice.natural'), hidden: true });
   const naturalList = el('div', { class: 'model-list', role: 'radiogroup', id: 'naturalVoices', 'aria-labelledby': 'naturalVoiceHead', hidden: true });
+  // Keep the natural voice on a phone that makes it slowly (answers then wait longer before they start).
+  const prefer = el('button', { type: 'button', class: 'setting-row', id: 'preferNatural', role: 'switch', hidden: true });
+  prefer.addEventListener('click', () => actions.setPreferNatural(!S.settings.preferNatural));
+  const preferSub = el('p', { class: 'hint', id: 'preferNaturalSub', hidden: true, text: t('voice.preferNaturalSub') });
   const draw = () => {
     const v = state.view();
     const ins = voice.inMods();
@@ -159,6 +163,10 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     const speakers = choice === 'phonon' && outs.phonon?.available() ? (voice.natural?.voices() ?? []) : [];
     const picked = voice.natural?.picked();
     naturalHead.hidden = naturalList.hidden = speakers.length < 2;
+    const naturalOn = choice === 'phonon' && !!outs.phonon?.available();
+    prefer.hidden = preferSub.hidden = !naturalOn;
+    prefer.setAttribute('aria-checked', String(!!S.settings.preferNatural));
+    prefer.replaceChildren(el('span', { text: t('voice.preferNatural') }), el('span', { class: 'value', text: S.settings.preferNatural ? t('look.on') : t('look.off') }));
     naturalList.replaceChildren(
       ...(speakers.length < 2 ? [] : speakers).map((v) =>
         el(
@@ -175,7 +183,7 @@ export function voiceScreen({ t, state, back, actions, voice, native = null }) {
     'main',
     { class: 'screen sub voice', 'data-screen': 'voice' },
     backHeader(t('voice.title'), back, t('common.back')),
-    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, prefer, preferSub),
   );
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }

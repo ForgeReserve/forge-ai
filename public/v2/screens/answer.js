@@ -29,7 +29,9 @@ export function answer({ t, state, nav, actions, format }) {
   const note = el('p', { class: 'answer-note', id: 'answerNote', role: 'status' });
   const speakWhat = el('span');
   const speakVia = el('small', { class: 'speak-via', id: 'speakVia', hidden: true });
-  const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), speakWhat, speakVia);
+  // While a slow phone makes sound ahead before reading: "Getting the voice ready" and a small bar.
+  const readyBar = el('span', { class: 'speak-ready', id: 'speakReady', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', hidden: true }, el('span', { class: 'speak-ready-fill' }));
+  const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), speakWhat, readyBar, speakVia);
   const errBox = el('div', { class: 'error-box', id: 'answerError', role: 'alert', hidden: true });
   const tiles = el('div', { class: 'action-tiles' });
   const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, asked, body, errBox, note, tiles);
@@ -63,7 +65,15 @@ export function answer({ t, state, nav, actions, format }) {
     const on = v.speak.current && v.speak.state !== 'idle';
     speaking.hidden = !on;
     const loading = v.speak.state === 'loading';
-    speakWhat.textContent = !on ? '' : loading && v.speak.progress != null ? t('speak.loadingPct', { pct: v.speak.progress }) : t(loading ? 'speak.loading' : 'speak.speaking');
+    const buffering = on && v.speak.state === 'buffering';
+    speakWhat.textContent = !on ? '' : buffering ? t('speak.buffering') : loading && v.speak.progress != null ? t('speak.loadingPct', { pct: v.speak.progress }) : t(loading ? 'speak.loading' : 'speak.speaking');
+    readyBar.hidden = !buffering;
+    if (buffering) {
+      const pct = v.speak.progress ?? 0;
+      readyBar.setAttribute('aria-valuenow', String(pct));
+      readyBar.setAttribute('aria-label', t('speak.buffering'));
+      readyBar.firstChild.style.width = `${pct}%`;
+    }
     // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
     speakVia.hidden = !(on && v.speak.viaEngine);
     speakVia.textContent = speakVia.hidden ? '' : t('speak.viaEngine');

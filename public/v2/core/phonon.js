@@ -6,6 +6,7 @@
 //
 // The pure parts (the model's file list, what the browser needs, checks on the sound) are tested in
 // Node; createPhonon wires them to the browser.
+import { notePace as addPace } from './voicepace.js';
 
 /** The folder of the model files, next to the app. */
 export const PHONON_BASE = new URL('../voice/phonon/', import.meta.url).href;
@@ -212,7 +213,11 @@ const reasonOf = (e) => String(e?.message ?? e).slice(0, 200);
  * - importLib: loads phonon-tts (tests pass a fake); fetch, caches: the browser's; env: the global
  *   object (its navigator.gpu and crossOriginIsolated decide the app's device);
  * - voice(): the voice the person picked for the app (settings.naturalVoice), or null for the default;
- * - memory: {get(), set(value)}, the app's settings.voiceDevice, where a WebGPU failure is remembered.
+ * - memory: {get(), set(value)}, the app's settings.voiceDevice, where a WebGPU failure is remembered;
+ * - nativeVoice: in the Android app, the natural voice made by native code (core/native.js
+ *   nativeVoice), used instead of the browser's build when this phone runs it (native());
+ * - pace: {get(), set(all)}, the app's settings.voicePace: how fast this phone makes the voice, per way
+ *   of making it (paceKey()), kept by notePace (core/voicepace.js); prefs(): {preferNatural}.
  *
  * load() without a device is the app's natural voice: it runs where chooseVoiceDevice says, and when
  * WebGPU fails to start, errors, stays silent or makes no sound in GPU_FIRST_SOUND_MS on its first
@@ -227,6 +232,9 @@ const reasonOf = (e) => String(e?.message ?? e).slice(0, 200);
 export function createPhonon({
   base = PHONON_BASE,
   native = false,
+  nativeVoice = null,
+  pace: paceStore = { get: () => null, set: () => {} },
+  prefs = () => ({}),
   importLib = () => import('../vendor/phonon-tts/index.js'),
   fetch: f = (...a) => globalThis.fetch(...a),
   caches: cs = globalThis.caches,
@@ -389,11 +397,54 @@ export function createPhonon({
     },
   };
 
+  // ---- the native voice (Android app): whether this phone runs it, and whether it failed this session
+  let nativeOk = null;
+  let nativeP = null;
+  let nativeBroken = null;
+  const nativeStatus = () =>
+    (nativeP ??= nativeVoice
+      ? nativeVoice.status().then((st) => ((nativeOk = st?.available === true), st), () => ((nativeOk = false), { available: false }))
+      : Promise.resolve({ available: false }));
+
   const api = {
     /** Reads which model files this app has. Resolves to the index, or null when there is none. */
-    init: readIndex,
-    /** True once the files are known to be here and the browser can run the model. */
-    available: () => !!index && canRun(env),
+    init: async () => {
+      const [ix] = await Promise.all([readIndex(), nativeStatus()]);
+      return ix;
+    },
+    /** True once the files are known to be here and the browser (or, in the app, native code) can run the model. */
+    available: () => !!index && (canRun(env) || (nativeOk === true && !nativeBroken)),
+    /** The native voice when this phone runs it and it has not failed this session, else null. */
+    async native() {
+      await api.init();
+      return nativeOk === true && !nativeBroken ? nativeVoice : null;
+    },
+    /** What the native voice says about this phone ({available, reason, threads, ...}). */
+    nativeStatus,
+    /** The native voice failed in a way the browser's build may not (a crash, a load failure): not again this session. */
+    nativeFailed: (e) => {
+      nativeBroken = String(e?.message ?? e ?? 'failed');
+    },
+    /** Which way of making the voice this phone's speed is kept under: 'native', or the browser's device. */
+    paceKey: (nativeUsed = false) => (nativeUsed ? 'native' : `web-${choice?.device ?? 'cpu'}-${choice?.threads ?? 'auto'}`),
+    /** The kept speed for a way of making the voice ({rtf, spc, n, at}), or null. */
+    pace: (key) => {
+      const v = paceStore.get?.()?.[key];
+      return v && typeof v === 'object' ? v : null;
+    },
+    /** Adds one answer's speed ({rtf, spc}) to what is kept for this way. */
+    notePace(key, m) {
+      if (!(m?.rtf > 0) && !(m?.spc > 0)) return;
+      const all = { ...(paceStore.get?.() ?? {}) };
+      all[key] = { ...addPace(all[key], m), at: Date.now() };
+      try {
+        paceStore.set?.(all);
+      } catch {
+        /* not kept: measured again next time */
+      }
+    },
+    /** The person asked to keep the natural voice even where it is slow (settings.preferNatural). */
+    preferNatural: () => !!prefs?.()?.preferNatural,
     index: () => index,
     /** Where the app's natural voice runs on this phone ({device, threads, reason}), without loading it. */
     device: () => (choice ? Promise.resolve(choice) : choose()),

@@ -5,7 +5,7 @@
 // sends on. Nothing here is sent anywhere.
 import { gpuInfo, meterNumbers, soundCheck } from '../core/phonon.js';
 import { backHeader, copy, el, meterBar, toast } from '../core/ui.js';
-import { CANDIDATES, CORPUS, candidateError, phoneVoices, readLine, report, speakLine, summarize, untilAborted, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
+import { CANDIDATES, CORPUS, candidateError, nativeRow, phoneVoices, readLine, report, speakLine, summarize, untilAborted, virtualUnderruns, waitForVoices } from '../core/voicelab.js';
 
 const now = () => performance.now();
 const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
@@ -35,7 +35,13 @@ function unlockSpeech() {
   }
 }
 
-export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
+/**
+ * nativeVoice: the Android app's native voice (core/native.js), or null on the website. Its candidates
+ * show only when this phone runs it. A debug build of the app can start a run from adb
+ * (MainActivity, forge.labAuto): it sets globalThis.__forgeLabAuto = {candidates, lines}, and the
+ * results are then kept in the app's own files (ForgeVoice saveLab) for adb to read (docs/VOICE.md).
+ */
+export function voiceLabScreen({ t, back, phonon, speaker, native = null, nativeVoice = null }) {
   const yes = (b) => (b == null ? t('lab.unknown') : b ? t('lab.yes') : t('lab.no'));
   const envList = el('ul', { class: 'lab-env', id: 'labEnv' });
   const voiceSel = el('select', { id: 'labVoice', class: 'lab-select', 'aria-label': t('lab.voice') });
@@ -50,6 +56,13 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   };
   voiceSel.addEventListener('change', showVoiceNote);
   const boxes = Object.fromEntries(CANDIDATES.map((c) => [c.id, el('input', { type: 'checkbox', id: `lab-${c.id}`, checked: true })]));
+  // The native candidates and the app's thread count: shown once the app says this phone runs it.
+  let nativeOn = false;
+  const nativeRows = [];
+  const threadsSel = el('select', { id: 'labAppThreads', class: 'lab-select', 'aria-label': t('lab.appThreads') });
+  threadsSel.addEventListener('change', () => nativeVoice?.config(Number(threadsSel.value) || 0).catch(() => {}));
+  const threadsRow = el('label', { class: 'lab-check', for: 'labAppThreads', hidden: true }, el('span', { text: t('lab.appThreads') }), threadsSel);
+  nativeRows.push(threadsRow);
   const play = el('input', { type: 'checkbox', id: 'labPlay' });
   // How many corpus lines a run reads: all of them by default, fewer for a quick look on a slow phone.
   const linesSel = el('select', { id: 'labLines', class: 'lab-select', 'aria-label': t('lab.lines') });
@@ -72,14 +85,17 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   let result = null;
   let ctrl = null;
 
-  (async () => {
+  const ready = (async () => {
     const index = await phonon.init().catch(() => null);
     const gpu = await gpuInfo();
     // Where the app itself reads with the natural voice on this phone (core/phonon.js chooseVoiceDevice).
     const appDevice = await phonon.device?.().catch(() => null);
+    const nst = nativeVoice ? await nativeVoice.status().catch(() => null) : null;
+    nativeOn = nst?.available === true;
     env = {
       userAgent: navigator.userAgent,
       app: native ? 'android' : 'web',
+      native: nst,
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       cores: navigator.hardwareConcurrency ?? null,
       deviceMemoryGb: navigator.deviceMemory ?? null,
@@ -96,7 +112,16 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       appDevice ? el('li', { id: 'labAppDevice', text: t('lab.appDevice', { value: t(appDevice.device === 'webgpu' ? 'lab.dev.webgpu' : appDevice.threads === 1 ? 'lab.dev.single' : 'lab.dev.threads') }) }) : null,
       el('li', { text: index ? t('lab.files', { size: Math.round(index.firstBytes / 1e6) }) : t('lab.none') }),
       el('li', { text: t('lab.kokoro') }),
+      nst ? el('li', { id: 'labNative', text: t('lab.native', { value: nativeOn ? t('lab.nativeYes', { cores: nst.cores ?? '?', big: (nst.bigCores ?? []).join(', ') || '-', threads: nst.threads ?? '?' }) : t('lab.nativeNo', { reason: nst.reason ?? '' }) }) }) : null,
     );
+    for (const r of nativeRows) r.hidden = !nativeOn;
+    for (const c of CANDIDATES) if (c.engine === 'native' && !nativeOn) boxes[c.id].checked = false;
+    if (nativeOn) {
+      threadsSel.replaceChildren(
+        el('option', { value: '0', text: t('lab.appThreadsDefault', { n: nst.defaultThreads ?? '?' }), selected: !nst.chosenThreads }),
+        ...[1, 2, 3, 4, 6, 8].filter((n) => n <= (nst.cores ?? 8)).map((n) => el('option', { value: String(n), text: String(n), selected: nst.chosenThreads === n })),
+      );
+    }
     // The app's voices, then the accent test: other locales' speakers read by the English model, which
     // only this page offers.
     const appVoices = (index?.voices ?? []).map((v) => el('option', { value: v.name, text: v.name, selected: v.name === index.defaultVoice }));
@@ -220,6 +245,54 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   }
 
   /**
+   * The Android app's native voice, at one thread count (its own voice process, started afresh): each
+   * line made without playing (ForgeVoice bench). The first line's wait includes starting the process,
+   * copying the model out of the APK the first time, and loading it.
+   */
+  async function runNative(c, voice, signal, onRow, out) {
+    Object.assign(out, { device: 'native', threads: c.threads });
+    const wait = (p) => untilAborted(p, signal);
+    await wait(nativeVoice.release());
+    status.textContent = t('lab.loading', { name: t(`lab.c.${c.id}`) });
+    meter.hidden = false;
+    for (const [i, item] of lines.entries()) {
+      if (signal.aborted) break;
+      meter.set({ fraction: i / lines.length, phase: t('dl.reading', { n: i + 1, total: lines.length }) });
+      const t0 = now();
+      let r;
+      try {
+        if (play.checked) {
+          // Played through the app's own speaker (AudioTrack), as answers are: its gaps are counted there.
+          const h = await wait(nativeVoice.speak({ pieces: [item.text], voice, threads: c.threads }));
+          signal.addEventListener('abort', () => h.stop(), { once: true });
+          const e = await wait(h.done);
+          r = { ...e, genMs: e.rtf > 0 ? e.rtf * e.audioS * 1000 : null, played: true };
+        } else r = await wait(nativeVoice.bench({ text: item.text, voice, threads: c.threads }));
+      } catch (e) {
+        if (signal.aborted) break;
+        if (i === 0) {
+          out.error = message(e);
+          out.loadFailed = true;
+          return;
+        }
+        out.rows.push({ id: item.id, kind: item.kind, error: message(e), ...(e?.code ? { code: e.code } : {}) });
+        onRow(out.rows.length);
+        if (e?.code === 'crashed') break;
+        continue;
+      }
+      if (i === 0) {
+        out.loadColdMs = Math.max(0, Math.round(now() - t0 - (r.genMs ?? 0)));
+        out.got = { device: 'native', threads: r.threads, pinned: r.pinned ?? [], pinError: r.pinError ?? 0, modelLoadMs: r.loadMs, copyMs: r.copyMs };
+        if (!(r.copyMs > 0)) out.loadWarmMs = r.loadMs ?? null;
+      }
+      out.rows.push(r.played ? { ...nativeRow(item, r), played: true, silent: !(r.audioS > 0), peak: null, underruns: r.gaps ?? 0, trackUnderruns: r.underruns ?? null, waitMs: r.waitMs ?? null } : nativeRow(item, r));
+      onRow(out.rows.length);
+    }
+    if (signal.aborted) return;
+    await wait(nativeVoice.release());
+  }
+
+  /**
    * The phone's own voice (speechSynthesis, voices that run on the phone): time to the first sound only.
    * The list is often empty until the browser has loaded it (iOS Safari): wait for it before saying
    * there is none. Each line is said in pieces of at most 200 characters, and a piece whose end never
@@ -326,7 +399,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
     saveBtn.hidden = copyBtn.hidden = false;
     const voice = voiceSel.value || null;
     lines = CORPUS.slice(0, Number(linesSel.value) || CORPUS.length);
-    const chosen = CANDIDATES.filter((c) => boxes[c.id].checked);
+    const chosen = CANDIDATES.filter((c) => boxes[c.id].checked && (c.engine !== 'native' || nativeOn));
     const done = [];
     live = { voice, done };
     for (const c of chosen) {
@@ -340,7 +413,8 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       };
       try {
         // untilAborted: the run goes on (or ends) at Stop even if the candidate never returns.
-        await untilAborted(c.engine === 'phonon' ? runPhonon(c, voice, signal, onRow, out) : runPhoneVoice(signal, onRow, out), signal);
+        const go = c.engine === 'phonon' ? runPhonon(c, voice, signal, onRow, out) : c.engine === 'native' ? runNative(c, voice, signal, onRow, out) : runPhoneVoice(signal, onRow, out);
+        await untilAborted(go, signal);
       } catch (e) {
         if (!signal.aborted) out.error = message(e);
       }
@@ -348,6 +422,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
         out.stopped = true;
         // A model left waiting is freed, so a hung worker does not keep running.
         if (c.engine === 'phonon') phonon.unload(phononOpts(c)).catch(() => {});
+        if (c.engine === 'native') nativeVoice?.release();
       }
       const failed = candidateError(out, { stopped: !!out.stopped });
       if (failed) out.error = failed;
@@ -375,10 +450,20 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
   runBtn.addEventListener('click', run);
   retryBtn.addEventListener('click', run);
   stopBtn.addEventListener('click', stopRun);
+  /** In the app: the results kept in its own files (for adb), and the system's save screen. */
+  async function saveInApp(r, { ask = true } = {}) {
+    const name = `forge-voice-lab-${r.at.replace(/[:.]/g, '-')}.json`;
+    const text = JSON.stringify(r, null, 2);
+    const kept = await nativeVoice?.saveLab?.(name, text).catch(() => null);
+    if (kept) status.textContent = t('lab.savedApp', { name });
+    if (ask) await native.share.save(new File([text], name, { type: 'application/json' })).catch(() => null);
+    return kept ? name : null;
+  }
   saveBtn.addEventListener('click', () => {
     const r = currentReport();
     if (!r) return;
     if (live) r.partial = true;
+    if (native?.share) return void saveInApp(r);
     const url = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }));
     const a = el('a', { href: url, download: `forge-voice-lab-${r.at.replace(/[:.]/g, '-')}.json`, hidden: true });
     document.body.append(a);
@@ -410,7 +495,15 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       voiceNote,
       el('label', { class: 'lab-check', for: 'labLines' }, el('span', { text: t('lab.lines') }), linesSel),
       el('h2', { class: 'caps', text: t('lab.candidates') }),
-      ...CANDIDATES.map((c) => label(boxes[c.id], t(`lab.c.${c.id}`))),
+      ...CANDIDATES.map((c) => {
+        const l = label(boxes[c.id], t(`lab.c.${c.id}`));
+        if (c.engine === 'native') {
+          l.hidden = true;
+          nativeRows.push(l);
+        }
+        return l;
+      }),
+      threadsRow,
       label(play, t('lab.play')),
       runBtn,
       stopBtn,
@@ -423,5 +516,20 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null }) {
       el('div', { class: 'row-btns' }, saveBtn, copyBtn),
     ),
   );
+  // A run started from adb in a debug build of the app (MainActivity, forge.labAuto): the candidates
+  // and lines it names, then the results kept in the app's files, where adb reads them.
+  const auto = native ? globalThis.__forgeLabAuto : null;
+  if (auto) {
+    globalThis.__forgeLabAuto = null;
+    ready.then(async () => {
+      const want = auto.candidates === 'native' ? CANDIDATES.filter((c) => c.engine === 'native').map((c) => c.id) : [].concat(auto.candidates ?? []);
+      for (const c of CANDIDATES) boxes[c.id].checked = want.includes(c.id);
+      if ([...linesSel.options].some((o) => o.value === String(auto.lines))) linesSel.value = String(auto.lines);
+      play.checked = auto.play === true;
+      await run();
+      const r = currentReport();
+      globalThis.__forgeLabDone = (r && (await saveInApp(r, { ask: false }))) || 'failed';
+    });
+  }
   return { node: main, update: () => {}, focus: main.querySelector('h1') };
 }

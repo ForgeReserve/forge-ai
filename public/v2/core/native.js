@@ -2,9 +2,11 @@
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
-// the bytes of each card command and the card's answer) and ForgeTill (the till a Fedimint card pays
-// through: its pay requests and card link, with its token kept by the app). The balance key and chats
-// never pass through it; a card's answers carry its pieces, which only the page reads.
+// the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
+// through: its pay requests and card link, with its token kept by the app) and ForgeVoice (the natural
+// voice made by native code: the answer's text goes to the app, which plays the sound itself). The
+// balance key and chats never pass through it; a card's answers carry its pieces, which only the page
+// reads.
 
 /** The engine the app talks to until the person sets another one in More. */
 export const DEFAULT_ENGINE = 'https://ai.forge-reserve.com';
@@ -84,6 +86,65 @@ export function createNative(win = globalThis) {
     forget: () => call('ForgeShare', 'forget').catch(() => {}),
     nfc: nativeNfc(call, on),
     till: nativeTill(call, on),
+    voice: nativeVoice(call, on),
+  };
+}
+
+/**
+ * The natural voice made by native code through ForgeVoice (docs/VOICE.md, Native voice in the Android
+ * app): the same model as the browser's build, run by Gradium's native runtime in a process of its own,
+ * which plays the sound through the phone's speaker itself. status() says whether this phone runs it
+ * ({available, reason, cores, bigCores, threads, defaultThreads}); speak() resolves with the answer's
+ * numbers once it was read ({firstMs, audioS, totalMs, rtf, spc, gaps, underruns, threads, stopped}) and
+ * rejects with {code}: too-slow (the phone's own voice should read it, data.rtf says how slow), crashed
+ * (the voice process ended), unavailable, load or failed. bench() makes the sound without playing it.
+ */
+export function nativeVoice(call, on) {
+  const handlers = new Map(); // id -> {started, buffering}
+  let wired = null;
+  const wire = () =>
+    (wired ??= Promise.all(['started', 'buffering'].map((type) => on('ForgeVoice', type, (ev) => handlers.get(ev?.id)?.[type]?.(ev)))));
+  let status = null;
+  let next = 0;
+  const newId = (p) => `${p}-${Date.now().toString(36)}-${++next}`;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failed', data: e?.data ?? null });
+  return {
+    supported: () => true,
+    status() {
+      status ??= call('ForgeVoice', 'status')
+        .then((r) => ({ available: r?.available === true, reason: r?.reason ?? null, cores: r?.cores ?? null, bigCores: r?.bigCores ?? [], threads: r?.threads ?? null, chosenThreads: r?.chosenThreads ?? 0, defaultThreads: r?.defaultThreads ?? null }))
+        .catch(() => ({ available: false, reason: 'no native voice in this app' }));
+      return status;
+    },
+    /**
+     * Reads pieces aloud. rtf, spc: this phone's kept speed (core/voicepace.js), for when to start;
+     * preferNatural, phoneVoice: whether too slow may give up (rejects too-slow). onStarted when the
+     * sound starts, onBuffering({fraction}) while it waits for sound in hand.
+     */
+    async speak({ pieces, voice = null, rtf = null, spc = null, preferNatural = false, phoneVoice = false, threads = 0, onStarted, onBuffering } = {}) {
+      await wire();
+      const id = newId('say');
+      handlers.set(id, { started: () => onStarted?.(), buffering: (ev) => onBuffering?.({ fraction: Number(ev?.fraction) || 0 }) });
+      const p = call('ForgeVoice', 'speak', { id, pieces, voice, rtf, spc, preferNatural, phoneVoice, threads })
+        .catch((e) => {
+          throw fail(e);
+        })
+        .finally(() => handlers.delete(id));
+      return { id, done: p, stop: () => call('ForgeVoice', 'stop', { id }).catch(() => {}) };
+    },
+    bench: ({ text, voice = null, threads = 0 }) =>
+      call('ForgeVoice', 'bench', { id: newId('bench'), text, voice, threads }).catch((e) => {
+        throw fail(e);
+      }),
+    /** The threads the app reads with from now on (0: the phone's default). */
+    async config(threads) {
+      status = null;
+      return call('ForgeVoice', 'config', { threads });
+    },
+    /** Ends the voice process, freeing its memory. */
+    release: () => call('ForgeVoice', 'release').catch(() => {}),
+    /** Keeps the voice lab's results in the app's own files (files/voice-lab/name), for adb to read. */
+    saveLab: async (name, json) => (await call('ForgeVoice', 'saveLab', { name, json }))?.saved === true,
   };
 }
 

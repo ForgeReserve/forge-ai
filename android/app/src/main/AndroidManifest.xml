@@ -45,6 +45,15 @@
 
         </activity>
 
+        <!--
+          The native natural voice (VoicePlugin, VoiceService) in a process of its own: its thread count
+          is fixed per process, and a crash in native code ends only that process. Not exported.
+        -->
+        <service
+            android:name=".VoiceService"
+            android:process=":voice"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
