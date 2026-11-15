@@ -231,6 +231,8 @@ function view() {
 /** The voice modules by id, for one direction. */
 const voiceMods = (kind) => Object.fromEntries((registry?.list(kind) ?? []).map((x) => [x.instance.id, x.instance]));
 const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
+/** True for a voice-in that hears on the phone itself: the phone's recogniser or Forge Private Voice's own model. */
+const onPhone = (m) => m?.id === 'phone' || m?.id === 'bundled';
 const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
 
 /**
@@ -318,7 +320,7 @@ function talkView(model, unit) {
     available: !!inMod && !!model,
     // The engine's speech to text is paid from the paid balance unless it is a free voice question. The
     // phone's own recogniser (or the browser's) costs nothing, so then the question can be all free.
-    freeOk: inMod?.id === 'device' || inMod?.id === 'phone' || fv.use,
+    freeOk: inMod?.id === 'device' || onPhone(inMod) || fv.use,
     freeVoice: fv.use,
     freeVoiceOut: fv.out,
     phase: tk.phase,
@@ -331,7 +333,8 @@ function talkView(model, unit) {
     maxSeconds: inMod?.maxSeconds() ?? 60,
     priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod, fv.use) : null,
     // Where the sound goes, for the line under the button: phone, engine-private, engine-standard or device.
-    route: !inMod ? null : inMod.id === 'phone' || inMod.id === 'device' ? inMod.id : inMod.private() ? 'engine-private' : 'engine-standard',
+    // Forge Private Voice's own speech to text is On this phone too.
+    route: !inMod ? null : onPhone(inMod) ? 'phone' : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
   };
 }
 
@@ -1652,7 +1655,7 @@ async function start() {
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speech: native?.speech ?? null, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speech: native?.speech ?? null, asr: native?.asr ?? null, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
   });
   // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
   // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
@@ -1688,7 +1691,7 @@ async function start() {
     store.set({});
   }
   // The phone's own recogniser says whether it has the language a moment after the app opens: then Hold to talk uses it.
-  voiceMods('voice-in').phone?.checked?.then(() => store.set({}));
+  for (const m of ['bundled', 'phone']) voiceMods('voice-in')[m]?.checked?.then(() => store.set({}));
   if (registry.refused.length) console.warn('modules refused', registry.refused);
   document.documentElement.dataset.ready = '1';
 

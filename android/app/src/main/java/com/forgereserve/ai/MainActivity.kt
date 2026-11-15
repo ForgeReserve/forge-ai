@@ -21,6 +21,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(TillPlugin::class.java)
         registerPlugin(VoicePlugin::class.java)
         registerPlugin(SpeechPlugin::class.java)
+        registerPlugin(AsrPlugin::class.java)
         registerPlugin(BarsPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The app's own files are served cross-origin isolated, as the website serves /v2/, so the natural
@@ -47,6 +48,7 @@ class MainActivity : BridgeActivity() {
         }
         takeLabAuto(intent)
         speechCheck(intent)
+        asrCheck(intent)
         // The back button walks back through the app's screens (they are web history), then leaves.
         onBackPressedDispatcher.addCallback(
             this,
@@ -66,6 +68,7 @@ class MainActivity : BridgeActivity() {
         super.onNewIntent(intent)
         takeLabAuto(intent)
         speechCheck(intent)
+        asrCheck(intent)
         labAuto?.let { js ->
             labAuto = null
             bridge?.webView?.evaluateJavascript(js, null)
@@ -94,5 +97,17 @@ class MainActivity : BridgeActivity() {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         val locale = intent?.getStringExtra("forge.speechCheck") ?: return
         SpeechCheck.run(this, Handler(Looper.getMainLooper()), locale) {}
+    }
+
+    /**
+     * Debug builds only: `adb shell am start -n <app id>/com.forgereserve.ai.MainActivity -e forge.asrCheck
+     * clip.wav` hears files/asr-check/clip.wav (16 kHz mono, put there with run-as) through ForgeAsr's
+     * whole path, as a microphone would feed it, and logs the words and timings (`adb logcat -s
+     * ForgeAsr`). Forge Private Voice only; a release build ignores the extra.
+     */
+    private fun asrCheck(intent: Intent?) {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        val name = intent?.getStringExtra("forge.asrCheck") ?: return
+        (bridge?.getPlugin("ForgeAsr")?.instance as? AsrPlugin)?.check(name)
     }
 }

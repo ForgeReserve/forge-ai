@@ -229,6 +229,44 @@ describe("Hold to talk through ForgeSpeech, the phone's on-device recogniser", (
   });
 });
 
+describe("Hold to talk through ForgeAsr, Forge Private Voice's own speech to text", () => {
+  it('says whether this app carries the model, and reads a broken bridge as no', async () => {
+    const ok = fakeCapacitor({ 'ForgeAsr.available': () => ({ available: true, reason: null, model: 'moonshine-tiny-en', language: 'en' }) });
+    expect(await N.createNative(ok.win).asr.available()).toEqual({ available: true, reason: null, language: 'en' });
+    expect(ok.calls).toEqual([['ForgeAsr', 'available', {}]]);
+    const universal = fakeCapacitor({ 'ForgeAsr.available': () => ({ available: false, reason: 'no speech to text in this app', model: null, language: 'en' }) });
+    expect(await N.createNative(universal.win).asr.available()).toEqual({ available: false, reason: 'no speech to text in this app', language: 'en' });
+    const broken = fakeCapacitor({
+      'ForgeAsr.available': () => {
+        throw new Error('"ForgeAsr" plugin is not implemented on android');
+      },
+    });
+    expect((await N.createNative(broken.win).asr.available()).available).toBe(false);
+  });
+
+  it('hands each press its own events, and a refused start keeps its code', async () => {
+    const f = fakeCapacitor();
+    const asr = N.createNative(f.win).asr;
+    const a: any[] = [];
+    const sa = await asr.start({ onEvent: (ev: any) => a.push(ev.type) });
+    const fire = f.listeners.find(([p, e]) => p === 'ForgeAsr' && e === 'asr')![2] as (ev: any) => void;
+    fire({ id: sa.id, type: 'partial', text: 'Is it' });
+    fire({ id: 'another', type: 'final', text: 'no' });
+    await sa.stop();
+    fire({ id: sa.id, type: 'final', text: 'Is it safe?' });
+    fire({ id: sa.id, type: 'end' });
+    fire({ id: sa.id, type: 'partial', text: 'late' });
+    expect(a).toEqual(['partial', 'final', 'end']);
+    expect(f.calls.map(([p, m]) => `${p}.${m}`)).toEqual(['ForgeAsr.start', 'ForgeAsr.stop']);
+    const busy = fakeCapacitor({
+      'ForgeAsr.start': () => {
+        throw Object.assign(new Error('Already listening.'), { code: 'busy' });
+      },
+    });
+    await expect(N.createNative(busy.win).asr.start({})).rejects.toMatchObject({ code: 'busy' });
+  });
+});
+
 describe('the native natural voice through ForgeVoice', () => {
   it('says whether this phone runs it, once, and asks again after the thread count changes', async () => {
     let asked = 0;

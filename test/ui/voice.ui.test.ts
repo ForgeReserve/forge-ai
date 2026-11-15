@@ -283,22 +283,25 @@ describe('hold to talk', () => {
 // In the Android app, the phone's own on-device recogniser hears Hold to talk (ForgeSpeech). Here a
 // stand-in for Capacitor's bridge plays the plugin: it says whether the recogniser has the language,
 // sends words while the button is held and the final words after the release. Chrome's microphone is
-// not allowed in this context: the sound never goes through the page, only words come back.
-async function appPhone({ onDevice }: { onDevice: boolean }) {
+// not allowed in this context: the sound never goes through the page, only words come back. With asr,
+// it plays Forge Private Voice's own speech to text too (ForgeAsr, the same events).
+async function appPhone({ onDevice, asr = false }: { onDevice: boolean; asr?: boolean }) {
   const ctx = await browser.newContext({ ...PHONE });
   await pastFirstRun(ctx);
-  await ctx.addInitScript((ready: boolean) => {
+  await ctx.addInitScript(([ready, bundled]: boolean[]) => {
     const w = window as any;
     const listeners: Array<{ plugin: string; event: string; fn: (ev: any) => void }> = [];
     w.__native = { calls: [] as string[] };
-    const emit = (id: string, ev: any) => {
-      for (const l of listeners) if (l.plugin === 'ForgeSpeech' && l.event === 'speech') l.fn({ id, ...ev });
-    };
+    const EVENT: Record<string, string> = { ForgeSpeech: 'speech', ForgeAsr: 'asr' };
     w.Capacitor = {
       isNativePlatform: () => true,
       nativePromise: async (plugin: string, method: string, opts: any) => {
         w.__native.calls.push(`${plugin}.${method}`);
-        if (plugin !== 'ForgeSpeech') return undefined;
+        if (!EVENT[plugin]) return undefined;
+        const emit = (id: string, ev: any) => {
+          for (const l of listeners) if (l.plugin === plugin && l.event === EVENT[plugin]) l.fn({ id, ...ev });
+        };
+        if (plugin === 'ForgeAsr' && method === 'available') return { available: bundled, reason: bundled ? null : 'no speech to text in this app', language: 'en' };
         if (method === 'available') return { onDevice: ready, reason: ready ? null : 'no-on-device-recognizer', locale: 'en-US' };
         if (method === 'start') {
           const at = (ms: number, ev: any) => setTimeout(() => emit(opts.id, ev), ms);
@@ -323,7 +326,7 @@ async function appPhone({ onDevice }: { onDevice: boolean }) {
         return { remove: async () => {} };
       },
     };
-  }, onDevice);
+  }, [onDevice, asr]);
   // Nothing reaches Forge's engine (the app's default): only this computer.
   const outside: string[] = [];
   await ctx.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => {
@@ -385,6 +388,37 @@ describe('hold to talk on this phone (the Android app)', () => {
     expect(transcriptions).toEqual([]);
     const made = await calls();
     expect(made.filter((c) => c.startsWith('ForgeSpeech.'))).toEqual(['ForgeSpeech.available', 'ForgeSpeech.start', 'ForgeSpeech.stop']);
+    expect(outside.every((u) => u.startsWith('https://ai.forge-reserve.com/'))).toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  it("Forge Private Voice hears it with its own model first, where the phone has no recogniser (GrapheneOS)", async () => {
+    const { ctx, page, errors, outside, transcriptions, calls } = await appPhone({ onDevice: false, asr: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    // One On this phone row, listed first.
+    expect(await page.locator('#voiceInHead + .model-list .model-card').first().getAttribute('id')).toBe('voiceIn-phone');
+    expect(await page.locator('#voiceIn-phone').count()).toBe(1);
+    await page.click('#voiceOut-off');
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toBe('$3.00');
+    const box = (await page.locator('#talkBtn').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
+    expect(await page.textContent('.listen-route')).toBe('This phone turns it into words. Your voice does not leave the phone.');
+    await expect.poll(() => page.textContent('.listen-text'), { timeout: 4000 }).toBe('What should I bring');
+    await page.mouse.up();
+    await page.waitForSelector('[data-screen=answer]');
+    await expect.poll(() => page.textContent('.asked')).toBe('What should I bring to the beach?');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    expect(transcriptions).toEqual([]);
+    const made = await calls();
+    expect(made.filter((c) => c.startsWith('ForgeAsr.'))).toEqual(['ForgeAsr.available', 'ForgeAsr.start', 'ForgeAsr.stop']);
+    expect(made.filter((c) => c.startsWith('ForgeSpeech.'))).toEqual(['ForgeSpeech.available']);
     expect(outside.every((u) => u.startsWith('https://ai.forge-reserve.com/'))).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();

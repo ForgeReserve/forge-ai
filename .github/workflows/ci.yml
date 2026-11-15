@@ -98,13 +98,25 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
 
-      - name: Debug build and JVM tests
+      - name: Debug builds of both APKs and JVM tests
+        # universal is Forge; privatevoice is Forge Private Voice, whose build fetches its speech to text
+        # (about 79 MB from GitHub and Hugging Face, pinned and checked against scripts/asr/lock.json).
         working-directory: android
-        run: ./gradlew assembleDebug testDebugUnitTest
+        run: ./gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest
 
       - name: Native libraries load on 16 KB page phones
         # Android 15+ phones can use 16 KB pages; each stored .so must sit on a 16 KB boundary in the APK.
         working-directory: android
         run: |
+          # A misaligned file makes zipalign fail; without pipefail the grep after it would hide that.
+          set -o pipefail
           ZA=$(ls "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)
-          "$ZA" -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk | grep -E 'lib/|Verification'
+          for apk in app/build/outputs/apk/universal/debug/app-universal-debug.apk app/build/outputs/apk/privatevoice/debug/app-privatevoice-debug.apk; do
+            echo "$apk"
+            "$ZA" -c -P 16 -v 4 "$apk" | grep -E 'lib/|Verification'
+          done
+          # The universal APK carries no speech to text model or runtime.
+          if unzip -l app/build/outputs/apk/universal/debug/app-universal-debug.apk | grep -E 'libsherpa-onnx-jni\.so|\.ort$'; then
+            echo "the universal APK carries Forge Private Voice's speech to text" >&2
+            exit 1
+          fi

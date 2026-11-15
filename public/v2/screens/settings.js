@@ -170,8 +170,9 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     const engineSub = (kind) => (enclave(kind) ? t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineSub`) : t(`voice.${kind === 'transcription' ? 'in' : 'out'}.engineStdSub`));
     const engineTags = (kind) => ['paid', enclave(kind) ? 'engine' : 'provider'];
     const inRows = [];
-    // The phone's own recogniser, in the Android app where it has the language: free, and the sound stays on the phone.
-    if (ins.phone?.available()) inRows.push(choice('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone', tags: ['free', 'phone'] }));
+    // On this phone: Forge Private Voice's own speech to text, else the phone's own recogniser in the Android
+    // app where it has the language. Free, and the sound stays on the phone. One row for either.
+    if (ins.bundled?.available() || ins.phone?.available()) inRows.push(choice('voiceIn', 'phone', t('voice.in.phone'), t('voice.in.phoneSub'), { on: inUsed === 'phone', tags: ['free', 'phone'] }));
     if (ins.engine?.available()) inRows.push(choice('voiceIn', 'engine', t('voice.in.engine'), engineSub('transcription'), { on: inUsed?.startsWith('engine'), tags: engineTags('transcription') }));
     if (ins.device?.available()) {
       const blocked = !!S.settings.privateOnly;

@@ -57,8 +57,11 @@ describe('CI workflow', () => {
   it('runs read-only, without credentials, and covers every suite', () => {
     expect(ci).not.toMatch(/\$\{\{\s*secrets\./);
     expect(ci).not.toMatch(/persist-credentials: true/);
-    for (const step of ['pnpm install --frozen-lockfile', 'pnpm typecheck', 'pnpm test', 'pnpm mint:up', 'pnpm test:e2e', 'pnpm test:ui', './gradlew assembleDebug testDebugUnitTest']) {
+    for (const step of ['pnpm install --frozen-lockfile', 'pnpm typecheck', 'pnpm test', 'pnpm mint:up', 'pnpm test:e2e', 'pnpm test:ui', './gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest']) {
       expect(ci, step).toContain(step);
     }
+    // Both APKs are checked for 16 KB pages, and the universal one for carrying no speech to text model.
+    expect(ci).toContain('app/build/outputs/apk/universal/debug/app-universal-debug.apk app/build/outputs/apk/privatevoice/debug/app-privatevoice-debug.apk');
+    expect(ci).toMatch(/zipalign[\s\S]*-c -P 16/);
   });
 });

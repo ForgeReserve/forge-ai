@@ -13,8 +13,12 @@ import { dirname, join, relative, sep } from 'node:path';
 
 /** Paths (relative to public/, with /) that go in the app. */
 const KEEP = /^(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
-/** Inside those, what stays on the website: its own pages, and the v2 service worker (the app's files are on the phone already). */
-const SKIP = /^v2\/(free\/|download\/|sw\.js$)/;
+/**
+ * Inside those, what stays on the website: its own pages, the v2 service worker (the app's files are on
+ * the phone already), and the licences of the speech to text only Forge Private Voice carries (the
+ * privatevoice flavour adds them itself, scripts/asr-model.ts).
+ */
+const SKIP = /^(v2\/(free\/|download\/|sw\.js$)|vendor\/licenses\/(sherpa-onnx|onnxruntime|moonshine)\.txt$)/;
 
 export function inBundle(rel: string): boolean {
   const p = rel.split(sep).join('/');

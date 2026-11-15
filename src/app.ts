@@ -17,7 +17,7 @@ import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import { type Config, isFreeModel, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
-import { apkSource, registerDownloadRoutes } from './download.ts';
+import { apkSource, PRIVATE_VOICE_APK_URL, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
 import { type FreeVoice, FreeVoiceError } from './free-voice.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
@@ -1165,7 +1165,7 @@ export function createApp(d: Deps) {
   });
 
   // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
-  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH));
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL));
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.

@@ -20,8 +20,8 @@ import { chromium } from 'playwright-core';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PUBLIC = join(ROOT, 'public');
 const TYPES: Record<string, string> = { '.js': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm', '.gguf': 'application/octet-stream', '.safetensors': 'application/octet-stream', '.html': 'text/html' };
-// Only what the voice needs: the package, the engine wrapper, the model and its index.
-const SERVED = [/^\/v2\/vendor\/phonon-tts\//, /^\/v2\/voice\/phonon\//, /^\/v2\/core\/phonon\.js$/, /^\/blank\.html$/];
+// Only what the voice needs: the package, the engine wrapper and the one module it imports, the model and its index.
+const SERVED = [/^\/v2\/vendor\/phonon-tts\//, /^\/v2\/voice\/phonon\//, /^\/v2\/core\/(phonon|voicepace)\.js$/, /^\/blank\.html$/];
 
 const [jobsPath, outDir] = process.argv.slice(2);
 if (!jobsPath || !outDir) {

@@ -14,6 +14,7 @@ const CTL: any = await import('../../../public/v2/core/talkctl.js' as string);
 const VIN: any = await import('../../../public/v2/modules/voice-in/engine/index.js' as string);
 const VIN_DEVICE: any = await import('../../../public/v2/modules/voice-in/device/index.js' as string);
 const VIN_PHONE: any = await import('../../../public/v2/modules/voice-in/phone/index.js' as string);
+const VIN_BUNDLED: any = await import('../../../public/v2/modules/voice-in/bundled/index.js' as string);
 const N: any = await import('../../../public/v2/core/native.js' as string);
 const VOUT: any = await import('../../../public/v2/modules/voice-out/engine/index.js' as string);
 const VOUT_DEVICE: any = await import('../../../public/v2/modules/voice-out/device/index.js' as string);
@@ -223,6 +224,22 @@ describe('voice prices and models', () => {
     expect(STATE.pickVoiceIn({ phone, engine, device }, { privateOnly: true, voiceIn: 'device' })?.id).toBe('phone');
   });
 
+  it("chooses Forge Private Voice's own speech to text first, then the phone's recogniser, then the engine", () => {
+    const engine = mod('engine', true, true);
+    const phone = mod('phone', true, true);
+    const bundled = mod('bundled', true, true);
+    const auto = { ...STATE.DEFAULT_SETTINGS };
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, auto)?.id).toBe('bundled');
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, { ...auto, voiceIn: 'phone' })?.id).toBe('bundled');
+    // The universal APK and the website: no bundled model, so as before.
+    const none = mod('bundled', false, true);
+    expect(STATE.pickVoiceIn({ bundled: none, phone, engine }, auto)?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ bundled: none, phone: mod('phone', false, true), engine }, auto)?.id).toBe('engine');
+    // The engine picked: the engine first, then the phone's ways.
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, { ...auto, voiceIn: 'engine' })?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ bundled, phone, engine: mod('engine', false, true) }, { ...auto, voiceIn: 'engine' })?.id).toBe('bundled');
+  });
+
   it("reads a saved 'engine' as the old default, unless it was picked since 'auto' came", () => {
     expect(STATE.loadedSettings(null).voiceIn).toBe('auto');
     expect(STATE.loadedSettings({ voiceIn: 'engine', look: 'dark' })).toMatchObject({ voiceIn: 'auto', look: 'dark' });
@@ -313,11 +330,12 @@ describe('the engine client audio calls', () => {
 describe('voice modules get only their own inputs', () => {
   it('hands voice in the microphone and speech to text, voice out the speaker and text to speech', () => {
     const fn = () => {};
-    const all = { t: fn, ui: {}, engine: {}, wallet: {}, vault: {}, state: {}, actions: {}, mic: {}, recognizer: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, transcribe: fn, speak: fn }, speech: { available: fn, start: fn, other: fn } };
+    const all = { t: fn, ui: {}, engine: {}, wallet: {}, vault: {}, state: {}, actions: {}, mic: {}, recognizer: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, transcribe: fn, speak: fn }, speech: { available: fn, start: fn, other: fn }, asr: { available: fn, start: fn, other: fn } };
     const vin = R.inputsFor('voice-in', all);
-    expect(Object.keys(vin).sort()).toEqual(['audio', 'mic', 'recognizer', 'speech', 't']);
+    expect(Object.keys(vin).sort()).toEqual(['asr', 'audio', 'mic', 'recognizer', 'speech', 't']);
     expect(Object.keys(vin.audio).sort()).toEqual(['model', 'price', 'transcribe']);
     expect(Object.keys(vin.speech).sort()).toEqual(['available', 'start']);
+    expect(Object.keys(vin.asr).sort()).toEqual(['available', 'start']);
     const vout = R.inputsFor('voice-out', all);
     expect(Object.keys(vout).sort()).toEqual(['audio', 'speaker', 'synth', 't']);
     expect(Object.keys(vout.audio).sort()).toEqual(['model', 'price', 'speak']);
@@ -326,9 +344,9 @@ describe('voice modules get only their own inputs', () => {
 
   it('bundles both ways for each direction', () => {
     const ids = R.BUNDLED.filter((b: any) => b.kind.startsWith('voice')).map((b: any) => `${b.kind}/${b.folder}`);
-    expect(ids.sort()).toEqual(['voice-in/device', 'voice-in/engine', 'voice-in/phone', 'voice-out/device', 'voice-out/engine', 'voice-out/phonon']);
-    // The phone's own recogniser is listed first.
-    expect(R.BUNDLED.find((b: any) => b.kind === 'voice-in').folder).toBe('phone');
+    expect(ids.sort()).toEqual(['voice-in/bundled', 'voice-in/device', 'voice-in/engine', 'voice-in/phone', 'voice-out/device', 'voice-out/engine', 'voice-out/phonon']);
+    // Forge Private Voice's own speech to text is listed first, then the phone's own recogniser.
+    expect(R.BUNDLED.filter((b: any) => b.kind === 'voice-in').map((b: any) => b.folder)).toEqual(['bundled', 'phone', 'engine', 'device']);
   });
 });
 
@@ -454,6 +472,69 @@ function fakeSpeech({ onDevice = true, reason = null as string | null, startErro
   const fake = { speech: N.nativeSpeech(call, on), calls, emit: (_ev: any) => {} };
   return fake;
 }
+
+/** A stand-in for ForgeAsr over the bridge, as nativeAsr sees it. */
+function fakeAsr({ available = true, reason = null as string | null, onStop = (emit: (ev: any) => void) => (emit({ type: 'final', text: 'Is it safe to swim?' }), emit({ type: 'end' })) } = {}) {
+  const calls: Array<[string, any]> = [];
+  let listener: (ev: any) => void = () => {};
+  let emit: (ev: any) => void = () => {};
+  const call = async (plugin: string, method: string, opts: any) => {
+    expect(plugin).toBe('ForgeAsr');
+    calls.push([method, opts]);
+    if (method === 'available') return { available, reason, model: available ? 'moonshine-tiny-en' : null, language: 'en' };
+    if (method === 'start') {
+      emit = (ev: any) => listener({ id: opts.id, ...ev });
+      emit({ type: 'started' });
+      emit({ type: 'partial', text: 'Is it' });
+      return {};
+    }
+    if (method === 'stop') setTimeout(() => onStop(emit), 5);
+    return {};
+  };
+  const on = (plugin: string, event: string, fn: any) => (expect([plugin, event]).toEqual(['ForgeAsr', 'asr']), (listener = fn), { remove: async () => {} });
+  return { asr: N.nativeAsr(call, on), calls };
+}
+
+describe("voice in on this phone (Forge Private Voice's own speech to text)", () => {
+  it('is offered only where the app carries the model, free and private', async () => {
+    const m = VIN_BUNDLED.create({ asr: fakeAsr().asr });
+    expect(m.id).toBe('bundled');
+    expect(m.available()).toBe(false); // until the app answers
+    await m.checked;
+    expect(m.available()).toBe(true);
+    expect(m.private()).toBe(true);
+    expect(m.price(30)).toBe(0);
+    // The universal APK, the website, and what the registry hands on the website.
+    for (const asr of [fakeAsr({ available: false, reason: 'no speech to text in this app' }).asr, null]) {
+      const x = VIN_BUNDLED.create({ asr });
+      await x.checked;
+      expect(x.available()).toBe(false);
+    }
+    const projected = VIN_BUNDLED.create(R.inputsFor('voice-in', { t: () => '', asr: null }));
+    await projected.checked;
+    expect(projected.available()).toBe(false);
+    expect(VIN_BUNDLED.bridgeFor({})).toBeNull();
+  });
+
+  it('shows the words as they come and sends the whole recording heard when the button is let go', async () => {
+    const f = fakeAsr();
+    const m = VIN_BUNDLED.create({ asr: f.asr });
+    await m.checked;
+    const heard: string[] = [];
+    const s = await m.start({ onText: (x: string) => heard.push(x) });
+    expect(heard).toEqual(['Is it']);
+    expect(await s.finish()).toEqual({ text: 'Is it safe to swim?', chargedMsub: 0, balanceMsub: null });
+    expect(f.calls.map(([x]) => x)).toEqual(['available', 'start', 'stop']);
+  });
+
+  it('a crash or failed load in the app hands the next question to the next way', async () => {
+    const f = fakeAsr({ onStop: (emit) => (emit({ type: 'error', code: 'unavailable' }), emit({ type: 'end' })) });
+    const m = VIN_BUNDLED.create({ asr: f.asr });
+    await m.checked;
+    await expect((await m.start()).finish()).rejects.toMatchObject({ key: 'talk.phoneFailed' });
+    expect(m.available()).toBe(false);
+  });
+});
 
 describe("voice in on this phone (the Android app's on-device recogniser)", () => {
   it('asks the phone once whether its on-device recogniser has the language, and is free and private', async () => {
