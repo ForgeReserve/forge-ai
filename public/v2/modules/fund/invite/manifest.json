@@ -1,0 +1,12 @@
+{
+  "id": "forge.fund.invite",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Start free"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

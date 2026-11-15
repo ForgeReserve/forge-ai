@@ -170,6 +170,8 @@ export const BUNDLED = [
   { kind: 'mode', folder: 'default' },
   // Free questions first in Add funds (docs/FREE-TIER.md); listed only while the engine gives them out.
   { kind: 'fund', folder: 'free' },
+  // Open a balance with an invite code and nothing on it, for the free models; listed only while there are some.
+  { kind: 'fund', folder: 'invite' },
   { kind: 'fund', folder: 'note' },
   { kind: 'fund', folder: 'card' },
   { kind: 'fund', folder: 'fedimint' },

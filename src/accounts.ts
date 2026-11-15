@@ -62,15 +62,18 @@ export function openAccount(
 }
 
 /**
- * Deletes a balance that never received anything and has nothing in flight, and reopens its invite.
- * Used when the first funding of a new balance fails or expires.
+ * Deletes a balance that never received anything, was never used, and has nothing in flight, and reopens
+ * its invite. Used when the first funding of a new balance fails or expires.
  */
 export function releaseIfEmpty(db: DB, accountId: string): boolean {
   return tx(db, () => {
     const a = db.prepare('SELECT balance_msub FROM accounts WHERE id = ?').get(accountId) as { balance_msub: number } | undefined;
     if (!a || a.balance_msub !== 0) return false;
+    // A ledger line ('open' from POST /v1/wallet/open included) or a request made with the key (a free
+    // model, at 0) means the key is in use: it is never deleted under the person using it.
     const ledgerRows = (db.prepare('SELECT COUNT(*) AS n FROM ledger WHERE account_id = ?').get(accountId) as { n: number }).n;
     if (ledgerRows > 0) return false;
+    if (db.prepare('SELECT 1 FROM requests WHERE account_id = ? LIMIT 1').get(accountId)) return false;
     const marks = OPEN_FUNDING_STATES.map(() => '?').join(',');
     const busy = (
       db.prepare(`SELECT COUNT(*) AS n FROM fundings WHERE account_id = ? AND (state IN (${marks}) OR credited > 0)`).get(accountId, ...OPEN_FUNDING_STATES) as {

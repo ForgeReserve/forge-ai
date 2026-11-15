@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS reservations_active ON reservations(account_id, statu
 CREATE TABLE IF NOT EXISTS ledger (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id TEXT NOT NULL,
-  kind TEXT NOT NULL,               -- topup | charge | refund
+  kind TEXT NOT NULL,               -- topup | charge | refund | open (0, POST /v1/wallet/open)
   amount_msub INTEGER NOT NULL,     -- signed
   ref TEXT,
   created_at INTEGER NOT NULL
@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS requests (
   lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
   price_nusd INTEGER,               -- what the request was priced at, nano-USD (before unit conversion)
   supplier_cost_nusd INTEGER,       -- what it cost us, nano-USD
-  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost)
+  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost) | free (a free model: 0)
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS requests_created ON requests(created_at);

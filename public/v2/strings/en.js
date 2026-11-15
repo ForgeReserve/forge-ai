@@ -35,6 +35,7 @@ export default {
   'home.attached': '{count} added for the next question',
   'home.scanNote': 'Scan a note to add funds',
   'home.otherWays': 'Other ways to add funds',
+  'home.openBalance': 'Open a balance',
   'home.freeOut': 'Free questions used up. See the ways forward',
 
   // Hold to talk (Listening)
@@ -89,6 +90,8 @@ export default {
   'type.freeOut': 'Your free questions are used up.',
   'type.freeOutBtn': 'See the ways forward',
   'type.freeModel': 'Free questions work with another model.',
+  'type.needKey': 'This model is free, but it needs a balance. Open one with your invite code. No money needed.',
+  'type.openBalance': 'Open a balance',
   'type.useFreeModel': 'Use the free model',
   'type.freeTooLong': 'This is too long for a free question. Start fresh, or ask it in a shorter way.',
 
@@ -110,6 +113,7 @@ export default {
   'answer.again': 'Ask again',
   'answer.stopped': 'Stopped.',
   'answer.cost': 'That cost {amount}.',
+  'answer.freeModel': 'That was free.',
   'answer.done': 'Answer ready.',
   'answer.none': 'No answer yet. Type a question to start.',
   'answer.empty': 'The model sent an empty answer.',
@@ -124,6 +128,7 @@ export default {
   // Errors: plain words, one next step
   'error.funds': 'Not enough funds for this question.',
   'error.key': 'The engine does not know this balance.',
+  'error.needKey': 'This model is free, but it needs a balance. Open one with your invite code.',
   'error.offline': 'No connection to the engine.',
   'error.busy': 'Too many questions at once. Wait a moment.',
   'error.model': 'The model did not answer. You were not charged.',
@@ -403,6 +408,8 @@ export default {
   'model.fast': 'Fast',
   'model.images': 'Images',
   'model.reasoning': 'Reasoning',
+  'model.free': 'Free',
+  'model.freeSub': 'Free to use. Needs a balance, even with nothing on it.',
   'model.price': '{input} in, {output} out per 1M',
   'model.hidden': 'Standard models are hidden',
   'model.hiddenSub': 'The engine and the model provider can read Standard questions. Turn off Private only to see them.',
@@ -418,6 +425,8 @@ export default {
   'funds.ways': 'Ways to add funds',
   'funds.enough': 'Enough for about {count} questions.',
   'funds.notEnough': 'Not enough for a question yet.',
+  'funds.modelFree': 'Questions to this model are free.',
+  'funds.needKey': 'Free models need a balance. Open one with your invite code.',
   'funds.refundable': 'You can take out {amount}.',
   'funds.add': 'Add',
   'funds.scanNote': 'Scan a note',
@@ -667,6 +676,18 @@ export default {
   'fund.free.kept': 'Not added yet. The voucher is kept on this phone and sent again later.',
   'fund.free.notMoney': 'Free questions are not money. They pay for questions on the free model and nothing else.',
 
+  // Fund module: Start free (docs/PAYMENTS.md, Free models)
+  'fund.invite.name': 'Start free',
+  'fund.invite.sub': 'Use the free models with your invite code. No money needed.',
+  'fund.invite.what': 'Some models are free to use. They need a balance, and your invite code opens one with nothing on it.',
+  'fund.invite.open': 'Open a balance',
+  'fund.invite.opening': 'Opening your balance',
+  'fund.invite.opened': 'Balance opened. The free models are ready.',
+  'fund.invite.openedHidden': 'Balance opened. The free models are Standard models: turn off Private only in Choose a model to use them.',
+  'fund.invite.used': 'This invite code was already used.',
+  'fund.invite.bad': 'This invite code does not work. Check it and try again.',
+  'fund.invite.later': 'You can add funds to this balance later for the other models.',
+
   // The daily faucet: the Free questions module and the /free page
   // The /download page (the Android app)
   'download.title': 'Forge for Android',
@@ -833,6 +854,8 @@ export default {
   'intro.listenStop': 'Stop',
   'intro.next': 'Next',
   'intro.start': 'Start',
+  'intro.startFree': 'Start free',
+  'intro.startFreeSub': 'Your invite code opens a balance with nothing on it. The free models work with it at once.',
   'intro.step': 'Step {n} of {total}',
   'intro.close': 'Close',
   'intro.learnMore': 'Learn more',

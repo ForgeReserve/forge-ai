@@ -21,7 +21,8 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const chip = el('button', { type: 'button', class: 'chip-low', id: 'memoryLow', hidden: true, onclick: () => nav('funds') }, icon('layers', 18), el('span', { text: t('home.memoryLow') }));
   const scanChip = el('button', { type: 'button', class: 'chip-scan', id: 'scanNote', hidden: true, onclick: () => nav('fund', { id: 'note' }) }, icon('qr', 18), el('span', { text: t('home.scanNote') }));
   // The rest of the empty state: every other way in, one tap away.
-  // Once free questions are used up, it opens the ways forward instead (screens/free.js).
+  // Once free questions are used up, it opens the ways forward instead (screens/free.js). With a free
+  // model and no balance key it reads Open a balance: Add funds lists Start free.
   const waysLabel = el('span', { text: t('home.otherWays') });
   const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav(state.view().fundsBlock === 'freeOut' ? 'freeOut' : 'addFunds') }, icon('plus', 18), waysLabel);
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
@@ -45,7 +46,7 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     ringBox.classList.toggle('invite', !!v.scanNote);
     scanChip.hidden = !v.scanNote || recording;
     waysChip.hidden = !v.noFunds || recording;
-    waysLabel.textContent = v.fundsBlock === 'freeOut' ? t('home.freeOut') : t('home.otherWays');
+    waysLabel.textContent = v.fundsBlock === 'freeOut' ? t('home.freeOut') : v.fundsBlock === 'needKey' ? t('home.openBalance') : t('home.otherWays');
     chip.hidden = !v.memory.low || recording;
     held.hidden = !v.pendingCount || recording;
     search.update();

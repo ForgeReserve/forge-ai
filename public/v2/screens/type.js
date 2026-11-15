@@ -25,6 +25,8 @@ export function typeScreen({ t, state, nav, back, actions }) {
   const blocker = (v) => {
     if (!v.online) return { key: 'type.offline' };
     if (!v.model) return v.noFunds ? { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') } : { key: 'type.noModel', btn: 'type.chooseModel', go: () => nav('model') };
+    // A free model costs nothing but needs a balance key: open one with an invite code.
+    if (v.fundsBlock === 'needKey') return { key: 'type.needKey', btn: 'type.openBalance', go: () => actions.openBalance() };
     // No paid balance: free questions pay, if there are any left and the model is a free one.
     if (v.fundsBlock === 'addFunds') return { key: 'type.noFunds', btn: 'type.addFunds', go: () => nav('addFunds') };
     if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', btn: 'type.freeOutBtn', go: () => nav('freeOut') };

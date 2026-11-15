@@ -2,6 +2,8 @@
 
 Status: steps 1 to 4 built in the v2 branch (slice B1), off by default; step 5 not built. Written 2026-11-12. See "What is built" at the end.
 
+Free questions are not free models. A free model (`"pricing": "free"`, every Token Factory model during its beta; docs/PAYMENTS.md, Free models) costs nothing on any balance key opened with an invite, even at 0, and takes no credit. Free questions are credits on a free balance, for the models in `FORGE_FREE_MODELS`, and a free balance cannot use a free model.
+
 People on the front line often have no money and no way to buy bitcoin, and most private AI tools they could use instead have a free tier. Forge has to be free where it counts without asking anyone who they are. It does that in three layers.
 
 | Layer | What is free | Who pays | Abuse limit |

@@ -14,7 +14,7 @@ import { BetaWaitlist, parseContact } from './beta.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
-import { type Config, mintAliasList, type ModelConfig, type Unit } from './config.ts';
+import { type Config, isFreeModel, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
 import { apkSource, registerDownloadRoutes } from './download.ts';
@@ -111,7 +111,8 @@ function bearer(c: Context): string | undefined {
 
 /** The balance reservation a chat request holds, if any (see the chat route). */
 type ChatOwnership = { reservationId?: string };
-type Payment = { kind: 'balance'; account: Account; reservationId: string } | { kind: 'nut24'; mint: string; unit: Unit; paid: number };
+/** free: a free model (pricing "free") served on a balance key, with no reservation and no charge. */
+type Payment = { kind: 'balance'; account: Account; reservationId: string } | { kind: 'free'; account: Account } | { kind: 'nut24'; mint: string; unit: Unit; paid: number };
 
 interface SettleResult {
   chargedMsub: number;
@@ -133,6 +134,7 @@ export function createApp(d: Deps) {
   const app = new Hono();
   const limiter = new RateLimiter(env.FORGE_RATE_LIMIT_RPM);
   const models = new Map(config.catalog.models.map((m) => [m.id, m]));
+  const freeModelIds = config.catalog.models.filter(isFreeModel).map((m) => m.id);
 
   installRecoveryHooks(d);
 
@@ -215,7 +217,10 @@ export function createApp(d: Deps) {
         context_length: m.context_length ?? null,
         max_output_tokens: m.max_output_tokens,
         pricing: {
-          mode: s.pricing,
+          // A free model costs nothing: it needs a balance key (even at 0), and every figure below is 0.
+          free: isFreeModel(m),
+          free_reason: isFreeModel(m) ? (m.free_reason ?? null) : undefined,
+          mode: isFreeModel(m) ? 'metered' : s.pricing,
           usd_per_mtok: { input: round(m.input_usd_per_mtok * env.FORGE_MARKUP), output: round(m.output_usd_per_mtok * env.FORGE_MARKUP) },
           sat_per_mtok: rate
             ? { input: round(displayPrice(m.input_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!), output: round(displayPrice(m.output_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!) }
@@ -439,7 +444,34 @@ export function createApp(d: Deps) {
     }
   };
 
-  app.get('/v1/wallet/fund/methods', async (c) => c.json({ ...(await funding.methods()), invite_only: env.FORGE_INVITE_ONLY, free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null } }));
+  // Opens a balance with an invite code and nothing on it (docs/PAYMENTS.md, Free models): its key uses
+  // the free models at once and takes funds later like any balance. Always takes an invite, even when
+  // FORGE_INVITE_ONLY is off, so a free model is never open to anyone without one. A key the gateway
+  // already knows is answered as it is, and its invite is not touched.
+  app.post('/v1/wallet/open', async (c) => {
+    const body = await readJson(c).catch(() => ({}));
+    const invite = typeof body?.invite === 'string' ? body.invite.trim() : c.req.header('x-forge-invite');
+    const unit = unitOf(body?.unit);
+    const known = bearer(c) ? ledger.findByKey(bearer(c)!) : undefined;
+    if (known?.free) throw new LedgerError('wrong_balance', 'this is a free-question balance; open a balance without a key, with an invite code', 409);
+    const opened = known ? { account: known, created: false, generatedKey: undefined } : openAccount({ db, ledger, invites, inviteOnly: true }, { key: bearer(c), invite, unit });
+    // A balance opened here stays open at 0: the ledger line keeps releaseIfEmpty from deleting it when a
+    // later funding of it expires (src/accounts.ts).
+    if (opened.created) ledger.creditRaw(opened.account.id, 0, 'open', null);
+    const a = ledger.get(opened.account.id)!;
+    if (opened.created) log.info('balance_open', { account: a.id, unit: a.unit });
+    return c.json({ key: opened.generatedKey, account_id: a.id, unit: a.unit, created: opened.created, balance_msub: a.balance_msub, free_models: freeModelIds });
+  });
+
+  app.get('/v1/wallet/fund/methods', async (c) =>
+    c.json({
+      ...(await funding.methods()),
+      invite_only: env.FORGE_INVITE_ONLY,
+      free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null },
+      // Free models (pricing "free"): a balance opened with an invite code uses them with nothing on it.
+      open: { enabled: freeModelIds.length > 0, free_models: freeModelIds },
+    }),
+  );
 
   // Other mints whose eCash is accepted for funding. Public; never waits on a relay.
   app.get(FOREIGN_MINTS_PATH, (c) => {
@@ -641,6 +673,18 @@ export function createApp(d: Deps) {
     // 2. Payment kind and unit.
     const key = bearer(c);
     const cashu = c.req.header('x-cashu');
+    // A free model (docs/PAYMENTS.md, Free models) is served only on a balance key, even one at 0. Without
+    // one it is refused here, before any eCash is read: a NUT-24 token sent with it is never taken.
+    const freeModel = isFreeModel(model);
+    if (freeModel && !key) {
+      return apiError(
+        c,
+        401,
+        'balance_key_required',
+        `${model.id} is free, but only with a balance key: send Authorization: Bearer <key>. A balance opened with an invite code works even with nothing on it (POST /v1/wallet/open). eCash is never taken for a free model.`,
+        { 'WWW-Authenticate': 'Bearer' },
+      );
+    }
     // NUT-11: lock this request's change to the payer's key. Stored with the request, never logged.
     const lockPubkey = parseOptionalLockPubkey(c.req.header('x-cashu-pubkey'));
     let account: Account | undefined;
@@ -649,6 +693,12 @@ export function createApp(d: Deps) {
       account = ledger.findByKey(key);
       if (!account) return apiError(c, 401, 'invalid_key', 'unknown balance key');
       unit = account.unit;
+      if (freeModel) {
+        // Free questions (credits) are not a balance key for this: a free model takes a paid balance's key.
+        if (account.free) return apiError(c, 403, 'balance_key_required', `${model.id} is free, but only with a balance key; a free-question balance cannot use it. Open a balance with an invite code (POST /v1/wallet/open), even with nothing on it.`);
+        // Nothing is reserved, so the freeze reserve() enforces is checked here.
+        if (ledger.isFrozen(account.id)) return apiError(c, 403, 'account_frozen', 'this balance is frozen by the operator; refunds still work');
+      }
     } else if (cashu) {
       const paidWith = await wallet.inspect(cashu);
       // Credits pay only through a free balance, where the free model list and the caps apply.
@@ -670,7 +720,7 @@ export function createApp(d: Deps) {
       if (upstreamBody && requestedOut === undefined) upstreamBody.max_tokens = maxOut;
     }
     let rate: number | undefined;
-    if (unit === 'sat' && !free) {
+    if (unit === 'sat' && !free && !freeModel) {
       rate = await rates.get();
       if (!rate) return apiError(c, 503, 'rate_unavailable', 'BTC/USD rate unavailable; sat pricing is paused. Pay in usd or retry later.');
     }
@@ -679,14 +729,15 @@ export function createApp(d: Deps) {
     // pricing=flat: always the flat schedule. pricing=metered: the model's own metered worst case, and a
     // response that arrives without a usage count is charged that worst case, which is the hold. A flat
     // schedule on a metered supplier no longer drives the hold or the fallback (owner decision, 2026-11-14).
-    const alwaysFlat = supplierCfg.pricing === 'flat';
+    // A free model holds and charges nothing, whatever its supplier's schedule.
+    const alwaysFlat = !freeModel && supplierCfg.pricing === 'flat';
     const markup = env.FORGE_MARKUP;
     const flatNano = alwaysFlat ? flatCostNanoUsd(supplierCfg.flat!, raw.length, maxOut, markup) : 0;
     // With web search on, the hold also takes the search fee and the search allowance (more input and output).
     const held = search ? searchTerms : undefined;
     const worst = worstUsage(raw.length, maxOut, env.FORGE_BYTES_PER_TOKEN, held);
     const maxNano = holdNanoUsd(supplierCfg, model, raw.length, maxOut, markup, env.FORGE_BYTES_PER_TOKEN, held);
-    const reserveMsub = free ? CREDIT_MSUB : Math.max(1, nanoUsdToMsub(maxNano, unit, rate));
+    const reserveMsub = freeModel ? 0 : free ? CREDIT_MSUB : Math.max(1, nanoUsdToMsub(maxNano, unit, rate));
     /** Source label for a response with no usage count: the flat schedule, or the metered worst case. */
     const noUsage = alwaysFlat ? 'flat' : 'worst-case';
     const requiredUnits = msubToUnitsCeil(reserveMsub);
@@ -694,7 +745,9 @@ export function createApp(d: Deps) {
     // 4. Payment.
     const inviteOk = () => !env.FORGE_INVITE_ONLY || invites.checkForNut24(c.req.header('x-forge-invite'));
     let pay: Payment;
-    if (account) {
+    if (account && freeModel) {
+      pay = { kind: 'free', account };
+    } else if (account) {
       const reservationId = ledger.reserve(account.id, reserveMsub);
       own.reservationId = reservationId;
       pay = { kind: 'balance', account, reservationId };
@@ -740,7 +793,7 @@ export function createApp(d: Deps) {
         throw e;
       }
     }
-    if (pay.kind === 'balance') {
+    if (pay.kind === 'balance' || pay.kind === 'free') {
       db.prepare(
         "INSERT INTO requests (id, account_id, payment, unit, model, supplier, encrypted, status, reserved_msub, created_at) VALUES (?, ?, 'balance', ?, ?, ?, ?, 'running', ?, ?)",
       ).run(requestId, pay.account.id, unit, model.id, model.supplier, encrypted ? 1 : 0, reserveMsub, now());
@@ -760,8 +813,8 @@ export function createApp(d: Deps) {
           // in the hold, so it is charged at most the hold (below), and logged.
           else if (usage) nano = usageNanoUsd(model, usage, markup, searchTerms);
         }
-        // A free question costs one credit when it is answered, nothing when it fails.
-        if (free) nano = 0;
+        // A free question costs one credit when it is answered, nothing when it fails. A free model, nothing.
+        if (free || freeModel) nano = 0;
         const owedMsub = free ? (status === 'ok' || status === 'partial' ? CREDIT_MSUB : 0) : nanoUsdToMsub(nano, unit, rate);
         // Never more than the hold, on every payment path.
         const actualMsub = Math.min(owedMsub, reserveMsub);
@@ -770,7 +823,11 @@ export function createApp(d: Deps) {
         // Our cost: the supplier's own figure when it sends one, else the usage at our catalog cost (no markup).
         let costNusd: number | null = null;
         let costSource: string | null = null;
-        if (usage && (status === 'ok' || status === 'partial')) {
+        if (freeModel && (status === 'ok' || status === 'partial')) {
+          // The supplier charges Forge nothing for it (the model's free_reason).
+          costNusd = 0;
+          costSource = 'free';
+        } else if (usage && (status === 'ok' || status === 'partial')) {
           if (usage.costUsd !== undefined) {
             costNusd = Math.round(usage.costUsd * 1e9);
             costSource = 'supplier';
@@ -780,7 +837,9 @@ export function createApp(d: Deps) {
           }
         }
         const res: SettleResult = { chargedMsub: 0 };
-        if (pay.kind === 'balance') {
+        if (pay.kind === 'free') {
+          res.balanceMsub = ledger.get(pay.account.id)!.balance_msub;
+        } else if (pay.kind === 'balance') {
           const s = ledger.settle(pay.reservationId, actualMsub, requestId);
           res.chargedMsub = s.charged;
           res.balanceMsub = s.balance;

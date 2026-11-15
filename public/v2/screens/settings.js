@@ -1,4 +1,5 @@
 // Mode and look (XThemes) and Choose a model (DPrivateOnly), both reached from More.
+import { isFreeModel } from '../core/price.js';
 import { isPrivate, visibleModels } from '../core/state.js';
 import { backHeader, el, icon } from '../core/ui.js';
 
@@ -75,7 +76,9 @@ export function modelScreen({ t, state, back, actions, format }) {
         ? models.map((m) => {
             const on = v.model?.id === m.id;
             const priv = isPrivate(m);
-            const p = format.modelPrice(m);
+            // A free model (core/price.js isFreeModel) shows Free in place of a price.
+            const free = isFreeModel(m);
+            const p = free ? null : format.modelPrice(m);
             return el(
               'button',
               { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, onclick: () => actions.chooseModel(m.id) },
@@ -84,11 +87,12 @@ export function modelScreen({ t, state, back, actions, format }) {
                 'span',
                 { class: 'tags' },
                 priv ? tag('lock', t('model.private'), 'teal') : tag('unlock', t('model.standard'), 'warn'),
+                free ? tag('gift', t('model.free'), 'free') : null,
                 m.speed === 'fast' ? tag('gauge', t('model.fast')) : null,
                 m.capabilities?.vision ? tag('image', t('model.images')) : null,
                 m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
               ),
-              p ? el('small', { text: t('model.price', p) }) : null,
+              free ? el('small', { class: 'free-text', text: t('model.freeSub') }) : p ? el('small', { text: t('model.price', p) }) : null,
               priv ? null : el('small', { class: 'warn-text', text: t('model.standardWarn') }),
             );
           })

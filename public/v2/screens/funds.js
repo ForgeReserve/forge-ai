@@ -130,7 +130,8 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
     fr.set(v.fundsFraction, null, v.freeFraction);
     scanBtn.hidden = !v.scanNote;
     amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
-    fundsNote.textContent = !v.hasKey ? (v.freeLeft > 0 ? '' : t('funds.empty')) : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
+    // A free model costs nothing: never "not enough" for it.
+    fundsNote.textContent = !v.hasKey ? (v.freeLeft > 0 ? '' : v.modelFree ? t('funds.needKey') : t('funds.empty')) : v.modelFree ? t('funds.modelFree') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough');
     fundsNote.hidden = !fundsNote.textContent;
     freeNote.hidden = !(v.freeLeft > 0) && v.fundsBlock !== 'freeOut';
     freeNote.textContent = v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'funds.freeLeftOne' : 'funds.freeLeft', { count: v.freeLeft }) : v.fundsBlock === 'freeOut' ? t('funds.freeUsed') : '';

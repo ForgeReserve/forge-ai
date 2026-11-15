@@ -25,6 +25,9 @@ export function errorView(code, message, charged = 0) {
       return { key: 'error.funds', next: 'addFunds' };
     case 'invalid_key':
       return { key: 'error.key', next: 'addFunds' };
+    // A free model asked without a balance key: Add funds lists Start free.
+    case 'balance_key_required':
+      return { key: 'error.needKey', next: 'addFunds' };
     case 'offline':
       return { key: 'error.offline', next: 'retry' };
     case 'rate_limited':

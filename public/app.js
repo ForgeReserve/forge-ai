@@ -149,7 +149,11 @@ async function loadModels() {
   fillSettingsModels();
 }
 
+/** A free model (GET /v1/models pricing.free): costs nothing, needs a balance key (docs/PAYMENTS.md, Free models). */
+const isFreeModel = (m) => m?.pricing?.free === true;
+
 function priceText(m) {
+  if (isFreeModel(m)) return 'Free to use with a balance key, even with nothing on it';
   const unit = S.unit ?? 'usd';
   const p = unit === 'sat' && m.pricing.sat_per_mtok ? m.pricing.sat_per_mtok : m.pricing.usd_per_mtok;
   const f = (n) => (unit === 'sat' && m.pricing.sat_per_mtok ? `${fmtInt(Math.round(n))} sat` : `$${n < 1 ? n.toFixed(2) : n.toFixed(n % 1 ? 2 : 0)}`);
@@ -300,6 +304,7 @@ const TIERS = {
   uncensored: { title: 'Uncensored', ico: 'cloud', text: 'Standard privacy. Tuned to refuse less.' },
 };
 function shortPrice(m) {
+  if (isFreeModel(m)) return 'Free';
   const sat = (S.unit ?? 'usd') === 'sat' && m.pricing.sat_per_mtok;
   const p = sat ? m.pricing.sat_per_mtok : m.pricing.usd_per_mtok;
   const f = (n) => (sat ? fmtInt(Math.round(n)) : `$${n < 1 ? n.toFixed(2) : n.toFixed(n % 1 ? 2 : 0)}`);
@@ -320,7 +325,7 @@ function renderMenu() {
         m.speed ? el('span', { class: 'tag' }, icon('gauge'), speedLabel[m.speed]) : null,
         m.capabilities?.vision ? el('span', { class: 'tag', text: 'Images' }) : null,
         m.capabilities?.reasoning ? el('span', { class: 'tag', text: 'Reasoning' }) : null,
-        el('span', { class: 'tag t-price', title: priceText(m), text: shortPrice(m) + (m.pricing?.verified === false ? ' (provisional)' : '') }),
+        el('span', { class: 'tag t-price' + (isFreeModel(m) ? ' t-free' : ''), title: priceText(m), text: shortPrice(m) + (!isFreeModel(m) && m.pricing?.verified === false ? ' (provisional)' : '') }),
       ];
       const o = el(
         'div',
@@ -637,7 +642,8 @@ async function submit() {
   if (!online) return toast("You're offline. Sending needs a connection.", 3000);
   if (attachments.some((a) => a.status === 'reading')) return toast('Wait until the files are read');
   if (!S.key) {
-    toast('Add funds to start chatting');
+    // A free model costs nothing, but the gateway still wants a balance key.
+    toast(isFreeModel(currentModel()) ? 'This model is free, but it needs a balance. Open one with your invite code.' : 'Add funds to start chatting');
     openWallet();
     return;
   }
@@ -876,6 +882,7 @@ function renderActionsOnly() {
 }
 
 function friendlyError(e) {
+  if (e.code === 'balance_key_required') return 'This model is free, but it needs a balance. Open one with your invite code.';
   if (e.code === 'insufficient_balance' || e.status === 402) return 'Your balance is too low for this request. Add funds, or choose a cheaper model.';
   if (e.code === 'invalid_key' || e.status === 401) return 'The gateway does not recognize this balance key.';
   if (e.code === 'rate_limited') return 'Too many requests. Wait a moment and try again.';
@@ -1156,7 +1163,7 @@ function estimateLine(model) {
   const pending = pendingMessage($('composer-input').value.trim(), model);
   if (!pending) return line;
   const est = estimateFor(model, pending);
-  const cost = est.costMsub != null ? `, about ${fmtCost(Math.max(1, est.costMsub), est.unit)} to read` : '';
+  const cost = isFreeModel(model) ? ', free' : est.costMsub != null ? `, about ${fmtCost(Math.max(1, est.costMsub), est.unit)} to read` : '';
   if (est.overBody) {
     line.dataset.level = 'error';
     line.textContent = 'Too large to send in one message. Remove a file or start a new chat.';
@@ -1233,7 +1240,7 @@ function applyTheme() {
 
 function fillSettingsModels() {
   const sel = $('setModel');
-  sel.replaceChildren(...visibleModels().map((m) => el('option', { value: m.id, text: `${m.name ?? m.id} (${m.tier === 'enclave' ? 'Enclave' : 'Standard'})` })));
+  sel.replaceChildren(...visibleModels().map((m) => el('option', { value: m.id, text: `${m.name ?? m.id} (${m.tier === 'enclave' ? 'Enclave' : 'Standard'}${isFreeModel(m) ? ', free' : ''})` })));
   sel.value = settings.defaultModel;
 }
 
