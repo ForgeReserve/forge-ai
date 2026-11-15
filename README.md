@@ -82,6 +82,8 @@ Environment variables, validated with zod at startup (`src/config.ts`):
 | `FORGE_RATE_LIMIT_RPM` | `60` | POST requests under `/v1` per minute per client IP, whatever key a request carries; a key that verifies is also held to the same rate across all its addresses. The faucet (`/v1/free/*`) and card relay (`/v1/wallet/fund/card/*`) routes take no balance, so they count by client IP only and never look a bearer up |
 | `FORGE_MAX_BODY_BYTES` | `1000000` | Request size limit |
 | `FORGE_AUDIO_MAX_BYTES` | `4000000` | Size limit for `POST /v1/audio/transcriptions` only (a recording is larger than a question) |
+| `FORGE_FREE_VOICE_PER_DAY` | `20` | Free voice questions: speech to text served free to a balance that cannot pay for it, this many per balance per UTC day (docs/PAYMENTS.md). `0`: off |
+| `FORGE_FREE_VOICE_BUDGET_USD` | `5.00` | The most the operator pays for free voice questions per UTC day, at the supplier's cost. `0`: off |
 | `FORGE_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for rate limiting (set behind Caddy) |
 | `FORGE_UPSTREAM_TIMEOUT_MS` / `FORGE_UPSTREAM_RETRIES` | `180000` / `2` | Time to upstream response headers (a timeout is final); retries only failures before the request was sent (refused, DNS, connect timeout, certificate), plus 408, 425, 429, 5xx and resets for a supplier with `idempotencyHeader` |
 | `FORGE_FUND_MINT` | first trusted mint | Mint used for Lightning, on-chain and other-mint funding |
@@ -183,7 +185,7 @@ OpenAI model list plus `tier` (`enclave` or `standard`), `uncensored`, `max_outp
 
 ### `POST /v1/audio/transcriptions` and `POST /v1/audio/speech`
 
-OpenAI-compatible speech to text (multipart: `file`, `model`, optional `language`, `response_format: json`) and text to speech (JSON: `model`, `input`, optional `voice`, `response_format: wav`). Paid from a balance only (`Authorization: Bearer sk-forge-...`): the price is held first, charged when the model answers, and released when it fails, with the same `X-Forge-*` response headers as chat. A recording must be WAV and is billed by the length its header gives; MP3 is refused, because its length cannot be read from its size. Errors: `audio_too_long` (over the model's `max_seconds`), `audio_too_short` (under 0.3 seconds), `unsupported_audio` (not WAV), `text_too_long` (over `max_chars`), `request_too_large` (over `FORGE_AUDIO_MAX_BYTES`). Audio and text are held in memory for the request only and never logged or stored; the log and the `requests` table carry the model, price and status.
+OpenAI-compatible speech to text (multipart: `file`, `model`, optional `language`, `response_format: json`) and text to speech (JSON: `model`, `input`, optional `voice`, `response_format: wav`). Paid from a balance only (`Authorization: Bearer sk-forge-...`): the price is held first, charged when the model answers, and released when it fails, with the same `X-Forge-*` response headers as chat. A recording must be WAV and is billed by the length its header gives; MP3 is refused, because its length cannot be read from its size. Errors: `audio_too_long` (over the model's `max_seconds`), `audio_too_short` (under 0.3 seconds), `unsupported_audio` (not WAV), `text_too_long` (over `max_chars`), `request_too_large` (over `FORGE_AUDIO_MAX_BYTES`). Audio and text are held in memory for the request only and never logged or stored; the log and the `requests` table carry the model, price and status. A transcription a balance cannot pay for is a free voice question while the balance's daily allowance and the operator's daily budget last (`X-Forge-Charged-Msub: 0`, `X-Forge-Free-Voice-Left`); used up, it is `402 free_voice_limit` with `free_voice: {left, per_day, resets_at, reason}` (docs/PAYMENTS.md, Free voice questions). Speech output is never free.
 
 ### Wallet
 
@@ -191,7 +193,7 @@ OpenAI-compatible speech to text (multipart: `file`, `model`, optional `language
 | - | - | - |
 | `POST /v1/wallet/topup` | `{"token": "cashuB...", "invite": "inv-..."}`; optional `Authorization: Bearer sk-forge-...` to top up an existing key, or to choose your own key for a new balance | `{key?, account_id, unit, credited, balance_msub}`. `key` is returned only when the gateway generated it |
 | `POST /v1/wallet/open` | `{"invite": "inv-...", "unit"?: "usd"\|"sat"}`; optional bearer key | Opens a balance at 0 for the free models: `{key?, account_id, unit, created, balance_msub, free_models}`. Always needs an invite, even with `FORGE_INVITE_ONLY=false`. A known bearer key is answered as it is |
-| `GET /v1/wallet` | bearer key | `{unit, balance_msub, available_msub, refundable}` |
+| `GET /v1/wallet` | bearer key | `{unit, balance_msub, available_msub, refundable, free_voice: {enabled, per_day, left, resets_at, reason?}}` |
 | `POST /v1/wallet/refund` | bearer key; optional `{"amount": N, "pubkey": "02..."}`, amount in whole units | `{token, amount, unit, status, locked_to}`. Sub-unit remainders stay on the balance. With `pubkey` the token is P2PK-locked to it |
 | `GET /v1/wallet/refunds` | bearer key | Every withdrawal with its token and `locked_to`, for re-delivery |
 | `GET /v1/change/{request_id}` | none (the id is an unguessable capability) | NUT-24 change for that request, under the id from the 402 when the paid request echoed it |

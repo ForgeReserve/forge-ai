@@ -284,21 +284,40 @@ const audio = {
  * it becomes (about CHARS_PER_SECOND characters a second) and, when the engine reads it aloud, the
  * longest part of the answer that is read. null when a part has no price.
  */
-function talkPrice(seconds, inMod) {
-  const toText = inMod.price(seconds);
+function talkPrice(seconds, inMod, freeVoice = false) {
+  // A free voice question: turning it into text costs nothing.
+  const toText = freeVoice ? 0 : inMod.price(seconds);
   const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND))).costMsub;
   const reading = readingPrice();
   if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
   return (toText ?? 0) + question + reading;
 }
 
+/**
+ * Free voice questions (docs/PAYMENTS.md): the engine turns a recording into text at no charge for a
+ * balance that cannot pay for it, while it has some left today. use: this recording goes free. out: the
+ * balance cannot pay and none are left today, so the engine would refuse it.
+ */
+function freeVoiceNow(inMod, seconds = 0) {
+  const fv = S.freeVoice;
+  if (!inMod || inMod.id !== 'engine' || !S.key || !fv?.enabled) return { use: false, out: false };
+  const price = inMod.price(Math.max(seconds, 0.5));
+  const funds = S.availableMsub ?? S.balanceMsub ?? 0;
+  if (price == null || funds >= price) return { use: false, out: false };
+  return { use: fv.left > 0, out: !(fv.left > 0) };
+}
+
 function talkView(model, unit) {
   const inMod = voiceIn();
   const tk = S.talk ?? { phase: 'idle' };
+  const fv = freeVoiceNow(inMod, tk.seconds ?? 0);
   return {
     available: !!inMod && !!model,
-    // The engine's speech to text is paid from the paid balance, so a voice question is never all free.
-    freeOk: inMod?.id === 'device',
+    // The engine's speech to text is paid from the paid balance unless it is a free voice question, so a
+    // voice question is all free only when the phone hears it, or on a free voice question.
+    freeOk: inMod?.id === 'device' || fv.use,
+    freeVoice: fv.use,
+    freeVoiceOut: fv.out,
     phase: tk.phase,
     seconds: tk.seconds ?? 0,
     level: tk.level ?? 0,
@@ -307,7 +326,7 @@ function talkView(model, unit) {
     error: tk.error ?? null,
     unit,
     maxSeconds: inMod?.maxSeconds() ?? 60,
-    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod) : null,
+    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod, fv.use) : null,
     // Where the sound goes, for the line under the button: engine-private, engine-standard or device.
     route: !inMod ? null : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
   };
@@ -424,6 +443,8 @@ async function refreshBalance() {
     S.unit = w.unit;
     S.balanceMsub = w.balance_msub;
     S.availableMsub = w.available_msub;
+    // Free voice questions left today (docs/PAYMENTS.md): speech to text the operator pays for.
+    S.freeVoice = w.free_voice ?? null;
     S.peakMsub = nextPeak(S.peakMsub, w.balance_msub);
     await savePeak();
   } catch (e) {
@@ -1028,7 +1049,8 @@ function blocker() {
   if (!S.key || S.balanceMsub === 0) {
     const v = view();
     // A voice question the phone turns into words can be a free question; the engine's speech to text
-    // is paid from the paid balance.
+    // is paid from the paid balance, or free while the balance has free voice questions left today.
+    if (v.fundsBlock === null && v.talk.freeVoiceOut) return { key: 'talk.freeVoiceOut' };
     if (!(v.talk.freeOk && v.fundsBlock === null)) {
       if (v.fundsBlock === 'needKey') return { key: 'type.needKey', go: openBalance };
       if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', go: () => nav('freeOut') };

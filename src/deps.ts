@@ -4,6 +4,7 @@ import { type Config, normalizeMintUrl } from './config.ts';
 import { CreditKeysets, freeRules, mintCredits } from './credits.ts';
 import { openDb } from './db.ts';
 import { Faucet } from './faucet.ts';
+import { FreeVoice } from './free-voice.ts';
 import { Invites, Ledger } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
 import { checkForeignMintUrl, type FundingFaults, FundingService } from './funding.ts';
@@ -24,6 +25,8 @@ export function buildDeps(
     discovery?: { query?: RelayQuery; probe?: (url: string) => Promise<MintProbe>; now?: () => number };
     /** Tests: the faucet's clock and voucher maker. */
     faucet?: { now?: () => number; issue?: (questions: number) => Promise<string> };
+    /** Tests: the clock free voice questions count days by. */
+    freeVoice?: { now?: () => number };
   } = {},
 ): Deps {
   const env = config.env;
@@ -112,6 +115,11 @@ export function buildDeps(
     discovery,
     free,
     faucet,
+    // Free voice questions (src/free-voice.ts): off when either limit is 0.
+    freeVoice:
+      env.FORGE_FREE_VOICE_PER_DAY > 0 && env.FORGE_FREE_VOICE_BUDGET_USD > 0
+        ? new FreeVoice({ db, perDay: env.FORGE_FREE_VOICE_PER_DAY, budgetUsd: env.FORGE_FREE_VOICE_BUDGET_USD, now: opts.freeVoice?.now })
+        : undefined,
     suppliers: buildSuppliers(config, opts.env ?? process.env),
     publicDir: resolve(import.meta.dirname, '..', 'public'),
   };

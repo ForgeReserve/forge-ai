@@ -126,6 +126,13 @@ export const EnvSchema = z.object({
   FORGE_ADMIN_RATE_LIMIT_RPM: z.coerce.number().int().min(1).default(120),
   /** Largest audio upload for POST /v1/audio/transcriptions, in bytes. Other routes keep FORGE_MAX_BODY_BYTES. */
   FORGE_AUDIO_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(4_000_000),
+  /**
+   * Free voice questions (docs/PAYMENTS.md): speech to text for a balance that cannot pay for it, at no
+   * charge, this many times per balance per UTC day. 0 turns free voice questions off.
+   */
+  FORGE_FREE_VOICE_PER_DAY: z.coerce.number().int().min(0).max(10_000).default(20),
+  /** The most the operator pays for free voice questions per UTC day, in USD at the supplier's cost. 0 turns them off. */
+  FORGE_FREE_VOICE_BUDGET_USD: z.coerce.number().min(0).max(10_000).default(5),
 
   // ---------------------------------------------------------------- free tier (docs/FREE-TIER.md)
   // Everything here is off until FORGE_CREDIT_MINT is set, and the faucet until FORGE_FAUCET_ENABLED.

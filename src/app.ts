@@ -9,7 +9,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
-import { audioModelList, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
+import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
@@ -19,13 +19,14 @@ import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
 import { apkSource, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
+import { type FreeVoice, FreeVoiceError } from './free-voice.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
 import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
 import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
-import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
+import { audioCostNanoUsd, costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
@@ -45,6 +46,8 @@ export interface Deps {
   free?: FreeRules;
   /** The daily faucet, when it is turned on. */
   faucet?: Faucet;
+  /** Free voice questions, when both their limits are above 0 (src/free-voice.ts). */
+  freeVoice?: FreeVoice;
   publicDir?: string;
 }
 
@@ -57,6 +60,8 @@ const EXPOSE = [
   'X-Forge-Balance-Msub',
   'X-Forge-Change-Url',
   'X-Forge-Privacy',
+  // Free voice questions this balance has left today, on a transcription served free.
+  'X-Forge-Free-Voice-Left',
   'Ehbp-Response-Nonce',
   'Retry-After',
   // A Bellows engine's proof of work challenge (public/v2/core/pow.js); the app reads it from a 428.
@@ -186,6 +191,7 @@ export function createApp(d: Deps) {
       const retry = e.extra?.retry_after;
       return apiError(c, e.status, e.code, e.message, retry ? { 'Retry-After': String(retry) } : {}, e.extra ?? {});
     }
+    if (e instanceof FreeVoiceError) return apiError(c, e.status, e.code, e.message, { 'Retry-After': String(e.retryAfter) }, e.extra);
     if (e instanceof UpstreamError) return apiError(c, e.status, 'upstream_error', e.message);
     log.error('unhandled', { path: c.req.path, err: errText(e) });
     return apiError(c, 500, 'internal_error', 'internal error');
@@ -316,6 +322,16 @@ export function createApp(d: Deps) {
     }
   });
 
+  // The least a transcription costs the operator: the cheapest one, at the shortest recording taken.
+  const transcribers = config.catalog.audio.filter((m) => m.kind === 'transcription');
+  const minVoiceNano = transcribers.length ? Math.min(...transcribers.map((m) => audioCostNanoUsd(m, { seconds: MIN_SECONDS }, 1))) : 0;
+  const freeVoiceOn = !!d.freeVoice?.enabled && transcribers.length > 0;
+  const freeVoiceStatus = (a: Account) => {
+    const s = d.freeVoice?.status(a.id, minVoiceNano);
+    if (!s || !freeVoiceOn || a.free || ledger.isFrozen(a.id)) return { enabled: false, per_day: 0, left: 0, resets_at: s?.resets_at ?? null };
+    return s;
+  };
+
   const requireAccount = (c: Context): Account => {
     const key = bearer(c);
     const a = key ? ledger.findByKey(key) : undefined;
@@ -335,6 +351,9 @@ export function createApp(d: Deps) {
       available_msub: a.balance_msub - reserved,
       balance: a.balance_msub / MSUB_PER_UNIT,
       refundable: Math.floor((a.balance_msub - reserved) / MSUB_PER_UNIT),
+      // Free voice questions left today (docs/PAYMENTS.md), so the app knows before recording. A
+      // free-question (credit) balance takes no speech to text at all, and a frozen one takes nothing.
+      free_voice: freeVoiceStatus(a),
     });
   });
 
@@ -467,6 +486,8 @@ export function createApp(d: Deps) {
     c.json({
       ...(await funding.methods()),
       invite_only: env.FORGE_INVITE_ONLY,
+      // Free voice questions: speech to text for a balance that cannot pay for it, per_day a day.
+      free_voice: { enabled: freeVoiceOn, per_day: freeVoiceOn ? d.freeVoice!.perDay : 0 },
       free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null },
       // Free models (pricing "free"): a balance opened with an invite code uses them with nothing on it.
       open: { enabled: freeModelIds.length > 0, free_models: freeModelIds },

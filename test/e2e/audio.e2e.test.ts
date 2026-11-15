@@ -11,7 +11,9 @@ let g: Gateway;
 const AUDIO_MAX = 400_000;
 
 beforeAll(async () => {
-  g = await startGateway({ audio: true, env: { FORGE_AUDIO_MAX_BYTES: String(AUDIO_MAX), FORGE_MAX_BODY_BYTES: '100000' } });
+  // Free voice questions off here, so a balance short of the price is refused as before they existed;
+  // they are tested in free-voice.e2e.test.ts.
+  g = await startGateway({ audio: true, env: { FORGE_AUDIO_MAX_BYTES: String(AUDIO_MAX), FORGE_MAX_BODY_BYTES: '100000', FORGE_FREE_VOICE_PER_DAY: '0' } });
 });
 afterAll(() => g?.close());
 

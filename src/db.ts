@@ -200,6 +200,22 @@ CREATE TABLE IF NOT EXISTS faucet_days (
   claimed INTEGER NOT NULL DEFAULT 0
 );
 
+-- Free voice questions (src/free-voice.ts): per UTC day, how many were served free and their summed
+-- supplier cost, and the day's random HMAC key, forgotten (NULL) once the day is over.
+CREATE TABLE IF NOT EXISTS free_voice_days (
+  day TEXT PRIMARY KEY,
+  hash_key TEXT,
+  used INTEGER NOT NULL DEFAULT 0,
+  spent_nusd INTEGER NOT NULL DEFAULT 0
+);
+-- Today's count per balance, keyed by HMAC(day key, balance id). Rows of a past day are deleted.
+CREATE TABLE IF NOT EXISTS free_voice_uses (
+  day TEXT NOT NULL,
+  balance TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, balance)
+);
+
 -- Metering log. No prompt or completion content, ever.
 CREATE TABLE IF NOT EXISTS requests (
   id TEXT PRIMARY KEY,
@@ -221,7 +237,7 @@ CREATE TABLE IF NOT EXISTS requests (
   lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
   price_nusd INTEGER,               -- what the request was priced at, nano-USD (before unit conversion)
   supplier_cost_nusd INTEGER,       -- what it cost us, nano-USD
-  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost) | free (a free model: 0)
+  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost) | free (a free model: 0) | operator (a free voice question: the operator pays)
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS requests_created ON requests(created_at);
