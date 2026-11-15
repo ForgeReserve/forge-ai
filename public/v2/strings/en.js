@@ -930,6 +930,7 @@ export default {
   'intro.private.artOn': 'A closed padlock, inside two fully lit rings.',
   'intro.private.artOff': 'An open padlock, inside two fully lit rings.',
   'intro.private.label': 'Private only',
+  'intro.private.learnMore': 'Learn more about Private only',
   'intro.private.on': 'On',
   'intro.private.off': 'Off',
   'intro.private.onSub': 'Forge shows only private models. Your typed questions, photos and files are encrypted on this phone so only the AI can read them. Forge and the model provider cannot.',

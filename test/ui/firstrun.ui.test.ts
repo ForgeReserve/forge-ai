@@ -133,16 +133,11 @@ describe('first run in a phone-sized browser', () => {
     expect(await page.locator('main button', { hasText: /^Back$/ }).count()).toBe(0);
     expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Next');
 
-    // This engine needs an invite code to open a balance: "I have an invite code" opens the field.
-    await page.waitForSelector('#introInviteLink:not([hidden])');
-    expect(await page.textContent('#introInviteLink')).toBe('I have an invite code');
-    expect(await page.locator('#introInviteLink svg').count()).toBe(1);
-    expect(await page.isVisible('#introInvite')).toBe(false);
-    await openSheet(page, '#introInviteLink', 'inviteSheet');
-    expect(await page.textContent('#inviteSheetTitle')).toBe('Invite code');
-    await page.fill('#introInvite', invite);
-    await page.click('#introInviteDone');
-    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
+    // No secondary link on Welcome (the invite code is on the last step); its row is kept all the same.
+    await page.waitForTimeout(500); // the engine's methods are read after the first paint
+    expect(await page.locator('.fr-links').count()).toBe(1);
+    expect(await page.locator('.fr-links button').count()).toBe(0);
+    expect(await page.locator('#introInviteLink').count()).toBe(0);
 
     await page.click('#introNext');
     await atStep(page, 'pay');
@@ -167,13 +162,9 @@ describe('first run in a phone-sized browser', () => {
     await page.click('#learnSheetClose');
     await page.waitForSelector('dialog#learnSheet:not([open])', { state: 'attached' });
 
-    // The phone's Back goes to the step before, and the code typed there is still there.
+    // The phone's Back goes to the step before.
     await page.goBack();
     await atStep(page, 'welcome');
-    await openSheet(page, '#introInviteLink', 'inviteSheet');
-    expect(await page.inputValue('#introInvite')).toBe(invite);
-    await page.keyboard.press('Escape');
-    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
     await page.click('#introNext');
     await atStep(page, 'pay');
 
@@ -217,7 +208,11 @@ describe('first run in a phone-sized browser', () => {
     expect(await page.isVisible('#introSkip')).toBe(false);
     expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Start');
     expect(await page.locator('#introNext svg path').getAttribute('d')).toBe('M5 12.5l4.5 4.5L19 7.5');
-    await openSheet(page, '#learnMoreLink', 'learnSheet');
+    // Learn more is the info button on the Private only card, not the step's link.
+    expect(await page.locator('#learnMoreLink').count()).toBe(0);
+    expect(await page.getAttribute('#privateInfo', 'aria-label')).toBe('Learn more about Private only');
+    expect(await page.locator('#privateCard #privateInfo').count()).toBe(1);
+    await openSheet(page, '#privateInfo', 'learnSheet');
     expect(await page.textContent('#learnSheetTitle')).toBe('Private only');
     expect(await page.textContent('#privateMore')).toContain('Forge and the model provider cannot.');
     expect(await page.textContent('#privateVoice')).toContain('The engine could hear or read them.');
@@ -225,6 +220,28 @@ describe('first run in a phone-sized browser', () => {
     expect(await page.isVisible('#privateOffSub')).toBe(false);
     await page.keyboard.press('Escape');
     await page.waitForSelector('dialog#learnSheet:not([open])', { state: 'attached' });
+
+    // This engine needs an invite code to open a balance (and has no free models): the step's one link,
+    // "I have an invite code", opens the field.
+    await page.waitForSelector('#introInviteLink:not([hidden])');
+    expect(await page.textContent('#introInviteLink')).toBe('I have an invite code');
+    expect(await page.locator('#introInviteLink svg').count()).toBe(1);
+    expect(await page.isVisible('#introInvite')).toBe(false);
+    await openSheet(page, '#introInviteLink', 'inviteSheet');
+    expect(await page.textContent('#inviteSheetTitle')).toBe('Invite code');
+    await page.fill('#introInvite', invite);
+    await page.click('#introInviteDone');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
+    expect(await step(page)).toBe('private');
+    // Back a step and on again: the code typed there is still there.
+    await page.goBack();
+    await atStep(page, 'limits');
+    await page.click('#introNext');
+    await atStep(page, 'private');
+    await openSheet(page, '#introInviteLink', 'inviteSheet');
+    expect(await page.inputValue('#introInvite')).toBe(invite);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
 
     await page.click('#introNext');
     await page.waitForSelector('[data-screen=home]');
@@ -235,7 +252,7 @@ describe('first run in a phone-sized browser', () => {
     // The home is in the look again (Light), not the first run's dark.
     expect(await page.getAttribute('meta[name="theme-color"]', 'content')).toBe('#F6F5F1');
 
-    // The invite code typed on Welcome is the one Add funds uses.
+    // The invite code typed on the last step is the one Add funds uses.
     await page.goto(`${g.url}/v2/#/funds/add/ecash`);
     await page.waitForSelector('[data-fund=ecash]');
     expect(await page.inputValue('#invite')).toBe(invite);
@@ -306,7 +323,7 @@ describe('first run in a phone-sized browser', () => {
     expect(await shackle()).toBe('M173 142V108a23 23 0 0 0-46 0v10');
     expect(await page.getAttribute('.fr-hero svg', 'aria-label')).toBe('An open padlock, inside two fully lit rings.');
     expect(await page.getAttribute('.fr-hero [data-fr=hole]', 'opacity')).toBe('0.85');
-    await openSheet(page, '#learnMoreLink', 'learnSheet');
+    await openSheet(page, '#privateInfo', 'learnSheet');
     expect(await page.textContent('#privateOffSub')).toBe('Standard models are shown too. The engine and the model provider can read questions to them.');
     expect(await page.isVisible('#privateHidden')).toBe(false);
     await page.keyboard.press('Escape');

@@ -2,11 +2,14 @@
 // Welcome, How you pay, What it hides, Private only, then the home. Every step can be skipped, and the
 // whole guide is under More. Always on the dark Night ground, whatever the look: it is its own screen.
 // Each step is the same frame: Listen, the step dots and Skip at the top; a 300 px hero whose two rings
-// light a quarter more each step; a heading and its lead; the round Next button; one secondary link.
-// The detail behind Learn more and See the full list opens in a sheet over the step.
+// light a quarter more each step; a heading and its lead; the round Next button; at most one secondary
+// link (none on Welcome; its row is kept so nothing moves). The detail behind Learn more and See the full
+// list opens in a sheet over the step. Start free (or the invite code) is the last step's link (owner,
+// 2026-11-15: once the code is in, the first run should be over), and Private only's Learn more is the
+// info button on its card.
 // The pure rules (steps, when it shows, which ways to pay, what Listen reads) are in core/firstrun.js.
 import { nextStep, payWays, spokenFor, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
-import { el, icon } from '../core/ui.js';
+import { el, icon, toast } from '../core/ui.js';
 import { ART, LIT, PRIVATE_ART, RING } from './firstrun-art.js';
 import { startFree } from './startfree.js';
 
@@ -99,7 +102,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   let toggle = null;
   let update = () => {};
   const sheets = [];
-  if (step === 'welcome') ({ link, update } = welcome());
+  if (step === 'welcome') lead.textContent = t('intro.welcome.lead');
   else if (step === 'pay') ({ link, update } = pay());
   else if (step === 'limits') ({ link } = limits());
   else ({ link, toggle, update } = privateOnly());
@@ -128,50 +131,6 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   }
   function open(dialog) {
     if (!dialog.open) dialog.showModal();
-  }
-
-  function welcome() {
-    lead.textContent = t('intro.welcome.lead');
-    // An invite code, only while this engine asks for one to open a balance. Kept in memory for the
-    // funding screens, as they keep it.
-    const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
-    input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-    const hint = el('p', { class: 'note', id: 'introInviteHint', text: t('invite.hint') });
-    const box = el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, hint);
-    const done = el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') });
-    // Start free (screens/startfree.js): while the engine has free models and there is no key, the step's
-    // one link reads "Start free with an invite" and the sheet opens a $0 balance with the code, then asks
-    // before Private only is turned off. "I'll add money instead" keeps the code for funding, as before.
-    let finished = false;
-    const free = startFree({ t, state, actions, wallet }, { id: 'intro', field: { input, box }, after: () => ((finished = true), update()) });
-    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()), text: t('startFree.money') });
-    const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
-    const title = s.querySelector('h2');
-    const label = el('span', { text: t('intro.inviteLink') });
-    let ico = svg(SVG.ticket);
-    const link = el('button', { type: 'button', class: 'fr-link', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, ico, label);
-    let shown = null;
-    const update = () => {
-      // Start free while the sheet shows it: a key opened here keeps the sheet's own words until it closes.
-      const free0 = !!S.methods?.open?.enabled && (!wallet.key() || free.busy());
-      link.hidden = !!wallet.key() || !(wallet.inviteOnly() || free0);
-      if (free0 !== shown) {
-        shown = free0;
-        label.textContent = t(free0 ? 'startFree.link' : 'intro.inviteLink');
-        const swap = free0 ? icon('gift', 22) : svg(SVG.ticket);
-        ico.replaceWith(swap);
-        ico = swap;
-        title.textContent = t(free0 ? 'startFree.title' : 'invite.label');
-      }
-      hint.hidden = free0 || !wallet.inviteOnly();
-      free.node.hidden = money.hidden = !free0;
-      if (free0) {
-        free.update();
-        money.hidden = finished || free.busy();
-      }
-      done.hidden = free0 && !finished;
-    };
-    return { link, update };
   }
 
   function pay() {
@@ -237,12 +196,13 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   }
 
   function privateOnly() {
-    // The switch is the setting itself. Off opens the padlock and says what that means.
+    // The switch is the setting itself. Off opens the padlock and says what that means. The card holds
+    // the switch and, beside it, the info button for Learn more (a button cannot hold another).
     const word = el('span', { class: 'fr-toggle-state', id: 'privateState' });
     const pad = svg(SVG.padlock);
-    const toggle = el(
+    const sw = el(
       'button',
-      { type: 'button', class: 'fr-toggle', id: 'privateToggle', role: 'switch', 'aria-labelledby': 'privateLabel', onclick: () => actions.setPrivateOnly(!privateOn()) },
+      { type: 'button', class: 'fr-switch', id: 'privateToggle', role: 'switch', 'aria-labelledby': 'privateLabel', onclick: () => actions.setPrivateOnly(!privateOn()) },
       el('span', { class: 'fr-toggle-tile' }, pad),
       el('span', { class: 'fr-toggle-text' }, el('span', { class: 'fr-toggle-label', id: 'privateLabel', text: t('intro.private.label') }), word),
       el('span', { class: 'fr-track', 'aria-hidden': 'true' }, el('span', { class: 'fr-knob' })),
@@ -250,10 +210,13 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     const offSub = el('p', { class: 'note', id: 'privateOffSub', text: t('intro.private.offSub') });
     const hidden = el('div', { class: 'dashed-box', id: 'privateHidden' }, el('b', { text: t('intro.private.hidden') }), el('p', { text: t('intro.private.hiddenSub') }));
     const s = sheet('learnSheet', 'intro.private.label', el('p', { class: 'note', id: 'privateMore', text: t('intro.private.onSub') }), offSub, el('p', { class: 'note', id: 'privateVoice', text: t('intro.private.voice') }), hidden);
+    const info = el('button', { type: 'button', class: 'fr-info', id: 'privateInfo', 'aria-label': t('intro.private.learnMore'), 'aria-haspopup': 'dialog', onclick: () => open(s) }, svg(SVG.info));
+    const toggle = el('div', { class: 'fr-toggle', id: 'privateCard' }, sw, info);
+    const invite = inviteLink(() => update());
     const update = () => {
       const on = privateOn();
       const look = PRIVATE_ART[on ? 'on' : 'off'];
-      toggle.setAttribute('aria-checked', String(on));
+      sw.setAttribute('aria-checked', String(on));
       toggle.classList.toggle('off', !on);
       word.textContent = t(on ? 'intro.private.on' : 'intro.private.off');
       pad.querySelector('[data-fr=mini-shackle]').setAttribute('d', MINI_SHACKLE[on ? 'on' : 'off']);
@@ -265,8 +228,60 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       art.querySelector('[data-fr=hole]').setAttribute('opacity', look.hole);
       offSub.hidden = on;
       hidden.hidden = !on;
+      invite.update();
     };
-    return { link: linkBtn('learnMoreLink', 'info', 'intro.learnMore', s), toggle, update };
+    return { link: invite.link, toggle, update };
+  }
+
+  /**
+   * The last step's one link. While the engine has free models and the phone has no balance key: "Start
+   * free with an invite" (screens/startfree.js), a sheet that opens a $0 balance with the code and then
+   * asks before Private only is turned off. The answer is applied, the switch shows it, and the first run
+   * is over: the home opens, the answer's words in a toast (owner, 2026-11-15: once the code is in, the
+   * first run should go away). "I'll add money instead" keeps the code for funding and stays on the step.
+   * Else, while the engine asks for an invite code to open a balance: "I have an invite code", the field
+   * alone, kept in memory for the funding screens. A key from elsewhere: no link. redraw(): the step's update.
+   */
+  function inviteLink(redraw) {
+    const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
+    input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
+    const hint = el('p', { class: 'note', id: 'introInviteHint', text: t('invite.hint') });
+    const box = el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, hint);
+    const done = el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') });
+    const answered = (words) => {
+      redraw();
+      toast(words, 4000);
+      finish();
+    };
+    const free = startFree({ t, state, actions, wallet }, { id: 'intro', field: { input, box }, after: answered });
+    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()), text: t('startFree.money') });
+    const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
+    const title = s.querySelector('h2');
+    const label = el('span', { text: t('intro.inviteLink') });
+    let ico = svg(SVG.ticket);
+    const link = el('button', { type: 'button', class: 'fr-link', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, ico, label);
+    let shown = null;
+    const update = () => {
+      // Start free while the sheet shows it: a key opened here keeps the sheet's own words until the
+      // question is answered.
+      const busy = free.busy();
+      const free0 = !!S.methods?.open?.enabled && (!wallet.key() || busy);
+      link.hidden = (!!wallet.key() && !busy) || !(wallet.inviteOnly() || free0);
+      if (free0 !== shown) {
+        shown = free0;
+        label.textContent = t(free0 ? 'startFree.link' : 'intro.inviteLink');
+        const swap = free0 ? icon('gift', 22) : svg(SVG.ticket);
+        ico.replaceWith(swap);
+        ico = swap;
+        title.textContent = t(free0 ? 'startFree.title' : 'invite.label');
+      }
+      hint.hidden = free0 || !wallet.inviteOnly();
+      free.node.hidden = !free0;
+      money.hidden = !free0 || busy;
+      done.hidden = free0;
+      if (free0) free.update();
+    };
+    return { link, update };
   }
 
   // The first run is dark on every look: the phone's bars match it while it shows.
