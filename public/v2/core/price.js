@@ -1,6 +1,13 @@
 // Prices shown before a request is sent, from the model's listed price per million tokens. Pure.
 // Amounts are in msub: thousandths of the balance unit (cent or sat), as the engine counts them.
 
+/**
+ * A free model (GET /v1/models `pricing.free`): it costs nothing and nothing is held, but the engine
+ * serves it only on a balance key (one opened with an invite code, even with nothing on it). Not the
+ * free questions (credits, core/free.js), which are a balance of their own and work on other models.
+ */
+export const isFreeModel = (model) => model?.pricing?.free === true;
+
 /** Tokens a typical question is assumed to use, for "enough for about N questions" and the likely price. */
 export const TYPICAL = { input: 1000, output: 400 };
 
@@ -8,6 +15,7 @@ export const TYPICAL = { input: 1000, output: 400 };
 export function perToken(model, unit) {
   const p = model?.pricing;
   if (!p) return null;
+  if (isFreeModel(model)) return { in: 0, out: 0 };
   if (unit === 'sat') return p.sat_per_mtok ? { in: p.sat_per_mtok.input / 1000, out: p.sat_per_mtok.output / 1000 } : null;
   if (!p.usd_per_mtok) return null;
   return { in: p.usd_per_mtok.input / 10, out: p.usd_per_mtok.output / 10 };
@@ -33,6 +41,7 @@ export function perQuestion(model, unit) {
  * `free` is set when the request is paid with a free question instead of the balance: true, or
  * {left, total} to say how many are left. The line then reads "Free" or "Free, 2 of 3 left". The free
  * questions themselves (credits) come with the free tier; until then no caller passes `free`.
+ * A question to a free model (isFreeModel) passes `free: true` too: its line reads "Free".
  */
 export function priceLine(costMsub, unit, free = null) {
   if (free) {
@@ -63,6 +72,8 @@ export function ehbpBytes(bytes) {
  * when the model cannot search).
  */
 export function holdMsub(model, unit, { bodyBytes, maxOut, btcUsd = null, search = false }) {
+  // A free model holds nothing (src/pricing.ts holdNanoUsd), and cannot search.
+  if (isFreeModel(model)) return search ? null : 0;
   const h = model?.pricing?.hold;
   if (!h) return null;
   let nano;

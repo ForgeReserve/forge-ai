@@ -20,7 +20,7 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { ehbpBytes, estimate, holdMsub, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, holdMsub, isFreeModel, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
@@ -30,7 +30,7 @@ import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
-import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut } from './core/state.js';
+import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -146,6 +146,8 @@ function view() {
   const hasKey = !!S.key;
   const fr = freeNow(model);
   const paidNone = !hasKey || S.balanceMsub === 0;
+  // A free model (core/price.js isFreeModel): nothing to pay, but the engine wants a balance key.
+  const modelFree = isFreeModel(model);
   const seg = fundsSegments({ balanceMsub: hasKey ? S.balanceMsub : 0, peakMsub: S.peakMsub, freeLeft: fr.left, freeTotal: fr.total, perQuestionMsub: perQuestion(model, unit) });
   return {
     model,
@@ -160,8 +162,10 @@ function view() {
     freeFraction: seg.free,
     freeLeft: fr.left,
     freeTotal: fr.total,
-    // What stops a question for lack of funds, if anything (core/free.js fundsBlock).
-    fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use }),
+    // What stops a question for lack of funds, if anything (core/free.js fundsBlock). Never funds on a free
+    // model: only the balance key it needs ('needKey').
+    fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use, freeModel: modelFree, hasKey }),
+    modelFree,
     // No funds at all (no balance yet or a balance at zero, and no free questions): the home and Funds
     // show their empty state, and the gold ring invites a paper note scan.
     noFunds: paidNone && fr.left === 0,
@@ -180,8 +184,8 @@ function view() {
     speak: speakView(),
     // The most Ask again can cost, shown on the button before it is pressed.
     againMsub: againNow(model),
-    // A free question in place of the balance: the price lines read "Free, 2 of 3 left".
-    free: fr.use ? { left: fr.left, total: fr.total } : null,
+    // A free question in place of the balance: the price lines read "Free, 2 of 3 left". A free model: "Free".
+    free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
     // Goes up whenever conversations are burned, so an open History screen reads the list again.
     historyVersion,
   };
@@ -476,6 +480,27 @@ const wallet = {
   topupFree,
   /** True for the engine's credit mint: its eCash is free questions, not money. */
   isCredit: (mint) => isCreditMint(S.free, mint),
+  /**
+   * Opens a balance with an invite code and nothing on it, for the free models (Start free: the first
+   * run and the fund module invite). The new key is kept like any balance key; funds can be added to it
+   * later. When the chosen model is not free, the first free model Private only allows is chosen.
+   * Resolves {created, freeShown}: freeShown is false when Private only hides every free model.
+   */
+  open: async (invite) => {
+    if (!S.key) {
+      const r = await engine.openBalance(invite);
+      if (r?.key) setKey(r.key);
+      S.invite = '';
+      await refreshBalance();
+    }
+    const shown = visibleModels(S.models, S.settings).filter(isFreeModel);
+    if (shown.length && !isFreeModel(pickModel(S.models, S.settings))) {
+      S.settings.model = shown[0].id;
+      await saveSettings();
+      store.set({});
+    }
+    return { created: true, freeShown: shown.length > 0 };
+  },
 };
 
 // ------------------------------------------------------------------ conversation
@@ -539,6 +564,7 @@ function estimateFor(text) {
   const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   const search = searchOn(model);
+  const modelFree = isFreeModel(model);
   const costMsub = questionHold(model, api, maxOut, tokens, search);
   // A search is never a free question: it is paid from the balance.
   const fr = search ? { ...freeNow(model, bodyTokens(bytes)), use: false } : freeNow(model, bodyTokens(bytes));
@@ -546,12 +572,13 @@ function estimateFor(text) {
     costMsub,
     search,
     // The engine refuses a question whose hold is more than the funds not already held: say so first.
-    short: !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
+    // A free model holds nothing, so it is never short.
+    short: !modelFree && !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
     unit,
-    // Paid with a free question: the price line reads "Free, 2 of 3 left".
-    free: fr.use ? { left: fr.left, total: fr.total } : null,
+    // Paid with a free question: the price line reads "Free, 2 of 3 left". A free model: "Free".
+    free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
     // Free questions left, but this one is too long for one, and there is no paid balance.
-    freeTooLong: !fr.use && fr.why === 'long' && !(S.key && S.balanceMsub > 0),
+    freeTooLong: !modelFree && !fr.use && fr.why === 'long' && !(S.key && S.balanceMsub > 0),
     reading: S.pending.some((a) => a.status === 'reading'),
     overContext: !!model.context_length && tokens + maxOut > model.context_length,
     overBody: bytes > BODY_LIMIT * 0.98,
@@ -623,9 +650,12 @@ async function generate() {
   // Search the web applies to this question only, and is never a free question.
   const search = searchOn(model);
   if (S.search) S.search = false;
-  const useF = fr.use && !!S.freeKey && !search;
+  // A free model is asked with the balance key: the engine never takes a free question (credit) for it.
+  const useF = fr.use && !!S.freeKey && !search && !isFreeModel(model);
   const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: S.unit } };
   if (useF) reply.meta.free = true;
+  // A free model: the note under the answer says it was free, never "That cost 0 cents".
+  if (isFreeModel(model)) reply.meta.freeModel = true;
   if (search) reply.meta.search = true;
   conv.messages.push(reply);
   const controller = new AbortController();
@@ -945,6 +975,12 @@ async function resumeCards() {
   }
 }
 
+/** Where a person with no balance key goes to open one for a free model: the invite module, else Add funds. */
+function openBalance() {
+  if (registry?.list('fund').some((x) => x.instance.id === 'invite' && x.instance.available(S.methods))) return nav('fund', { id: 'invite' });
+  return nav('addFunds');
+}
+
 /** Why a question cannot be asked right now, with where to go about it, or null. */
 function blocker() {
   if (!S.online) return { key: 'type.offline' };
@@ -954,6 +990,7 @@ function blocker() {
     // A voice question the phone turns into words can be a free question; the engine's speech to text
     // is paid from the paid balance.
     if (!(v.talk.freeOk && v.fundsBlock === null)) {
+      if (v.fundsBlock === 'needKey') return { key: 'type.needKey', go: openBalance };
       if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', go: () => nav('freeOut') };
       return { key: 'type.noFunds', go: () => nav('addFunds') };
     }
@@ -981,6 +1018,8 @@ const talk = createTalk({
 const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
 
 const actions = {
+  /** Opens the invite module, where a balance for the free models is opened (or Add funds without it). */
+  openBalance: () => openBalance(),
   ask,
   talkDown: () => talk.down(),
   talkUp: () => talk.up(),

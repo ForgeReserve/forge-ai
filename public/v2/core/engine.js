@@ -121,6 +121,8 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
     refunds: (key) => must('/v1/wallet/refunds', { key }),
     refund: (key, { amount, pubkey } = {}) => call('/v1/wallet/refund', { key, json: { amount, pubkey: pubkey || undefined } }),
     topup: (key, token, invite) => call('/v1/wallet/topup', { key, json: { token, invite: invite || undefined } }),
+    /** Opens a balance with an invite code and nothing on it (free models need one). Resolves {key, ...}. */
+    openBalance: (invite, unit) => must('/v1/wallet/open', { json: { invite, unit: unit || undefined } }),
     fundMethods: () => must('/v1/wallet/fund/methods'),
     fundLightning: (key, body) => call('/v1/wallet/fund/lightning', { key, json: body }),
     fundOnchain: (key, body) => call('/v1/wallet/fund/onchain', { key, json: body }),

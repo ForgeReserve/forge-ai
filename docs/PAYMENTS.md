@@ -35,12 +35,27 @@ NUT-24 does not specify change. Forge AI's choice (header, final stream event, r
 
 Only a SHA-256 of each key is stored.
 
+## Free models
+
+A model with `"pricing": "free"` in the catalog costs the user nothing. Every Token Factory model is free (owner decision, 2026-11-15): Token Factory charges Forge nothing during its beta. Each free model says why in `free_reason`.
+
+- **Who can use one:** anyone with a balance key (`Authorization: Bearer sk-forge-...`) from a balance opened with an invite code, even with nothing on it, and not frozen. `POST /v1/wallet/open {"invite": "..."}` opens such a balance at 0 and returns its key; it always takes an invite, even with `FORGE_INVITE_ONLY=false`, so a free model is never open to people without one. Funds can be added to the same key later for the paid models. The address and key rate limits apply as on every request.
+- **What it costs:** nothing. No reservation is made and nothing is charged, whatever the usage, at a balance of 0 or not, in usd or sat (no BTC/USD rate is needed). `FORGE_MARKUP` does not apply. The response carries `X-Forge-Charged-Msub: 0` and the balance; a stream's `forge` event says `charged_msub: 0`.
+- **What is recorded:** the request is still metered in the `requests` table and the `request` log line like any other: tokens in and out, status, `charged_msub` 0, `price_nusd` 0, `supplier_cost_nusd` 0 and `cost_source: "free"`.
+- **Without a balance key:** `401 balance_key_required` (with `WWW-Authenticate: Bearer`), before any payment is looked at. There is no 402 and no NUT-18 request, so a NUT-24 client has nothing to pay, and an `X-Cashu` token sent with the request is never read, swapped or kept: it stays the sender's. A free-question (credit) balance key is refused the same way, with `403 balance_key_required`: credits are not a balance key for this. A frozen balance gets `403 account_frozen`.
+- **The catalog:** a free model carries no token price (`input_usd_per_mtok` and `output_usd_per_mtok` left out, or 0), needs `free_reason`, and cannot have `web_search` (a search has its own fee). The loader refuses anything else. Its hold is 0 whatever its supplier's schedule, and it is left off `FORGE_FREE_MODELS` (the free tier's list) even if named there.
+- **`GET /v1/models`:** `pricing.free: true` and `pricing.free_reason` on a free model (`free: false` on the others). The older fields stay, all at 0: `usd_per_mtok` and `sat_per_mtok` are 0 in and 0 out, `mode` is `metered`, and `hold` is the metered shape with `input_nano_usd_per_token` and `output_nano_usd_per_token` 0 and `web_search: null`, so a client that does not know `free` computes a hold of 0 as well. `GET /v1/wallet/fund/methods` adds `open: {enabled, free_models}`.
+- **The apps:** the v2 app's price line reads Free, the model list shows a Free badge, Funds says questions to the model are free, and "not enough funds" never stops one. An invite code alone opens a $0 balance from the app: Start free on the first run's Welcome step and in Add funds (owner decision, 2026-11-15); the invite is spent exactly as a funded top-up spends it (the same open, redeemed and revoked rules, and the same address limit). With no balance key yet, Type and the home lead to Start free instead of Add funds. The v1 app's model menu reads Free.
+
+These are not the free tier's free questions ([FREE-TIER.md](FREE-TIER.md)): those are credits on a free balance of their own, one per question, on the models in `FORGE_FREE_MODELS`. A free model is a kind of model; a free question is a kind of balance.
+
 ## The funds hold
 
 Before a request is sent on, the gateway holds the most it can cost (a balance reservation, or the NUT-24 quote):
 
 - `pricing: "metered"`: the model's own metered worst case, at the model's prices with `FORGE_MARKUP`: input estimated as `ceil(body bytes / FORGE_BYTES_PER_TOKEN)` plus `max_tokens` (or `X-Tinfoil-Max-Output-Tokens`) of output. For an encrypted request the body bytes are the ciphertext the gateway receives.
 - `pricing: "flat"`: the flat schedule, a request-size bucket plus declared max output at the schedule's output price.
+- A free model (`"pricing": "free"` on the model, above): 0. Nothing is held.
 
 No request is ever charged more than its hold, on any payment path; a usage figure above it is logged as `usage_over_reservation` and charged at the hold.
 

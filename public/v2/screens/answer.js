@@ -155,8 +155,20 @@ export function answer({ t, state, nav, actions, format }) {
     const cost = a.meta?.cost != null ? format.cost(a.meta.cost, a.meta.unit) : null;
     // A free question says so, never an amount: a credit is not money.
     const freeNote = a.meta?.free && a.meta?.freeLeft != null ? (a.meta.freeLeft === 0 ? t('answer.freeLast') : t('answer.free', { left: a.meta.freeLeft })) : null;
+    // A free model's answer says it was free (the engine charged it 0).
+    const modelFree = !!a.meta?.freeModel && !(a.meta?.cost > 0);
     // A failed answer says its cost in the error box, so the note stays empty then.
-    note.textContent = a.meta?.stopped ? t('answer.stopped') : a.meta?.partial ? (freeNote ? t('answer.partialFree') : cost ? t('answer.partialCost', { amount: cost }) : t('answer.partial')) : a.meta?.error ? '' : (freeNote ?? (cost ? t('answer.cost', { amount: cost }) : ''));
+    note.textContent = a.meta?.stopped
+      ? t('answer.stopped')
+      : a.meta?.partial
+        ? freeNote
+          ? t('answer.partialFree')
+          : cost && !modelFree
+            ? t('answer.partialCost', { amount: cost })
+            : t('answer.partial')
+        : a.meta?.error
+          ? ''
+          : (freeNote ?? (modelFree ? t('answer.freeModel') : cost ? t('answer.cost', { amount: cost }) : ''));
   };
   update();
   // Once markdown is in, the answer is drawn again with it.

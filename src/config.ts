@@ -226,8 +226,18 @@ const ModelSchema = z.object({
   supplier: z.string(),
   upstream: z.string(),
   name: z.string().optional(),
-  input_usd_per_mtok: z.number().nonnegative(),
-  output_usd_per_mtok: z.number().nonnegative(),
+  /**
+   * paid (default): charged at the token prices below, with FORGE_MARKUP. free: costs the user nothing
+   * (docs/PAYMENTS.md, Free models). A free request needs a balance key, is never held or charged, and
+   * carries no token price: the prices are 0 and must not be set to anything else. Not the free tier's
+   * free questions (credits, docs/FREE-TIER.md), which are a kind of balance, not a kind of model.
+   */
+  pricing: z.enum(['paid', 'free']).default('paid'),
+  /** Why a free model is free, and on whose decision (required with pricing "free"; shown in /v1/models). */
+  free_reason: z.string().trim().min(1).optional(),
+  /** Supplier cost per million tokens in USD. Required on a paid model; 0 (or left out) on a free one. */
+  input_usd_per_mtok: z.number().nonnegative().optional(),
+  output_usd_per_mtok: z.number().nonnegative().optional(),
   /** true once the cost above has been checked against the supplier's rate card. */
   price_verified: z.boolean().default(false),
   max_output_tokens: z.number().int().positive().default(4096),
@@ -243,8 +253,26 @@ const ModelSchema = z.object({
   speed: z.enum(['fast', 'balanced', 'slow']).optional(),
   /** Can search the web (its supplier sets web_search). Off on every request unless the client asks. */
   web_search: z.boolean().default(false),
-});
+})
+  .superRefine((m, ctx) => {
+    if (m.pricing === 'free') {
+      if (!m.free_reason) ctx.addIssue({ code: 'custom', message: `free model ${m.id}: free_reason is required` });
+      if ((m.input_usd_per_mtok ?? 0) !== 0 || (m.output_usd_per_mtok ?? 0) !== 0)
+        ctx.addIssue({ code: 'custom', message: `free model ${m.id}: a free model carries no token price (leave input_usd_per_mtok and output_usd_per_mtok out, or 0)` });
+      // A search has a fee of its own; a free request takes no hold to cover it.
+      if (m.web_search) ctx.addIssue({ code: 'custom', message: `free model ${m.id}: web_search is not offered on a free model` });
+    } else {
+      if (m.input_usd_per_mtok === undefined || m.output_usd_per_mtok === undefined)
+        ctx.addIssue({ code: 'custom', message: `model ${m.id}: input_usd_per_mtok and output_usd_per_mtok (price per million tokens) are required on a paid model` });
+      if (m.free_reason) ctx.addIssue({ code: 'custom', message: `model ${m.id}: free_reason is only for pricing "free"` });
+    }
+  })
+  // A free model's prices are 0 everywhere they are read, so no path can charge for one.
+  .transform((m) => ({ ...m, input_usd_per_mtok: m.input_usd_per_mtok ?? 0, output_usd_per_mtok: m.output_usd_per_mtok ?? 0 }));
 export type ModelConfig = z.infer<typeof ModelSchema>;
+
+/** True for a model that costs the user nothing (pricing "free"; docs/PAYMENTS.md, Free models). */
+export const isFreeModel = (m: Pick<ModelConfig, 'pricing'>): boolean => m.pricing === 'free';
 
 /**
  * An audio model: speech to text (POST /v1/audio/transcriptions) or text to speech (POST /v1/audio/speech).

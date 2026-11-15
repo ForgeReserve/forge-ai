@@ -488,7 +488,7 @@ async function renderCosts() {
               h: 'Model',
               wrap: true,
               v: (m) =>
-                `<span class="cell">${esc(m.name || m.model)}${m.name && m.name !== m.model ? `<span class="cell-note mono">${esc(m.model)}</span>` : ''}${m.drift || !m.catalog.verified ? `<span class="tags">${m.drift ? badge('price changed', 'warn') : ''}${m.catalog.verified ? '' : badge('placeholder price', 'warn')}</span>` : ''}</span>`,
+                `<span class="cell">${esc(m.name || m.model)}${m.name && m.name !== m.model ? `<span class="cell-note mono">${esc(m.model)}</span>` : ''}${m.catalog.free ? `<span class="tags">${badge('free model', 'ok')}</span>` : m.drift || !m.catalog.verified ? `<span class="tags">${m.drift ? badge('price changed', 'warn') : ''}${m.catalog.verified ? '' : badge('placeholder price', 'warn')}</span>` : ''}</span>`,
             },
             { h: 'Supplier', v: (m) => esc(m.supplier) },
             { h: 'Requests', num: true, v: (m) => nf(m.requests) },
@@ -1073,7 +1073,7 @@ async function renderSettings() {
           { h: 'Price in/out $/Mtok', num: true, v: (r) => `${nf(r.price_usd_per_mtok.input, 2)} / ${nf(r.price_usd_per_mtok.output, 2)}` },
           { h: 'Price sat/Mtok', num: true, v: (r) => (r.price_sat_per_mtok ? `${nf(r.price_sat_per_mtok.input)} / ${nf(r.price_sat_per_mtok.output)}` : '–') },
           { h: 'Max out', num: true, v: (r) => nf(r.max_output_tokens) },
-          { h: 'Price checked', v: (r) => (r.verified ? badge('yes', 'ok') : badge('no', 'warn')) },
+          { h: 'Price checked', v: (r) => (r.pricing === 'free' ? badge('free model', 'ok') : r.verified ? badge('yes', 'ok') : badge('no', 'warn')) },
         ],
         s.models,
       )}</section>

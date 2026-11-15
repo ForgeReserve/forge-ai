@@ -11,7 +11,7 @@
  * shared by the faucet and scripts/issue-credits.ts.
  */
 import { getEncodedToken, type Proof, Wallet } from '@cashu/cashu-ts';
-import type { Config, ModelConfig, Unit } from './config.ts';
+import { type Config, isFreeModel, type ModelConfig, type Unit } from './config.ts';
 import type { DB } from './db.ts';
 import { MSUB_PER_UNIT } from './pricing.ts';
 
@@ -34,7 +34,9 @@ export interface FreeRules {
 export function freeRules(config: Config): FreeRules | undefined {
   if (!config.creditMint) return undefined;
   const env = config.env;
-  const ids = new Set(config.catalog.models.map((m) => m.id));
+  // A free model (pricing "free") is not a free question: it needs a paid balance key and costs nothing,
+  // so it never takes a credit, and a credit balance is refused on it (src/app.ts).
+  const ids = new Set(config.catalog.models.filter((m) => !isFreeModel(m)).map((m) => m.id));
   return {
     mint: config.creditMint,
     unit: env.FORGE_CREDIT_UNIT,
