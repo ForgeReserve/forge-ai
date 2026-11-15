@@ -369,6 +369,14 @@ describe('first run in a phone-sized browser', () => {
     await atStep(page, 'welcome');
     await page.waitForSelector('#introListen:not([hidden])');
     expect(await page.textContent('#introListen')).toBe('Listen');
+    // One plain pill in every browser (it broke in DuckDuckGo on an iPhone): solid colours, no native
+    // button look, its contents clipped to it.
+    expect(
+      await page.locator('#introListen').evaluate((b) => {
+        const s = getComputedStyle(b);
+        return [s.backgroundColor, s.borderTopColor, s.backgroundImage, s.overflow, s.appearance, s.isolation];
+      }),
+    ).toEqual(['rgb(16, 32, 32)', 'rgb(37, 111, 99)', 'none', 'hidden', 'none', 'isolate']);
     await page.click('#introListen');
     await expect.poll(() => page.textContent('#introListen')).toBe('Stop');
     expect(requests).toContain('/v2/voice/en/welcome.ogg');

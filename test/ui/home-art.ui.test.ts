@@ -6,9 +6,9 @@ import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } 
 import { pastFirstRun } from './firstrun-seen.ts';
 import { openWay } from './ways.ts';
 
-// The home's rings and talk button drawn to the first run's art standard (owner, 2026-11-15): the rings
-// in a sunk groove with a lit fill, its glow and a bright tip where it ends, the talk button as a
-// polished object with a lit microphone. The meaning stays: gold is funds, the inner ring is memory
+// The home's rings drawn as the first run draws its rings (owner, 2026-11-15): thin, on a faint track,
+// one soft glow under the lit arc and a small bright dot where it ends; the talk button as a polished
+// object with a lit microphone. The meaning stays: gold is funds, the inner ring is memory
 // (orange when low), they fill with the real values, and the button holds to talk. Also the note's
 // coin with its dollar sign. Screenshots for the owner are kept under .tmp/home-art/.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
@@ -142,6 +142,14 @@ describe('the home drawn to the art standard', () => {
     expect(r.memory).toBe(760);
     expect(r.memoryTip).toEqual({ turn: 360, shown: true });
     expect(r.low).toBe(false);
+    // The first run's proportions: a stroke of 0.0424 of the outer ring's diameter (12.7 on 300), and one
+    // glow per ring, nothing more drawn over the fill than its shade and the tip.
+    const look = await page.locator('.home-rings .rings-svg').evaluate((s) => ({
+      tracks: [...s.querySelectorAll('.ring-track')].map((n) => n.getAttribute('stroke-width')),
+      glows: s.querySelectorAll('.ring-glow').length,
+      layers: s.querySelectorAll('.ring-band-gold > *').length,
+    }));
+    expect(look).toEqual({ tracks: ['12.7', '12.7'], glows: 2, layers: 5 });
     // The button keeps its size and place: 204 px in the 336 px rings, centred.
     const ringsBox = await box(page, '.home-rings');
     const talk = await box(page, '#talkBtn');

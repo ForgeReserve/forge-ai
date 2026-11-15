@@ -54,6 +54,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .ring-track { transition: stroke 300ms; }
 .ring-tip { transition: transform 700ms var(--ease), opacity 300ms; }
 .ring-tip-glow { transition: fill 300ms; }
+/* The one glow under each lit arc, as on the first run; stronger on the Light look's pale ground. */
+.ring-glow { opacity: .35; }
+:root:not([data-scheme="dark"]) .ring-glow { opacity: .5; }
+:root:not([data-scheme="dark"]) .ring-sheen-light { stop-opacity: .2; }
 .ring-hit { position: absolute; inset: 0; border-radius: 50%; border: 0; background: transparent; padding: 0; }
 /* The talk button as a polished object, lit like the first run's art: a glossy body in the look's talk
    colour, a key light from the top left (a highlight and a gloss), a teal rim light from the bottom
@@ -421,7 +425,15 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 }
 .fr :focus-visible { outline: 2px solid #3FCFB4; outline-offset: 3px; }
 .fr-top { flex: none; height: 48px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; }
-.fr-listen { grid-column: 1; justify-self: start; height: 48px; border-radius: 24px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: inline-flex; gap: 8px; align-items: center; padding: 0 16px 0 14px; font-size: 15px; font-weight: 500; color: #3FCFB4; }
+/* Listen (here and .listen-chip on the other screens) is one plain pill in every browser. The owner saw it
+   break in DuckDuckGo on an iPhone (a WKWebView; Safari drew it right): a shifted rounded piece with a
+   dark box behind the word, most likely its see-through tint and border composited apart from the text
+   in that web view. So the pill takes no see-through paint at all
+   (its colours are the tint already laid on the Night ground), no native button look, and clips what it
+   holds: background, radius, overflow hidden, nothing else. */
+.fr-listen, .listen-chip { -webkit-appearance: none; appearance: none; margin: 0; flex: none; white-space: nowrap; overflow: hidden; isolation: isolate; -webkit-background-clip: border-box; background-clip: border-box; background-image: none; box-shadow: none; text-shadow: none; }
+.fr-listen > *, .listen-chip > * { flex: none; background: none; }
+.fr-listen { grid-column: 1; justify-self: start; height: 48px; border-radius: 24px; border: 1px solid #256F63; background-color: #102020; display: inline-flex; gap: 8px; align-items: center; padding: 0 16px 0 14px; font-size: 15px; font-weight: 500; line-height: 1; color: #3FCFB4; }
 .fr-dots { grid-column: 2; justify-self: center; display: flex; gap: 6px; align-items: center; }
 .fr-dots span { width: 6px; height: 6px; border-radius: 3px; background: #3A3D44; }
 .fr-dots span.done, .fr-dots span.now { background: #F5F5F7; }
@@ -516,7 +528,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .listen-head { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
 .listen-head h1 { white-space: nowrap; }
 .listen-slot { justify-self: end; display: flex; }
-.listen-chip { min-height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--teal-line); background: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 600; }
+.listen-chip { min-height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--teal-line); background-color: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 600; line-height: 1; }
 
 /* Add money: the wallet cards (AddFunds-C1). The card area never scrolls: the cards take the height left. */
 .screen.wallet { flex: none; height: 100dvh; min-height: 0; overflow: hidden; gap: 10px; }
