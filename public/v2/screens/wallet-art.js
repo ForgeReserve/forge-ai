@@ -137,6 +137,69 @@ ${markPath}
 </g>`;
 }
 
+// ------------------------------------------------------------------ the note's coin, with its dollar sign
+
+/** The dollar coin's gradients: the raised rim, the sunk field, the wall between them and the sign. */
+const dollarDefs = (p) =>
+  rg(`${p}cn`, { fx: '32%', fy: '26%' }, [
+    [0, '#FFF3C9'],
+    [0.45, '#EBC56C'],
+    [0.8, '#C29034'],
+    [1, '#9C7020'],
+  ]) +
+  lg(`${p}cnf`, [0.15, 0, 0.85, 1], [
+    [0, '#F0CD7E'],
+    [0.5, '#DDAD4E'],
+    [1, '#BD8A32'],
+  ]) +
+  lg(`${p}cnw`, [0.15, 0.1, 0.85, 0.9], [
+    [0, '#5A3C08', 0.75],
+    [0.5, '#8A6410', 0.25],
+    [1, '#FFF2C8', 0.95],
+  ]) +
+  lg(`${p}cnr`, [0.1, 0.1, 0.9, 0.9], [
+    [0, '#FFFFFF', 0.95],
+    [0.45, '#FFFFFF', 0.08],
+    [1, '#FFFFFF', 0],
+  ]) +
+  lg(`${p}usd`, [-7, -12, 7, 12], [
+    [0, '#FFF8DE'],
+    [0.5, '#F3D488'],
+    [1, '#D2A045'],
+  ], true);
+
+// The dollar sign at 1 unit = 1 px of a 26 px coin: an S, and one vertical stroke through it whose
+// tails show above and below. Centred on (0, 0).
+const USD_S = 'M5.9 -5.3C5.1 -7.6 2.9 -8.7 0 -8.7C-3.5 -8.7 -5.8 -6.9 -5.8 -4.4C-5.8 -1.5 -3.1 -0.7 0 0C3.3 0.7 6.1 1.5 6.1 4.5C6.1 7.2 3.6 8.7 0 8.7C-3.2 8.7 -5.6 7.3 -6.3 4.9';
+const USD_BAR = 'M0 -12.2V12.2';
+
+/**
+ * The gold coin printed on the note: a raised rim lit from the top left, a sunk field with its soft
+ * shadow under the rim, a dotted ring, and the dollar sign struck in relief (its light edge up and
+ * left, its shadow down and right). (cx, cy) the centre; the coin is 26 px in radius.
+ */
+function dollarCoin(p, cx, cy) {
+  const sign = (attrs) => `<path d="${USD_S}" stroke-width="3" stroke-linecap="butt" ${attrs}/><path d="${USD_BAR}" stroke-width="2.3" stroke-linecap="round" ${attrs}/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="27" fill="#8A6410" opacity="0.28" ${f(p, 'b2')} transform="translate(1.5 2.5)"/>
+<g transform="translate(${cx} ${cy})">
+<circle r="26" fill="url(#${p}cn)"/>
+<circle r="25.4" fill="none" stroke="url(#${p}cnr)" stroke-width="1.1"/>
+<path d="M18.4 18.4A26 26 0 0 1 -6.7 25.1" fill="none" stroke="${TEAL}" stroke-opacity="0.45" stroke-width="1" ${f(p, 'b06')}/>
+<circle r="20.6" fill="url(#${p}cnf)"/>
+<clipPath id="${p}cnclip"><circle r="20.6"/></clipPath>
+<g clip-path="url(#${p}cnclip)"><circle r="21.6" cx="1" cy="1.4" fill="none" stroke="#5A3C08" stroke-opacity="0.5" stroke-width="3.2" ${f(p, 'b1')}/></g>
+<circle r="20.6" fill="none" stroke="url(#${p}cnw)" stroke-width="1.3"/>
+<circle r="17.8" fill="none" stroke="#7A5614" stroke-opacity="0.5" stroke-width="1.3" stroke-linecap="round" stroke-dasharray="0.01 2.33"/>
+<g fill="none" stroke-linejoin="round">
+<g transform="translate(0.75 1.05)" stroke="#4A3207" stroke-opacity="0.55" ${f(p, 'b06')}>${sign('')}</g>
+<g transform="translate(-0.3 -0.42)" stroke="#FFF9E6" stroke-opacity="0.8">${sign('')}</g>
+<g stroke="url(#${p}usd)">${sign('')}</g>
+<path d="M-4.9 -6.6C-3.8 -7.9 -2.1 -8.2 0 -8.2" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="0.7" stroke-linecap="round"/>
+</g>
+<ellipse cx="-9" cy="-11" rx="8" ry="3.6" fill="#FFFFFF" opacity="0.4" transform="rotate(-35 -9 -11)" ${f(p, 'b2')}/>
+</g>`;
+}
+
 // ------------------------------------------------------------------ the card pictures (250 by 200)
 
 /** Start free: a gift box, tied with a gold ribbon, on the teal card. */
@@ -248,11 +311,7 @@ ${lg(`${p}fold`, [0, 0, 1, 0], [
   [0.58, '#8A6410', 0.06],
   [1, '#8A6410', 0],
 ])}
-${rg(`${p}cn`, { fx: '34%', fy: '28%' }, [
-  [0, '#FFF0BE'],
-  [0.5, '#E9C36A'],
-  [1, '#A97A24'],
-])}
+${dollarDefs(p)}
 ${lg(`${p}sheen`, [0, 0, 1, 1], [
   [0, '#FFFFFF', 0],
   [0.45, '#FFFFFF', 0.5],
@@ -274,13 +333,7 @@ ${contact(p, 128, 168, 92, 5, 0.3, '#5A3C08')}
 <rect x="38" y="60" width="174" height="96" rx="4" fill="none" stroke="#C9A24A" stroke-width="1.3"/>
 <rect x="41.5" y="63.5" width="167" height="89" rx="3" fill="none" stroke="#C9A24A" stroke-opacity="0.55" stroke-width="0.6" stroke-dasharray="1 2"/>
 <g fill="#C9A24A"><circle cx="45" cy="67" r="2"/><circle cx="205" cy="67" r="2"/><circle cx="45" cy="149" r="2"/><circle cx="205" cy="149" r="2"/></g>
-<circle cx="80" cy="108" r="27" fill="#8A6410" opacity="0.25" ${f(p, 'b2')} transform="translate(1.5 2.5)"/>
-<circle cx="80" cy="108" r="26" fill="url(#${p}cn)"/>
-<circle cx="80" cy="108" r="21.5" fill="none" stroke="#FFF2C8" stroke-opacity="0.7" stroke-width="1"/>
-<circle cx="80" cy="108" r="19" fill="none" stroke="#7A5614" stroke-opacity="0.5" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.01 2.6"/>
-<path d="M80 95v26M74 100h8.5a3.6 3.6 0 0 1 0 7.2h-5a3.6 3.6 0 0 0 0 7.2h9" fill="none" stroke="#5A3C08" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round" transform="translate(0.8 1.2)"/>
-<path d="M80 95v26M74 100h8.5a3.6 3.6 0 0 1 0 7.2h-5a3.6 3.6 0 0 0 0 7.2h9" fill="none" stroke="#FFF4CF" stroke-width="2.6" stroke-linecap="round"/>
-<ellipse cx="72" cy="98" rx="9" ry="4.5" fill="#FFFFFF" opacity="0.55" ${f(p, 'b2')}/>
+${dollarCoin(p, 80, 108)}
 <g fill="#8A6410" opacity="0.55"><rect x="112" y="70" width="26" height="3" rx="1.5"/><rect x="112" y="76" width="18" height="2.4" rx="1.2"/><rect x="112" y="140" width="22" height="2.4" rx="1.2"/><rect x="112" y="145" width="14" height="2.4" rx="1.2"/></g>
 <g fill="#14161A" opacity="0.7"><rect x="150" y="140" width="3" height="5" rx="0.6"/><rect x="155" y="140" width="3" height="5" rx="0.6"/><rect x="160" y="140" width="3" height="5" rx="0.6"/><rect x="167" y="140" width="3" height="5" rx="0.6"/><rect x="172" y="140" width="3" height="5" rx="0.6"/><rect x="177" y="140" width="3" height="5" rx="0.6"/></g>
 <rect x="149" y="77" width="58" height="58" rx="4" fill="#5A3C08" opacity="0.2" ${f(p, 'b1')}/>

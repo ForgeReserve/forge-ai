@@ -5,17 +5,57 @@
 // Works with a finger, a mouse, and the keyboard (hold Space or Enter; Escape cancels).
 import { clock, inside } from '../core/talk.js';
 import { priceLine } from '../core/price.js';
-import { el, icon } from '../core/ui.js';
+import { el } from '../core/ui.js';
 
 const BARS = 9;
 const SHAPE = [0.45, 0.7, 0.9, 0.6, 1, 0.65, 0.85, 0.55, 0.4];
+
+let micN = 0;
+
+/**
+ * The microphone on the talk button, drawn with the button's light (a key light from the top left): a
+ * rounded capsule shaded as a cylinder with its grille and a specular streak, the yoke and stand, and a
+ * soft shadow under it on the button. Its colour is the button's ink (currentColor), so every look
+ * keeps its own; the light and shade are white and black on top. Static markup from this file only.
+ */
+export function micGlyph(size) {
+  const p = `mic${++micN}-`;
+  const ns = 'http://www.w3.org/2000/svg';
+  const s = document.createElementNS(ns, 'svg');
+  for (const [k, v] of Object.entries({ width: size, height: size, viewBox: '0 0 64 64', 'aria-hidden': 'true', class: 'ico talk-mic' })) s.setAttribute(k, String(v));
+  const body = 'M32 5.5a10 10 0 0 1 10 10v16.5a10 10 0 0 1-20 0V15.5a10 10 0 0 1 10-10z';
+  const stand = 'M15.5 29v3a16.5 16.5 0 0 0 33 0v-3M32 48.5v8M24 57.5h16';
+  s.innerHTML = [
+    `<defs><filter id="${p}sh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.3"/></filter>`,
+    `<linearGradient id="${p}cyl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.04"/><stop offset="0.3" stop-color="#fff" stop-opacity="0.1"/><stop offset="0.62" stop-color="#000" stop-opacity="0.12"/><stop offset="1" stop-color="#000" stop-opacity="0.38"/></linearGradient>`,
+    `<linearGradient id="${p}top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.35" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.2"/></linearGradient>`,
+    `<linearGradient id="${p}metal" gradientUnits="userSpaceOnUse" x1="14" y1="28" x2="50" y2="60"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.32"/></linearGradient>`,
+    `<linearGradient id="${p}rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0.55" stop-color="#3FCFB4" stop-opacity="0"/><stop offset="1" stop-color="#9FF5E2" stop-opacity="0.75"/></linearGradient></defs>`,
+    // The shadow on the button, down and to the right of the light.
+    `<g transform="translate(1.4 2.4)" opacity="0.55" filter="url(#${p}sh)"><path d="${body}" fill="#000"/><path d="${stand}" fill="none" stroke="#000" stroke-width="3.6" stroke-linecap="round"/></g>`,
+    // The stand, lit along its top left.
+    `<path d="${stand}" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>`,
+    `<path d="${stand}" fill="none" stroke="url(#${p}metal)" stroke-width="3.4" stroke-linecap="round"/>`,
+    `<path d="M16.6 33.5a15.6 15.6 0 0 0 5.4 10.9" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="0.9" stroke-linecap="round"/>`,
+    // The capsule: shaded as a cylinder, its grille, its specular streak and the rim light.
+    `<path d="${body}" fill="currentColor"/>`,
+    `<path d="${body}" fill="url(#${p}cyl)"/>`,
+    `<path d="${body}" fill="url(#${p}top)"/>`,
+    `<path d="M26 14.5h12M25 19.5h14M25 24.5h14" fill="none" stroke="#000" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>`,
+    `<path d="M26 15.3h12M25 20.3h14M25 25.3h14" fill="none" stroke="#fff" stroke-opacity="0.22" stroke-width="0.7" stroke-linecap="round"/>`,
+    `<path d="M26.6 12.5a6.6 6.6 0 0 1 3.4-4.4v0" fill="none" stroke="#fff" stroke-opacity="0.9" stroke-width="1.4" stroke-linecap="round"/>`,
+    `<rect x="25.2" y="15" width="2.4" height="17" rx="1.2" fill="#fff" opacity="0.55"/>`,
+    `<path d="${body}" fill="none" stroke="url(#${p}rim)" stroke-width="1.2"/>`,
+  ].join('');
+  return s;
+}
 
 /**
  * Makes `button` the talk button. size: 'big' (home) or 'small' (answer). Returns {info, update}:
  * `info` is the line shown under the rings while recording.
  */
 export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big' }) {
-  const mic = icon('mic', size === 'big' ? 69 : 34, 1.6);
+  const mic = micGlyph(size === 'big' ? 70 : 36);
   const bars = el('span', { class: 'level-bars', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => el('span', { class: 'bar' })));
   const label = el('span', { class: 'talk-label' });
   button.replaceChildren(mic, bars, label);

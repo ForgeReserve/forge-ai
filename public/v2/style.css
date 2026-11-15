@@ -48,16 +48,40 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .rings { position: relative; flex: none; display: flex; align-items: center; justify-content: center; }
 .home-rings { width: min(336px, 100%); aspect-ratio: 1; }
 .answer-rings { width: 200px; height: 200px; align-self: center; }
-.rings-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ring-fill { transition: stroke-dasharray 700ms var(--ease), stroke 300ms; }
+.rings-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* The rings fill and empty smoothly, the lit layers and the tip with them (instant with reduced motion). */
+.ring-fill, .ring-lit { transition: stroke-dasharray 700ms var(--ease), stroke-dashoffset 700ms var(--ease), stroke 300ms, opacity 300ms; }
+.ring-track { transition: stroke 300ms; }
+.ring-tip { transition: transform 700ms var(--ease), opacity 300ms; }
+.ring-tip-glow { transition: fill 300ms; }
 .ring-hit { position: absolute; inset: 0; border-radius: 50%; border: 0; background: transparent; padding: 0; }
-.talk { position: relative; width: 60.7%; aspect-ratio: 1; border-radius: 50%; background: var(--talk); border: 0; box-shadow: var(--shadow-talk); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--talk-ink); font-size: 16px; font-weight: 700; line-height: 1.1; text-align: center; padding: 0 6px; transition: transform 120ms var(--ease); }
-.talk:active { transform: scale(.97); }
-.talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14); }
+/* The talk button as a polished object, lit like the first run's art: a glossy body in the look's talk
+   colour, a key light from the top left (a highlight and a gloss), a teal rim light from the bottom
+   right, a bevel at its edge and a soft contact shadow under it. Its size is the design's. */
+.talk {
+  --talk-bevel: inset 0 2px 1px rgba(255,255,255,0.22), inset 0 -9px 16px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --talk-drop: 0 18px 26px -12px rgba(20,22,26,0.6), 0 5px 10px rgba(20,22,26,0.16);
+  position: relative; width: 60.7%; aspect-ratio: 1; border-radius: 50%; border: 0;
+  background-color: var(--talk);
+  background-image:
+    radial-gradient(115% 115% at 30% 20%, rgba(255,255,255,0.17) 0%, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0) 52%),
+    radial-gradient(55% 55% at 80% 88%, rgba(63,207,180,0.2), rgba(63,207,180,0) 72%),
+    linear-gradient(155deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.36) 100%);
+  box-shadow: var(--talk-bevel), var(--talk-drop);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--talk-ink); font-size: 16px; font-weight: 700; line-height: 1.1; text-align: center; padding: 0 6px;
+  transition: transform 160ms var(--ease), background-color 220ms var(--ease), box-shadow 260ms var(--ease), opacity 220ms;
+}
+/* The gloss (key light) and the bevel's facet, under the microphone and the words. */
+.talk::before { content: ''; position: absolute; left: 15%; top: 5%; width: 58%; height: 36%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,0.24), rgba(255,255,255,0.06) 60%, rgba(255,255,255,0)); transform: rotate(-22deg); pointer-events: none; }
+.talk::after { content: ''; position: absolute; inset: 3.5%; border-radius: 50%; pointer-events: none; background: linear-gradient(150deg, rgba(255,255,255,0.3), rgba(255,255,255,0) 38%, rgba(0,0,0,0) 62%, rgba(63,207,180,0.45)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.4px), #000 calc(100% - 1px)); mask: radial-gradient(farthest-side, transparent calc(100% - 1.4px), #000 calc(100% - 1px)); }
+.talk > * { position: relative; z-index: 1; }
+.talk-mic { overflow: visible; }
+.talk:active { transform: scale(.97); --talk-drop: 0 10px 16px -10px rgba(20,22,26,0.55), 0 2px 5px rgba(20,22,26,0.16); }
+.talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; --talk-bevel: inset 0 1.5px 1px rgba(255,255,255,0.22), inset 0 -5px 10px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07); --talk-drop: 0 10px 16px -8px rgba(20,22,26,0.55), 0 3px 6px rgba(20,22,26,0.14); }
 .chip-low { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--low-tint); border: 1px solid var(--low-line); color: var(--low-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
 .held-line { margin: 0; color: var(--text-2); font-size: 14px; font-weight: 600; }
 /* No funds on a paid model: the gold ring's track breathes, unless reduced motion is on. */
-.home-rings.invite .rings-svg circle:first-child { animation: pulse 2.4s var(--ease) infinite; }
+.home-rings.invite .ring-track-gold { animation: pulse 2.4s var(--ease) infinite; }
 
 /* Bottom row */
 .bottom-row { display: flex; gap: 8px; }
@@ -279,12 +303,15 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 
 /* Hold to talk (XListenLight). The press must not scroll, select or open the long-press menu. */
 .talk { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.talk.recording { transform: scale(1.04); box-shadow: var(--shadow-talk), 0 0 0 10px var(--teal-tint); }
-.talk.recording.leaving { background: var(--danger); box-shadow: var(--shadow-talk), 0 0 0 10px var(--danger-tint); transform: scale(.96); }
-.talk.sending { opacity: .8; }
-.talk-label { pointer-events: none; }
+/* Held: the button lifts, with a teal halo and glow; slid off, it turns to the danger colour. */
+.talk.recording { transform: scale(1.04); box-shadow: var(--talk-bevel), 0 0 0 10px var(--teal-tint), 0 0 34px 8px rgba(63,207,180,0.32), var(--talk-drop); }
+.talk.recording.leaving { background-color: var(--danger); box-shadow: var(--talk-bevel), 0 0 0 10px var(--danger-tint), 0 0 30px 6px rgba(179,64,47,0.25), var(--talk-drop); transform: scale(.96); }
+/* Sending: the halo breathes while the question goes (it keeps still with reduced motion). */
+.talk.sending { opacity: .88; animation: talkbusy 1.6s ease-in-out infinite; }
+@keyframes talkbusy { 50% { box-shadow: var(--talk-bevel), 0 0 0 8px var(--teal-tint), 0 0 28px 4px rgba(63,207,180,0.28), var(--talk-drop); } }
+.talk-label { pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
 .level-bars { display: flex; align-items: center; gap: 5px; height: 40%; pointer-events: none; }
-.level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; transition: height 90ms linear; }
+.level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; background-image: linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%, rgba(0,0,0,0.18)); box-shadow: 0 0 10px rgba(63,207,180,0.45), 0 1px 2px rgba(0,0,0,0.3); transition: height 90ms linear; }
 .talk.small .level-bars { gap: 3px; }
 .talk.small .level-bars .bar { width: 5px; }
 .listen-info { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: center; }

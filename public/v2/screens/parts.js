@@ -9,26 +9,151 @@ const svgEl = (tag, attrs) => {
   return n;
 };
 
+let ringsN = 0;
+
+/** A gradient across the whole drawing (user space), from the key light's corner to the far one. */
+const gradient = (id, c, stops, { onArc = false } = {}) => {
+  const [x1, y1, x2, y2] = [0.15, 0.1, 0.85, 0.9];
+  const n = svgEl('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: x1 * 2 * c, y1: y1 * 2 * c, x2: x2 * 2 * c, y2: y2 * 2 * c });
+  // An arc is turned a quarter back to start at 12 o'clock; its gradient is turned forward to match.
+  if (onArc) n.setAttribute('gradientTransform', `rotate(90 ${c} ${c})`);
+  for (const [o, colour, a] of stops) n.append(svgEl('stop', { offset: o, 'stop-color': colour, 'stop-opacity': a }));
+  return n;
+};
+const blur = (id, s) => {
+  const n = svgEl('filter', { id, x: '-50%', y: '-50%', width: '200%', height: '200%' });
+  n.append(svgEl('feGaussianBlur', { stdDeviation: s }));
+  return n;
+};
+
 /**
  * Two rings (gold funds outside, green memory inside). Returns {node, set(funds, memory, low, free)}.
  * Free questions are a lighter gold segment from 12 o'clock, and the paid balance follows it.
+ *
+ * Drawn to the first run's standard (screens/firstrun-art.js), with its one light (a key light from the
+ * top left, a soft teal rim light from the bottom right): each ring runs in a groove sunk into the
+ * ground (shadow under the wall that faces away from the light, a lit edge on the wall that faces it),
+ * and its fill is a lit band in that groove, with a soft glow, a specular line along its lit side and a
+ * bright tip where it ends. The colours stay the look's tokens (--gold, --memory, --low and their
+ * tracks); the light is white and the shade a deep tone laid over them, so every look keeps its colours.
  */
 export function rings(size = 'home') {
   const g = GEOMETRY[size];
   const c = g.box / 2;
+  const p = `rg${++ringsN}-`;
   const svg = svgEl('svg', { width: g.box, height: g.box, viewBox: `0 0 ${g.box} ${g.box}`, 'aria-hidden': 'true', class: 'rings-svg' });
-  const ring = (r, w, track, fill) => {
-    svg.append(svgEl('circle', { cx: c, cy: c, r, fill: 'none', stroke: `var(--${track})`, 'stroke-width': w, class: 'ring-track' }));
-    const f = svgEl('circle', { cx: c, cy: c, r, fill: 'none', stroke: `var(--${fill})`, 'stroke-width': w, 'stroke-linecap': 'round', transform: `rotate(-90 ${c} ${c})`, class: 'ring-fill', 'stroke-dasharray': `0 ${Math.round(2 * Math.PI * r)}` });
-    svg.append(f);
-    return f;
+  const defs = svgEl('defs', {});
+  defs.append(
+    // The groove's lit edges: the wall facing the key light catches it.
+    gradient(`${p}lout`, c, [
+      [0, '#FFFFFF', 0],
+      [0.55, '#FFFFFF', 0.25],
+      [1, '#FFFFFF', 0.95],
+    ]),
+    gradient(`${p}lin`, c, [
+      [0, '#FFFFFF', 0.9],
+      [0.5, '#FFFFFF', 0.2],
+      [1, '#FFFFFF', 0],
+    ]),
+    // The fill: lit toward the key light, shaded away from it; its specular line, and the rim light.
+    gradient(`${p}tube`, c, [
+      [0, '#FFFFFF', 0.42],
+      [0.45, '#FFFFFF', 0.06],
+      [0.7, '#000000', 0],
+      [1, '#000000', 0.2],
+    ], { onArc: true }),
+    gradient(`${p}spec`, c, [
+      [0, '#FFFFFF', 0.95],
+      [0.55, '#FFFFFF', 0.35],
+      [1, '#FFFFFF', 0.1],
+    ], { onArc: true }),
+    gradient(`${p}rim`, c, [
+      [0, '#3FCFB4', 0],
+      [0.6, '#3FCFB4', 0],
+      [1, '#9FF5E2', 0.55],
+    ], { onArc: true }),
+    blur(`${p}b1`, 1),
+    blur(`${p}b2`, Math.max(1.2, g.outer.w / 12)),
+    blur(`${p}b4`, Math.max(2.4, g.outer.w / 6)),
+  );
+  svg.append(defs);
+  const circle = (r, attrs) => svgEl('circle', { cx: c, cy: c, r, fill: 'none', ...attrs });
+  const arc = (r, attrs) => circle(r, { 'stroke-linecap': 'round', transform: `rotate(-90 ${c} ${c})`, 'stroke-dasharray': `0 ${Math.round(2 * Math.PI * r)}`, ...attrs });
+
+  /** One ring: its groove, then the lit band in it. `band` is the fill's width, a little inside the groove. */
+  const ring = (key, { r, w }, track, ink) => {
+    const band = w - Math.max(2, w * 0.12);
+    // The groove's shade, in a deep tone of the ring's own colour: under the outer wall at the top left,
+    // under the inner wall at the bottom right.
+    defs.append(
+      gradient(`${p}${key}gout`, c, [
+        [0, ink, 0.3],
+        [0.5, ink, 0.06],
+        [1, ink, 0],
+      ]),
+      gradient(`${p}${key}gin`, c, [
+        [0, ink, 0],
+        [0.5, ink, 0.05],
+        [1, ink, 0.26],
+      ]),
+    );
+    // The groove, clipped to itself so its shading stays inside.
+    const clip = svgEl('clipPath', { id: `${p}${key}clip` });
+    clip.append(svgEl('path', { d: `M${c - r - w / 2} ${c}a${r + w / 2} ${r + w / 2} 0 1 0 ${2 * r + w} 0a${r + w / 2} ${r + w / 2} 0 1 0 ${-2 * r - w} 0ZM${c - r + w / 2} ${c}a${r - w / 2} ${r - w / 2} 0 1 1 ${2 * r - w} 0a${r - w / 2} ${r - w / 2} 0 1 1 ${-2 * r + w} 0Z`, 'clip-rule': 'evenodd' }));
+    defs.append(clip);
+    const trackEl = circle(r, { stroke: `var(--${track})`, 'stroke-width': w, class: `ring-track ring-track-${key}` });
+    const groove = svgEl('g', { 'clip-path': `url(#${p}${key}clip)` });
+    groove.append(
+      circle(r + w / 2, { stroke: `url(#${p}${key}gout)`, 'stroke-width': w * 0.55, filter: `url(#${p}b2)` }),
+      circle(r - w / 2, { stroke: `url(#${p}${key}gin)`, 'stroke-width': w * 0.45, filter: `url(#${p}b2)` }),
+      circle(r + w / 2 - 0.6, { stroke: `url(#${p}lout)`, 'stroke-width': 1.2 }),
+      circle(r - w / 2 + 0.6, { stroke: `url(#${p}lin)`, 'stroke-width': 1.2 }),
+    );
+    // The lip around the groove catches the key light (top left of the outer edge).
+    const lip = circle(r + w / 2 + 0.7, { stroke: `url(#${p}lin)`, 'stroke-width': 1.1, opacity: 0.8 });
+    svg.append(trackEl, groove, lip);
+    const fill = svgEl('g', { class: `ring-band ring-band-${key}` });
+    const glow = arc(r, { 'stroke-width': band + 6, opacity: 0.32, filter: `url(#${p}b4)`, class: 'ring-lit ring-glow' });
+    const lit = arc(r, { stroke: `url(#${p}tube)`, 'stroke-width': band, class: 'ring-lit' });
+    const spec = arc(r + band * 0.22, { stroke: `url(#${p}spec)`, 'stroke-width': Math.max(1.2, band * 0.09), class: 'ring-lit ring-spec' });
+    const rim = arc(r - band * 0.3, { stroke: `url(#${p}rim)`, 'stroke-width': Math.max(1, band * 0.06), class: 'ring-lit', filter: `url(#${p}b1)` });
+    // The tip: a soft glow and a bright dot where the fill ends, turned into place.
+    const tip = svgEl('g', { class: 'ring-tip' });
+    tip.append(svgEl('circle', { cx: c, cy: c - r, r: band * 0.42, class: 'ring-tip-glow', filter: `url(#${p}b2)`, opacity: 0.75 }), svgEl('circle', { cx: c, cy: c - r, r: Math.max(1.6, band * 0.15), fill: '#FFFBEA', class: 'ring-tip-dot' }));
+    tip.style.transformOrigin = `${c}px ${c}px`;
+    fill.append(glow);
+    return { r, band, trackEl, fill, glow, lit, spec, rim, tip };
   };
-  const outer = ring(g.outer.r, g.outer.w, 'gold-track', 'gold');
-  const freeArc = svgEl('circle', { cx: c, cy: c, r: g.outer.r, fill: 'none', stroke: 'var(--gold-free)', 'stroke-width': g.outer.w, 'stroke-linecap': 'round', transform: `rotate(-90 ${c} ${c})`, class: 'ring-fill ring-free', 'stroke-dasharray': `0 ${Math.round(2 * Math.PI * g.outer.r)}` });
-  svg.insertBefore(freeArc, outer);
-  const innerTrack = svg.childElementCount;
-  const inner = ring(g.inner.r, g.inner.w, 'memory-track', 'memory');
-  const innerTrackEl = svg.children[innerTrack];
+
+  const o = ring('gold', g.outer, 'gold-track', '#5A3C08');
+  // Free questions first (lighter gold), then the paid balance: these two keep the class ring-fill.
+  const freeArc = arc(o.r, { stroke: 'var(--gold-free)', 'stroke-width': o.band, class: 'ring-fill ring-free' });
+  const outer = arc(o.r, { stroke: 'var(--gold)', 'stroke-width': o.band, class: 'ring-fill ring-paid' });
+  o.fill.append(freeArc, outer, o.lit, o.spec, o.rim, o.tip);
+  svg.append(o.fill);
+  const m = ring('memory', g.inner, 'memory-track', '#0A4A40');
+  const inner = arc(m.r, { stroke: 'var(--memory)', 'stroke-width': m.band, class: 'ring-fill ring-memory' });
+  m.fill.append(inner, m.lit, m.spec, m.rim, m.tip);
+  svg.append(m.fill);
+
+  /** Lays the lit layers over a fill of this share of the ring (from 12 o'clock), and turns the tip to its end. */
+  const light = (x, share, colour) => {
+    const on = dash(share, x.r).length >= 0.5;
+    for (const [n, r] of [
+      [x.glow, x.r],
+      [x.lit, x.r],
+      [x.spec, x.r + x.band * 0.22],
+      [x.rim, x.r - x.band * 0.3],
+    ]) {
+      n.setAttribute('stroke-dasharray', dash(share, r).dasharray);
+      n.style.opacity = on ? '' : '0';
+    }
+    x.glow.style.stroke = colour;
+    x.tip.firstChild.style.fill = colour;
+    x.tip.style.transform = `rotate(${Math.round(Math.min(1, Math.max(0, share)) * 3600) / 10}deg)`;
+    x.tip.style.opacity = on ? '' : '0';
+  };
+
   return {
     node: svg,
     set(funds, memoryFree, low = false, free = 0) {
@@ -43,11 +168,15 @@ export function rings(size = 'home') {
       outer.style.opacity = a.length < 0.5 ? '0' : '1';
       inner.setAttribute('stroke-dasharray', b.dasharray);
       inner.style.opacity = b.length < 0.5 ? '0' : '1';
-      inner.setAttribute('stroke', low ? 'var(--low)' : 'var(--memory)');
-      innerTrackEl.setAttribute('stroke', low ? 'var(--low-tint)' : 'var(--memory-track)');
+      inner.style.stroke = low ? 'var(--low)' : 'var(--memory)';
+      m.trackEl.style.stroke = low ? 'var(--low-tint)' : 'var(--memory-track)';
+      // The light follows the whole gold fill (free and paid together) and the memory fill.
+      light(o, (f.length + a.length) / f.circumference, a.length >= 0.5 ? 'var(--gold)' : 'var(--gold-free)');
+      light(m, b.length / b.circumference, low ? 'var(--low)' : 'var(--memory)');
       svg.dataset.funds = String(Math.round(a.length));
       svg.dataset.free = String(Math.round(f.length));
       svg.dataset.memory = String(Math.round(b.length));
+      svg.dataset.low = String(!!low);
     },
   };
 }
