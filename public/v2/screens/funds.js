@@ -2,9 +2,12 @@
 // out (refund as eCash, kept on the phone until the person says they saved it).
 import { backHeader, copy, el, icon, listRow, msgLine, toast } from '../core/ui.js';
 import { cardRing } from './parts.js';
+import { startFreeCard } from './startfree.js';
 
-export function fundsScreen({ t, state, nav, back, actions, format, vault, registry }) {
+export function fundsScreen({ t, state, nav, back, actions, format, vault, registry, wallet }) {
   const S = state.S;
+  // Start free first, while it is the way in (screens/startfree.js).
+  const free = startFreeCard({ t, state, actions, wallet }, 'funds');
   const fr = cardRing('gold-track', 'gold');
   const mr = cardRing('memory-track', 'memory');
   const amount = el('div', { class: 'big', id: 'fundsAmount' });
@@ -47,7 +50,7 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
       el('button', { type: 'button', class: 'btn primary', id: 'startFresh', onclick: () => (actions.startFresh(), toast(t('funds.started'))) }, icon('trash', 20), el('span', { text: t('funds.startFresh') })),
     ),
   );
-  const main = el('main', { class: 'screen sub funds', 'data-screen': 'funds' }, backHeader(t('funds.title'), back, t('common.back')), el('div', { class: 'scroll' }, vaultBox, fundsCard, memCard));
+  const main = el('main', { class: 'screen sub funds', 'data-screen': 'funds' }, backHeader(t('funds.title'), back, t('common.back')), el('div', { class: 'scroll' }, free.node, vaultBox, fundsCard, memCard));
 
   const vaultRows = () => {
     const rows = [];
@@ -113,7 +116,8 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
   let waysFor = null;
   const drawWays = (v) => {
     // Scan a note has its own big button above while there are no funds.
-    const list = v.noFunds ? registry.list('fund').filter((x) => x.instance.available(S.methods) && !(v.scanNote && x.instance.id === 'note')) : [];
+    // Start free has its own card on top while it shows.
+    const list = v.noFunds ? registry.list('fund').filter((x) => x.instance.available(S.methods) && !(v.scanNote && x.instance.id === 'note') && !(!free.node.hidden && x.instance.id === 'invite')) : [];
     const k = list.map((x) => x.instance.id).join(',');
     ways.hidden = !list.length;
     if (k === waysFor) return;
@@ -127,6 +131,7 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
 
   const update = () => {
     const v = state.view();
+    free.update();
     fr.set(v.fundsFraction, null, v.freeFraction);
     scanBtn.hidden = !v.scanNote;
     amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
@@ -166,13 +171,17 @@ export function fundsScreen({ t, state, nav, back, actions, format, vault, regis
   return { node: main, update, focus: main.querySelector('h1') };
 }
 
-export function addFundsScreen({ t, state, nav, back, registry }) {
+export function addFundsScreen({ t, state, nav, back, registry, actions, wallet }) {
   const S = state.S;
   const list = el('div', { class: 'fund-groups' });
+  // Start free on top while it is the way in; its own row (the invite module) is then left out.
+  const free = startFreeCard({ t, state, actions, wallet }, 'addFunds');
   const draw = () => {
+    free.update();
+    const card = !free.node.hidden;
     const groups = { unlinked: [], depends: [] };
     for (const { instance } of registry.list('fund')) {
-      if (!instance.available(S.methods)) continue;
+      if (!instance.available(S.methods) || (card && instance.id === 'invite')) continue;
       groups[instance.group === 'unlinked' ? 'unlinked' : 'depends'].push(
         listRow({ ico: instance.icon, tint: 'gold', title: t(`fund.${instance.id}.name`), sub: t(instance.sub?.() ?? `fund.${instance.id}.sub`), id: `fund-${instance.id}`, cls: instance.group === 'unlinked' ? 'teal-border' : '', onclick: () => nav('fund', { id: instance.id }) }),
       );
@@ -183,7 +192,7 @@ export function addFundsScreen({ t, state, nav, back, registry }) {
     );
   };
   draw();
-  const main = el('main', { class: 'screen sub add-funds', 'data-screen': 'addFunds' }, backHeader(t('addFunds.title'), back, t('common.back')), el('div', { class: 'scroll' }, list));
+  const main = el('main', { class: 'screen sub add-funds', 'data-screen': 'addFunds' }, backHeader(t('addFunds.title'), back, t('common.back')), el('div', { class: 'scroll' }, free.node, list));
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
 

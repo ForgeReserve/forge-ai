@@ -8,6 +8,15 @@
  */
 export const isFreeModel = (model) => model?.pricing?.free === true;
 
+/** The free model Start free chooses when there is no free one in use: a fast one when it is listed. */
+export const PREFERRED_FREE = 'glm-5.3-flash';
+
+/** The free model to use: PREFERRED_FREE when listed, else the first free one, never an uncensored one; or null. */
+export function freeModelChoice(models) {
+  const free = (models ?? []).filter((m) => !m.uncensored && isFreeModel(m));
+  return free.find((m) => m.id === PREFERRED_FREE) ?? free[0] ?? null;
+}
+
 /** Tokens a typical question is assumed to use, for "enough for about N questions" and the likely price. */
 export const TYPICAL = { input: 1000, output: 400 };
 

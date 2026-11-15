@@ -1,5 +1,7 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Browser, chromium } from 'playwright-core';
+import { type Browser, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 
@@ -7,6 +9,8 @@ import { pastFirstRun } from './firstrun-seen.ts';
 // with no balance key is sent to open one with an invite code, and then a question at a $0 balance
 // shows "Free", is sent, is answered, and the balance stays at 0. The v1 app's model menu says Free too.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
+// Screenshots of Start free for the owner (2026-11-15: "make start free easier to find").
+const SHOTS = join(import.meta.dirname, '../../.tmp/start-free');
 
 let g: Gateway;
 let browser: Browser;
@@ -18,6 +22,8 @@ beforeAll(async () => {
     editCatalog: (c) => {
       c.suppliers.freebie = { type: 'mock', tier: 'standard' };
       c.models.push({ id: 'free-echo', name: 'Free Echo', supplier: 'freebie', upstream: 'mock-echo', pricing: 'free', free_reason: 'ui test', max_output_tokens: 256 });
+      // The fast free model Start free prefers (core/price.js PREFERRED_FREE), listed after the other.
+      c.models.push({ id: 'glm-5.3-flash', name: 'GLM Flash', supplier: 'freebie', upstream: 'mock-echo', pricing: 'free', free_reason: 'ui test', max_output_tokens: 256 });
     },
   });
   browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -94,33 +100,87 @@ describe('free models in the v2 app', () => {
   });
 });
 
+/** A phone on a clean profile (seen: the first run was already seen), with its page errors kept. */
+async function phone({ seen = false, viewport = PHONE.viewport } = {}) {
+  const ctx = await browser.newContext({ ...PHONE, viewport });
+  if (seen) await pastFirstRun(ctx);
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // 401 and 402: a free model with no key and a paid one at $0; 403: the wrong invite code, on purpose.
+  page.on('console', (m) => m.type() === 'error' && !/40[123]/.test(m.text()) && errors.push(m.text()));
+  return { ctx, page, errors };
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+  mkdirSync(SHOTS, { recursive: true });
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: join(SHOTS, name) });
+}
+
+/** A $0 balance key opened with an invite through the API. */
+async function zeroKey(): Promise<string> {
+  const r = await fetch(`${g.url}/v1/wallet/open`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ invite: createInvite(g) }) });
+  const b: any = await r.json();
+  if (!b.key) throw new Error(`open failed: ${JSON.stringify(b)}`);
+  return b.key;
+}
+
+const privateOnly = async (page: Page) => {
+  await page.goto(`${g.url}/v2/#/more/model`);
+  await page.waitForSelector('[data-screen=model]');
+  return page.getAttribute('#privateOnly', 'aria-checked');
+};
+
 describe('Start free on the first run', () => {
-  it('opens a $0 balance with the invite code alone; free models work, paid ones still need funds', async () => {
-    const ctx = await browser.newContext(PHONE);
-    const page = await ctx.newPage();
-    const errors: string[] = [];
-    page.on('pageerror', (e) => errors.push(e.message));
+  it('is the step 1 link; the invite opens a $0 balance, asks before Private only goes off, and Type sends at $0', async () => {
+    const { ctx, page, errors } = await phone();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=intro][data-step=welcome]');
-    // Start free sits in the invite sheet, behind "I have an invite code".
-    await page.waitForSelector('#introInviteLink:not([hidden])');
+    // The step's one secondary link reads Start free once the engine says it has free models.
+    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+    expect(await page.locator('#introInviteLink svg').count()).toBe(1);
+    expect(await page.locator('.fr-links button:visible').count()).toBe(1);
+    await page.waitForSelector('#introListen:not([hidden])');
+    await shot(page, '1-step1-link.png');
+
     await page.click('#introInviteLink');
-    await page.waitForSelector('#introStartFree:not([hidden])');
+    await page.waitForSelector('dialog#inviteSheet[open]');
+    expect(await page.textContent('#inviteSheetTitle')).toBe('Start free');
     expect(await page.textContent('#introStartFree')).toBe('Start free');
+    expect(await page.textContent('#introFreeNote')).toBe('Free models answer at no cost. Add money later for private models.');
+    expect(await page.textContent('#introAddMoney')).toBe("I'll add money instead");
+    expect(await page.isVisible('#introInvite')).toBe(true);
+    expect(await page.isVisible('#introInviteDone')).toBe(false);
+    expect(await page.isVisible('#introInviteHint')).toBe(false);
     await page.click('#introStartFree');
     expect(await page.textContent('#introFreeMsg')).toBe('Enter your invite code first.');
     await page.fill('#introInvite', 'not-a-code');
     await page.click('#introStartFree');
     await expect.poll(() => page.textContent('#introFreeMsg')).toBe('This invite code does not work. Check it and try again.');
     await page.fill('#introInvite', createInvite(g));
+    await page.waitForTimeout(250); // the sheet's rise has ended
+    await shot(page, '2-start-free-sheet.png');
     await page.click('#introStartFree');
-    // Private only is on by default and the free models are Standard: the words say how to see them.
-    await expect.poll(() => page.textContent('#introFreeMsg')).toBe('Balance opened. The free models are Standard models: turn off Private only in Choose a model to use them.');
+
+    // The balance is open; the question, once, in the sheet. Private only is still on until the answer.
+    await page.waitForSelector('#introFreeAsk:not([hidden])');
+    expect(await page.textContent('#introFreeAsk p')).toBe('Free models are Standard models: the company running them can read what you type. Use them?');
+    expect(await page.textContent('#introUseFree')).toBe('Use free models');
+    expect(await page.textContent('#introKeepPrivate')).toBe('Keep Private only');
+    expect(await page.textContent('#introFreeMsg')).toBe('Your balance is open.');
+    expect(await page.isVisible('#introInvite')).toBe(false);
+    expect(await page.isVisible('#introAddMoney')).toBe(false);
+    expect(await page.isVisible('#introInviteDone')).toBe(false);
     const key = await page.evaluate(() => localStorage.getItem('forge.balanceKey'));
     expect(key).toMatch(/^sk-forge-/);
-    // Start free and the invite link are gone once there is a key.
-    await expect.poll(() => page.isVisible('#introStartFree')).toBe(false);
+    await shot(page, '3-private-only-question.png');
+    await page.click('#introUseFree');
+    await expect.poll(() => page.textContent('#introFreeMsg')).toBe('Private only is off now. You are using GLM Flash, a free model.');
+    expect(await page.isVisible('#introFreeAsk')).toBe(false);
     await page.click('#introInviteDone');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
     await expect.poll(() => page.isVisible('#introInviteLink')).toBe(false);
 
     // The balance is $0 and real: a free model answers on it, a paid one is refused for funds.
@@ -131,25 +191,91 @@ describe('Start free on the first run', () => {
     expect((await ask('free-echo')).status).toBe(200);
     expect((await ask('mock-echo')).status).toBe(402);
 
-    // Turning Private only off and choosing the free model, Type sends at $0 with no funds notice.
+    // Type shows Free on GLM Flash and sends at $0, with no funds notice.
     await page.click('#introSkip');
     await page.waitForSelector('[data-screen=home]');
-    await page.click('#btn-more');
-    await page.click('#moreModel');
-    await page.waitForSelector('[data-screen=model]');
-    await page.click('#privateOnly');
-    await page.click('[data-model="free-echo"]');
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('[data-screen=type]');
     await page.fill('#question', 'Hello?');
     expect(await page.textContent('#priceLine')).toBe('PriceFree');
     expect(await page.isVisible('#typeNotice')).toBe(false);
-    expect(await page.isDisabled('#sendBtn')).toBe(false);
+    await page.click('#sendBtn');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    expect(await page.textContent('#answerNote')).toBe('That was free.');
+    expect(g.deps.db.prepare("SELECT charged_msub FROM requests WHERE model = 'glm-5.3-flash'").all()).toEqual([{ charged_msub: 0 }]);
+    expect(await privateOnly(page)).toBe('false');
     expect(errors).toEqual([]);
     await ctx.close();
-  });
+  }, 90_000);
 
-  it('is not offered on an engine with no free models', async () => {
+  it("I'll add money instead keeps the code for funding; Keep Private only keeps it on", async () => {
+    const { ctx, page, errors } = await phone();
+    const code = createInvite(g);
+    await page.goto(`${g.url}/v2/`);
+    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+    await page.click('#introInviteLink');
+    await page.waitForSelector('dialog#inviteSheet[open]');
+    await page.fill('#introInvite', code);
+    await page.click('#introAddMoney');
+    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
+    expect(await page.evaluate(() => localStorage.getItem('forge.balanceKey'))).toBeNull();
+    // The code is the one the funding screens use, and the Start free card on Funds has it too.
+    await page.goto(`${g.url}/v2/#/funds/add/ecash`);
+    await page.waitForSelector('[data-fund=ecash]');
+    expect(await page.inputValue('#invite')).toBe(code);
+    await page.goto(`${g.url}/v2/#/funds`);
+    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
+    expect(await page.inputValue('#fundsFreeInvite')).toBe(code);
+
+    // Back on the first run, the sheet still has it: Start free, then Keep Private only.
+    await page.goto(`${g.url}/v2/#/start`);
+    await page.waitForSelector('[data-screen=intro][data-step=welcome]');
+    await page.click('#introInviteLink');
+    await page.waitForSelector('dialog#inviteSheet[open]');
+    expect(await page.inputValue('#introInvite')).toBe(code);
+    await page.click('#introStartFree');
+    await page.waitForSelector('#introFreeAsk:not([hidden])');
+    await page.click('#introKeepPrivate');
+    await expect.poll(() => page.textContent('#introFreeMsg')).toBe('Private only stays on. To use free models later, turn it off in Choose a model.');
+    expect(await page.isVisible('#introInviteDone')).toBe(true);
+    await page.click('#introInviteDone');
+    expect(await privateOnly(page)).toBe('true');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  for (const size of [
+    { width: 360, height: 640 },
+    { width: 412, height: 915 },
+  ])
+    it(`fits ${size.width} by ${size.height} with the Start free link: no scrolling, 48 px touch targets`, async () => {
+      const { ctx, page } = await phone({ seen: true, viewport: size });
+      await page.goto(`${g.url}/v2/#/start`);
+      await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+      const m = await page.evaluate(() => {
+        const main = document.querySelector('main')!;
+        return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, mainScroll: main.scrollHeight - main.clientHeight, bottom: document.querySelector('.fr-links')!.getBoundingClientRect().bottom };
+      });
+      expect(m.scrollW).toBeLessThanOrEqual(size.width);
+      expect(m.scrollH).toBeLessThanOrEqual(size.height);
+      expect(m.mainScroll).toBe(0);
+      expect(m.bottom).toBeLessThanOrEqual(size.height);
+      const small = (sel: string) => page.locator(sel).evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()).filter((r) => r.width < 48 || r.height < 48).length);
+      expect(await small('main > button:visible, main > :not(dialog) button:visible')).toBe(0);
+      // The sheet's buttons too, the question's included.
+      await page.click('#introInviteLink');
+      await page.waitForSelector('dialog#inviteSheet[open]');
+      expect(await small('dialog#inviteSheet button:visible')).toBe(0);
+      await page.fill('#introInvite', createInvite(g));
+      await page.click('#introStartFree');
+      await page.waitForSelector('#introFreeAsk:not([hidden])');
+      expect(await small('dialog#inviteSheet button:visible')).toBe(0);
+      const ask = await page.locator('#introFreeAsk').boundingBox();
+      expect(ask!.y + ask!.height).toBeLessThanOrEqual(size.height);
+      await ctx.close();
+    }, 60_000);
+
+  it('is not offered on an engine with no free models: the link, the sheet, Funds and Type stay as before', async () => {
     const plain = await startGateway({ env: { FORGE_INVITE_ONLY: 'true' } });
     try {
       const ctx = await browser.newContext(PHONE);
@@ -158,15 +284,141 @@ describe('Start free on the first run', () => {
       await page.waitForSelector('#introInviteLink:not([hidden])');
       // The methods are read after the first paint; give them the time a phone would.
       await page.waitForTimeout(500);
+      expect(await page.textContent('#introInviteLink')).toBe('I have an invite code');
       await page.click('#introInviteLink');
       await page.waitForSelector('#introInvite');
+      expect(await page.textContent('#inviteSheetTitle')).toBe('Invite code');
       expect(await page.isVisible('#introStartFree')).toBe(false);
+      expect(await page.isVisible('#introAddMoney')).toBe(false);
+      expect(await page.isVisible('#introInviteHint')).toBe(true);
+      expect(await page.isVisible('#introInviteDone')).toBe(true);
       expect((await (await fetch(`${plain.url}/v1/wallet/fund/methods`)).json()).open).toEqual({ enabled: false, free_models: [] });
+      await page.goto(`${plain.url}/v2/#/funds`);
+      await page.waitForSelector('[data-screen=funds]');
+      expect(await page.isVisible('#fundsStartFreeCard')).toBe(false);
+      await page.goto(`${plain.url}/v2/#/type`);
+      await page.waitForSelector('#typeNotice:not([hidden])');
+      expect(await page.isVisible('#noticeBtn')).toBe(true);
+      expect(await page.isVisible('#noticeFreeBtn')).toBe(false);
       await ctx.close();
     } finally {
       await plain.close();
     }
-  });
+  }, 60_000);
+});
+
+describe('Start free on Funds, Add funds and the funds notice', () => {
+  it('the Funds card opens a $0 balance with the invite, asks, and the free model answers', async () => {
+    const { ctx, page, errors } = await phone({ seen: true });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    // Add funds: the card on top, and the Start free row is left out while it shows.
+    await page.goto(`${g.url}/v2/#/funds/add`);
+    await page.waitForSelector('#addFundsStartFreeCard:not([hidden])');
+    expect(await page.textContent('#addFundsStartFreeCap')).toBe('Start free');
+    expect(await page.isVisible('#fund-invite')).toBe(false);
+    expect(await page.isVisible('#fund-ecash')).toBe(true);
+
+    await page.goto(`${g.url}/v2/#/funds`);
+    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
+    // At the top, above the funds card.
+    const [card, funds] = await Promise.all([page.locator('#fundsStartFreeCard').boundingBox(), page.locator('#fundsCap').boundingBox()]);
+    expect(card!.y).toBeLessThan(funds!.y);
+    expect(await page.textContent('#fundsStartFreeCap')).toBe('Start free');
+    expect(await page.textContent('#fundsFreeNote')).toBe('Free models answer at no cost. Add money later for private models.');
+    expect(await page.isVisible('#fundsUseFreeModel')).toBe(false);
+    // Its way in the empty state's grid is left out: the card is that way.
+    await page.waitForSelector('#fundsWays:not([hidden])');
+    expect(await page.isVisible('#way-invite')).toBe(false);
+    await page.fill('#fundsFreeInvite', createInvite(g));
+    await shot(page, '4-funds-card.png');
+    await page.click('#fundsStartFree');
+    await page.waitForSelector('#fundsFreeAsk:not([hidden])');
+    expect(await page.textContent('#fundsFreeAsk p')).toBe('Free models are Standard models: the company running them can read what you type. Use them?');
+    await page.click('#fundsUseFree');
+    await expect.poll(() => page.textContent('#fundsFreeMsg')).toBe('Private only is off now. You are using GLM Flash, a free model.');
+    // The card stays to say so; the funds card says questions are free.
+    expect(await page.isVisible('#fundsStartFreeCard')).toBe(true);
+    await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
+    // Opened again, with the free model in use, there is no card.
+    await page.waitForTimeout(300); // the settings are written to IndexedDB
+    await page.reload();
+    await page.waitForSelector('[data-screen=funds]');
+    await expect.poll(() => page.textContent('#fundsNote')).toBe('Questions to this model are free.');
+    expect(await page.isVisible('#fundsStartFreeCard')).toBe(false);
+    expect(await privateOnly(page)).toBe('false');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('"Use a free model instead" next to Add funds at $0: asks while Private only is on, then Type sends free', async () => {
+    const { ctx, page, errors } = await phone({ seen: true });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const key = await zeroKey();
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+
+    // Funds with a $0 key on a paid (private) model: the card has one button, no invite field.
+    await page.goto(`${g.url}/v2/#/funds`);
+    await page.waitForSelector('#fundsStartFreeCard:not([hidden])');
+    expect(await page.isVisible('#fundsUseFreeModel')).toBe(true);
+    expect(await page.textContent('#fundsUseFreeModel')).toBe('Use a free model instead');
+    expect(await page.isVisible('#fundsFreeInvite')).toBe(false);
+
+    // Type: the funds notice, with the free model next to Add funds.
+    await page.goto(`${g.url}/v2/#/type`);
+    await page.waitForSelector('#typeNotice:not([hidden])');
+    expect(await page.textContent('#typeNotice p')).toBe('Add funds to ask a question.');
+    expect(await page.textContent('#noticeBtn')).toBe('Add funds');
+    expect(await page.textContent('#noticeFreeBtn')).toBe('Use a free model instead');
+    const small = await page.locator('#typeNotice button').evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()).filter((r) => r.width < 48 || r.height < 48).length);
+    expect(small).toBe(0);
+    await shot(page, '5-funds-notice.png');
+
+    // Keep Private only: nothing changes, the notice is back.
+    await page.click('#noticeFreeBtn');
+    await page.waitForSelector('#typeFreeAsk');
+    expect(await page.textContent('#typeFreeAsk')).toBe('Free models are Standard models: the company running them can read what you type. Use them?');
+    await page.click('#typeKeepPrivate');
+    await expect.poll(() => page.textContent('#toast')).toBe('Private only stays on. To use free models later, turn it off in Choose a model.');
+    await page.waitForSelector('#noticeFreeBtn');
+    expect(await page.isDisabled('#sendBtn')).toBe(true);
+
+    // Use free models: Private only goes off, GLM Flash is chosen, and the question is free.
+    await page.click('#noticeFreeBtn');
+    await page.click('#typeUseFree');
+    await expect.poll(() => page.textContent('#toast')).toBe('Private only is off now. You are using GLM Flash, a free model.');
+    await expect.poll(() => page.isVisible('#typeNotice')).toBe(false);
+    await page.fill('#question', 'Is this free?');
+    expect(await page.textContent('#priceLine')).toBe('PriceFree');
+    expect(await page.isDisabled('#sendBtn')).toBe(false);
+    await page.click('#sendBtn');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    expect(await page.textContent('#answerNote')).toBe('That was free.');
+    expect(await privateOnly(page)).toBe('false');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('with Private only off already, "Use a free model instead" chooses it without asking', async () => {
+    const { ctx, page } = await phone({ seen: true });
+    const key = await zeroKey();
+    await page.goto(`${g.url}/v2/`);
+    await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    await page.reload();
+    await page.goto(`${g.url}/v2/#/more/model`);
+    await page.waitForSelector('[data-screen=model]');
+    await page.click('#privateOnly');
+    await page.click('[data-model="mock-echo"]');
+    await page.goto(`${g.url}/v2/#/type`);
+    await page.waitForSelector('#noticeFreeBtn');
+    await page.click('#noticeFreeBtn');
+    await expect.poll(() => page.textContent('#toast')).toBe('You are using GLM Flash, a free model.');
+    expect(await page.locator('#typeFreeAsk').count()).toBe(0);
+    await expect.poll(() => page.isVisible('#typeNotice')).toBe(false);
+    await ctx.close();
+  }, 60_000);
 });
 
 describe('free models in the v1 app', () => {

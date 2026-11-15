@@ -20,7 +20,7 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { ehbpBytes, estimate, holdMsub, isFreeModel, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
@@ -195,6 +195,9 @@ function view() {
     // model: only the balance key it needs ('needKey').
     fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use, freeModel: modelFree, hasKey }),
     modelFree,
+    // Start free (screens/startfree.js): this engine has free models, which a $0 balance opened with an
+    // invite code can use. Offered while there is no key or the balance is at 0 on a paid model.
+    startFree: !!S.methods?.open?.enabled,
     // No funds at all (no balance yet or a balance at zero, and no free questions): the home and Funds
     // show their empty state, and the gold ring invites a paper note scan.
     noFunds: paidNone && fr.left === 0,
@@ -492,6 +495,10 @@ const wallet = {
   mintAliases: () => S.mintAliases,
   units: () => S.units,
   lockKey: () => lockKey(),
+  /** Whether Private only is on: Start free asks before the free (Standard) models are used. */
+  privateOnly: () => !!S.settings.privateOnly,
+  /** Start free's choice, after a yes (actions.useFreeModels): Private only off, a free model chosen. */
+  useFreeModels: () => actions.useFreeModels(),
   /**
    * Adds eCash through the vault: stored on the phone first, removed only once credited. A voucher of
    * free questions (from the engine's credit mint) goes on the free balance; the result says free: true.
@@ -515,7 +522,8 @@ const wallet = {
   /**
    * Opens a balance with an invite code and nothing on it, for the free models (Start free: the first
    * run and the fund module invite). The new key is kept like any balance key; funds can be added to it
-   * later. When the chosen model is not free, the first free model Private only allows is chosen.
+   * later. When the chosen model is not free, the free model Private only allows (core/price.js
+   * freeModelChoice) is chosen; Private only itself is never changed here (Start free asks first).
    * Resolves {created, freeShown}: freeShown is false when Private only hides every free model.
    */
   open: async (invite) => {
@@ -527,7 +535,7 @@ const wallet = {
     }
     const shown = visibleModels(S.models, S.settings).filter(isFreeModel);
     if (shown.length && !isFreeModel(pickModel(S.models, S.settings))) {
-      S.settings.model = shown[0].id;
+      S.settings.model = freeModelChoice(shown).id;
       await saveSettings();
       store.set({});
     }
@@ -1218,6 +1226,22 @@ const actions = {
     S.settings.privateOnly = on;
     saveSettings();
     store.set({});
+  },
+  /**
+   * Start free's choice (screens/startfree.js): turns Private only off and chooses a free model (the
+   * chosen one if it is free, else core/price.js freeModelChoice). Called only after the person said yes to using Standard models,
+   * or with Private only off already. Returns the model, or null when the engine lists none.
+   */
+  useFreeModels: () => {
+    // A free model already chosen stays chosen.
+    const cur = pickModel(S.models, { ...S.settings, privateOnly: false });
+    const m = isFreeModel(cur) ? cur : freeModelChoice(S.models);
+    if (!m) return null;
+    S.settings.privateOnly = false;
+    S.settings.model = m.id;
+    saveSettings();
+    store.set({});
+    return m;
   },
   /** Chooses the first free model Private only allows (Funds and Type offer it when free questions are left). */
   useFreeModel: () => {

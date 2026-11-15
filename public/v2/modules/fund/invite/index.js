@@ -1,7 +1,9 @@
 // Fund module: Start free (docs/PAYMENTS.md, Free models). Opens a balance with an invite code
 // and nothing on it, through wallet.open (POST /v1/wallet/open). Its balance key is all a free model
 // needs: questions to one cost nothing and nothing is held. Funds can be added to the same balance later.
-// Listed only while the engine has free models and this phone has no balance key yet.
+// Listed only while the engine has free models and this phone has no balance key yet. Free models
+// are Standard models: with Private only on, it asks before turning it off (the same question as
+// screens/startfree.js), and never turns it off without a yes.
 
 export function create(inputs) {
   const { t, ui, wallet } = inputs;
@@ -25,12 +27,13 @@ export function create(inputs) {
         go.disabled = true;
         msg.set(t('fund.invite.opening'));
         try {
-          const r = await wallet.open(code);
-          // With Private only on, the free models (Standard) are hidden: say how to see them.
-          const words = t(r?.freeShown === false ? 'fund.invite.openedHidden' : 'fund.invite.opened');
-          ui.toast(words);
-          msg.set(words, 'ok');
-          done();
+          await wallet.open(code);
+          if (wallet.privateOnly()) {
+            msg.set(t('startFree.opened'), 'ok');
+            field.hidden = go.hidden = true;
+            ask.hidden = false;
+            useBtn.focus();
+          } else finish(false);
         } catch (e) {
           const why = e?.code;
           msg.set(why === 'invite_used' ? t('fund.invite.used') : why === 'invite_required' || why === 'invite_invalid' ? t('fund.invite.bad') : t('fund.failed', { message: e?.message ?? String(e) }), 'err');
@@ -38,8 +41,22 @@ export function create(inputs) {
           go.disabled = false;
         }
       });
+      // The question, once the balance is open and Private only is on.
+      const useBtn = ui.el('button', { type: 'button', class: 'btn primary', id: 'openUseFree', text: t('startFree.use') });
+      const keepBtn = ui.el('button', { type: 'button', class: 'btn', id: 'openKeepPrivate', text: t('startFree.keep') });
+      const ask = ui.el('div', { class: 'free-ask', id: 'openFreeAsk', role: 'group', 'aria-labelledby': 'openFreeAskText', hidden: true }, ui.el('p', { id: 'openFreeAskText', text: t('startFree.ask') }), ui.el('div', { class: 'row-btns' }, useBtn, keepBtn));
+      /** Says what was chosen, then back to Funds. used: the free models (Private only goes off, after a yes). */
+      function finish(wasOn, used = true) {
+        const m = used ? wallet.useFreeModels() : null;
+        const words = !used ? t('startFree.kept') : m ? t(wasOn ? 'startFree.using' : 'startFree.ready', { name: m.name ?? m.id }) : t('startFree.noModel');
+        ui.toast(words, 4000);
+        msg.set(words, 'ok');
+        done();
+      }
+      useBtn.addEventListener('click', () => finish(true));
+      keepBtn.addEventListener('click', () => finish(true, false));
       const field = ui.el('div', { class: 'field' }, ui.el('label', { for: 'openInvite', class: 'label', text: t('invite.label') }), input);
-      const body = ui.el('div', { class: 'scroll fund-body' }, ui.el('p', { text: t('fund.invite.what') }), field, msg, ui.el('p', { class: 'note', text: t('fund.invite.later') }));
+      const body = ui.el('div', { class: 'scroll fund-body' }, ui.el('p', { text: t('fund.invite.what') }), field, ask, msg, ui.el('p', { class: 'note', text: t('fund.invite.later') }));
       const node = ui.el('div', { class: 'fund-view' }, body, ui.el('div', { class: 'foot' }, go));
       return { node };
     },

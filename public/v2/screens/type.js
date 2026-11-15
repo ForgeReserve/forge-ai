@@ -1,7 +1,7 @@
 // Type: a text field, what is attached, the price before sending, and Send. The canvas draws no typing
 // screen (Decision 5), so this one is built from its tokens: back header, one field, one primary button.
 import { priceLine } from '../core/price.js';
-import { backHeader, el, icon } from '../core/ui.js';
+import { backHeader, el, icon, toast } from '../core/ui.js';
 import { searchSwitch } from './parts.js';
 
 export function typeScreen({ t, state, nav, back, actions }) {
@@ -21,6 +21,32 @@ export function typeScreen({ t, state, nav, back, actions }) {
     el('div', { class: 'type-body' }, follow, chips, el('label', { class: 'sr-only', for: 'question', text: t('type.label') }), ta, notice),
     el('div', { class: 'type-foot' }, search.node, price, send),
   );
+
+  // "Use a free model instead" next to Add funds, while the engine has free models (screens/startfree.js).
+  // With Private only on it asks first, in the notice; with no balance key it opens Start free, which asks.
+  let asking = false;
+  const freeInstead = () => {
+    const v = state.view();
+    if (!v.hasKey) return actions.openBalance();
+    if (S.settings.privateOnly) {
+      asking = true;
+      update();
+      notice.querySelector('#typeUseFree')?.focus();
+      return;
+    }
+    useFree(false);
+  };
+  const useFree = (wasOn) => {
+    asking = false;
+    const m = actions.useFreeModels();
+    toast(m ? t(wasOn ? 'startFree.using' : 'startFree.ready', { name: m.name ?? m.id }) : t('startFree.noModel'), 4000);
+    update();
+  };
+  const keepPrivate = () => {
+    asking = false;
+    toast(t('startFree.kept'), 4000);
+    update();
+  };
 
   const blocker = (v) => {
     if (!v.online) return { key: 'type.offline' };
@@ -53,8 +79,18 @@ export function typeScreen({ t, state, nav, back, actions }) {
     // The funds left (less what other questions hold) do not cover this question's hold.
     const b = blocker(v) ?? (est.short ? { key: 'type.short', btn: 'type.addFunds', go: () => nav('addFunds') } : null);
     let problem = b ? null : est.reading ? 'type.reading' : est.overBody ? 'type.tooLarge' : est.overContext ? 'type.tooLong' : est.freeTooLong ? 'type.freeTooLong' : null;
-    if (b) {
-      notice.replaceChildren(el('p', { text: t(b.key) }), b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : '');
+    // Not enough funds for a paid model: a free model is the other way, on an engine that has them.
+    const free = !!b && v.startFree && (b.key === 'type.noFunds' || b.key === 'type.short');
+    if (!free) asking = false;
+    if (b && asking) {
+      notice.replaceChildren(
+        el('p', { id: 'typeFreeAsk', text: t('startFree.ask') }),
+        el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn primary', id: 'typeUseFree', onclick: () => useFree(true), text: t('startFree.use') }), el('button', { type: 'button', class: 'btn', id: 'typeKeepPrivate', onclick: keepPrivate, text: t('startFree.keep') })),
+      );
+      notice.hidden = false;
+    } else if (b) {
+      const btns = [b.btn ? el('button', { type: 'button', class: 'btn', id: 'noticeBtn', onclick: b.go, text: t(b.btn) }) : null, free ? el('button', { type: 'button', class: 'btn', id: 'noticeFreeBtn', onclick: freeInstead }, icon('gift', 20), el('span', { text: t('startFree.useModel') })) : null].filter(Boolean);
+      notice.replaceChildren(el('p', { text: t(b.key) }), btns.length > 1 ? el('div', { class: 'row-btns' }, ...btns) : (btns[0] ?? ''));
       notice.hidden = false;
     } else if (problem) {
       notice.replaceChildren(el('p', { text: t(problem) }));

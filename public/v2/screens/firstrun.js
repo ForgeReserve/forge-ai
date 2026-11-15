@@ -8,6 +8,7 @@
 import { nextStep, payWays, spokenFor, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
 import { el, icon } from '../core/ui.js';
 import { ART, LIT, PRIVATE_ART, RING } from './firstrun-art.js';
+import { startFree } from './startfree.js';
 
 const NIGHT = '#0B0D10';
 
@@ -135,41 +136,41 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     // funding screens, as they keep it.
     const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
     input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-    // Start free: the invite code alone opens a balance with nothing on it, for the free models
-    // (docs/PAYMENTS.md, Free models). Offered in the invite sheet while the engine has free models and
-    // there is no key.
-    const freeMsg = el('p', { class: 'msg', id: 'introFreeMsg', role: 'status' });
-    const startFree = el('button', { type: 'button', class: 'btn soft block', id: 'introStartFree', hidden: true }, icon('gift', 20), el('span', { text: t('intro.startFree') }));
-    const freeNote = el('p', { class: 'note', id: 'introFreeNote', hidden: true, text: t('intro.startFreeSub') });
     const hint = el('p', { class: 'note', id: 'introInviteHint', text: t('invite.hint') });
-    const s = sheet('inviteSheet', 'invite.label', el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, hint, freeNote, startFree, freeMsg));
-    s.querySelector('.fr-sheet-body').append(el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') }));
-    const link = linkBtn('introInviteLink', 'ticket', 'intro.inviteLink', s);
+    const box = el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, hint);
+    const done = el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') });
+    // Start free (screens/startfree.js): while the engine has free models and there is no key, the step's
+    // one link reads "Start free with an invite" and the sheet opens a $0 balance with the code, then asks
+    // before Private only is turned off. "I'll add money instead" keeps the code for funding, as before.
+    let finished = false;
+    const free = startFree({ t, state, actions, wallet }, { id: 'intro', field: { input, box }, after: () => ((finished = true), update()) });
+    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()), text: t('startFree.money') });
+    const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
+    const title = s.querySelector('h2');
+    const label = el('span', { text: t('intro.inviteLink') });
+    let ico = svg(SVG.ticket);
+    const link = el('button', { type: 'button', class: 'fr-link', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, ico, label);
+    let shown = null;
     const update = () => {
-      const free = !!S.methods?.open?.enabled;
-      link.hidden = !!wallet.key() || !(wallet.inviteOnly() || free);
-      hint.hidden = !wallet.inviteOnly();
-      startFree.hidden = freeNote.hidden = !free || !!wallet.key();
+      // Start free while the sheet shows it: a key opened here keeps the sheet's own words until it closes.
+      const free0 = !!S.methods?.open?.enabled && (!wallet.key() || free.busy());
+      link.hidden = !!wallet.key() || !(wallet.inviteOnly() || free0);
+      if (free0 !== shown) {
+        shown = free0;
+        label.textContent = t(free0 ? 'startFree.link' : 'intro.inviteLink');
+        const swap = free0 ? icon('gift', 22) : svg(SVG.ticket);
+        ico.replaceWith(swap);
+        ico = swap;
+        title.textContent = t(free0 ? 'startFree.title' : 'invite.label');
+      }
+      hint.hidden = free0 || !wallet.inviteOnly();
+      free.node.hidden = money.hidden = !free0;
+      if (free0) {
+        free.update();
+        money.hidden = finished || free.busy();
+      }
+      done.hidden = free0 && !finished;
     };
-    startFree.addEventListener('click', async () => {
-      const code = input.value.trim();
-      if (!code) {
-        freeMsg.textContent = t('invite.missing');
-        input.focus();
-        return;
-      }
-      startFree.disabled = true;
-      freeMsg.textContent = t('fund.invite.opening');
-      try {
-        const r = await wallet.open(code);
-        freeMsg.textContent = t(r?.freeShown === false ? 'fund.invite.openedHidden' : 'fund.invite.opened');
-        update();
-      } catch (e) {
-        freeMsg.textContent = e?.code === 'invite_used' ? t('fund.invite.used') : e?.code === 'invite_required' || e?.code === 'invite_invalid' ? t('fund.invite.bad') : t('fund.failed', { message: e?.message ?? String(e) });
-      } finally {
-        startFree.disabled = false;
-      }
-    });
     return { link, update };
   }
 
