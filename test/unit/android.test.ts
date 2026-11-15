@@ -1,6 +1,7 @@
 // The Android app's project files (android/): what the APK may do and carry. The build itself is
 // checked by `cd android && ./gradlew assembleDebug testDebugUnitTest`.
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -141,3 +142,48 @@ describe('the web bundle in the APK', () => {
     expect(() => readConfig(f)).toThrow(/appId/);
   });
 });
+
+describe("the native natural voice's libraries (scripts/android-ptts.sh)", () => {
+  const lock = JSON.parse(read('scripts/ptts/lock.json'));
+  const libs = join(ROOT, 'android/app/src/main/jniLibs');
+
+  it('are the ones built from the pinned xn-ptts commit, byte for byte', () => {
+    expect(lock).toMatchObject({ repo: 'https://github.com/gradium-ai/xn-ptts', tag: 'v0.7.0', commit: '32c1554a8ce442d672de90fc82700bbdcf08d918', license: 'MIT OR Apache-2.0' });
+    expect(read('scripts/android-ptts.sh')).toContain(`COMMIT=${lock.commit}`);
+    for (const f of lock.files) {
+      const b = readFileSync(join(libs, f.name));
+      expect(b.length, f.name).toBe(f.size);
+      expect(createHash('sha256').update(b).digest('hex'), f.name).toBe(f.sha256);
+    }
+    // Nothing else: every native file in the APK is in the lock.
+    const all = readdirSync(libs, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => `${d.parentPath.slice(libs.length + 1)}/${d.name}`).sort();
+    expect(all).toEqual(lock.files.map((f: any) => f.name).sort());
+  });
+
+  it('are 64-bit ARM with a placeholder for every other ABI, so the app still installs on 32-bit and x86 phones', () => {
+    const abis = readdirSync(libs).sort();
+    expect(abis).toEqual(['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']);
+    // ELF, and the machine each folder says (183 aarch64, 40 arm, 3 x86, 62 x86-64).
+    const machine = { 'arm64-v8a': 183, 'armeabi-v7a': 40, x86: 3, x86_64: 62 } as Record<string, number>;
+    for (const f of lock.files) {
+      const b = readFileSync(join(libs, f.name));
+      expect(b.subarray(0, 4).toString('latin1')).toBe('\x7fELF');
+      expect(b.readUInt16LE(18), f.name).toBe(machine[f.name.split('/')[0]]);
+    }
+  });
+
+  it('run in a voice process of their own, which no other app can reach', () => {
+    expect(manifest).toMatch(/<service\s+android:name="\.VoiceService"\s+android:process=":voice"\s+android:exported="false" \/>/);
+    expect(read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt')).toContain('registerPlugin(VoicePlugin::class.java)');
+    // The debug-only lab run from adb is refused by a release build.
+    expect(read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt')).toMatch(/FLAG_DEBUGGABLE == 0\) return/);
+  });
+
+  it('carry their licences', () => {
+    expect(read('public/vendor/licenses/xn-ptts.txt')).toContain(lock.commit);
+    expect(read('public/vendor/licenses/xn-ptts.txt')).toMatch(/Permission is hereby granted[\s\S]*Apache License/);
+    const third = read('public/vendor/licenses/xn-ptts-THIRD_PARTY_LICENSES.md');
+    for (const crate of ['tokenizers', 'serde_json', 'rayon']) expect(third, crate).toMatch(new RegExp(`^- ${crate} `, 'm'));
+  });
+});
+
