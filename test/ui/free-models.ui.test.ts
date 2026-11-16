@@ -364,6 +364,43 @@ describe('Start free on the first run', () => {
     }
   }, 60_000);
 
+  it('Scan tapped again while the camera is still opening closes the scanner, and never starts a second scan', async () => {
+    // No service worker, so the scanner's script comes through the route below.
+    const ctx = await browser.newContext({ ...PHONE, serviceWorkers: 'block' });
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // The scanner's script arrives late, and counts the scans it is asked for and the ones stopped.
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route('**/js/scan.js', async (route) => {
+      await held;
+      await route.fulfill({ contentType: 'text/javascript', body: 'window.__scans = 0; window.__stops = 0; window.ForgeScan = { scan: () => (window.__scans++, { promise: new Promise(() => {}), stop: () => window.__stops++ }) };' });
+    });
+    await page.goto(`${g.url}/v2/#/start/private`);
+    await page.waitForSelector('#introNext.free');
+    await page.click('#introNext');
+    await page.waitForSelector('#introInviteScan');
+    await page.click('#introInviteScan');
+    expect(await page.isVisible('#introInviteScanner')).toBe(true);
+    await page.click('#introInviteScan');
+    expect(await page.isVisible('#introInviteScanner')).toBe(false);
+    release();
+    await page.waitForFunction(() => (window as any).__scans === 1);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => [(window as any).__scans, (window as any).__stops])).toEqual([1, 1]);
+    expect(await page.isVisible('#introInviteScanner')).toBe(false);
+    // A tap after that opens it as usual, and one more closes it.
+    await page.click('#introInviteScan');
+    await page.waitForFunction(() => (window as any).__scans === 2);
+    expect(await page.isVisible('#introInviteScanner')).toBe(true);
+    await page.click('#introInviteScan');
+    expect(await page.evaluate(() => [(window as any).__scans, (window as any).__stops])).toEqual([2, 2]);
+    expect(await page.isVisible('#introInviteScanner')).toBe(false);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('reads the ways to pay again after a failed read: later on its own, and at once when the phone is back online', async () => {
     for (const how of ['timer', 'online'] as const) {
       const { ctx, page, errors } = await phone();

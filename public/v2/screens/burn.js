@@ -15,6 +15,7 @@ export const BURN_MS = 1700;
 const RECOVER_MS = 420;
 const FINALE_MS = 700;
 const TAP_MS = 260;
+const AGAIN_MS = 6000;
 
 /** A smooth wobble along the fire's front, in px, for x (px) at time t (s). */
 const wobble = (x, t) => 9 * Math.sin(x * 0.034 + t * 1.9) + 5 * Math.sin(x * 0.087 - t * 2.6) + 2.4 * Math.sin(x * 0.21 + t * 5.1);
@@ -24,7 +25,8 @@ const ease = (p) => p * p * (3 - 2 * p);
  * Turns `btn` into a hold-to-burn button.
  * target(): the element that burns (the conversation card), read when the hold starts.
  * onBurn(): called once the hold completes (after the ash), awaited.
- * onTap(): a press too short to be a hold (say "Hold to burn").
+ * onTap(again): a press too short to be a hold (say "Hold to burn"). again: it was a screen reader's
+ * activation, which cannot hold, and doing it once more burns (say so).
  * below(): an element pinned over the card's foot (the answer's dock): the fire stays above it.
  * Returns {destroy()}.
  */
@@ -55,6 +57,7 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
 
   const start = () => {
     if (phase === 'finale' || phase === 'done' || phase === 'dead') return;
+    armedAt = 0;
     downAt = performance.now();
     if (phase === 'idle') {
       card = target?.() ?? null;
@@ -170,9 +173,19 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
       else release();
     }
   };
-  // A click with no press before it (a screen reader's activation): say how it works.
+  // A click with no press before it is a screen reader's activation, which cannot hold: the first says
+  // so, and a second within AGAIN_MS burns (with no fire to watch). Still never one activation.
+  let armedAt = 0;
   const onClick = (e) => {
-    if (e.detail === 0 && phase === 'idle') onTap();
+    if (e.detail !== 0 || phase !== 'idle') return;
+    const now = performance.now();
+    if (armedAt && now - armedAt < AGAIN_MS) {
+      armedAt = 0;
+      finish();
+      return;
+    }
+    armedAt = now;
+    onTap(true);
   };
   const off = new AbortController();
   const on = (type, fn) => btn.addEventListener(type, fn, { signal: off.signal });

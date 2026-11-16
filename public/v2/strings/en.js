@@ -1089,6 +1089,7 @@ export default {
   // Hold to burn (screens/burn.js).
   'burn.hold': 'Hold',
   'burn.tap': 'Hold to burn. Keep your finger on it until the card burns away.',
+  'burn.again': 'Press it again now to burn.',
   // The natural voice, offered after the phone's own voice read an answer.
   'speak.offer': 'Better voice',
   'speak.offerSize': '{mb} MB, once',

@@ -21,8 +21,15 @@ export function speakable(md) {
     l = l.replace(/^#{1,6}\s+/, '').replace(/^>\s?/, '').replace(/^([-*+]|\d+[.)])\s+/, '');
     l = l.replace(/^[•·▪◦‣]\s*/, '');
     l = l.replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2').replace(/(\*|_)(?=\S)([^*_]*?\S)\1/g, '$2');
-    // What is left of the marks (a star or hash the model left open) is never said.
-    l = l.replace(/[*#~`|>]+/g, ' ').replace(/(^|\s)_+|_+(\s|$)/g, '$1$2').replace(/\s+/g, ' ').trim();
+    // What is left of the marks (a star or hash the model left open) is never said. A hash or a
+    // "greater than" that belongs to the words stays (C#, #1, 5 > 3), and a bar between words is a pause.
+    l = l
+      .replace(/[*~`]+/g, ' ')
+      .replace(/(?<![\p{L}\p{N}])#+(?!\p{N})|(?<=[\p{L}\p{N}])#+(?=[\p{L}\p{N}])|#{2,}/gu, ' ')
+      .replace(/(\S)\s*\|+\s*(?=\S)/g, '$1, ')
+      .replace(/\|+/g, ' ')
+      .replace(/(?<![\p{L}\p{N}]\s?)>+|>+(?!\s?[\p{L}\p{N}=])/gu, ' ');
+    l = l.replace(/(^|\s)_+|_+(\s|$)/g, '$1$2').replace(/\s+/g, ' ').trim();
     return l;
   });
   // A line that ends without a stop gets one, so a list is read as separate sentences.

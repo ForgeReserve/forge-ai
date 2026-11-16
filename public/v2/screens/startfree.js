@@ -35,22 +35,32 @@ export function codeScanner({ t, scan, id, onCode, cls = 'btn sf-btn' }) {
   const video = el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
   const scanner = el('div', { class: 'scanner', id: `${id}Scanner`, hidden: true }, video);
   let job = null;
+  // The open still on its way (the scanner's script loads first): a tap then closes it, and never
+  // starts a second scan beside the first.
+  let opening = null;
   const stop = () => {
+    opening = null;
     job?.stop();
     job = null;
     scanner.hidden = true;
   };
   const button = scan?.available() ? el('button', { type: 'button', class: cls, id: `${id}Scan`, 'aria-label': t('startFree.scanLabel') }, icon('scan', 22), el('span', { text: t('startFree.scan') })) : null;
   button?.addEventListener('click', async () => {
-    if (job) return stop();
+    if (job || opening) return stop();
+    const mine = (opening = {});
     scanner.hidden = false;
+    let j = null;
     try {
-      job = await scan.open(video);
-      const text = await job.promise;
+      j = await scan.open(video);
+      if (opening !== mine) return j.stop();
+      opening = null;
+      job = j;
+      const text = await j.promise;
+      if (job !== j) return;
       stop();
       onCode(codeFrom(text));
     } catch {
-      stop();
+      if (opening === mine || (j && job === j)) stop();
     }
   });
   return { button, scanner, stop };

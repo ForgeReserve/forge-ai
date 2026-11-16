@@ -153,6 +153,10 @@ describe('what is read aloud', () => {
     expect(SPEECH.speakable('**Note: the total is 5 # items')).toBe('Note: the total is 5 items.');
     expect(SPEECH.speakable('Call it max_tokens.')).toBe('Call it max_tokens.');
     expect(SPEECH.speakable('A 🇯🇲 flag and 👋🏽 wave.')).toBe('A flag and wave.');
+    // A hash or a "greater than" that belongs to the words is kept, and a bar between words is a pause.
+    expect(SPEECH.speakable('C# and F# are #1. 5 > 3 and x >= 2.')).toBe('C# and F# are #1. 5 > 3 and x >= 2.');
+    expect(SPEECH.speakable('red | green | blue')).toBe('red, green, blue.');
+    expect(SPEECH.speakable('##Heading\n#tag and a -> b')).toBe('Heading. tag and a - b.');
   });
 
   it('splits sentences and groups them into pieces no longer than the limit', () => {

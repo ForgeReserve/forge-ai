@@ -22,7 +22,7 @@ export function historyScreen({ t, state, back, backTo, actions, reader }) {
   // question, so a redraw of the list never leaves it running unowned.
   const holders = new Set();
   let allHolder = null;
-  const holdBurn = (btn, target, onBurn) => holdToBurn(btn, { target, onBurn, onTap: () => toast(t('burn.tap'), 2600) });
+  const holdBurn = (btn, target, onBurn) => holdToBurn(btn, { target, onBurn, onTap: (again) => toast(t(again ? 'burn.again' : 'burn.tap'), again ? 6000 : 2600) });
 
   const card = (h) => {
     const [ico, tint] = KIND_ICON[h.kind] ?? KIND_ICON.text;
