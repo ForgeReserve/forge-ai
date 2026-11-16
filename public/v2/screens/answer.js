@@ -14,7 +14,8 @@
 // plain text.
 let md = null;
 let mdLoading = null;
-const loadMarkdown = () =>
+/** Loads the Markdown module once (Playful mode's answer uses it too); resolves the module. */
+export const loadMarkdown = () =>
   (mdLoading ??= import('../../js/markdown.js').then(
     (m) => (md = m),
     (e) => {

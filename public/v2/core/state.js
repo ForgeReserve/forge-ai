@@ -81,9 +81,18 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  */
 /**
  * look: 'midnight' by default (the owner, 2026-11-15), 'light' or 'dark'. lookPicked: true once the
- * person picked a look in More, Mode and look.
+ * person picked a look in More, Mode and look. mode: the home and answer screens' mode module ('default',
+ * or 'playful': docs/PLAYFUL.md), chosen in the same place.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '' });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default' });
+
+/**
+ * The mode to draw the home and the answer with: the chosen one when it can be drawn now (`ready`, the
+ * ids of the mode modules whose screens are in), else Default.
+ */
+export function pickMode(ready, settings) {
+  return ready.includes(settings?.mode) ? settings.mode : 'default';
+}
 
 /**
  * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the

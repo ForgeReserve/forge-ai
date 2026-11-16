@@ -30,9 +30,28 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
     s.innerHTML = `<rect width="60" height="84" rx="10" fill="${c('bg')}" stroke="${c('line')}"/><circle cx="30" cy="38" r="17" fill="none" stroke="${c('gold-track')}" stroke-width="5"/><circle cx="30" cy="38" r="17" fill="none" stroke="${c('gold')}" stroke-width="5" stroke-dasharray="80 107" stroke-linecap="round" transform="rotate(-90 30 38)"/><circle cx="30" cy="38" r="11" fill="none" stroke="${c('memory-track')}" stroke-width="5"/><circle cx="30" cy="38" r="11" fill="none" stroke="${c('memory')}" stroke-width="5" stroke-dasharray="48 69" stroke-linecap="round" transform="rotate(-90 30 38)"/><circle cx="30" cy="38" r="6" fill="${c('talk')}"/><rect x="10" y="66" width="40" height="8" rx="4" fill="${c('surface')}" stroke="${c('line')}"/>`;
     return s;
   };
+  // The modes (core/registry.js, kind mode): the one in use is the big card, the others under it. The
+  // name and line of a bundled mode are in the string table; a later one shows its manifest's name.
+  const MODE_TEXT = { default: ['look.default', 'look.defaultSub', 'grid'], playful: ['look.playful', 'look.playfulSub', 'star'] };
+  const modes = el('div', { class: 'mode-list', role: 'radiogroup', 'aria-label': t('look.mode') });
   const group = el('div', { class: 'look-list', role: 'radiogroup', 'aria-label': t('look.look') });
   const follow = el('button', { type: 'button', class: 'setting-row', id: 'followSystem', role: 'switch', 'aria-label': t('look.followLabel') });
   const draw = () => {
+    const using = S.settings.mode ?? 'default';
+    modes.replaceChildren(
+      ...registry.list('mode').map(({ manifest, instance }) => {
+        const on = instance.id === using;
+        const [name, sub, ico] = MODE_TEXT[instance.id] ?? [null, null, 'grid'];
+        const line = sub ? t(sub) : '';
+        return el(
+          'button',
+          { type: 'button', class: on ? 'mode-on' : 'mode-card', role: 'radio', 'aria-checked': String(on), id: `mode-${instance.id}`, onclick: () => !on && actions.setMode(instance.id) },
+          icon(ico, on ? 30 : 22),
+          el('span', {}, el('b', { text: name ? t(name) : manifest.name.en }), line || on ? el('small', { text: on ? `${line} ${t('look.onNow')}`.trim() : line }) : null),
+          on ? el('span', { class: 'on-dot', 'aria-hidden': 'true' }) : null,
+        );
+      }),
+    );
     group.replaceChildren(
       ...looks.map(({ instance }) => {
         const on = S.settings.look === instance.id;
@@ -58,8 +77,8 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
       'div',
       { class: 'scroll' },
       el('h2', { class: 'caps', text: t('look.mode') }),
-      el('div', { class: 'mode-on', 'aria-current': 'true' }, icon('grid', 30), el('span', {}, el('b', { text: t('look.default') }), el('small', { text: t('look.defaultSub') })), el('span', { class: 'on-dot', 'aria-hidden': 'true' })),
-      // Classic is the v1 chat page; Playful comes with a later slice and is not listed.
+      modes,
+      // Classic is the v1 chat page, a link rather than a mode module.
       // The Android app carries only this app, so it has no Classic to open.
       native ? null : el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
       el('h2', { class: 'caps', text: t('look.look') }),

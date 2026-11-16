@@ -23,6 +23,9 @@
     .boot svg { width: min(336px, 82vw); height: auto; }
     @media (prefers-reduced-motion: no-preference) { .boot svg { animation: boot-breathe 2.4s ease-in-out infinite; } }
     @keyframes boot-breathe { 50% { opacity: .55; } }
+    /* Playful mode (docs/PLAYFUL.md): its purple ground and ring tracks at once, until the app draws. */
+    :root[data-boot-mode="playful"] body { background: #4B3FC9; }
+    :root[data-boot-mode="playful"] .boot circle { stroke: #3A30A6; }
     /* A phone that has not seen the first run opens on it (core/firstrun.js shouldShow): its dark ground at once. */
     :root.fr-boot { --bg: #0B0D10; color-scheme: dark; }
     .fr-boot .boot svg { visibility: hidden; }
@@ -42,6 +45,11 @@
           if (hex.test(c.tokens['memory-track'])) root.style.setProperty('--memory-track', c.tokens['memory-track']);
           root.style.colorScheme = c.scheme === 'light' ? 'light' : 'dark';
           bar.setAttribute('content', c.tokens.bg);
+        }
+        // A mode other than Default paints its own ground (app.js MODE_CACHE).
+        if (localStorage.getItem('forge2.mode') === 'playful') {
+          root.dataset.bootMode = 'playful';
+          bar.setAttribute('content', '#4B3FC9');
         }
       }
     } catch (e) {} })();
@@ -123,6 +131,7 @@
   <link rel="modulepreload" href="/v2/screens/answer.js">
   <link rel="modulepreload" href="/v2/screens/talk.js">
   <link rel="modulepreload" href="/v2/screens/home.js">
+  <link rel="modulepreload" href="/v2/modules/mode/playful/index.js">
   <link rel="modulepreload" href="/v2/modules/fund/free/index.js" fetchpriority="low">
   <link rel="modulepreload" href="/v2/modules/fund/invite/index.js" fetchpriority="low">
   <link rel="modulepreload" href="/v2/modules/fund/note/index.js" fetchpriority="low">

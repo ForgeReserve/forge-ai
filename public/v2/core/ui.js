@@ -72,6 +72,8 @@ const PATHS = {
   ticket: '<path d="M4 6h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V7a1 1 0 0 1 1-1z"/><path d="M14.5 7.5v1.5M14.5 11.25v1.5M14.5 15v1.5"/>',
   scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="8" y="8" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/><path d="M13 8h3v2M8 13v3h2"/>',
   newChat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v6M9 10.5h6"/>',
+  share: '<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>',
+  star: '<path d="M12 3l2.7 5.6 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 2.9 1.2-6.2L3 9.4l6.3-.8z"/>',
 };
 
 export const ICONS = Object.keys(PATHS);
@@ -162,8 +164,20 @@ export function infoToggle(panel, label, id = null) {
 }
 
 let toastTimer;
+let toastCatcher = null;
+
+/**
+ * A screen that says short messages in its own place (Playful mode's Pip, docs/PLAYFUL.md) takes the
+ * toasts while it is shown: fn(text, ms) returns true when it took the message, and is called with null
+ * when hideToast() runs. Pass null to give the toasts back. Default never sets one.
+ */
+export function catchToasts(fn) {
+  toastCatcher = fn;
+}
+
 /** A short message at the bottom of the screen: its first sentence in view, the whole read out by screen readers. */
 export function toast(text, ms = 2600) {
+  if (toastCatcher?.(text, ms)) return;
   let t = document.getElementById('toast');
   if (!t) {
     t = el('div', { id: 'toast', class: 'toast', role: 'status', 'aria-live': 'polite' });
@@ -192,6 +206,7 @@ export function announce(text) {
 
 /** Hides the toast now (a wait it said is over, and the screen says what came of it). */
 export function hideToast() {
+  toastCatcher?.(null, 0);
   clearTimeout(toastTimer);
   document.getElementById('toast')?.classList.remove('show');
 }

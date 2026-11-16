@@ -272,6 +272,8 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .on-dot { width: 12px; height: 12px; border-radius: 6px; background: var(--teal-bright); }
 .mode-card { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 16px; border-radius: 18px; background: var(--surface); color: var(--ink); text-decoration: none; box-shadow: var(--shadow-raised-sm); }
 .mode-card small { font-size: 12px; color: var(--text-2); }
+.mode-list { display: flex; flex-direction: column; gap: 10px; }
+button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .look-list, .model-list { display: flex; flex-direction: column; gap: 10px; }
 .look-card, .model-card { display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px; border-radius: 20px; border: 2px solid transparent; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-raised-sm); }
 .look-card.on, .model-card.on { border-color: var(--ink); }

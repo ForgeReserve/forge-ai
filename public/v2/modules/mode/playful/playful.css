@@ -1,0 +1,137 @@
+/* Playful mode (docs/PLAYFUL.md; the design's KidsHome and KidsChat). Loaded by the mode's ready() only once
+   Playful is chosen, so Default's first paint never pays for it or its two typefaces. Everything here is
+   scoped to .pf (the Playful screens) or to the page while one shows: the other screens keep the look. */
+
+/* The typefaces, vendored from fontsource (scripts/vendor-playful-fonts.ts): Latin and Latin Extended. */
+@font-face { font-family: "Baloo 2"; src: url("/v2/vendor/baloo-2/baloo-2-latin-wght-normal.woff2") format("woff2"); font-weight: 400 800; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Baloo 2"; src: url("/v2/vendor/baloo-2/baloo-2-latin-ext-wght-normal.woff2") format("woff2"); font-weight: 400 800; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Nunito; src: url("/v2/vendor/nunito/nunito-latin-wght-normal.woff2") format("woff2"); font-weight: 200 1000; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Nunito; src: url("/v2/vendor/nunito/nunito-latin-ext-wght-normal.woff2") format("woff2"); font-weight: 200 1000; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+/* The design's colours. Small text on the purple is white (7.4:1); the green line on the white card is
+   #2E7D5B (5.0:1); the soft ink #4A4470 on white is 8.9:1 (test/unit/v2/playful.test.ts checks them). The
+   ring tokens are the look's names, so screens/parts.js rings() draws the Playful rings unchanged. */
+.pf {
+  --pf-ground: #4B3FC9; --pf-ink: #1B1440; --pf-ink-2: #4A4470; --pf-track: #3A30A6; --pf-yellow: #FFD23F; --pf-green: #3DDC97;
+  --pf-coral: #FF8A7A; --pf-lilac: #F1EEFF; --pf-read: #2E7D5B; --pf-press: inset 0 -6px 0 rgba(27,20,64,0.18);
+  --pf-display: "Baloo 2", ui-rounded, "Arial Rounded MT Bold", Nunito, system-ui, sans-serif;
+  --pf-text: Nunito, ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gold: var(--pf-yellow); --gold-free: #FFE9A3; --memory: var(--pf-green); --gold-track: var(--pf-track); --memory-track: var(--pf-track);
+  --low: var(--pf-coral); --low-tint: var(--pf-track); --danger: var(--pf-coral); --danger-tint: rgba(255,138,122,0.4); --teal-tint: rgba(61,220,151,0.45);
+  --focus: #FFFFFF;
+  background: var(--pf-ground); color: #FFFFFF; font-family: var(--pf-text); color-scheme: light;
+}
+body:has(> #app > .pf) { background: #4B3FC9; }
+.pf-card, .pf-bubble, .pf-chip { --focus: var(--pf-ink); }
+
+/* Top: Private and the star chip, white pills. */
+.pf-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pf-chip { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 0 16px; border: 0; border-radius: 24px; background: #FFFFFF; color: var(--pf-ink); font-family: var(--pf-text); font-size: 15px; font-weight: 800; white-space: nowrap; }
+.pf-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.pf-stars:active { transform: translateY(1px); background: var(--pf-lilac); }
+
+/* Home: Pip and the bubble over the rings. */
+.pf-stage { flex: 1; min-height: 0; gap: 10px; }
+.pf-helper { display: flex; align-items: flex-end; gap: 10px; align-self: stretch; padding: 0 6px; }
+.pf-helper > .pip { flex: none; }
+.pf-bubble { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 22px 22px 22px 6px; background: #FFFFFF; color: var(--pf-ink); font-family: var(--pf-display); font-size: 20px; font-weight: 700; line-height: 1.15; }
+.pf-say { margin: 0; }
+.pf-say .info-btn, .pf-card .info-btn { color: var(--pf-ink); }
+.pf-say-go[hidden] { display: none; }
+.pf-go { min-height: 48px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px 3px; border: 0; border-radius: 16px; background: var(--pf-yellow); color: var(--pf-ink); box-shadow: var(--pf-press); font-family: var(--pf-display); font-size: 18px; font-weight: 800; }
+.pf-go:active { transform: translateY(2px); }
+/* The recording's line inside the bubble: the time, where the sound goes and the price. */
+.pf-bubble .listen-info { text-align: left; gap: 4px; font-family: var(--pf-text); }
+.pf-bubble .listen-time { color: var(--pf-ink); font-size: 16px; font-weight: 800; }
+.pf-bubble .listen-text { padding: 8px 12px; background: var(--pf-lilac); font-size: 17px; }
+.pf-bubble .listen-foot { font-size: 13px; font-weight: 700; }
+.pf-bubble .listen-route { color: var(--pf-read); }
+.pf-bubble .listen-route[data-route="engine-standard"], .pf-bubble .listen-route[data-route="device"] { color: #A3392A; }
+.pf-bubble .listen-price { color: var(--pf-ink-2); }
+
+/* The rings: the design's thick flat bands, without the Default rings' glow, light and tip. */
+.pf-rings { width: min(336px, 100%, max(220px, calc(100dvh - 360px))); aspect-ratio: 1; }
+.pf-rings-small { width: clamp(140px, calc(100dvh - 470px), 200px); aspect-ratio: 1; align-self: center; flex: none; }
+.pf .ring-glow, .pf .ring-shade, .pf .ring-tip { display: none; }
+
+/* The talk button: white, with the pressed-in bottom edge (its bevel; no drop shadow). Its box-shadow
+   stays the app's, so the recording and leaving halos still show. */
+.pf .talk {
+  --talk-bevel: inset 0 -10px 0 rgba(27,20,64,0.18); --talk-drop: 0 0 0 transparent;
+  background-color: #FFFFFF; background-image: none; color: var(--pf-ink);
+  font-family: var(--pf-display); font-size: 18px; font-weight: 800; gap: 4px; padding: 0 6px 6px;
+}
+.pf .talk::before, .pf .talk::after { content: none; }
+.pf .talk-label { text-shadow: none; }
+.pf .talk.small { --talk-bevel: inset 0 -6px 0 rgba(27,20,64,0.18); width: 56%; height: auto; font-size: 14px; padding-bottom: 4px; }
+.pf .level-bars .bar { background-image: none; box-shadow: none; }
+
+/* The bar: Type yellow, Add green, More coral, chunky with a pressed-in edge. */
+.pf .bottom-btn { min-height: 64px; border-radius: 22px; box-shadow: var(--pf-press); color: var(--pf-ink); font-family: var(--pf-display); font-size: 18px; font-weight: 700; padding: 0 0 5px; }
+.pf #btn-type { background: var(--pf-yellow); }
+.pf #btn-add { background: var(--pf-green); }
+.pf #btn-more { background: var(--pf-coral); }
+.pf .bottom-btn:active { transform: translateY(2px); }
+.pf .bottom-btn.is-open { background: var(--pf-ink); color: #FFFFFF; box-shadow: none; }
+.pf .bottom-btn .ico { stroke-width: 2.4; }
+
+/* The answer: a white card that holds Pip's line, the words and the actions; the words scroll inside it. */
+/* The answer is one screen high, whatever the answer's length: the card shrinks and its words scroll. */
+.pf-answer { flex: none; height: 100dvh; }
+.pf-card { flex: 1; min-height: 150px; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 28px; background: #FFFFFF; color: var(--pf-ink); box-shadow: inset 0 -6px 0 rgba(27,20,64,0.12); }
+.pf-card:focus { outline: none; }
+.pf-card-head { display: flex; align-items: center; gap: 10px; }
+.pf-card-head > .pip { flex: none; }
+.pf-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 14px; font-weight: 800; color: var(--pf-ink-2); }
+.pf-line[data-reading="true"] { color: var(--pf-read); }
+.pf-secs { font-variant-numeric: tabular-nums; font-weight: 700; }
+.pf-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+.pf-scroll-in { margin: auto 0; display: flex; flex-direction: column; gap: 10px; }
+.pf-asked { margin: 0; font-size: 15px; font-weight: 700; color: var(--pf-ink-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pf-asked:empty { display: none; }
+.pf-text { overflow-wrap: anywhere; }
+.pf-lead, .pf-lead p { margin: 0; font-family: var(--pf-display); font-size: 26px; font-weight: 800; line-height: 1.15; }
+.pf-lead:empty, .pf-rest:empty { display: none; }
+.pf-lead + .pf-rest { margin-top: 10px; }
+.pf-rest { font-size: 17px; font-weight: 500; line-height: 1.45; }
+.pf-rest > :first-child { margin-top: 0; }
+.pf-rest > :last-child { margin-bottom: 0; }
+.pf-rest p { margin: 0 0 0.6em; }
+.pf-text pre { overflow-x: auto; background: var(--pf-lilac); border-radius: 12px; padding: 12px; font-size: 13px; }
+.pf-text code { font-family: var(--mono); }
+.pf-text .table-wrap { overflow-x: auto; }
+.pf-text table { border-collapse: collapse; }
+.pf-text th, .pf-text td { border: 1px solid #D9D3F5; padding: 4px 8px; }
+.pf-text a { color: #3D31B8; }
+.pf-text .code-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--pf-ink-2); }
+.pf-card .btn:not(.primary) { color: var(--pf-ink); border-color: #D9D3F5; }
+.pf-acts { display: flex; gap: 8px; }
+.pf-acts[hidden], .pf-acts:empty { display: none; }
+.pf-act { flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; border: 0; border-radius: 18px; background: var(--pf-lilac); color: var(--pf-ink); font-family: var(--pf-text); font-size: 13px; font-weight: 800; line-height: 1.1; }
+.pf-act[aria-expanded="true"] { background: var(--pf-ink); color: #FFFFFF; }
+.pf-act-sub { font-size: 11px; font-weight: 700; color: var(--pf-ink-2); }
+.pf-tray { padding-top: 10px; border-top: 2px dashed #D9D3F5; }
+.pf-card .error-box { background: #FFF1EE; color: var(--pf-ink); }
+.pf-card .price-line .cap { color: var(--pf-ink-2); }
+.pf-card .price-line .amount { color: var(--pf-ink); }
+.pf-card .slow-note { background: var(--pf-lilac); border-color: var(--pf-ink-2); }
+.pf-card .slow-text { color: var(--pf-ink); }
+.pf .btn.primary { background: var(--pf-ink); color: #FFFFFF; box-shadow: none; font-family: var(--pf-display); font-weight: 800; }
+.pf .btn.primary .ico { color: #FFFFFF; }
+/* The recording's line under the small rings, on the purple. */
+.pf-answer .listen-time, .pf-answer .listen-route, .pf-answer .listen-route[data-route] { color: #FFFFFF; }
+.pf-answer .listen-price { color: var(--pf-yellow); }
+.pf-answer .listen-text { background: #FFFFFF; color: var(--pf-ink); }
+.pf-careful { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: #FFFFFF; text-wrap: balance; }
+
+/* Short phones (360 by 640): a smaller Pip and bar, so the talk button and the bar always fit. */
+@media (max-height: 700px) {
+  .pf-helper > .pip { width: 64px; height: 64px; }
+  .pf-bubble { padding: 10px 14px; font-size: 18px; }
+  .pf .bottom-btn { min-height: 56px; }
+  .pf-card { padding: 12px 14px; gap: 8px; }
+  .pf-card-head > .pip { width: 40px; height: 40px; }
+  .pf-lead, .pf-lead p { font-size: 22px; }
+  .pf-rest { font-size: 16px; }
+  .pf-answer { gap: 10px; }
+}

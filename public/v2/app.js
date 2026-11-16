@@ -33,7 +33,7 @@ import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createUpdater } from './core/updates.js';
-import { createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
+import { createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, loadedSettings, pickMode, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -53,6 +53,8 @@ import { typeScreen } from './screens/type.js';
 const MAX_OUT = 4096; // the most output a question asks for; the engine holds the worst case up front (questionHold)
 const MODELS_CACHE = 'forge2.models';
 const LOOK_CACHE = 'forge2.look';
+// The mode in use when it is not Default, read by index.html to paint its ground before the app loads.
+const MODE_CACHE = 'forge2.mode';
 
 // ------------------------------------------------------------------ storage that survives a reload
 
@@ -431,6 +433,39 @@ try {
   /* first run */
 }
 darkQuery?.addEventListener?.('change', () => S.settings.followSystem && applyLook());
+
+// ------------------------------------------------------------------ the mode
+
+// Modes whose screens are in. Default's are loaded with the app; another mode may load its screens,
+// styles and fonts only once it is chosen (its ready(), docs/PLAYFUL.md), so Default never pays for them.
+const modesReady = new Set(['default']);
+
+/** The mode module that draws the home and the answer now (core/state.js pickMode). */
+function modeNow() {
+  const list = registry.list('mode');
+  const id = pickMode([...modesReady], S.settings);
+  return (list.find((x) => x.instance.id === id) ?? list.find((x) => x.instance.id === 'default') ?? list[0]).instance;
+}
+
+/** Loads a mode's screens (its ready()). False when it cannot be drawn: not bundled, or offline and not kept. */
+async function prepareMode(id) {
+  const mode = registry?.list('mode').find((x) => x.instance.id === id)?.instance;
+  if (!mode) return false;
+  try {
+    await mode.ready?.();
+  } catch (e) {
+    console.warn('mode not ready', id, e);
+    return false;
+  }
+  modesReady.add(id);
+  return true;
+}
+
+/** Keeps the mode in use for index.html's first frame; Default keeps nothing. */
+function keepMode() {
+  const id = modeNow().id;
+  keep(MODE_CACHE, id === 'default' ? null : id);
+}
 // In the Android app the phone's bars follow the page's colour (core/native.js followBars).
 if (native) followBars(native.bars);
 
@@ -1347,6 +1382,14 @@ const actions = {
     saveSettings();
     store.set({});
   },
+  /** Mode and look: the mode that draws the home and the answer. Its screens load first; then it is saved. */
+  setMode: async (id) => {
+    if (!(await prepareMode(id))) return ui.toast(t('look.modeFailed'), 4000);
+    S.settings.mode = id;
+    keepMode();
+    saveSettings();
+    store.set({});
+  },
   setFollowSystem: (on) => {
     S.settings.followSystem = on;
     applyLook();
@@ -1635,7 +1678,7 @@ function labErrorScreen(e) {
 }
 
 function screenFor(name, params) {
-  const mode = registry.list('mode')[0].instance;
+  const mode = modeNow();
   const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, reader, scan: adapters.camera, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
   switch (name) {
     case 'add':
@@ -1754,6 +1797,8 @@ function render() {
   current = screenFor(name, params);
   root.replaceChildren(current.node);
   root.dataset.route = name;
+  // index.html's first frame in a mode's ground (data-boot-mode) is over: the screen draws its own.
+  delete document.documentElement.dataset.bootMode;
   unsub = store.subscribe(() => current?.update?.());
   // Move focus to the new screen on navigation (not on the first paint, and not on the home).
   if (rendered && name !== 'home') current.focus?.focus?.({ preventScroll: true });
@@ -1908,6 +1953,9 @@ async function start() {
   await registry.loadAll(firstRun ? drawFirst : BUNDLED);
   if (!registry.list('mode').length) throw new Error('no mode module');
   applyLook();
+  // A mode other than Default: its screens, styles and fonts before the first frame (else Default draws).
+  if (S.settings.mode && S.settings.mode !== 'default') await prepareMode(S.settings.mode);
+  keepMode();
   await stylesReady();
 
   addEventListener('popstate', onPop);
