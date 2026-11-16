@@ -1,0 +1,12 @@
+{
+  "id": "org.example.voice-in.listen",
+  "kind": "voice-in",
+  "version": "1.0.0",
+  "name": {
+    "en": "Listen in the browser"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

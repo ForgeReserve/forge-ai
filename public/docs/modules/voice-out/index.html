@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice-out modules | Forge AI</title>
+<meta name="description" content="Reference for voice-out modules: how the Forge app reads an answer aloud.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/voice-out.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out" aria-current="page">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#manifest">Manifest</a><ul>
+</ul></li>
+<li><a href="#inputs">Inputs</a><ul>
+<li><a href="#t"><code>t</code></a></li>
+<li><a href="#speaker"><code>speaker</code></a></li>
+<li><a href="#synth"><code>synth</code></a></li>
+<li><a href="#audio"><code>audio</code></a></li>
+<li><a href="#phonon"><code>phonon</code></a></li>
+</ul></li>
+<li><a href="#what-a-voice-out-module-provides">What a voice-out module provides</a><ul>
+<li><a href="#id"><code>id</code></a></li>
+<li><a href="#available"><code>available()</code></a></li>
+<li><a href="#private"><code>private()</code></a></li>
+<li><a href="#piecesize"><code>pieceSize()</code></a></li>
+<li><a href="#price-pieces-key"><code>price(pieces, key)</code></a></li>
+<li><a href="#speak-pieces-options"><code>speak(pieces, options)</code></a></li>
+<li><a href="#download"><code>download()</code></a></li>
+<li><a href="#forget-key"><code>forget(key)</code></a></li>
+</ul></li>
+<li><a href="#lifecycle">Lifecycle</a><ul>
+</ul></li>
+<li><a href="#errors">Errors</a><ul>
+</ul></li>
+<li><a href="#how-the-app-picks-one">How the app picks one</a><ul>
+</ul></li>
+<li><a href="#platforms">Platforms</a><ul>
+</ul></li>
+<li><a href="#a-minimal-voice-out-module">A minimal voice-out module</a><ul>
+</ul></li>
+<li><a href="#tests">Tests</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Voice-out modules</h1>
+<p>A voice-out module reads an answer aloud. The app reads the answer to a question asked by voice on its own, and any answer when the person taps Listen. The app picks one voice-out module at a time.</p>
+<p>Read <a href="/docs/modules/">the overview</a> first. The bundled voice-out modules are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-out"><code>public/v2/modules/voice-out/</code></a> and described in the <a href="/docs/modules/list#voice-out">module list</a>. The natural voice is described in full in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/VOICE.md"><code>docs/VOICE.md</code></a>.</p>
+<h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
+<p><code>kind</code> is <code>voice-out</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>.</p>
+<h2 id="inputs">Inputs<a class="anchor" href="#inputs" aria-label="Link to this section">#</a></h2>
+<p>A voice-out module gets these inputs. <code>audio</code> and <code>phonon</code> are cut down to the functions listed for them.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-string">&#x27;voice-out&#x27;</span>: [<span class="hljs-string">&#x27;t&#x27;</span>, <span class="hljs-string">&#x27;speaker&#x27;</span>, <span class="hljs-string">&#x27;synth&#x27;</span>, <span class="hljs-string">&#x27;audio&#x27;</span>, <span class="hljs-string">&#x27;phonon&#x27;</span>],
+<span class="hljs-comment">// PROJECTIONS</span>
+<span class="hljs-string">&#x27;voice-out&#x27;</span>: { <span class="hljs-attr">audio</span>: [<span class="hljs-string">&#x27;model&#x27;</span>, <span class="hljs-string">&#x27;price&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>], <span class="hljs-attr">phonon</span>: [<span class="hljs-string">&#x27;available&#x27;</span>, <span class="hljs-string">&#x27;download&#x27;</span>, <span class="hljs-string">&#x27;load&#x27;</span>, <span class="hljs-string">&#x27;native&#x27;</span>, <span class="hljs-string">&#x27;nativeFailed&#x27;</span>, <span class="hljs-string">&#x27;voice&#x27;</span>, <span class="hljs-string">&#x27;paceKey&#x27;</span>, <span class="hljs-string">&#x27;pace&#x27;</span>, <span class="hljs-string">&#x27;notePace&#x27;</span>, <span class="hljs-string">&#x27;preferNatural&#x27;</span>] },</code></pre></div>
+<h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
+<p><code>t(key, params)</code> returns the text for <code>key</code> from the string table. See <a href="/docs/modules/fund#t">Fund</a>.</p>
+<h3 id="speaker"><code>speaker</code><a class="anchor" href="#speaker" aria-label="Link to this section">#</a></h3>
+<p>Sound out (<code>adapters.speaker</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/adapters.js"><code>public/v2/core/adapters.js</code></a>). All streamed sound goes through one Web Audio context. On an iPhone the sound starts only after a tap; the app calls <code>unlock()</code> inside every tap that may lead to sound.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>play(blob)</code></td>
+<td>Plays a sound file. Returns <code>{done, stop()}</code>; <code>done</code> resolves when it ends.</td>
+</tr>
+<tr>
+<td><code>stream({sampleRate})</code></td>
+<td>Plays sound as it is made. Returns <code>{push(samples), end(), done, stop(), underruns(), blocked()}</code>. <code>push</code> queues a <code>Float32Array</code> right after the one before; <code>underruns()</code> counts the gaps a listener heard.</td>
+</tr>
+<tr>
+<td><code>unlock()</code></td>
+<td>Starts the sound inside a tap.</td>
+</tr>
+<tr>
+<td><code>ready(ms = 1000)</code></td>
+<td>Resolves <code>true</code> when the sound can play, after giving it up to <code>ms</code>.</td>
+</tr>
+<tr>
+<td><code>state()</code></td>
+<td>The Web Audio context&#39;s state, or <code>&#39;none&#39;</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="synth"><code>synth</code><a class="anchor" href="#synth" aria-label="Link to this section">#</a></h3>
+<p>The phone&#39;s own voices (<code>adapters.synth</code>), only those that run on the phone, so the answer is never sent to a voice service.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>voices(lang = &#39;en&#39;)</code></td>
+<td>The phone&#39;s own voices for the language.</td>
+</tr>
+<tr>
+<td><code>speak(text, lang = &#39;en&#39;)</code></td>
+<td>Reads <code>text</code>. Returns <code>{done, stop()}</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="audio"><code>audio</code><a class="anchor" href="#audio" aria-label="Link to this section">#</a></h3>
+<p>The engine&#39;s audio calls for text to speech. The app makes the paid call with the balance key, which the module never sees.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>model(kind)</code></td>
+<td>The engine&#39;s audio model of this kind (<code>&#39;speech&#39;</code> here) that Private only allows, or <code>null</code>. It is an entry of <code>audio</code> in <a href="/docs/#get-v1-models"><code>GET /v1/models</code></a>: <code>id</code>, <code>tier</code>, <code>max_chars</code>, <code>voices</code> and its prices.</td>
+</tr>
+<tr>
+<td><code>price(kind, usage)</code></td>
+<td>What requests cost, in msub: <code>price(&#39;speech&#39;, {requests, chars})</code>. <code>null</code> when the model has no price in the balance&#39;s unit.</td>
+</tr>
+<tr>
+<td><code>speak(input, {signal})</code></td>
+<td>Sends text to <a href="/docs/#post-v1-audio-speech"><code>POST /v1/audio/speech</code></a> with the model&#39;s first voice. Resolves <code>{blob, chargedMsub, balanceMsub}</code>; <code>blob</code> is WAV. Throws <code>EngineError</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="phonon"><code>phonon</code><a class="anchor" href="#phonon" aria-label="Link to this section">#</a></h3>
+<p>The natural voice made on the phone, Phonon 31m, from <code>createPhonon</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/phonon.js"><code>public/v2/core/phonon.js</code></a>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>available()</code></td>
+<td><code>true</code> once the app&#39;s voice files are known and this phone can run the model: the browser has WebAssembly SIMD and workers, or the Android app&#39;s native voice works.</td>
+</tr>
+<tr>
+<td><code>download()</code></td>
+<td>Resolves <code>{needed, bytes}</code>: whether a first use downloads the model, and how much.</td>
+</tr>
+<tr>
+<td><code>load({onMeter, onProgress})</code></td>
+<td>Loads the model, from the phone&#39;s cache when it is there. Resolves a handle with <code>sampleRate</code> and <code>stream(text, {signal})</code>, which yields the sound as <code>Float32Array</code> pieces. <code>onMeter</code> gets <code>{loaded, total, fraction}</code> while it downloads.</td>
+</tr>
+<tr>
+<td><code>native()</code></td>
+<td>Resolves the Android app&#39;s native voice when this phone runs it, else <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>nativeFailed(error)</code></td>
+<td>Tells the app the native voice failed, so it is not used again this session.</td>
+</tr>
+<tr>
+<td><code>voice()</code></td>
+<td>The name of the voice picked in More, Voice, or the default.</td>
+</tr>
+<tr>
+<td><code>paceKey(nativeUsed)</code></td>
+<td>The name this phone&#39;s speed is kept under.</td>
+</tr>
+<tr>
+<td><code>pace(key)</code></td>
+<td>The speed kept for that name, <code>{rtf, spc, n, at}</code>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>notePace(key, {rtf, spc})</code></td>
+<td>Adds one answer&#39;s speed to what is kept.</td>
+</tr>
+<tr>
+<td><code>preferNatural()</code></td>
+<td><code>true</code> when the person asked to keep the natural voice on a slow phone.</td>
+</tr>
+</tbody></table></div>
+<h2 id="what-a-voice-out-module-provides">What a voice-out module provides<a class="anchor" href="#what-a-voice-out-module-provides" aria-label="Link to this section">#</a></h2>
+<h3 id="id"><code>id</code><a class="anchor" href="#id" aria-label="Link to this section">#</a></h3>
+<p>Required. The app picks voice-out modules by this id. See <a href="#how-the-app-picks-one">How the app picks one</a>.</p>
+<h3 id="available"><code>available()</code><a class="anchor" href="#available" aria-label="Link to this section">#</a></h3>
+<p>Required. <code>true</code> when the module can read aloud on this phone now. The app calls it whenever it draws a screen with Listen. Keep it fast.</p>
+<h3 id="private"><code>private()</code><a class="anchor" href="#private" aria-label="Link to this section">#</a></h3>
+<p>Required. <code>true</code> only when the answer&#39;s text never leaves the phone or goes only to a model in sealed hardware. With Private only on, the app uses only a module whose <code>private()</code> is true.</p>
+<h3 id="piecesize"><code>pieceSize()</code><a class="anchor" href="#piecesize" aria-label="Link to this section">#</a></h3>
+<p>Required. The most characters in one piece. The app cuts the answer into plain-text pieces of this size (<code>speechPieces</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/speech.js"><code>public/v2/core/speech.js</code></a>, at most 1,500 characters in all) and hands them to <code>price</code> and <code>speak</code>.</p>
+<h3 id="price-pieces-key"><code>price(pieces, key)</code><a class="anchor" href="#price-pieces-key" aria-label="Link to this section">#</a></h3>
+<p>Required. What reading these pieces costs, in msub. <code>key</code> is the answer&#39;s message id, so a module that keeps sound already paid for can return <code>0</code> for it. Return <code>0</code> when it is free. The app shows it on Listen.</p>
+<h3 id="speak-pieces-options"><code>speak(pieces, options)</code><a class="anchor" href="#speak-pieces-options" aria-label="Link to this section">#</a></h3>
+<p>Required. Reads the pieces aloud. Returns <code>{done, stop()}</code> at once. <code>done</code> resolves <code>{chargedMsub}</code> when the reading ends; the app reads the balance again when <code>chargedMsub</code> is more than 0. <code>stop()</code> stops at once.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>key</code></td>
+<td>The answer&#39;s message id.</td>
+</tr>
+<tr>
+<td><code>onState(state)</code></td>
+<td>Tell the app <code>&#39;loading&#39;</code>, <code>&#39;buffering&#39;</code> or <code>&#39;playing&#39;</code>. The Listen button follows it.</td>
+</tr>
+<tr>
+<td><code>onProgress(p)</code></td>
+<td><code>{loaded, total, fraction, phase}</code> while a model downloads and gets ready, then <code>{fraction, phase: &#39;buffering&#39;}</code> while sound is made ahead.</td>
+</tr>
+<tr>
+<td><code>onNotice(kind)</code></td>
+<td><code>&#39;slow&#39;</code>: the natural voice is too slow on this phone and the phone&#39;s own voice reads this answer. The app says so once a session.</td>
+</tr>
+</tbody></table></div>
+<h3 id="download"><code>download()</code><a class="anchor" href="#download" aria-label="Link to this section">#</a></h3>
+<p>Optional. Resolves <code>{needed, bytes}</code>. When a module has it and <code>needed</code> is true, the app asks before the first download, or lets the phone&#39;s own voice read while it offers the download under Listen.</p>
+<h3 id="forget-key"><code>forget(key)</code><a class="anchor" href="#forget-key" aria-label="Link to this section">#</a></h3>
+<p>Optional. Drops the sound kept for one answer, or for all with no <code>key</code>. The app calls it when a conversation is burned and on Erase everything.</p>
+<p>The bundled modules also have <code>cached(key)</code>. No app code calls it.</p>
+<h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>The registry calls <code>create(inputs)</code> once when the app starts.</li>
+<li>The app calls <code>available()</code> and <code>private()</code> whenever it draws a screen with Listen, and <code>price(pieces, key)</code> for the answer on show.</li>
+<li>Listen, or an answer to a voice question: <code>download()</code> first when the module has it, then <code>speak(pieces, options)</code>.</li>
+<li>Stop, a new question, or the screen gone: <code>stop()</code>.</li>
+<li>A conversation burned: <code>forget(key)</code> for each of its messages.</li>
+</ol>
+<h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<p>The app reads the error <code>done</code> rejects with:</p>
+<ul>
+<li><code>name</code> <code>AbortError</code>: a stop. Nothing is said.</li>
+<li><code>name</code> <code>AudioBlocked</code>: the phone kept the sound off until a tap. The app says to tap Listen.</li>
+<li>an error with a <code>code</code>: shown as the engine&#39;s error.</li>
+<li>any other error: the app says the answer could not be read aloud. When a download window is open, it shows the message there with Try again.</li>
+</ul>
+<h2 id="how-the-app-picks-one">How the app picks one<a class="anchor" href="#how-the-app-picks-one" aria-label="Link to this section">#</a></h2>
+<p><code>pickVoiceOut</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/state.js"><code>public/v2/core/state.js</code></a> picks one module by id:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">pickVoiceOut</span>(<span class="hljs-params">mods, settings</span>) {
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">ok</span> = (<span class="hljs-params">m</span>) =&gt; !!m?.<span class="hljs-title function_">available</span>() &amp;&amp; (!settings.<span class="hljs-property">privateOnly</span> || m.<span class="hljs-title function_">private</span>());
+  <span class="hljs-keyword">switch</span> (settings.<span class="hljs-property">voiceOut</span>) {
+    <span class="hljs-keyword">case</span> <span class="hljs-string">&#x27;off&#x27;</span>:
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">case</span> <span class="hljs-string">&#x27;phonon&#x27;</span>:
+      <span class="hljs-keyword">return</span> <span class="hljs-title function_">ok</span>(mods.<span class="hljs-property">phonon</span>) ? mods.<span class="hljs-property">phonon</span> : <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">case</span> <span class="hljs-string">&#x27;engine&#x27;</span>:
+      <span class="hljs-keyword">return</span> <span class="hljs-title function_">ok</span>(mods.<span class="hljs-property">engine</span>) ? mods.<span class="hljs-property">engine</span> : <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">case</span> <span class="hljs-string">&#x27;device&#x27;</span>:
+      <span class="hljs-keyword">return</span> <span class="hljs-title function_">ok</span>(mods.<span class="hljs-property">device</span>) ? mods.<span class="hljs-property">device</span> : <span class="hljs-literal">null</span>;
+    <span class="hljs-attr">default</span>:
+      <span class="hljs-keyword">return</span> [mods.<span class="hljs-property">phonon</span>, mods.<span class="hljs-property">device</span>, mods.<span class="hljs-property">engine</span>].<span class="hljs-title function_">find</span>(ok) ?? <span class="hljs-literal">null</span>;
+  }
+}</code></pre></div>
+<p><code>voiceOut</code> in the settings is <code>auto</code> (the default), <code>phonon</code>, <code>device</code>, <code>engine</code> or <code>off</code>, set in More, Voice. The Voice screen in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/settings.js"><code>public/v2/screens/settings.js</code></a> has one row for each of the three ids and Off. The first run&#39;s Listen uses <code>device</code> only, and only when it is private. The price of a voice question counts the engine&#39;s reading only for <code>engine</code>.</p>
+<p>A voice-out module with any other id loads, and the app never uses it or lists it. To offer a new one, a pull request must also add its id to <code>pickVoiceOut</code> and a row to the Voice screen.</p>
+<h2 id="platforms">Platforms<a class="anchor" href="#platforms" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Website</th>
+<th>Android app</th>
+<th>iPhone app</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>phonon</code></td>
+<td>Where the browser can run the model; the first use downloads it</td>
+<td>The app carries the files; native code makes the voice where the phone runs it, else the web build</td>
+<td>The app carries the files; the web build runs it on the graphics chip where WebKit has WebGPU, else on one thread</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td>Where the phone has its own voice for English</td>
+<td>The same</td>
+<td>The same</td>
+</tr>
+<tr>
+<td><code>engine</code></td>
+<td>Where the engine has a text to speech model</td>
+<td>The same</td>
+<td>The same</td>
+</tr>
+</tbody></table></div>
+<h2 id="a-minimal-voice-out-module">A minimal voice-out module<a class="anchor" href="#a-minimal-voice-out-module" aria-label="Link to this section">#</a></h2>
+<p>This module reads with the phone&#39;s own voices. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/voice-out/say"><code>docs/modules/examples/voice-out/say/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>. Its id is <code>say</code>, so the app loads it and does not use it until <code>pickVoiceOut</code> knows that id.</p>
+<p><code>manifest.json</code>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.voice-out.say&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;voice-out&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Say it on the phone&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>index.js</code>:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// A voice-out module: the phone&#x27;s own voices (the synth input), one piece of the answer at a time. Only</span>
+<span class="hljs-comment">// voices that run on the phone are used, so the answer is not sent anywhere and it costs nothing.</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params">{ synth }</span>) {
+  <span class="hljs-keyword">return</span> {
+    <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;say&#x27;</span>,
+    <span class="hljs-attr">available</span>: <span class="hljs-function">() =&gt;</span> synth.<span class="hljs-title function_">voices</span>(<span class="hljs-string">&#x27;en&#x27;</span>).<span class="hljs-property">length</span> &gt; <span class="hljs-number">0</span>,
+    <span class="hljs-attr">private</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-literal">true</span>,
+    <span class="hljs-attr">pieceSize</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-number">200</span>,
+    <span class="hljs-attr">price</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-number">0</span>,
+    <span class="hljs-title function_">speak</span>(<span class="hljs-params">pieces, { onState = () =&gt; {} } = {}</span>) {
+      <span class="hljs-keyword">let</span> stopped = <span class="hljs-literal">false</span>;
+      <span class="hljs-keyword">let</span> current = <span class="hljs-literal">null</span>;
+      <span class="hljs-keyword">const</span> done = (<span class="hljs-title function_">async</span> () =&gt; {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> piece <span class="hljs-keyword">of</span> pieces) {
+          <span class="hljs-keyword">if</span> (stopped) <span class="hljs-keyword">break</span>;
+          <span class="hljs-title function_">onState</span>(<span class="hljs-string">&#x27;playing&#x27;</span>);
+          current = synth.<span class="hljs-title function_">speak</span>(piece, <span class="hljs-string">&#x27;en&#x27;</span>);
+          <span class="hljs-keyword">await</span> current.<span class="hljs-property">done</span>;
+        }
+        <span class="hljs-keyword">return</span> { <span class="hljs-attr">chargedMsub</span>: <span class="hljs-number">0</span> };
+      })();
+      <span class="hljs-keyword">return</span> {
+        done,
+        <span class="hljs-title function_">stop</span>(<span class="hljs-params"></span>) {
+          stopped = <span class="hljs-literal">true</span>;
+          current?.<span class="hljs-title function_">stop</span>();
+        },
+      };
+    },
+  };
+}</code></pre></div>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/phonon.test.ts"><code>test/unit/v2/phonon.test.ts</code></a> runs the natural voice module against a fake engine; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/voice.test.ts"><code>test/unit/v2/voice.test.ts</code></a> tests <code>pickVoiceOut</code>; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/phonon.ui.test.ts"><code>test/ui/phonon.ui.test.ts</code></a> reads answers aloud in Chrome.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/voice-out.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

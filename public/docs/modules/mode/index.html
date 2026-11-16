@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mode modules | Forge AI</title>
+<meta name="description" content="Reference for mode modules: the home and the answer screen of the Forge app.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/mode.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode" aria-current="page">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#manifest">Manifest</a><ul>
+</ul></li>
+<li><a href="#inputs">Inputs</a><ul>
+<li><a href="#t"><code>t</code></a></li>
+<li><a href="#ui"><code>ui</code></a></li>
+<li><a href="#state"><code>state</code></a></li>
+<li><a href="#nav"><code>nav</code></a></li>
+<li><a href="#actions"><code>actions</code></a></li>
+<li><a href="#format"><code>format</code></a></li>
+</ul></li>
+<li><a href="#what-a-mode-provides">What a mode provides</a><ul>
+<li><a href="#id"><code>id</code></a></li>
+<li><a href="#home-options"><code>home(options)</code></a></li>
+<li><a href="#answer"><code>answer()</code></a></li>
+<li><a href="#ready"><code>ready()</code></a></li>
+<li><a href="#the-screen">The screen</a></li>
+</ul></li>
+<li><a href="#lifecycle">Lifecycle</a><ul>
+</ul></li>
+<li><a href="#errors">Errors</a><ul>
+</ul></li>
+<li><a href="#how-the-app-lists-and-orders-them">How the app lists and orders them</a><ul>
+</ul></li>
+<li><a href="#platforms">Platforms</a><ul>
+</ul></li>
+<li><a href="#a-minimal-mode">A minimal mode</a><ul>
+</ul></li>
+<li><a href="#tests">Tests</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Mode modules</h1>
+<p>A mode module draws the two screens a person sees most: the home and the answer. The rest of the app (Type, Funds, Add money, More and its screens) stays the same in every mode. The person picks a mode in More, Mode and look. The app ships with two: Default, with the rings, and Playful, with Pip.</p>
+<p>Read <a href="/docs/modules/">the overview</a> first. The bundled modes are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode"><code>public/v2/modules/mode/</code></a> and described in the <a href="/docs/modules/list#mode">module list</a>. Playful is described in full in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PLAYFUL.md"><code>docs/PLAYFUL.md</code></a>.</p>
+<h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
+<p><code>kind</code> is <code>mode</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>. For a mode the app has no strings of its own for, More, Mode and look shows the manifest&#39;s <code>name.en</code>.</p>
+<h2 id="inputs">Inputs<a class="anchor" href="#inputs" aria-label="Link to this section">#</a></h2>
+<p>A mode gets what the screens show and the actions of the home and the answer. <code>state</code> and <code>actions</code> are cut down to the functions listed for them.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-attr">mode</span>: [<span class="hljs-string">&#x27;t&#x27;</span>, <span class="hljs-string">&#x27;ui&#x27;</span>, <span class="hljs-string">&#x27;state&#x27;</span>, <span class="hljs-string">&#x27;nav&#x27;</span>, <span class="hljs-string">&#x27;actions&#x27;</span>, <span class="hljs-string">&#x27;format&#x27;</span>],
+<span class="hljs-comment">// PROJECTIONS</span>
+<span class="hljs-attr">mode</span>: {
+  <span class="hljs-attr">state</span>: [<span class="hljs-string">&#x27;view&#x27;</span>, <span class="hljs-string">&#x27;subscribe&#x27;</span>],
+  <span class="hljs-attr">actions</span>: [<span class="hljs-string">&#x27;ask&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-string">&#x27;again&#x27;</span>, <span class="hljs-string">&#x27;copyAnswer&#x27;</span>, <span class="hljs-string">&#x27;startFresh&#x27;</span>, <span class="hljs-string">&#x27;burn&#x27;</span>, <span class="hljs-string">&#x27;talkDown&#x27;</span>, <span class="hljs-string">&#x27;talkMove&#x27;</span>, <span class="hljs-string">&#x27;talkUp&#x27;</span>, <span class="hljs-string">&#x27;talkCancel&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>, <span class="hljs-string">&#x27;stopSpeaking&#x27;</span>, <span class="hljs-string">&#x27;setSearch&#x27;</span>, <span class="hljs-string">&#x27;useFastModel&#x27;</span>, <span class="hljs-string">&#x27;getNaturalVoice&#x27;</span>, <span class="hljs-string">&#x27;naturalNotNow&#x27;</span>],
+},</code></pre></div>
+<h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
+<p><code>t(key, params)</code> returns the text for <code>key</code> from the string table. See <a href="/docs/modules/fund#t">Fund</a>.</p>
+<h3 id="ui"><code>ui</code><a class="anchor" href="#ui" aria-label="Link to this section">#</a></h3>
+<p>The whole of <code>core/ui.js</code>, the same object a fund module gets. See <a href="/docs/modules/fund#ui">Fund</a> for every function.</p>
+<h3 id="state"><code>state</code><a class="anchor" href="#state" aria-label="Link to this section">#</a></h3>
+<p>What the screens show. It never holds the balance key.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>view()</code></td>
+<td>Returns the view: a new object with what the screens show now (below).</td>
+</tr>
+<tr>
+<td><code>subscribe(fn)</code></td>
+<td>Calls <code>fn()</code>, with no arguments, after every change. Returns a function that stops it. The app already calls a screen&#39;s <code>update()</code> after every change, so a mode rarely needs it.</td>
+</tr>
+</tbody></table></div>
+<p>The fields of <code>view()</code>, from <code>view()</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js"><code>public/v2/app.js</code></a>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>model</code></td>
+<td>The model questions go to: an entry of <a href="/docs/#get-v1-models"><code>GET /v1/models</code></a>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>private</code></td>
+<td><code>true</code> when that model is private.</td>
+</tr>
+<tr>
+<td><code>online</code></td>
+<td><code>false</code> while the phone is offline.</td>
+</tr>
+<tr>
+<td><code>hasKey</code></td>
+<td><code>true</code> when the phone has a balance key.</td>
+</tr>
+<tr>
+<td><code>balanceMsub</code>, <code>balanceText</code></td>
+<td>The balance in msub and in words, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>fundsFraction</code>, <code>freeFraction</code></td>
+<td>How full the gold ring is: the paid part and the free questions part, 0 to 1.</td>
+</tr>
+<tr>
+<td><code>freeLeft</code>, <code>freeTotal</code></td>
+<td>Free questions left, and how many there were.</td>
+</tr>
+<tr>
+<td><code>fundsBlock</code></td>
+<td>What stops a question for lack of funds: <code>null</code>, or a reason such as <code>&#39;needKey&#39;</code> or <code>&#39;freeOut&#39;</code>.</td>
+</tr>
+<tr>
+<td><code>modelFree</code></td>
+<td><code>true</code> when the model costs nothing.</td>
+</tr>
+<tr>
+<td><code>startFree</code></td>
+<td><code>true</code> when the engine has free models a balance opened with an invite code can use.</td>
+</tr>
+<tr>
+<td><code>noFunds</code></td>
+<td><code>true</code> with no balance and no free questions.</td>
+</tr>
+<tr>
+<td><code>scanNote</code></td>
+<td><code>true</code> when the home should invite a paper note scan.</td>
+</tr>
+<tr>
+<td><code>refundable</code></td>
+<td>What can be taken out, in the balance&#39;s unit.</td>
+</tr>
+<tr>
+<td><code>questionsLeft</code></td>
+<td>About how many questions the balance pays for.</td>
+</tr>
+<tr>
+<td><code>memory</code>, <code>held</code></td>
+<td>How much of the model&#39;s memory the conversation uses (<code>memory.free</code>, <code>memory.low</code>, <code>memory.percentFree</code>, ...), and what is held for the next question.</td>
+</tr>
+<tr>
+<td><code>pendingCount</code></td>
+<td>Files and photos waiting for the next question.</td>
+</tr>
+<tr>
+<td><code>lastExchange</code></td>
+<td>The last question and its answer: <code>{question, answer}</code>, where <code>answer</code> has <code>content</code> and <code>meta</code>. <code>meta.error</code> is set when it failed. <code>null</code> before any question.</td>
+</tr>
+<tr>
+<td><code>streaming</code></td>
+<td><code>true</code> while an answer comes in.</td>
+</tr>
+<tr>
+<td><code>waitSince</code></td>
+<td>When the app started waiting for the first words, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>hiddenCount</code></td>
+<td>Models Private only hides.</td>
+</tr>
+<tr>
+<td><code>talk</code></td>
+<td>The talk button: <code>available</code>, <code>phase</code> (<code>idle</code>, <code>recording</code>, <code>sending</code>), <code>seconds</code>, <code>level</code>, <code>inside</code>, <code>text</code>, <code>error</code>, <code>maxSeconds</code>, <code>priceMsub</code>, <code>route</code>, <code>freeOk</code>, <code>freeVoice</code>, <code>freeVoiceOut</code>, <code>unit</code>.</td>
+</tr>
+<tr>
+<td><code>search</code></td>
+<td>Search the web: <code>{available, on}</code>.</td>
+</tr>
+<tr>
+<td><code>speak</code></td>
+<td>Listen: <code>available</code>, <code>state</code>, <code>progress</code>, <code>current</code>, <code>viaEngine</code>, <code>priceMsub</code>, <code>offer</code>.</td>
+</tr>
+<tr>
+<td><code>againMsub</code></td>
+<td>The most Ask again can cost, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>free</code></td>
+<td><code>true</code> on a free model, <code>{left, total}</code> when the next question uses a free question, else <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>historyVersion</code></td>
+<td>Goes up when conversations are burned.</td>
+</tr>
+<tr>
+<td><code>answerModel</code></td>
+<td>The model that wrote the answer on show: <code>{id, name, private, speed}</code>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>fastModel</code></td>
+<td>A fast model the slow-answer note can switch to, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>freeModels</code></td>
+<td><code>true</code> when the engine lists free models.</td>
+</tr>
+</tbody></table></div>
+<h3 id="nav"><code>nav</code><a class="anchor" href="#nav" aria-label="Link to this section">#</a></h3>
+<p><code>nav(name, params = {}, {replace = false})</code> opens a screen by its route name from <code>ROUTES</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/router.js"><code>public/v2/core/router.js</code></a>: <code>home</code>, <code>type</code>, <code>answer</code>, <code>add</code>, <code>more</code>, <code>funds</code>, <code>addFunds</code>, <code>model</code>, <code>voice</code>, <code>history</code>, <code>photo</code>, and the others there. <code>replace</code> replaces the current history entry instead of adding one.</p>
+<h3 id="actions"><code>actions</code><a class="anchor" href="#actions" aria-label="Link to this section">#</a></h3>
+<p>The answer and voice actions. None of them takes money out.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ask(text)</code></td>
+<td>Asks a question with the files waiting for it, opens the answer screen and starts the answer.</td>
+</tr>
+<tr>
+<td><code>stop()</code></td>
+<td>Stops the answer coming in.</td>
+</tr>
+<tr>
+<td><code>again()</code></td>
+<td>Asks the last question again.</td>
+</tr>
+<tr>
+<td><code>copyAnswer()</code></td>
+<td>Copies the last answer and says so.</td>
+</tr>
+<tr>
+<td><code>startFresh()</code></td>
+<td>Starts a new conversation.</td>
+</tr>
+<tr>
+<td><code>burn()</code></td>
+<td>Removes the open conversation from the phone, then goes home.</td>
+</tr>
+<tr>
+<td><code>talkDown()</code>, <code>talkMove(inside)</code>, <code>talkUp()</code>, <code>talkCancel()</code></td>
+<td>Hold to talk: the button goes down, the finger moves (<code>inside</code> is <code>false</code> when it slid off), comes up, or the recording is cancelled.</td>
+</tr>
+<tr>
+<td><code>speak()</code></td>
+<td>Reads the last answer aloud.</td>
+</tr>
+<tr>
+<td><code>stopSpeaking()</code></td>
+<td>Stops reading aloud.</td>
+</tr>
+<tr>
+<td><code>setSearch(on)</code></td>
+<td>Search the web for the next question only.</td>
+</tr>
+<tr>
+<td><code>useFastModel()</code></td>
+<td>Switches a slow answer to a fast model and asks again there.</td>
+</tr>
+<tr>
+<td><code>getNaturalVoice()</code></td>
+<td>Downloads the natural voice, then reads the answer.</td>
+</tr>
+<tr>
+<td><code>naturalNotNow()</code></td>
+<td>Stops offering the natural voice on this phone.</td>
+</tr>
+</tbody></table></div>
+<h3 id="format"><code>format</code><a class="anchor" href="#format" aria-label="Link to this section">#</a></h3>
+<p>Amounts in words: <code>units</code>, <code>int</code>, <code>cost</code>, <code>plain</code>, <code>parse</code> and <code>modelPrice</code>. See <a href="/docs/modules/fund#format">Fund</a>.</p>
+<h2 id="what-a-mode-provides">What a mode provides<a class="anchor" href="#what-a-mode-provides" aria-label="Link to this section">#</a></h2>
+<h3 id="id"><code>id</code><a class="anchor" href="#id" aria-label="Link to this section">#</a></h3>
+<p>Required. A short name such as <code>&#39;default&#39;</code>. The settings keep it when the person picks the mode.</p>
+<h3 id="home-options"><code>home(options)</code><a class="anchor" href="#home-options" aria-label="Link to this section">#</a></h3>
+<p>Required. Draws the home. <code>options</code> is <code>{sheet, open}</code> when the person opened the Add or More menu: <code>sheet</code> is the menu&#39;s element, which the mode must show over or in its home, and <code>open</code> is <code>&#39;add&#39;</code> or <code>&#39;more&#39;</code>. With no menu open it is called with no argument. Returns a screen.</p>
+<h3 id="answer"><code>answer()</code><a class="anchor" href="#answer" aria-label="Link to this section">#</a></h3>
+<p>Required. Draws the answer screen for the open conversation. Returns a screen.</p>
+<h3 id="ready"><code>ready()</code><a class="anchor" href="#ready" aria-label="Link to this section">#</a></h3>
+<p>Optional. Loads what the mode&#39;s screens need. The app calls it before it first draws the mode, when the person picks it and at start on a phone where it is chosen, and draws Default until it resolves. A rejection leaves Default on; when the person just picked the mode, the app says it could not load. Playful keeps its screens, stylesheet and typefaces out of the first paint this way.</p>
+<h3 id="the-screen">The screen<a class="anchor" href="#the-screen" aria-label="Link to this section">#</a></h3>
+<p><code>home</code> and <code>answer</code> return a screen, the same shape every screen of the app has:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What the app does with it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>node</code></td>
+<td>Required. The app puts it in the page in place of the screen before.</td>
+</tr>
+<tr>
+<td><code>update()</code></td>
+<td>Optional. Called after every change of state while the screen shows. Read <code>state.view()</code> here.</td>
+</tr>
+<tr>
+<td><code>destroy()</code></td>
+<td>Optional. Called when the screen is replaced.</td>
+</tr>
+<tr>
+<td><code>focus</code></td>
+<td>Optional. An element the app moves the focus to when the person arrives on the screen (never on the first paint, and never on the home).</td>
+</tr>
+</tbody></table></div>
+<h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>The registry calls <code>create(inputs)</code> once when the app starts, with the looks, before the first screen is drawn.</li>
+<li>A chosen mode other than Default: the app calls <code>ready()</code> before the first frame.</li>
+<li>On every navigation to the home, the Add or More menu, or the answer, the app calls <code>home(options)</code> or <code>answer()</code> again and calls <code>destroy()</code> on the screen before.</li>
+<li>While a screen shows, the app calls its <code>update()</code> after every change of state.</li>
+</ol>
+<h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>A <code>create</code> that throws gets the mode refused, and it is not listed. The app needs at least one mode: with none it stops.</li>
+<li>A rejected <code>ready()</code> leaves Default on. When the person just picked the mode, the app says it could not load (<code>look.modeFailed</code>).</li>
+<li><code>home</code>, <code>answer</code> and <code>update</code> run inside the app&#39;s drawing. An exception there stops the screen from being drawn. Catch errors inside them.</li>
+<li>An answer that failed has <code>lastExchange.answer.meta.error</code> set, with <code>code</code> and <code>message</code>. The Default mode shows it in plain words with one next step.</li>
+</ul>
+<h2 id="how-the-app-lists-and-orders-them">How the app lists and orders them<a class="anchor" href="#how-the-app-lists-and-orders-them" aria-label="Link to this section">#</a></h2>
+<p>More, Mode and look (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/settings.js"><code>public/v2/screens/settings.js</code></a>) lists every mode in the order of <code>BUNDLED</code>, the one in use as the big card. Default and Playful have a name, a line and an icon in the app&#39;s strings; any other mode shows its manifest&#39;s <code>name.en</code> and the <code>grid</code> icon. <code>pickMode</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/state.js"><code>public/v2/core/state.js</code></a> uses the chosen mode once its <code>ready()</code> has resolved, else <code>default</code>.</p>
+<h2 id="platforms">Platforms<a class="anchor" href="#platforms" aria-label="Link to this section">#</a></h2>
+<p>A mode works the same on the website and in both apps. Classic, the chat page at <code>/</code>, is a plain link in Mode and look on the website; the apps do not show it.</p>
+<h2 id="a-minimal-mode">A minimal mode<a class="anchor" href="#a-minimal-mode" aria-label="Link to this section">#</a></h2>
+<p>This mode draws a plain home and a plain answer. It uses only its inputs and the app&#39;s existing strings. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/mode/plain"><code>docs/modules/examples/mode/plain/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>.</p>
+<p><code>manifest.json</code>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.mode.plain&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mode&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Plain&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>index.js</code>:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// A mode module: a plain home with the balance, one big Type button and More, and an answer screen with</span>
+<span class="hljs-comment">// the question, the answer as plain text, Stop while it comes in, and Back. It uses only its inputs and</span>
+<span class="hljs-comment">// the app&#x27;s existing strings.</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params">{ t, ui, state, nav, actions }</span>) {
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">btn</span> = (<span class="hljs-params">id, icon, word, onclick, primary = <span class="hljs-literal">false</span></span>) =&gt; ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;button&#x27;</span>, { <span class="hljs-attr">type</span>: <span class="hljs-string">&#x27;button&#x27;</span>, <span class="hljs-attr">class</span>: <span class="hljs-string">`btn block<span class="hljs-subst">${primary ? <span class="hljs-string">&#x27; primary&#x27;</span> : <span class="hljs-string">&#x27;&#x27;</span>}</span>`</span>, id, onclick }, ui.<span class="hljs-title function_">icon</span>(icon, <span class="hljs-number">22</span>), ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;span&#x27;</span>, { <span class="hljs-attr">text</span>: word }));
+
+  <span class="hljs-comment">/** The home. With `sheet` (the Add or More menu) it shows the menu and a Close button. */</span>
+  <span class="hljs-keyword">function</span> <span class="hljs-title function_">home</span>(<span class="hljs-params">{ sheet = <span class="hljs-literal">null</span> } = {}</span>) {
+    <span class="hljs-keyword">const</span> balance = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;p&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;hint&#x27;</span>, <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;plainBalance&#x27;</span> });
+    <span class="hljs-keyword">const</span> type = <span class="hljs-title function_">btn</span>(<span class="hljs-string">&#x27;plainType&#x27;</span>, <span class="hljs-string">&#x27;keyboard&#x27;</span>, <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;home.type&#x27;</span>), <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">nav</span>(<span class="hljs-string">&#x27;type&#x27;</span>), <span class="hljs-literal">true</span>);
+    <span class="hljs-keyword">const</span> more = sheet ? <span class="hljs-title function_">btn</span>(<span class="hljs-string">&#x27;plainClose&#x27;</span>, <span class="hljs-string">&#x27;x&#x27;</span>, <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;home.close&#x27;</span>), <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">nav</span>(<span class="hljs-string">&#x27;home&#x27;</span>)) : <span class="hljs-title function_">btn</span>(<span class="hljs-string">&#x27;plainMore&#x27;</span>, <span class="hljs-string">&#x27;dots&#x27;</span>, <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;home.more&#x27;</span>), <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">nav</span>(<span class="hljs-string">&#x27;more&#x27;</span>));
+    <span class="hljs-keyword">const</span> node = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;main&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;screen sub&#x27;</span>, <span class="hljs-string">&#x27;data-screen&#x27;</span>: <span class="hljs-string">&#x27;home&#x27;</span> }, ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;scroll&#x27;</span> }, balance, type, sheet), ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;foot&#x27;</span> }, more));
+    <span class="hljs-keyword">const</span> <span class="hljs-title function_">update</span> = (<span class="hljs-params"></span>) =&gt; {
+      balance.<span class="hljs-property">textContent</span> = state.<span class="hljs-title function_">view</span>().<span class="hljs-property">balanceText</span> ?? <span class="hljs-string">&#x27;&#x27;</span>;
+    };
+    <span class="hljs-title function_">update</span>();
+    <span class="hljs-keyword">return</span> { node, update, <span class="hljs-attr">focus</span>: type };
+  }
+
+  <span class="hljs-comment">/** The answer to the last question, as it streams in. */</span>
+  <span class="hljs-keyword">function</span> <span class="hljs-title function_">answer</span>(<span class="hljs-params"></span>) {
+    <span class="hljs-keyword">const</span> question = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;p&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;hint&#x27;</span>, <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;plainQuestion&#x27;</span> });
+    <span class="hljs-keyword">const</span> text = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;p&#x27;</span>, { <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;plainAnswer&#x27;</span> });
+    <span class="hljs-keyword">const</span> stop = <span class="hljs-title function_">btn</span>(<span class="hljs-string">&#x27;plainStop&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;answer.stop&#x27;</span>), <span class="hljs-function">() =&gt;</span> actions.<span class="hljs-title function_">stop</span>());
+    <span class="hljs-keyword">const</span> back = <span class="hljs-title function_">btn</span>(<span class="hljs-string">&#x27;plainBack&#x27;</span>, <span class="hljs-string">&#x27;back&#x27;</span>, <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;common.back&#x27;</span>), <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">nav</span>(<span class="hljs-string">&#x27;home&#x27;</span>), <span class="hljs-literal">true</span>);
+    <span class="hljs-keyword">const</span> node = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;main&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;screen sub&#x27;</span>, <span class="hljs-string">&#x27;data-screen&#x27;</span>: <span class="hljs-string">&#x27;answer&#x27;</span> }, ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;scroll&#x27;</span> }, question, text), ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;foot&#x27;</span> }, stop, back));
+    <span class="hljs-keyword">const</span> <span class="hljs-title function_">update</span> = (<span class="hljs-params"></span>) =&gt; {
+      <span class="hljs-keyword">const</span> v = state.<span class="hljs-title function_">view</span>();
+      <span class="hljs-keyword">const</span> ex = v.<span class="hljs-property">lastExchange</span>;
+      question.<span class="hljs-property">textContent</span> = <span class="hljs-keyword">typeof</span> ex?.<span class="hljs-property">question</span> === <span class="hljs-string">&#x27;string&#x27;</span> ? ex.<span class="hljs-property">question</span> : <span class="hljs-string">&#x27;&#x27;</span>;
+      text.<span class="hljs-property">textContent</span> = ex?.<span class="hljs-property">answer</span>.<span class="hljs-property">meta</span>?.<span class="hljs-property">error</span>?.<span class="hljs-property">message</span> ?? ex?.<span class="hljs-property">answer</span>.<span class="hljs-property">content</span> ?? <span class="hljs-string">&#x27;&#x27;</span>;
+      stop.<span class="hljs-property">hidden</span> = !v.<span class="hljs-property">streaming</span>;
+    };
+    <span class="hljs-title function_">update</span>();
+    <span class="hljs-keyword">return</span> { node, update, <span class="hljs-attr">focus</span>: back };
+  }
+
+  <span class="hljs-keyword">return</span> { <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;plain&#x27;</span>, home, answer };
+}</code></pre></div>
+<p>To try it, copy the folder to <code>public/v2/modules/mode/plain/</code>, add <code>{ kind: &#39;mode&#39;, folder: &#39;plain&#39; }</code> to <code>BUNDLED</code>, run <code>node scripts/v2-preload.ts</code>, and pick Plain in More, Mode and look.</p>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/playful.test.ts"><code>test/unit/v2/playful.test.ts</code></a> tests Playful&#39;s pure rules; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/playful.ui.test.ts"><code>test/ui/playful.ui.test.ts</code></a> picks Playful in Chrome and walks its home and answer.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/mode.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

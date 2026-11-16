@@ -25,6 +25,23 @@
 </header>
 <div class="layout">
 <aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/" aria-current="page">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
 <nav aria-label="Sections"><ul>
 <li><a href="#quickstart">Quickstart</a><ul>
 <li><a href="#1-list-the-models">1. List the models</a></li>
@@ -1384,6 +1401,14 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <li><strong>Privacy is a choice per request.</strong> Pick a private model (<code>tier: &quot;enclave&quot;</code>) and encrypt with Tinfoil&#39;s SDK, or use a standard model when that is enough.</li>
 </ul>
 <p>Inside the Forge app, the same idea runs through app modules: each way to fund (paper note, Lightning, Cashu card, other mint), each voice in and out, each photo filter and each look is a module with a manifest and a small interface. Today only the modules bundled with the app load. Signed third-party modules, their sandbox and their permissions are designed but not built yet.</p>
+<p>The <a href="/docs/modules/">module guide</a> documents them:</p>
+<ul>
+<li><a href="/docs/modules/">Modules</a>: what a module is, the six kinds, how the app loads them, and what is built and what is designed.</li>
+<li><a href="/docs/modules/first-module">Write your first module</a>: a look and a photo filter, step by step, with tests.</li>
+<li><a href="/docs/modules/list">Module list</a>: every module the app ships with.</li>
+<li>One reference page for each kind: <a href="/docs/modules/fund">fund</a>, <a href="/docs/modules/voice-in">voice in</a>, <a href="/docs/modules/voice-out">voice out</a>, <a href="/docs/modules/filter">filter</a>, <a href="/docs/modules/look">look</a> and <a href="/docs/modules/mode">mode</a>.</li>
+<li><a href="/docs/modules/engine">Engine modules</a>: the gateway&#39;s suppliers and funding methods.</li>
+</ul>
 
 <footer class="foot"><p>Forge AI. Generated from <code>docs/API.md</code>. <a href="#top">Back to the top</a></p></footer>
 </main>

@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fund modules | Forge AI</title>
+<meta name="description" content="Reference for fund modules: the ways to put money into a Forge balance.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/fund.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund" aria-current="page">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#manifest">Manifest</a><ul>
+</ul></li>
+<li><a href="#inputs">Inputs</a><ul>
+<li><a href="#t"><code>t</code></a></li>
+<li><a href="#ui"><code>ui</code></a></li>
+<li><a href="#engine"><code>engine</code></a></li>
+<li><a href="#wallet"><code>wallet</code></a></li>
+<li><a href="#vault"><code>vault</code></a></li>
+<li><a href="#format"><code>format</code></a></li>
+<li><a href="#scan"><code>scan</code></a></li>
+<li><a href="#qr"><code>qr</code></a></li>
+<li><a href="#nfc"><code>nfc</code></a></li>
+<li><a href="#card"><code>card</code></a></li>
+<li><a href="#till"><code>till</code></a></li>
+</ul></li>
+<li><a href="#what-a-fund-module-provides">What a fund module provides</a><ul>
+<li><a href="#id"><code>id</code></a></li>
+<li><a href="#available-methods"><code>available(methods)</code></a></li>
+<li><a href="#view-options"><code>view(options)</code></a></li>
+<li><a href="#icon"><code>icon</code></a></li>
+<li><a href="#usable"><code>usable()</code></a></li>
+<li><a href="#sub"><code>sub()</code></a></li>
+</ul></li>
+<li><a href="#lifecycle">Lifecycle</a><ul>
+</ul></li>
+<li><a href="#errors">Errors</a><ul>
+</ul></li>
+<li><a href="#how-the-app-lists-and-orders-them">How the app lists and orders them</a><ul>
+</ul></li>
+<li><a href="#strings">Strings</a><ul>
+</ul></li>
+<li><a href="#platforms">Platforms</a><ul>
+</ul></li>
+<li><a href="#a-minimal-fund-module">A minimal fund module</a><ul>
+</ul></li>
+<li><a href="#tests">Tests</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Fund modules</h1>
+<p>A fund module is one way to put money into a Forge balance: scan a paper note, paste eCash, pay a Lightning invoice, tap a card. Add money shows every fund module the engine allows, and each one draws its own screen.</p>
+<p>Read <a href="/docs/modules/">the overview</a> first for the manifest, the registry and what is built today. The bundled fund modules are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund"><code>public/v2/modules/fund/</code></a> and described in the <a href="/docs/modules/list#fund">module list</a>.</p>
+<h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
+<p><code>kind</code> is <code>fund</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>. The bundled ones use ids such as <code>forge.fund.note</code>.</p>
+<h2 id="inputs">Inputs<a class="anchor" href="#inputs" aria-label="Link to this section">#</a></h2>
+<p>A fund module gets these inputs, in the registry&#39;s <code>INPUTS.fund</code> order. Every one is handed whole: no fund input is cut down.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-attr">fund</span>: [<span class="hljs-string">&#x27;t&#x27;</span>, <span class="hljs-string">&#x27;ui&#x27;</span>, <span class="hljs-string">&#x27;engine&#x27;</span>, <span class="hljs-string">&#x27;wallet&#x27;</span>, <span class="hljs-string">&#x27;vault&#x27;</span>, <span class="hljs-string">&#x27;format&#x27;</span>, <span class="hljs-string">&#x27;scan&#x27;</span>, <span class="hljs-string">&#x27;qr&#x27;</span>, <span class="hljs-string">&#x27;nfc&#x27;</span>, <span class="hljs-string">&#x27;card&#x27;</span>, <span class="hljs-string">&#x27;till&#x27;</span>],</code></pre></div>
+<h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
+<p><code>t(key, params)</code> returns the text for <code>key</code> from <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/strings/en.js"><code>public/v2/strings/en.js</code></a>, with named slots such as <code>{amount}</code> filled from <code>params</code>. It throws <code>missing string &lt;key&gt;</code> for a key the table does not have. Every word a module shows comes from there.</p>
+<h3 id="ui"><code>ui</code><a class="anchor" href="#ui" aria-label="Link to this section">#</a></h3>
+<p>The whole of <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/ui.js"><code>public/v2/core/ui.js</code></a>: the helpers the app&#39;s own screens are drawn with.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>el(tag, attrs, ...children)</code></td>
+<td>Makes an element. <code>attrs</code>: <code>class</code>, <code>text</code>, <code>on&lt;event&gt;</code> handlers, <code>true</code> for an empty attribute; <code>null</code> and <code>false</code> are left out. <code>html</code> sets inner HTML and is for fixed markup only. Children may be nodes or text.</td>
+</tr>
+<tr>
+<td><code>icon(name, size = 20, stroke = 2)</code></td>
+<td>An inline SVG icon from the app&#39;s set, hidden from screen readers.</td>
+</tr>
+<tr>
+<td><code>ICONS</code></td>
+<td>The list of icon names <code>icon</code> knows.</td>
+</tr>
+<tr>
+<td><code>say(node, text, kind = &#39;&#39;, ico = null)</code></td>
+<td>Writes <code>text</code> into <code>node</code> headline first: an icon, the first sentence in view, the rest behind a round info button. <code>kind</code> is <code>&#39;&#39;</code>, <code>&#39;err&#39;</code>, <code>&#39;ok&#39;</code> or <code>&#39;wait&#39;</code>. Returns <code>node</code>.</td>
+</tr>
+<tr>
+<td><code>sayEl(tag, attrs, text, kind, ico)</code></td>
+<td><code>say</code> into a new element.</td>
+</tr>
+<tr>
+<td><code>msgLine()</code></td>
+<td>A status line (<code>role=&quot;status&quot;</code>) with <code>set(text, kind)</code>. A text with no kind that does not end in a full stop shows the wait icon.</td>
+</tr>
+<tr>
+<td><code>toast(text, ms = 2600)</code></td>
+<td>A short message at the bottom of the screen.</td>
+</tr>
+<tr>
+<td><code>announce(text)</code></td>
+<td>Says <code>text</code> to screen readers only.</td>
+</tr>
+<tr>
+<td><code>hideToast()</code></td>
+<td>Hides the toast now.</td>
+</tr>
+<tr>
+<td><code>copy(text)</code></td>
+<td>Copies to the clipboard. Resolves <code>true</code> or <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>reduced()</code></td>
+<td><code>true</code> when the person asked for reduced motion.</td>
+</tr>
+<tr>
+<td><code>infoToggle(panel, label, id)</code></td>
+<td>A round info button that shows and hides <code>panel</code>.</td>
+</tr>
+<tr>
+<td><code>tileButton({ico, label, onclick, cls, id, attrs})</code></td>
+<td>An icon button with a label.</td>
+</tr>
+<tr>
+<td><code>backHeader(title, onBack, backLabel)</code></td>
+<td>The back button and a centred title.</td>
+</tr>
+<tr>
+<td><code>listRow({ico, tint, title, sub, onclick, id, cls})</code></td>
+<td>A list row with a tinted icon, a title, a subtitle and a chevron.</td>
+</tr>
+<tr>
+<td><code>meterBar({id, label})</code></td>
+<td>A progress bar; its <code>set({fraction, text, phase})</code> moves it.</td>
+</tr>
+<tr>
+<td><code>headOf(text)</code></td>
+<td>Splits text into its first sentence and the rest: <code>[head, rest]</code>.</td>
+</tr>
+<tr>
+<td><code>catchToasts(fn)</code></td>
+<td>Lets a screen take the toasts while it shows (Playful mode does).</td>
+</tr>
+<tr>
+<td><code>load(key)</code></td>
+<td>Reads <code>localStorage[key]</code>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>store(key, value)</code></td>
+<td>Writes <code>localStorage[key]</code>; <code>null</code> removes it.</td>
+</tr>
+</tbody></table></div>
+<h3 id="engine"><code>engine</code><a class="anchor" href="#engine" aria-label="Link to this section">#</a></h3>
+<p>The engine client from <code>createEngine</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/engine.js"><code>public/v2/core/engine.js</code></a>, always the engine the person uses now (More, Engine can change it). Calls that take <code>key</code> need the balance key, which <code>wallet.key()</code> gives.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>base</code></td>
+<td>The engine&#39;s address: <code>&#39;&#39;</code> for the page&#39;s own origin, else an origin such as <code>https://ai.forge-reserve.com</code>.</td>
+</tr>
+<tr>
+<td><code>call(path, {key, json, method, signal})</code></td>
+<td>Any JSON call. Resolves <code>{status, ok, body}</code> and never throws for an HTTP error. Throws <code>EngineError(&#39;offline&#39;)</code> when the engine cannot be reached. Answers a <code>428</code> proof-of-work challenge once.</td>
+</tr>
+<tr>
+<td><code>fundMethods()</code></td>
+<td><a href="/docs/#get-v1-wallet-fund-methods"><code>GET /v1/wallet/fund/methods</code></a>. Resolves the body; throws <code>EngineError</code> on an error.</td>
+</tr>
+<tr>
+<td><code>topup(key, token, invite)</code></td>
+<td><a href="/docs/#post-v1-wallet-topup"><code>POST /v1/wallet/topup</code></a>. Resolves <code>{status, ok, body}</code>. Use <code>wallet.topup</code> instead, which keeps the token safe.</td>
+</tr>
+<tr>
+<td><code>openBalance(invite, unit)</code></td>
+<td><a href="/docs/#post-v1-wallet-open"><code>POST /v1/wallet/open</code></a>. Resolves the body; throws <code>EngineError</code>.</td>
+</tr>
+<tr>
+<td><code>fundLightning(key, {amount, unit, invite})</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-lightning"><code>POST /v1/wallet/fund/lightning</code></a>. Resolves <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>fundOnchain(key, {invite})</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-onchain"><code>POST /v1/wallet/fund/onchain</code></a>. Resolves <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>foreignQuote(key, {token, unit, invite, pubkey, accept_unlisted})</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-foreign-quote"><code>POST /v1/wallet/fund/foreign/quote</code></a>. Resolves <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>foreignConfirm(key, {id, token, pubkey})</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-foreign-confirm"><code>POST /v1/wallet/fund/foreign/confirm</code></a>. Resolves <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>foreignMints(path)</code></td>
+<td><a href="/docs/#get-v1-wallet-fund-mints"><code>GET /v1/wallet/fund/mints</code></a>. Resolves the body; throws <code>EngineError</code>.</td>
+</tr>
+<tr>
+<td><code>funding(key, id)</code></td>
+<td><a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>: one funding&#39;s state. Resolves <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>cardMint(body)</code>, <code>cardSwap(body)</code>, <code>cardRestore(body)</code></td>
+<td>The <a href="/docs/#cashu-card-relay">Cashu card relay</a>. No key. Resolve <code>{status, ok, body}</code>.</td>
+</tr>
+<tr>
+<td><code>models()</code>, <code>wallet(key)</code>, <code>refunds(key)</code>, <code>refund(key, {amount, pubkey})</code>, <code>transcribe(key, ...)</code>, <code>speech(key, ...)</code>, <code>chat(...)</code></td>
+<td>The rest of the client. No bundled fund module uses them.</td>
+</tr>
+</tbody></table></div>
+<p><code>EngineError</code> has <code>code</code> (the engine&#39;s error code, or <code>offline</code>, <code>http_&lt;status&gt;</code>, <code>bad_answer</code>), <code>message</code>, <code>status</code> and <code>retryable</code>. <code>retryable</code> is true for a server error, a <code>429</code>, and codes such as <code>topup_pending</code> and <code>mint_unavailable</code>: the same request may work later.</p>
+<h3 id="wallet"><code>wallet</code><a class="anchor" href="#wallet" aria-label="Link to this section">#</a></h3>
+<p>The balance as a fund module sees it, from <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js"><code>public/v2/app.js</code></a>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>key()</code></td>
+<td>The balance key, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>setKey(k)</code></td>
+<td>Keeps a new balance key on the phone. Call it at once when an engine answer carries <code>body.key</code>.</td>
+</tr>
+<tr>
+<td><code>unit()</code></td>
+<td>The balance&#39;s unit, <code>&#39;usd&#39;</code> or <code>&#39;sat&#39;</code>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>inviteOnly()</code></td>
+<td><code>true</code> when the engine opens new balances only with an invite code.</td>
+</tr>
+<tr>
+<td><code>invite()</code>, <code>setInvite(v)</code></td>
+<td>The invite code typed so far on this phone.</td>
+</tr>
+<tr>
+<td><code>refresh()</code></td>
+<td>Reads the balance again from the engine. Resolves when done.</td>
+</tr>
+<tr>
+<td><code>methods()</code></td>
+<td>The engine&#39;s <a href="/docs/#get-v1-wallet-fund-methods">ways to pay</a>, or <code>null</code> before they arrive.</td>
+</tr>
+<tr>
+<td><code>mints()</code></td>
+<td>The mints whose eCash the engine takes.</td>
+</tr>
+<tr>
+<td><code>mintAliases()</code></td>
+<td>Other addresses of those mints.</td>
+</tr>
+<tr>
+<td><code>units()</code></td>
+<td>The units the engine takes.</td>
+</tr>
+<tr>
+<td><code>lockKey()</code></td>
+<td>The public key the person locks payouts to, or <code>&#39;&#39;</code>.</td>
+</tr>
+<tr>
+<td><code>privateOnly()</code></td>
+<td>Whether Private only is on.</td>
+</tr>
+<tr>
+<td><code>useFreeModels()</code></td>
+<td>Turns Private only off and chooses a free model. Returns the model, or <code>null</code>. Only after the person said yes.</td>
+</tr>
+<tr>
+<td><code>topup(token, invite)</code></td>
+<td>Adds eCash. Stores the token on the phone first (<a href="#vault">the vault</a>), sends it, and removes it only once the engine credits it. Resolves <code>{credited, unit, replay}</code>, with <code>free: true</code> for a voucher of free questions. Throws <code>EngineError</code>; when <code>retryable</code> is true the token stays on the phone and is sent again later.</td>
+</tr>
+<tr>
+<td><code>topupFree(token)</code></td>
+<td>The same for a voucher of free questions, onto the free balance.</td>
+</tr>
+<tr>
+<td><code>isCredit(mint)</code></td>
+<td><code>true</code> for the engine&#39;s credit mint, whose eCash is free questions.</td>
+</tr>
+<tr>
+<td><code>open(invite)</code></td>
+<td>Opens a balance with an invite code and nothing on it, for the free models. Resolves <code>{created, freeShown}</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="vault"><code>vault</code><a class="anchor" href="#vault" aria-label="Link to this section">#</a></h3>
+<p>eCash on its way in or out, kept in the phone&#39;s storage so a token is never lost. From <code>createVault</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/vault.js"><code>public/v2/core/vault.js</code></a>. <code>wallet.topup</code> uses it for you; use it directly when a token goes somewhere else first, as Other mint does.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>hold(token, via = &#39;topup&#39;, extra = {})</code></td>
+<td>Stores a token before it is sent. Returns the entry <code>{id, token, via, state: &#39;pending&#39;, ...extra}</code>. Throws when the phone cannot store it: then do not send it.</td>
+</tr>
+<tr>
+<td><code>credited(id)</code></td>
+<td>Removes the entry once the engine confirmed the credit.</td>
+</tr>
+<tr>
+<td><code>pending(id, code)</code></td>
+<td>Marks it pending: the outcome is open, it is sent again later.</td>
+</tr>
+<tr>
+<td><code>refused(id, code, message)</code></td>
+<td>Marks it refused: the engine did not take it. Funds lists it so the person can copy it back out.</td>
+</tr>
+<tr>
+<td><code>discard(id)</code></td>
+<td>Removes a refused entry the person copied.</td>
+</tr>
+<tr>
+<td><code>incoming()</code>, <code>outgoing()</code></td>
+<td>The entries on their way in, and the payout tokens kept until saved.</td>
+</tr>
+<tr>
+<td><code>keepRefund({id, token, amount, unit})</code></td>
+<td>Keeps a payout token until the person says they saved it.</td>
+</tr>
+<tr>
+<td><code>saved(id)</code></td>
+<td>Removes a kept payout token.</td>
+</tr>
+</tbody></table></div>
+<h3 id="format"><code>format</code><a class="anchor" href="#format" aria-label="Link to this section">#</a></h3>
+<p>Amounts in words. <code>usd</code> amounts are whole cents and <code>sat</code> amounts whole sats; <code>msub</code> is a thousandth of the unit.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>units(n, unit)</code></td>
+<td><code>&#39;$5.00&#39;</code> for 500 usd, <code>&#39;5,000 sat&#39;</code> for 5000 sat.</td>
+</tr>
+<tr>
+<td><code>int(n)</code></td>
+<td>A whole number with separators.</td>
+</tr>
+<tr>
+<td><code>cost(msub, unit)</code></td>
+<td>A price: <code>&#39;$1.20&#39;</code> for 120000 msub in usd.</td>
+</tr>
+<tr>
+<td><code>plain(n, unit)</code></td>
+<td>A number for an input field: <code>&#39;5.00&#39;</code> for 500 usd.</td>
+</tr>
+<tr>
+<td><code>parse(s, unit)</code></td>
+<td>What a person typed, back to cents or sats. <code>NaN</code> when it is not an amount.</td>
+</tr>
+<tr>
+<td><code>modelPrice(m)</code></td>
+<td>A model&#39;s input and output price as text.</td>
+</tr>
+</tbody></table></div>
+<h3 id="scan"><code>scan</code><a class="anchor" href="#scan" aria-label="Link to this section">#</a></h3>
+<p>The camera, for QR codes (<code>adapters.camera</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/adapters.js"><code>public/v2/core/adapters.js</code></a>).</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>available()</code></td>
+<td><code>true</code> when the browser can use a camera.</td>
+</tr>
+<tr>
+<td><code>open(video, onProgress)</code></td>
+<td>Starts reading single or animated QR codes into the <code>&lt;video&gt;</code> element. Resolves <code>{promise, stop()}</code>; <code>promise</code> resolves the text read. <code>onProgress(p)</code> gets 0 to 1 for an animated code.</td>
+</tr>
+</tbody></table></div>
+<h3 id="qr"><code>qr</code><a class="anchor" href="#qr" aria-label="Link to this section">#</a></h3>
+<p>Drawing QR codes (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/js/qr.js"><code>public/js/qr.js</code></a>).</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>renderQR(box, text, level = &#39;M&#39;)</code></td>
+<td>Draws one code into <code>box</code>.</td>
+</tr>
+<tr>
+<td><code>playAnimatedQR(box, text, {fragment, fps})</code></td>
+<td>Plays an animated code for long text. Resolves <code>{parts, stop()}</code>.</td>
+</tr>
+<tr>
+<td><code>STATIC_MAX</code></td>
+<td>The longest text put in one code (700).</td>
+</tr>
+</tbody></table></div>
+<h3 id="nfc"><code>nfc</code><a class="anchor" href="#nfc" aria-label="Link to this section">#</a></h3>
+<p>The card reader. In the Android app it is <code>nativeNfc</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js"><code>public/v2/core/native.js</code></a>; on the website a stand-in that cannot read cards; in the iPhone app <code>NO_READER</code>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>supported()</code></td>
+<td><code>true</code> only in the Android app.</td>
+</tr>
+<tr>
+<td><code>listed()</code></td>
+<td>Only on the iPhone app&#39;s reader, where it returns <code>false</code>: leave card ways out there. Missing elsewhere.</td>
+</tr>
+<tr>
+<td><code>status()</code></td>
+<td>Resolves <code>{available, enabled}</code>: the phone has a reader, and it is on.</td>
+</tr>
+<tr>
+<td><code>start(onCard)</code></td>
+<td>Listens for cards. <code>onCard</code> gets <code>{transceive(bytes), close()}</code> for each card held to the phone (<code>transceive</code> resolves the card&#39;s answer as bytes), or <code>null</code> for one that is not a smart card. Returns <code>{started, stop()}</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="card"><code>card</code><a class="anchor" href="#card" aria-label="Link to this section">#</a></h3>
+<p>Taking eCash off a Cashu card.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>load()</code></td>
+<td>Loads the card flow the first time. Resolves <code>{flow, handToken}</code>: <code>flow</code> from <code>createCardFunding</code> and <code>handToken</code> from <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/card/flow.js"><code>public/v2/core/card/flow.js</code></a>. The flow reaches the card&#39;s mint through the engine&#39;s card relay and keeps its own records on the phone.</td>
+</tr>
+</tbody></table></div>
+<h3 id="till"><code>till</code><a class="anchor" href="#till" aria-label="Link to this section">#</a></h3>
+<p>The till a Fedimint card pays through. Only the Android app has one; elsewhere <code>supported()</code> is <code>false</code>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>supported()</code></td>
+<td><code>true</code> in the Android app.</td>
+</tr>
+<tr>
+<td><code>status()</code></td>
+<td>Resolves <code>{paired, url}</code>.</td>
+</tr>
+<tr>
+<td><code>pair(text)</code></td>
+<td>Pairs with a till from the pay code it shows. Throws <code>{code: &#39;app_only&#39;}</code> outside the Android app.</td>
+</tr>
+<tr>
+<td><code>forget()</code></td>
+<td>Forgets the paired till.</td>
+</tr>
+<tr>
+<td><code>pays</code></td>
+<td>The payments on this phone (<code>createTillPays</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js"><code>public/v2/core/till.js</code></a>): <code>all</code>, <code>get</code>, <code>waiting</code>, <code>start</code>, <code>reprice</code>, <code>pay</code>, <code>check</code>, <code>refund</code>, <code>credited</code>, <code>drop</code>.</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td>The till&#39;s address and margin (<code>createTillSettings</code>): <code>get</code>, <code>marginKnown</code>, <code>paired</code>, <code>forget</code>, <code>setMargin</code>, <code>learn</code>.</td>
+</tr>
+</tbody></table></div>
+<h2 id="what-a-fund-module-provides">What a fund module provides<a class="anchor" href="#what-a-fund-module-provides" aria-label="Link to this section">#</a></h2>
+<p><code>create(inputs)</code> returns an object with these fields.</p>
+<h3 id="id"><code>id</code><a class="anchor" href="#id" aria-label="Link to this section">#</a></h3>
+<p>Required. A short name such as <code>&#39;note&#39;</code>. It goes in the address of the module&#39;s screen (<code>#/funds/add/note</code>), so it must match <code>^[a-z0-9-]{1,40}$</code>. It names the module&#39;s strings: <code>fund.&lt;id&gt;.name</code> must exist in the string table.</p>
+<h3 id="available-methods"><code>available(methods)</code><a class="anchor" href="#available-methods" aria-label="Link to this section">#</a></h3>
+<p>Required. Returns <code>true</code> when the module can be offered with this engine. <code>methods</code> is the body of <a href="/docs/#get-v1-wallet-fund-methods"><code>GET /v1/wallet/fund/methods</code></a>, or <code>null</code> before it arrives. The app calls it often: every time Add money, the Funds card stack or the first run is drawn or updated, and before a module&#39;s screen opens. Keep it fast and never let it throw.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-attr">available</span>: <span class="hljs-function">(<span class="hljs-params">methods</span>) =&gt;</span> !!methods?.<span class="hljs-property">lightning</span>?.<span class="hljs-property">enabled</span>,</code></pre></div>
+<h3 id="view-options"><code>view(options)</code><a class="anchor" href="#view-options" aria-label="Link to this section">#</a></h3>
+<p>Required. Draws the module&#39;s screen. The app calls it each time the screen opens, and puts the result under a header with the module&#39;s name and a back button. <code>options</code> holds:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>done()</code></td>
+<td>Call it when the money is in: the app goes back to Funds.</td>
+</tr>
+<tr>
+<td><code>open(id, {token})</code></td>
+<td>Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint to Other mint this way.</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>The token another module handed over with <code>open</code>, or <code>undefined</code>.</td>
+</tr>
+</tbody></table></div>
+<p>It returns <code>{node, update, destroy}</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What the app does with it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>node</code></td>
+<td>Required. The element the app shows.</td>
+</tr>
+<tr>
+<td><code>update()</code></td>
+<td>Optional. Called on every change in the app&#39;s state while the screen shows.</td>
+</tr>
+<tr>
+<td><code>destroy()</code></td>
+<td>Optional. Called when the person leaves the screen. Stop cameras, timers and pollers here.</td>
+</tr>
+</tbody></table></div>
+<h3 id="icon"><code>icon</code><a class="anchor" href="#icon" aria-label="Link to this section">#</a></h3>
+<p>Optional. An icon name from <code>ui.ICONS</code>. The app draws it on the module&#39;s More tile, its tab and its card when it has no picture of its own for this <code>id</code>. Without it the app draws <code>plus</code>.</p>
+<h3 id="usable"><code>usable()</code><a class="anchor" href="#usable" aria-label="Link to this section">#</a></h3>
+<p>Optional. Return <code>false</code> on a phone that cannot use the module. The first run&#39;s How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a card returns <code>nfc.supported()</code>.</p>
+<h3 id="sub"><code>sub()</code><a class="anchor" href="#sub" aria-label="Link to this section">#</a></h3>
+<p>Optional. Returns the string key of the line behind the module&#39;s info button on Add money. Without it the app uses <code>fund.&lt;id&gt;.sub</code> when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired.</p>
+<p>The bundled modules also set <code>group</code> (<code>&#39;unlinked&#39;</code> or <code>&#39;depends&#39;</code>). No app code reads it.</p>
+<h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>The registry calls <code>create(inputs)</code> once, when the app starts. On the first run that happens after the first screen is drawn. Keep <code>create</code> quick and free of side effects; the instance lives as long as the page.</li>
+<li>The app calls <code>available(methods)</code> whenever it draws a list of ways to pay.</li>
+<li>When the person opens the module, the app calls <code>view(options)</code> and shows <code>node</code>. Keep everything the screen needs inside <code>view</code>: it runs again each time the screen opens.</li>
+<li>While the screen shows, the app calls <code>update()</code> after every change of state: the balance, the engine&#39;s methods, the connection.</li>
+<li>When the person leaves, the app calls <code>destroy()</code>.</li>
+</ol>
+<h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>A <code>create</code> that throws gets the module refused. It never shows.</li>
+<li><code>available</code> and <code>view</code> run inside the app&#39;s own drawing. An exception there breaks the screen. Catch errors and show them in the module&#39;s own screen with <code>ui.msgLine()</code> and <code>msg.set(text, &#39;err&#39;)</code>.</li>
+<li>Never lose a token. Put eCash on the phone before it leaves: through <code>wallet.topup</code>, which does it for you, or with <code>vault.hold</code> before your own call, then <code>credited</code>, <code>pending</code> or <code>refused</code> once you know the outcome.</li>
+<li>When <code>wallet.topup</code> throws an <code>EngineError</code> with <code>retryable</code> true, the token is still on the phone and the app sends it again on start and when the connection comes back. Say so in words, as eCash does with <code>fund.ecash.kept</code>.</li>
+<li>When an engine answer carries <code>body.key</code>, call <code>wallet.setKey</code> at once, even when the answer is an error, so a new balance key is never lost.</li>
+</ul>
+<h2 id="how-the-app-lists-and-orders-them">How the app lists and orders them<a class="anchor" href="#how-the-app-lists-and-orders-them" aria-label="Link to this section">#</a></h2>
+<p>Add money (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/wallet.js"><code>public/v2/screens/wallet.js</code></a> and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/ways.js"><code>public/v2/core/ways.js</code></a>) takes every fund module whose <code>available(methods)</code> is true, leaves out <code>invite</code>, and orders them:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> <span class="hljs-variable constant_">MAIN_WAYS</span> = <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">freeze</span>([<span class="hljs-string">&#x27;note&#x27;</span>, <span class="hljs-string">&#x27;lightning&#x27;</span>, <span class="hljs-string">&#x27;card&#x27;</span>, <span class="hljs-string">&#x27;ecash&#x27;</span>]);</code></pre></div>
+<ol>
+<li>Start free, first, while the engine has free models and the balance is empty.</li>
+<li>The way used last on this phone (<code>lastWay</code> in the settings), on a card of its own.</li>
+<li><code>note</code>, <code>lightning</code>, <code>card</code> and <code>ecash</code>, in that order, each on a card.</li>
+<li>The More card, whose tiles are every other module, in the order of <code>BUNDLED</code>.</li>
+</ol>
+<p>A new fund module is a tile on the More card until a person uses it; then it has a card of its own, first. The Funds screen shows the first three cards as a fanned stack. The first run&#39;s How you pay shows a fixed set of ways (<code>note</code>, <code>free</code>, <code>card</code>, <code>lightning</code>, from <code>PAY_WAYS</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/firstrun.js"><code>public/v2/core/firstrun.js</code></a>) where their modules are available and usable.</p>
+<h2 id="strings">Strings<a class="anchor" href="#strings" aria-label="Link to this section">#</a></h2>
+<p>Add these to <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/strings/en.js"><code>public/v2/strings/en.js</code></a> for a module with the id <code>paste</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Needed</th>
+<th>Where it shows</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fund.paste.name</code></td>
+<td>Yes</td>
+<td>The screen&#39;s title, the tile&#39;s and tab&#39;s names for screen readers</td>
+</tr>
+<tr>
+<td><code>fund.paste.sub</code></td>
+<td>No</td>
+<td>Behind the info button on its card: what the way is, and who sees the payment</td>
+</tr>
+<tr>
+<td><code>ways.paste.word</code></td>
+<td>No</td>
+<td>The one word under its card or tile. Default: the name</td>
+</tr>
+<tr>
+<td><code>ways.paste.go</code></td>
+<td>No</td>
+<td>The word on the big button under its card. Default: <code>ways.go</code></td>
+</tr>
+</tbody></table></div>
+<h2 id="platforms">Platforms<a class="anchor" href="#platforms" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Website</th>
+<th>Android app</th>
+<th>iPhone app</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>engine</code></td>
+<td>The page&#39;s own origin</td>
+<td><code>https://ai.forge-reserve.com</code> until the person sets another</td>
+<td>The same as Android</td>
+</tr>
+<tr>
+<td><code>scan</code></td>
+<td>The browser&#39;s camera</td>
+<td>The camera, through the web view</td>
+<td>The camera, through the web view</td>
+</tr>
+<tr>
+<td><code>nfc</code></td>
+<td><code>supported()</code> false: card ways are listed and say they need the Android app</td>
+<td>Reads cards (ForgeNfc)</td>
+<td><code>listed()</code> false: card ways are left out</td>
+</tr>
+<tr>
+<td><code>till</code></td>
+<td><code>supported()</code> false</td>
+<td>Pairs and pays (ForgeTill)</td>
+<td><code>supported()</code> false</td>
+</tr>
+</tbody></table></div>
+<p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a card does.</p>
+<h2 id="a-minimal-fund-module">A minimal fund module<a class="anchor" href="#a-minimal-fund-module" aria-label="Link to this section">#</a></h2>
+<p>This module adds pasted eCash. It reuses eCash&#39;s strings, so it needs only <code>fund.paste.name</code> in the string table. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/fund/paste"><code>docs/modules/examples/fund/paste/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>.</p>
+<p><code>manifest.json</code>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.fund.paste&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;fund&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Paste eCash&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>index.js</code>:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// A fund module: paste eCash and add it to the balance. wallet.topup keeps the token on the phone until</span>
+<span class="hljs-comment">// the engine has credited it. It reuses eCash&#x27;s strings; it needs fund.paste.name in strings/en.js.</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params">{ t, ui, wallet, format }</span>) {
+  <span class="hljs-keyword">return</span> {
+    <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;paste&#x27;</span>,
+    <span class="hljs-attr">icon</span>: <span class="hljs-string">&#x27;paste&#x27;</span>,
+    <span class="hljs-attr">available</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-literal">true</span>,
+    <span class="hljs-title function_">view</span>(<span class="hljs-params">{ done }</span>) {
+      <span class="hljs-keyword">const</span> msg = ui.<span class="hljs-title function_">msgLine</span>();
+      <span class="hljs-keyword">const</span> box = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;textarea&#x27;</span>, { <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;pasteToken&#x27;</span>, <span class="hljs-attr">rows</span>: <span class="hljs-string">&#x27;4&#x27;</span>, <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;field-input mono&#x27;</span>, <span class="hljs-attr">spellcheck</span>: <span class="hljs-string">&#x27;false&#x27;</span>, <span class="hljs-string">&#x27;aria-label&#x27;</span>: <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.label&#x27;</span>) });
+      <span class="hljs-keyword">const</span> add = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;button&#x27;</span>, { <span class="hljs-attr">type</span>: <span class="hljs-string">&#x27;button&#x27;</span>, <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;btn primary block&#x27;</span>, <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;pasteAdd&#x27;</span> }, ui.<span class="hljs-title function_">icon</span>(<span class="hljs-string">&#x27;addMoney&#x27;</span>, <span class="hljs-number">22</span>), ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;span&#x27;</span>, { <span class="hljs-attr">text</span>: <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.add&#x27;</span>) }));
+      add.<span class="hljs-title function_">addEventListener</span>(<span class="hljs-string">&#x27;click&#x27;</span>, <span class="hljs-title function_">async</span> () =&gt; {
+        <span class="hljs-keyword">const</span> token = box.<span class="hljs-property">value</span>.<span class="hljs-title function_">replace</span>(<span class="hljs-regexp">/\s+/g</span>, <span class="hljs-string">&#x27;&#x27;</span>);
+        <span class="hljs-keyword">if</span> (!<span class="hljs-regexp">/^cashu[AB]/</span>.<span class="hljs-title function_">test</span>(token)) <span class="hljs-keyword">return</span> msg.<span class="hljs-title function_">set</span>(<span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.bad&#x27;</span>), <span class="hljs-string">&#x27;err&#x27;</span>);
+        add.<span class="hljs-property">disabled</span> = <span class="hljs-literal">true</span>;
+        msg.<span class="hljs-title function_">set</span>(<span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.sending&#x27;</span>));
+        <span class="hljs-keyword">try</span> {
+          <span class="hljs-keyword">const</span> r = <span class="hljs-keyword">await</span> wallet.<span class="hljs-title function_">topup</span>(token);
+          msg.<span class="hljs-title function_">set</span>(<span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.added&#x27;</span>, { <span class="hljs-attr">amount</span>: format.<span class="hljs-title function_">units</span>(r.<span class="hljs-property">credited</span>, r.<span class="hljs-property">unit</span>) }), <span class="hljs-string">&#x27;ok&#x27;</span>);
+          <span class="hljs-keyword">await</span> wallet.<span class="hljs-title function_">refresh</span>();
+          <span class="hljs-title function_">done</span>();
+        } <span class="hljs-keyword">catch</span> (e) {
+          msg.<span class="hljs-title function_">set</span>(e?.<span class="hljs-property">retryable</span> ? <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.kept&#x27;</span>) : <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.failed&#x27;</span>, { <span class="hljs-attr">message</span>: e?.<span class="hljs-property">message</span> ?? <span class="hljs-title class_">String</span>(e) }), <span class="hljs-string">&#x27;err&#x27;</span>);
+        } <span class="hljs-keyword">finally</span> {
+          add.<span class="hljs-property">disabled</span> = <span class="hljs-literal">false</span>;
+        }
+      });
+      <span class="hljs-keyword">const</span> body = ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;scroll fund-body&#x27;</span> }, box, msg);
+      <span class="hljs-keyword">return</span> { <span class="hljs-attr">node</span>: ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;fund-view&#x27;</span> }, body, ui.<span class="hljs-title function_">el</span>(<span class="hljs-string">&#x27;div&#x27;</span>, { <span class="hljs-attr">class</span>: <span class="hljs-string">&#x27;foot&#x27;</span> }, add)) };
+    },
+  };
+}</code></pre></div>
+<p>To try it, copy the folder to <code>public/v2/modules/fund/paste/</code>, add <code>{ kind: &#39;fund&#39;, folder: &#39;paste&#39; }</code> to <code>BUNDLED</code>, add <code>&#39;fund.paste.name&#39;: &#39;Paste eCash&#39;,</code> to the string table and run <code>node scripts/v2-preload.ts</code>. It shows as a tile on Add money&#39;s More card. On an engine that needs an invite code, a first top-up also needs the invite: the bundled modules use <code>inviteField</code> from <code>fund/kit.js</code> for that.</p>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p>Pure logic belongs in functions the module exports, tested in Node: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/card-module.test.ts"><code>test/unit/v2/card-module.test.ts</code></a> tests Tap a card&#39;s <code>routeFor</code> and <code>wordsFor</code>. The screens are tested in a phone-sized Chrome against a local gateway and the local test mints: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/note.ui.test.ts"><code>test/ui/note.ui.test.ts</code></a> scans a note, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/ways.ts"><code>test/ui/ways.ts</code></a> opens any way from Add money by its id.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/fund.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

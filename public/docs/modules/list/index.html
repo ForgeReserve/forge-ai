@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Module list | Forge AI</title>
+<meta name="description" content="Every module bundled with the Forge app: what it does, what it needs, where it works and what it costs.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/list.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list" aria-current="page">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#at-a-glance">At a glance</a><ul>
+</ul></li>
+<li><a href="#fund">Fund</a><ul>
+<li><a href="#free-questions">Free questions</a></li>
+<li><a href="#start-free">Start free</a></li>
+<li><a href="#scan-a-note">Scan a note</a></li>
+<li><a href="#tap-a-card">Tap a card</a></li>
+<li><a href="#tap-a-fedimint-card">Tap a Fedimint card</a></li>
+<li><a href="#ecash">eCash</a></li>
+<li><a href="#lightning">Lightning</a></li>
+<li><a href="#on-chain">On-chain</a></li>
+<li><a href="#other-mint">Other mint</a></li>
+</ul></li>
+<li><a href="#voice-in">Voice in</a><ul>
+<li><a href="#on-this-phone-forge-private-voice">On this phone (Forge Private Voice)</a></li>
+<li><a href="#on-this-phone-the-phone-s-recogniser">On this phone (the phone&#39;s recogniser)</a></li>
+<li><a href="#engine">Engine</a></li>
+<li><a href="#this-browser">This browser</a></li>
+</ul></li>
+<li><a href="#voice-out">Voice out</a><ul>
+<li><a href="#natural-voice">Natural voice</a></li>
+<li><a href="#phone-voice">Phone voice</a></li>
+<li><a href="#engine-voice">Engine voice</a></li>
+</ul></li>
+<li><a href="#filter">Filter</a><ul>
+<li><a href="#hidden-details">Hidden details</a></li>
+<li><a href="#cover-faces">Cover faces</a></li>
+<li><a href="#cover-writing-and-numbers">Cover writing and numbers</a></li>
+</ul></li>
+<li><a href="#look">Look</a><ul>
+<li><a href="#light">Light</a></li>
+<li><a href="#dark">Dark</a></li>
+<li><a href="#midnight">Midnight</a></li>
+</ul></li>
+<li><a href="#mode">Mode</a><ul>
+<li><a href="#default">Default</a></li>
+<li><a href="#playful">Playful</a></li>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Module list</h1>
+<p>Every module that ships with the Forge app, grouped by kind. Within a kind they are in the order the app loads and lists them (<code>BUNDLED</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/registry.js"><code>public/v2/core/registry.js</code></a>). Each entry says what the module does, what it needs, where it works, what it costs and where its data goes.</p>
+<p>&quot;Private&quot; means here that what the module handles stays on the phone, or goes only to a model in sealed hardware (an enclave), where the engine&#39;s operator cannot read it. A test, <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>, fails when this list and the module folders disagree.</p>
+<h2 id="at-a-glance">At a glance<a class="anchor" href="#at-a-glance" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Id</th>
+<th>Name</th>
+<th>Website</th>
+<th>Android app</th>
+<th>iPhone app</th>
+<th>Cost</th>
+<th>Private</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.free</code></td>
+<td>Free questions</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>No name or email</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.invite</code></td>
+<td>Start free</td>
+<td>By address</td>
+<td>By address</td>
+<td>By address</td>
+<td>Free</td>
+<td>Free models are Standard</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.note</code></td>
+<td>Scan a note</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>The note&#39;s value</td>
+<td>Cannot be linked to you</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.card</code></td>
+<td>Tap a card</td>
+<td>Points to the app</td>
+<td>Yes</td>
+<td>Hidden</td>
+<td>The amount taken, fee shown</td>
+<td>Cannot be linked to you</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.fedimint</code></td>
+<td>Tap a Fedimint card</td>
+<td>Points to the app</td>
+<td>Yes, with a till</td>
+<td>Hidden</td>
+<td>The amount, till fee shown</td>
+<td>The till sees the payment</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.ecash</code></td>
+<td>eCash</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>The token&#39;s value</td>
+<td>Cannot be linked to you</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.lightning</code></td>
+<td>Lightning</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>The invoice</td>
+<td>Your wallet sees it</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.onchain</code></td>
+<td>On-chain</td>
+<td>When on</td>
+<td>When on</td>
+<td>When on</td>
+<td>The deposit</td>
+<td>Public on the chain</td>
+</tr>
+<tr>
+<td><code>fund</code></td>
+<td><code>forge.fund.othermint</code></td>
+<td>Other mint</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>The token, less fees</td>
+<td>The engine sees the other mint</td>
+</tr>
+<tr>
+<td><code>voice-in</code></td>
+<td><code>forge.voice-in.bundled</code></td>
+<td>On this phone</td>
+<td>No</td>
+<td>Forge Private Voice only</td>
+<td>No</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>voice-in</code></td>
+<td><code>forge.voice-in.phone</code></td>
+<td>On this phone</td>
+<td>No</td>
+<td>Where the phone has the language</td>
+<td>No</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>voice-in</code></td>
+<td><code>forge.voice-in.engine</code></td>
+<td>Engine</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Paid per request</td>
+<td>With an enclave model</td>
+</tr>
+<tr>
+<td><code>voice-in</code></td>
+<td><code>forge.voice-in.device</code></td>
+<td>This browser</td>
+<td>Where the browser has one</td>
+<td>Where the web view has one</td>
+<td>Yes</td>
+<td>Free</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>voice-out</code></td>
+<td><code>forge.voice-out.phonon</code></td>
+<td>Natural voice</td>
+<td>Where the browser runs it</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>voice-out</code></td>
+<td><code>forge.voice-out.device</code></td>
+<td>Phone voice</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>voice-out</code></td>
+<td><code>forge.voice-out.engine</code></td>
+<td>Engine voice</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Paid per request</td>
+<td>With an enclave model</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td><code>forge.filter.strip-details</code></td>
+<td>Hidden details</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td><code>forge.filter.cover-faces</code></td>
+<td>Cover faces</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td><code>forge.filter.cover-numbers</code></td>
+<td>Cover writing and numbers</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>look</code></td>
+<td><code>forge.look.light</code></td>
+<td>Light</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>look</code></td>
+<td><code>forge.look.dark</code></td>
+<td>Dark</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>look</code></td>
+<td><code>forge.look.midnight</code></td>
+<td>Midnight</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td><code>forge.mode.default</code></td>
+<td>Default</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td><code>forge.mode.playful</code></td>
+<td>Playful</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Free</td>
+<td>Yes</td>
+</tr>
+</tbody></table></div>
+<h2 id="fund">Fund<a class="anchor" href="#fund" aria-label="Link to this section">#</a></h2>
+<p>Ways to put money into the balance, on Add money. See <a href="/docs/modules/fund">Fund modules</a>. Each one appears only while its <code>available(methods)</code> is true for the engine in use.</p>
+<h3 id="free-questions">Free questions<a class="anchor" href="#free-questions" aria-label="Link to this section">#</a></h3>
+<p>Opens the engine&#39;s daily faucet in the app. The phone works a short proof-of-work puzzle, the engine hands out a voucher of free questions, and the app adds it to the free balance, kept apart from any money.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.free</code>, known in the app as <code>free</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/free"><code>public/v2/modules/fund/free/</code></a></li>
+<li><strong>Needs:</strong> <code>engine.call</code> for <a href="/docs/#get-v1-free"><code>GET /v1/free</code></a>, <a href="/docs/#post-v1-free-challenge"><code>POST /v1/free/challenge</code></a>, <a href="/docs/#post-v1-free-verify"><code>POST /v1/free/verify</code></a> and <a href="/docs/#post-v1-free-claim"><code>POST /v1/free/claim</code></a> (through <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/faucet.js"><code>public/v2/core/faucet.js</code></a>); <code>wallet.topupFree</code>. No hardware.</li>
+<li><strong>Works on:</strong> the website and both apps, while the engine&#39;s faucet is on (<code>free.enabled</code> in the ways to pay). It is off on the hosted gateway today.</li>
+<li><strong>Costs:</strong> nothing. The questions are free.</li>
+<li><strong>Private:</strong> asks for no name and no email. The engine sees the phone&#39;s address while it hands out the voucher.</li>
+</ul>
+<h3 id="start-free">Start free<a class="anchor" href="#start-free" aria-label="Link to this section">#</a></h3>
+<p>Opens a balance with an invite code and nothing on it, for the free models. Free models are Standard models, so with Private only on it asks before turning Private only off.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.invite</code>, known in the app as <code>invite</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/invite"><code>public/v2/modules/fund/invite/</code></a></li>
+<li><strong>Needs:</strong> <code>wallet.open</code> for <a href="/docs/#post-v1-wallet-open"><code>POST /v1/wallet/open</code></a>, <code>wallet.privateOnly</code> and <code>wallet.useFreeModels</code>. No hardware.</li>
+<li><strong>Works on:</strong> the website and both apps, while the engine has free models and the phone has no balance key. Add money leaves it out and uses Start free&#39;s own screen (<code>public/v2/screens/startfree.js</code>) instead, so the module opens only at its own address, <code>#/funds/add/invite</code>.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> no. The free models it leads to are Standard models: the company running them can read what is typed.</li>
+</ul>
+<h3 id="scan-a-note">Scan a note<a class="anchor" href="#scan-a-note" aria-label="Link to this section">#</a></h3>
+<p>Reads a paper eCash note with the camera, single or animated QR code, or a pasted code. It shows the amount and the mint before anything is sent, then adds it on one tap. A note from a mint the engine does not take offers Other mint.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.note</code>, known in the app as <code>note</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/note"><code>public/v2/modules/fund/note/</code></a></li>
+<li><strong>Needs:</strong> <code>scan</code> (the camera); <code>wallet.topup</code> for <a href="/docs/#post-v1-wallet-topup"><code>POST /v1/wallet/topup</code></a>; <code>wallet.mints</code>, <code>mintAliases</code>, <code>units</code> and <code>isCredit</code>; <code>open(&#39;othermint&#39;, {token})</code>. It reads the note with <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/note.js"><code>public/v2/core/note.js</code></a>.</li>
+<li><strong>Works on:</strong> the website and both apps. Without a camera it asks for the code to be pasted.</li>
+<li><strong>Costs:</strong> the note&#39;s value goes into the balance.</li>
+<li><strong>Private:</strong> eCash, which the app marks as a way that cannot be linked to you. The note&#39;s token stays on the phone until the engine credits it.</li>
+</ul>
+<h3 id="tap-a-card">Tap a card<a class="anchor" href="#tap-a-card" aria-label="Link to this section">#</a></h3>
+<p>Takes eCash off a Cashu card held to the phone. The card proves its key, the person enters its PIN and picks how much, the card signs one swap at its own mint, and the eCash goes into the balance. A card from another mint the engine takes goes on through Other mint.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.card</code>, known in the app as <code>card</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/card"><code>public/v2/modules/fund/card/</code></a></li>
+<li><strong>Needs:</strong> <code>nfc</code> (a card reader); <code>card.load()</code>, whose flow uses the <a href="/docs/#cashu-card-relay">Cashu card relay</a>; <code>wallet.topup</code>, <code>vault</code>, <code>open(&#39;othermint&#39;, {token})</code>.</li>
+<li><strong>Works on:</strong> the Android app. The website lists it and says it needs the Android app (<code>usable()</code> is false). The iPhone app leaves it out: there is no reader there yet.</li>
+<li><strong>Costs:</strong> the amount taken off the card. Any fee and what goes back on the card are shown before the card signs.</li>
+<li><strong>Private:</strong> eCash, which the app marks as a way that cannot be linked to you.</li>
+</ul>
+<h3 id="tap-a-fedimint-card">Tap a Fedimint card<a class="anchor" href="#tap-a-fedimint-card" aria-label="Link to this section">#</a></h3>
+<p>Pays the engine&#39;s Lightning invoice from a Fedimint card, through a till. The engine makes the invoice, the price shows, the person holds the card to the phone, the phone passes the till&#39;s card commands to the card, and the till charges the card and pays the invoice.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.fedimint</code>, known in the app as <code>fedimint</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/fedimint"><code>public/v2/modules/fund/fedimint/</code></a></li>
+<li><strong>Needs:</strong> <code>nfc</code>; <code>till</code>, paired once by scanning the till&#39;s pay code with <code>scan</code>; <code>engine.fundLightning</code> for <a href="/docs/#post-v1-wallet-fund-lightning"><code>POST /v1/wallet/fund/lightning</code></a> and <code>engine.funding</code> for <a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>. Its payments are kept by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js"><code>public/v2/core/till.js</code></a>.</li>
+<li><strong>Works on:</strong> the Android app, with a paired till, while the engine has Lightning. The website shows a tile on the More card that says it needs the Android app. The iPhone app leaves it out.</li>
+<li><strong>Costs:</strong> the invoice, plus the till&#39;s fee and margin, shown before the tap. A failed payment offers the money back to the same card.</li>
+<li><strong>Private:</strong> the till sees the card and the payment; the engine sees a Lightning payment.</li>
+</ul>
+<h3 id="ecash">eCash<a class="anchor" href="#ecash" aria-label="Link to this section">#</a></h3>
+<p>Paste, or scan, a Cashu token from a mint the engine takes, and add it.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.ecash</code>, known in the app as <code>ecash</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/ecash"><code>public/v2/modules/fund/ecash/</code></a></li>
+<li><strong>Needs:</strong> <code>wallet.topup</code> for <a href="/docs/#post-v1-wallet-topup"><code>POST /v1/wallet/topup</code></a>; <code>scan</code> when the phone has a camera.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> the token&#39;s value goes into the balance.</li>
+<li><strong>Private:</strong> eCash, which the app marks as a way that cannot be linked to you.</li>
+</ul>
+<h3 id="lightning">Lightning<a class="anchor" href="#lightning" aria-label="Link to this section">#</a></h3>
+<p>Pick an amount, pay the invoice from any Lightning wallet, and the engine credits it.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.lightning</code>, known in the app as <code>lightning</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/lightning"><code>public/v2/modules/fund/lightning/</code></a></li>
+<li><strong>Needs:</strong> <code>engine.fundLightning</code> for <a href="/docs/#post-v1-wallet-fund-lightning"><code>POST /v1/wallet/fund/lightning</code></a>; <code>engine.funding</code> for <a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>, every 2 seconds until it is paid; <code>qr</code> for the invoice.</li>
+<li><strong>Works on:</strong> the website and both apps, while the engine has Lightning.</li>
+<li><strong>Costs:</strong> the invoice&#39;s amount, between the engine&#39;s least and most.</li>
+<li><strong>Private:</strong> no. The person&#39;s wallet sees a Lightning payment, and so does an exchange that knows their name.</li>
+</ul>
+<h3 id="on-chain">On-chain<a class="anchor" href="#on-chain" aria-label="Link to this section">#</a></h3>
+<p>A bitcoin deposit address. The deposit is credited to a sat balance once it has its confirmations.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.onchain</code>, known in the app as <code>onchain</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/onchain"><code>public/v2/modules/fund/onchain/</code></a></li>
+<li><strong>Needs:</strong> <code>engine.fundOnchain</code> for <a href="/docs/#post-v1-wallet-fund-onchain"><code>POST /v1/wallet/fund/onchain</code></a>; <code>engine.funding</code> for <a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>, every 15 seconds; <code>qr</code>.</li>
+<li><strong>Works on:</strong> the website and both apps, while the engine has on-chain funding on. It is off unless the operator turns it on (<code>FORGE_ONCHAIN_ENABLED</code>). Only for a sat balance.</li>
+<li><strong>Costs:</strong> the deposit, at least the engine&#39;s least.</li>
+<li><strong>Private:</strong> no. Bitcoin payments are public and permanent.</li>
+</ul>
+<h3 id="other-mint">Other mint<a class="anchor" href="#other-mint" aria-label="Link to this section">#</a></h3>
+<p>eCash from another Cashu mint. The engine quotes what it will credit, then on confirm pays a Lightning invoice from the other mint and credits what arrives. eCash the engine sends back (unused fees, or the whole token when the payment fails) is kept on the phone until the person saves it.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.fund.othermint</code>, known in the app as <code>othermint</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/othermint"><code>public/v2/modules/fund/othermint/</code></a></li>
+<li><strong>Needs:</strong> <code>engine.foreignQuote</code> and <code>engine.foreignConfirm</code> for <a href="/docs/#post-v1-wallet-fund-foreign-quote"><code>POST /v1/wallet/fund/foreign/quote</code></a> and <a href="/docs/#post-v1-wallet-fund-foreign-confirm"><code>POST /v1/wallet/fund/foreign/confirm</code></a>; <code>engine.funding</code>; <code>vault</code>, which holds the token from confirm to the outcome; <code>wallet.lockKey</code>; <code>scan</code> when the phone has a camera.</li>
+<li><strong>Works on:</strong> the website and both apps, while the engine takes other mints.</li>
+<li><strong>Costs:</strong> the token&#39;s value, less the Lightning fees. The most the fees can be is shown before confirm.</li>
+<li><strong>Private:</strong> the engine and the other mint see one Lightning payment between them.</li>
+</ul>
+<h2 id="voice-in">Voice in<a class="anchor" href="#voice-in" aria-label="Link to this section">#</a></h2>
+<p>Hold to talk: turning the voice into words. See <a href="/docs/modules/voice-in">Voice-in modules</a>. The app picks one at a time, by id.</p>
+<h3 id="on-this-phone-forge-private-voice">On this phone (Forge Private Voice)<a class="anchor" href="#on-this-phone-forge-private-voice" aria-label="Link to this section">#</a></h3>
+<p>Forge Private Voice&#39;s own speech to text, a small English model (Moonshine tiny) inside the app. Live words show while the button is held. It is the phone module over another bridge.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-in.bundled</code>, known in the app as <code>bundled</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-in/bundled"><code>public/v2/modules/voice-in/bundled/</code></a></li>
+<li><strong>Needs:</strong> <code>asr</code> (ForgeAsr). It reuses the code of <code>voice-in/phone</code>.</li>
+<li><strong>Works on:</strong> the Android app built as Forge Private Voice, the APK made for phones with no on-device recogniser, such as GrapheneOS. It says it is not available everywhere else.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. The sound never leaves the phone.</li>
+</ul>
+<h3 id="on-this-phone-the-phone-s-recogniser">On this phone (the phone&#39;s recogniser)<a class="anchor" href="#on-this-phone-the-phone-s-recogniser" aria-label="Link to this section">#</a></h3>
+<p>The phone&#39;s own on-device speech recogniser, offered where it has the language now.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-in.phone</code>, known in the app as <code>phone</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-in/phone"><code>public/v2/modules/voice-in/phone/</code></a></li>
+<li><strong>Needs:</strong> <code>speech</code> (ForgeSpeech). The app uses only a recogniser that runs on the phone.</li>
+<li><strong>Works on:</strong> the Android app, on a phone whose recogniser has the language. Not on the website or the iPhone app.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. The sound never leaves the phone; only the words come back to the page.</li>
+</ul>
+<h3 id="engine">Engine<a class="anchor" href="#engine" aria-label="Link to this section">#</a></h3>
+<p>Records on the phone, makes a 16 kHz WAV file in memory, and sends it to the engine&#39;s speech to text model. The recording is dropped once it is sent or cancelled.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-in.engine</code>, known in the app as <code>engine</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-in/engine"><code>public/v2/modules/voice-in/engine/</code></a></li>
+<li><strong>Needs:</strong> <code>mic</code>; <code>audio.transcribe</code> for <a href="/docs/#post-v1-audio-transcriptions"><code>POST /v1/audio/transcriptions</code></a>; <code>audio.model</code> and <code>audio.price</code>. It makes the WAV with <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/wav.js"><code>public/v2/core/wav.js</code></a>.</li>
+<li><strong>Works on:</strong> the website and both apps, where there is a microphone and the engine has a speech to text model.</li>
+<li><strong>Costs:</strong> paid per request from the balance, by the recording&#39;s length. A balance that cannot pay gets a few free voice questions a day, where the engine gives them.</li>
+<li><strong>Private:</strong> only when the engine&#39;s model runs in an enclave. With Private only on, the app uses no other.</li>
+</ul>
+<h3 id="this-browser">This browser<a class="anchor" href="#this-browser" aria-label="Link to this section">#</a></h3>
+<p>The browser&#39;s own speech recogniser, where the browser has one and the person picks it.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-in.device</code>, known in the app as <code>device</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-in/device"><code>public/v2/modules/voice-in/device/</code></a></li>
+<li><strong>Needs:</strong> <code>recognizer</code>.</li>
+<li><strong>Works on:</strong> browsers that have <code>SpeechRecognition</code>. In the iPhone app it is WebKit&#39;s, Apple&#39;s.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> no. The browser decides where the sound goes: Chrome sends it to Google, WebKit to Apple. The app never uses it while Private only is on.</li>
+</ul>
+<h2 id="voice-out">Voice out<a class="anchor" href="#voice-out" aria-label="Link to this section">#</a></h2>
+<p>Reading an answer aloud. See <a href="/docs/modules/voice-out">Voice-out modules</a>. The app picks one at a time, by id.</p>
+<h3 id="natural-voice">Natural voice<a class="anchor" href="#natural-voice" aria-label="Link to this section">#</a></h3>
+<p>The natural voice made on the phone, Phonon 31m. In the Android app native code makes the voice where the phone runs it; elsewhere the model runs in the page and its sound streams to the speaker as it is made. On a phone too slow for it, the phone&#39;s own voice reads the answer instead.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-out.phonon</code>, known in the app as <code>phonon</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-out/phonon"><code>public/v2/modules/voice-out/phonon/</code></a></li>
+<li><strong>Needs:</strong> <code>phonon</code>, <code>speaker</code> and <code>synth</code>. It paces itself with <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/voicepace.js"><code>public/v2/core/voicepace.js</code></a>. The model files come from the app&#39;s own address, <code>/v2/voice/phonon/</code>, fetched at build time by <code>scripts/phonon-model.ts</code>.</li>
+<li><strong>Works on:</strong> the website where the browser can run it (WebAssembly SIMD and workers): the first use downloads about 65 MB, after the person agrees. The Android and iPhone apps carry the files.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. The answer&#39;s text never leaves the phone.</li>
+</ul>
+<h3 id="phone-voice">Phone voice<a class="anchor" href="#phone-voice" aria-label="Link to this section">#</a></h3>
+<p>The phone&#39;s own voices, only those that run on the phone.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-out.device</code>, known in the app as <code>device</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-out/device"><code>public/v2/modules/voice-out/device/</code></a></li>
+<li><strong>Needs:</strong> <code>synth</code>.</li>
+<li><strong>Works on:</strong> the website and both apps, where the phone has an English voice of its own. The first run&#39;s Listen uses it.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes.</li>
+</ul>
+<h3 id="engine-voice">Engine voice<a class="anchor" href="#engine-voice" aria-label="Link to this section">#</a></h3>
+<p>Sends each piece of the answer to the engine&#39;s text to speech model and plays it as it arrives. The sound of the last four answers stays in the page&#39;s memory, so Listen never pays twice for a piece; burning a conversation drops it.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.voice-out.engine</code>, known in the app as <code>engine</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-out/engine"><code>public/v2/modules/voice-out/engine/</code></a></li>
+<li><strong>Needs:</strong> <code>audio.speak</code> for <a href="/docs/#post-v1-audio-speech"><code>POST /v1/audio/speech</code></a>; <code>audio.model</code>, <code>audio.price</code>; <code>speaker</code>.</li>
+<li><strong>Works on:</strong> the website and both apps, where the engine has a text to speech model.</li>
+<li><strong>Costs:</strong> paid per request from the balance, by the characters read.</li>
+<li><strong>Private:</strong> only when the engine&#39;s model runs in an enclave. The answer reaches the model as plain text through the engine.</li>
+</ul>
+<h2 id="filter">Filter<a class="anchor" href="#filter" aria-label="Link to this section">#</a></h2>
+<p>The checks of Share unseen, run in this order on every photo, on the phone. See <a href="/docs/modules/filter">Filter modules</a>.</p>
+<h3 id="hidden-details">Hidden details<a class="anchor" href="#hidden-details" aria-label="Link to this section">#</a></h3>
+<p>Reads which hidden details the original file holds (where, when, which phone, a small copy of the picture), for the list of changes. On the new file it takes out every place a JPEG keeps notes: Exif, XMP, IPTC, the colour profile, comments and trailing data.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.filter.strip-details</code>, known in the app as <code>strip-details</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/strip-details"><code>public/v2/modules/filter/strip-details/</code></a></li>
+<li><strong>Needs:</strong> the photo&#39;s <code>bytes</code>. It uses <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/photometa.js"><code>public/v2/core/photometa.js</code></a>. No network.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. It runs on the phone.</li>
+</ul>
+<h3 id="cover-faces">Cover faces<a class="anchor" href="#cover-faces" aria-label="Link to this section">#</a></h3>
+<p>Finds faces and covers each with a solid block. The person sees every block before anything is shared and can add more; it can miss a face turned away, very small or in shadow.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.filter.cover-faces</code>, known in the app as <code>cover-faces</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-faces"><code>public/v2/modules/filter/cover-faces/</code></a></li>
+<li><strong>Needs:</strong> the photo&#39;s <code>canvas</code>. It loads face-api&#39;s tiny face detector on TensorFlow.js and its model (about 190 KB) from the app&#39;s own address, <code>public/vendor/face-api/</code>, on the graphics chip when it can.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. The photo never leaves the page.</li>
+</ul>
+<h3 id="cover-writing-and-numbers">Cover writing and numbers<a class="anchor" href="#cover-writing-and-numbers" aria-label="Link to this section">#</a></h3>
+<p>Covers places that look like a line of writing: number plates, signs, papers, name tags. Plain JavaScript on the photo&#39;s pixels, with no model file. It can miss small or slanted writing, and can cover a row of similar marks such as a fence.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.filter.cover-numbers</code>, known in the app as <code>cover-numbers</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-numbers"><code>public/v2/modules/filter/cover-numbers/</code></a></li>
+<li><strong>Needs:</strong> the photo&#39;s <code>pixels</code>.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes. It runs on the phone.</li>
+</ul>
+<h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
+<p>The app&#39;s colours. See <a href="/docs/modules/look">Look modules</a>.</p>
+<h3 id="light">Light<a class="anchor" href="#light" aria-label="Link to this section">#</a></h3>
+<p>Calm and ordinary: dark text on a light warm grey.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.look.light</code>, known in the app as <code>light</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/look/light"><code>public/v2/modules/look/light/</code></a></li>
+<li><strong>Needs:</strong> nothing.</li>
+<li><strong>Works on:</strong> the website and both apps. Follow the phone uses it while the phone is light.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes.</li>
+</ul>
+<h3 id="dark">Dark<a class="anchor" href="#dark" aria-label="Link to this section">#</a></h3>
+<p>Softer on the eyes at night: light text on a dark blue grey.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.look.dark</code>, known in the app as <code>dark</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/look/dark"><code>public/v2/modules/look/dark/</code></a></li>
+<li><strong>Needs:</strong> nothing.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes.</li>
+</ul>
+<h3 id="midnight">Midnight<a class="anchor" href="#midnight" aria-label="Link to this section">#</a></h3>
+<p>Black, for dark rooms. The default look.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.look.midnight</code>, known in the app as <code>midnight</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/look/midnight"><code>public/v2/modules/look/midnight/</code></a></li>
+<li><strong>Needs:</strong> nothing.</li>
+<li><strong>Works on:</strong> the website and both apps. The <code>/free</code> and <code>/download</code> pages use it unless the app keeps another look on the phone.</li>
+<li><strong>Costs:</strong> nothing.</li>
+<li><strong>Private:</strong> yes.</li>
+</ul>
+<h2 id="mode">Mode<a class="anchor" href="#mode" aria-label="Link to this section">#</a></h2>
+<p>The home and the answer screen. See <a href="/docs/modules/mode">Mode modules</a>.</p>
+<h3 id="default">Default<a class="anchor" href="#default" aria-label="Link to this section">#</a></h3>
+<p>The rings home, with the funds and memory rings around the talk button, and the answer screen with Copy, Ask again and Burn.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.mode.default</code>, known in the app as <code>default</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode/default"><code>public/v2/modules/mode/default/</code></a></li>
+<li><strong>Needs:</strong> <code>t</code>, <code>ui</code>, <code>state</code>, <code>nav</code>, <code>actions</code>. Its screens are the app&#39;s own, <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/home.js"><code>public/v2/screens/home.js</code></a> and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/answer.js"><code>public/v2/screens/answer.js</code></a>.</li>
+<li><strong>Works on:</strong> the website and both apps.</li>
+<li><strong>Costs:</strong> nothing. Questions asked from it cost what the model costs.</li>
+<li><strong>Private:</strong> yes. It draws on the phone.</li>
+</ul>
+<h3 id="playful">Playful<a class="anchor" href="#playful" aria-label="Link to this section">#</a></h3>
+<p>Pip, bright colours and big buttons on the home and the answer screen, for people who read poorly and for children.</p>
+<ul>
+<li><strong>Id:</strong> <code>forge.mode.playful</code>, known in the app as <code>playful</code>.</li>
+<li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode/playful"><code>public/v2/modules/mode/playful/</code></a></li>
+<li><strong>Needs:</strong> the same inputs as Default. Its <code>ready()</code> loads its screens, <code>playful.css</code> and two typefaces, Baloo 2 and Nunito, from <code>public/v2/vendor/</code>, once Playful is chosen.</li>
+<li><strong>Works on:</strong> the website and both apps. Offline, it opens only once it has been loaded before.</li>
+<li><strong>Costs:</strong> nothing. Questions asked from it cost what the model costs.</li>
+<li><strong>Private:</strong> yes. It draws on the phone.</li>
+</ul>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/list.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

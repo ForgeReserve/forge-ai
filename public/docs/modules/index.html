@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Modules | Forge AI</title>
+<meta name="description" content="What a module of the Forge app is, the six kinds, how the registry loads them, and what is built and what is designed.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/README.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/" aria-current="page">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#the-six-kinds">The six kinds</a><ul>
+</ul></li>
+<li><a href="#where-modules-live">Where modules live</a><ul>
+</ul></li>
+<li><a href="#the-manifest">The manifest</a><ul>
+</ul></li>
+<li><a href="#the-entry-file">The entry file</a><ul>
+</ul></li>
+<li><a href="#how-the-registry-loads-modules">How the registry loads modules</a><ul>
+<li><a href="#how-the-inputs-are-cut-down">How the inputs are cut down</a></li>
+</ul></li>
+<li><a href="#how-the-app-uses-each-kind">How the app uses each kind</a><ul>
+</ul></li>
+<li><a href="#what-is-built-and-what-is-designed">What is built and what is designed</a><ul>
+<li><a href="#built">Built</a></li>
+<li><a href="#not-built">Not built</a></li>
+<li><a href="#designed">Designed</a></li>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Modules</h1>
+<p>The Forge app (the app at <code>/v2/</code>, also inside the Android and iPhone apps) is built from modules. A module is a folder with a <code>manifest.json</code> and an entry file. One registry loads every module and hands it only the inputs of its kind. The app ships with 24 modules in six kinds.</p>
+<p>This guide is for people who want to build a module. Start with <a href="/docs/modules/first-module">Write your first module</a>, then read the reference page for your kind. The <a href="/docs/modules/list">module list</a> describes every module that ships today. The gateway has modules of its own, described in <a href="/docs/modules/engine">Engine modules</a>.</p>
+<h2 id="the-six-kinds">The six kinds<a class="anchor" href="#the-six-kinds" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>What it does</th>
+<th>What the app hands it</th>
+<th>What it must provide</th>
+<th>Bundled</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="/docs/modules/fund"><code>fund</code></a></td>
+<td>A way to put money into the balance, shown on Add money</td>
+<td><code>t</code>, <code>ui</code>, <code>engine</code>, <code>wallet</code>, <code>vault</code>, <code>format</code>, <code>scan</code>, <code>qr</code>, <code>nfc</code>, <code>card</code>, <code>till</code></td>
+<td><code>id</code>, <code>available(methods)</code>, <code>view({done, open, token})</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td><a href="/docs/modules/voice-in"><code>voice-in</code></a></td>
+<td>Turns the voice into words for Hold to talk</td>
+<td><code>t</code>, <code>mic</code>, <code>recognizer</code>, <code>audio</code>, <code>speech</code>, <code>asr</code></td>
+<td><code>id</code>, <code>available()</code>, <code>private()</code>, <code>price(seconds)</code>, <code>maxSeconds()</code>, <code>start({onLevel, onText})</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td><a href="/docs/modules/voice-out"><code>voice-out</code></a></td>
+<td>Reads an answer aloud</td>
+<td><code>t</code>, <code>speaker</code>, <code>synth</code>, <code>audio</code>, <code>phonon</code></td>
+<td><code>id</code>, <code>available()</code>, <code>private()</code>, <code>pieceSize()</code>, <code>price(pieces, key)</code>, <code>speak(pieces, options)</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td><a href="/docs/modules/filter"><code>filter</code></a></td>
+<td>Checks a photo in Share unseen: hidden details to take out, places to cover</td>
+<td><code>t</code></td>
+<td><code>id</code>, <code>what</code>, <code>analyse(photo)</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td><a href="/docs/modules/look"><code>look</code></a></td>
+<td>The app&#39;s colours</td>
+<td>nothing</td>
+<td><code>id</code>, <code>scheme</code>, <code>tokens</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td><a href="/docs/modules/mode"><code>mode</code></a></td>
+<td>Draws the home and the answer screen</td>
+<td><code>t</code>, <code>ui</code>, <code>state</code>, <code>nav</code>, <code>actions</code>, <code>format</code></td>
+<td><code>id</code>, <code>home(options)</code>, <code>answer()</code></td>
+<td>2</td>
+</tr>
+</tbody></table></div>
+<p><code>audio</code>, <code>speech</code>, <code>asr</code>, <code>phonon</code>, <code>state</code> and <code>actions</code> are handed in part: only the functions the registry names for that kind. Each kind&#39;s page lists every input and every function on it.</p>
+<h2 id="where-modules-live">Where modules live<a class="anchor" href="#where-modules-live" aria-label="Link to this section">#</a></h2>
+<p>Every module is a folder under <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules"><code>public/v2/modules/</code></a>, one folder per kind:</p>
+<div class="code"><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs">public/v2/modules/
+  fund/        card  ecash  fedimint  free  invite  lightning  note  onchain  othermint  (and kit.js)
+  voice-in/    bundled  device  engine  phone
+  voice-out/   device  engine  phonon
+  filter/      cover-faces  cover-numbers  strip-details
+  look/        dark  light  midnight
+  mode/        default  playful</code></pre></div>
+<p>A module folder holds <code>manifest.json</code>, the entry file the manifest names (always <code>index.js</code> today), and any other files the entry imports. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/kit.js"><code>public/v2/modules/fund/kit.js</code></a> holds parts the bundled fund modules share (the invite field, the paste box, the payment QR code, a poller). It has no manifest, and the registry does not load it.</p>
+<p>There is no build step. The files are plain ES modules that the browser loads as they are. The Android and iPhone apps carry the same files.</p>
+<h2 id="the-manifest">The manifest<a class="anchor" href="#the-manifest" aria-label="Link to this section">#</a></h2>
+<p>This is the manifest of the Cover faces filter, <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-faces/manifest.json"><code>public/v2/modules/filter/cover-faces/manifest.json</code></a>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;forge.filter.cover-faces&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;filter&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Cover faces&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>checkManifest(m, kind)</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/registry.js"><code>public/v2/core/registry.js</code></a> checks every field. A manifest with any problem is refused and its entry is never imported.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>The rule the registry checks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>A string of at most 100 characters matching <code>^[a-z0-9]+(?:[.-][a-z0-9]+)*$</code>. Bundled modules use <code>forge.&lt;kind&gt;.&lt;name&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>One of the registry&#39;s kinds, and the same as the kind folder it is listed under.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Three numbers: <code>1.0.0</code>.</td>
+</tr>
+<tr>
+<td><code>name.en</code></td>
+<td>A name in English that is not empty.</td>
+</tr>
+<tr>
+<td><code>entry</code></td>
+<td>A file name in the module folder ending in <code>.js</code>, matching <code>^[a-z0-9][a-z0-9-]*\.js$</code>. No folders.</td>
+</tr>
+<tr>
+<td><code>permissions</code></td>
+<td>A list. Every entry must be in the registry&#39;s <code>PERMISSIONS</code>, which is empty, so the list must be empty.</td>
+</tr>
+<tr>
+<td><code>publisher</code></td>
+<td>Present, as a string or <code>null</code>. Not checked further.</td>
+</tr>
+<tr>
+<td><code>sig</code></td>
+<td>Present, as a string or <code>null</code>. Not checked further.</td>
+</tr>
+</tbody></table></div>
+<p>The registry refuses a second module with the same <code>kind</code> and <code>id</code>. Two bundled modules may share a name (<code>voice-in/bundled</code> and <code>voice-in/phone</code> are both &quot;On this phone&quot;).</p>
+<h2 id="the-entry-file">The entry file<a class="anchor" href="#the-entry-file" aria-label="Link to this section">#</a></h2>
+<p>The entry file exports <code>create(inputs)</code>. The registry calls it once, with the inputs of the module&#39;s kind, and keeps what it returns as the module&#39;s instance. <code>create</code> may return a promise; the registry waits for it.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params">inputs</span>) {
+  <span class="hljs-keyword">return</span> { <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;midnight&#x27;</span>, <span class="hljs-attr">scheme</span>: <span class="hljs-string">&#x27;dark&#x27;</span>, tokens };
+}</code></pre></div>
+<p>The app finds a module by the <code>id</code> of its instance (<code>midnight</code> above). The manifest&#39;s <code>id</code> (<code>forge.look.midnight</code>) is for the registry. The instance <code>id</code> is what the settings store when a person picks a look, a mode or a voice, and what the address holds for a fund module (<code>#/funds/add/note</code>). Keep it unique within its kind: the registry does not check it.</p>
+<h2 id="how-the-registry-loads-modules">How the registry loads modules<a class="anchor" href="#how-the-registry-loads-modules" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js"><code>public/v2/app.js</code></a> makes one registry when the app starts:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">const</span> loader = <span class="hljs-title function_">bundledLoader</span>();
+registry = <span class="hljs-title function_">createRegistry</span>({
+  ...loader,
+  <span class="hljs-attr">inputs</span>: { t, ui, state, nav, actions, format, <span class="hljs-attr">engine</span>: engineProxy, wallet, vault, <span class="hljs-attr">scan</span>: adapters.<span class="hljs-property">camera</span>, <span class="hljs-attr">qr</span>: <span class="hljs-variable constant_">QR</span>, nfc, <span class="hljs-attr">card</span>: cards, till, <span class="hljs-attr">mic</span>: adapters.<span class="hljs-property">mic</span>, <span class="hljs-attr">recognizer</span>: adapters.<span class="hljs-property">recognizer</span>, <span class="hljs-attr">speech</span>: native?.<span class="hljs-property">speech</span> ?? <span class="hljs-literal">null</span>, <span class="hljs-attr">asr</span>: native?.<span class="hljs-property">asr</span> ?? <span class="hljs-literal">null</span>, <span class="hljs-attr">speaker</span>: adapters.<span class="hljs-property">speaker</span>, <span class="hljs-attr">synth</span>: adapters.<span class="hljs-property">synth</span>, audio, phonon },
+});</code></pre></div>
+<p>Then <code>registry.loadAll(list)</code> loads the modules in <code>BUNDLED</code>, the list at the end of <code>registry.js</code>:</p>
+<ol>
+<li>For every module in the list, at the same time, <code>bundledLoader</code> fetches <code>/v2/modules/&lt;kind&gt;/&lt;folder&gt;/manifest.json</code> from the app&#39;s own address.</li>
+<li><code>checkManifest</code> checks it. A manifest with problems goes to <code>registry.refused</code>.</li>
+<li>The entry is imported with <code>import()</code>. A module whose <code>kind</code> and <code>id</code> are already loaded is refused before its <code>create</code> runs.</li>
+<li>The registry calls <code>create(inputsFor(kind, inputs))</code>. An entry with no <code>create</code>, or a <code>create</code> that throws, is refused.</li>
+<li>The loaded modules are kept in list order. <code>registry.list(kind)</code> returns them in that order and <code>registry.get(kind, id)</code> finds one by its manifest <code>id</code>.</li>
+</ol>
+<p>When the app opens on the first run, it waits only for the looks and the modes, draws the first screen, then loads the rest. On any other screen it waits for all of them. The app needs at least one mode: with none it stops with an error. Refused modules are written to the browser console as <code>modules refused</code>.</p>
+<h3 id="how-the-inputs-are-cut-down">How the inputs are cut down<a class="anchor" href="#how-the-inputs-are-cut-down" aria-label="Link to this section">#</a></h3>
+<p><code>inputsFor(kind, all)</code> builds each module&#39;s inputs from two tables in <code>registry.js</code>. <code>INPUTS</code> names the inputs of each kind. <code>PROJECTIONS</code> names, for some inputs, the only functions a kind gets. Both results are frozen, so a module cannot add to them.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">inputsFor</span>(<span class="hljs-params">kind, all</span>) {
+  <span class="hljs-keyword">const</span> out = {};
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> k <span class="hljs-keyword">of</span> <span class="hljs-variable constant_">INPUTS</span>[kind] ?? []) {
+    <span class="hljs-keyword">if</span> (!(k <span class="hljs-keyword">in</span> all)) <span class="hljs-keyword">continue</span>;
+    <span class="hljs-keyword">const</span> only = <span class="hljs-variable constant_">PROJECTIONS</span>[kind]?.[k];
+    <span class="hljs-keyword">if</span> (!only) out[k] = all[k];
+    <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">const</span> part = {};
+      <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> p <span class="hljs-keyword">of</span> only) <span class="hljs-keyword">if</span> (all[k] != <span class="hljs-literal">null</span> &amp;&amp; <span class="hljs-keyword">typeof</span> all[k][p] === <span class="hljs-string">&#x27;function&#x27;</span>) part[p] = all[k][p];
+      out[k] = <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">freeze</span>(part);
+    }
+  }
+  <span class="hljs-keyword">return</span> <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">freeze</span>(out);
+}</code></pre></div>
+<p>An input the app offers as <code>null</code> (the phone&#39;s recogniser on the website, say) reaches a module as <code>null</code>, or as an empty frozen object when the kind gets only part of it.</p>
+<h2 id="how-the-app-uses-each-kind">How the app uses each kind<a class="anchor" href="#how-the-app-uses-each-kind" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Where the app uses it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fund</code></td>
+<td>Add money (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/wallet.js"><code>public/v2/screens/wallet.js</code></a>) shows every fund module whose <code>available(methods)</code> is true. Note, Lightning, Tap a card and eCash have cards of their own; any other module is a tile on the More card. A module&#39;s screen is hosted by <code>fundScreen</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/funds.js"><code>public/v2/screens/funds.js</code></a>.</td>
+</tr>
+<tr>
+<td><code>voice-in</code></td>
+<td><code>pickVoiceIn</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/state.js"><code>public/v2/core/state.js</code></a> picks one module; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/talkctl.js"><code>public/v2/core/talkctl.js</code></a> runs it while the talk button is held.</td>
+</tr>
+<tr>
+<td><code>voice-out</code></td>
+<td><code>pickVoiceOut</code> in <code>core/state.js</code> picks one module; <code>core/talkctl.js</code> runs it for Listen and for answers to a voice question.</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td>Share unseen (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/photo.js"><code>public/v2/screens/photo.js</code></a>) runs every filter on the photo, in list order, through <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js"><code>public/v2/core/filters.js</code></a>.</td>
+</tr>
+<tr>
+<td><code>look</code></td>
+<td>More, Mode and look (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/settings.js"><code>public/v2/screens/settings.js</code></a>) lists every look. <code>applyLook</code> in <code>app.js</code> sets its tokens on the page.</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>More, Mode and look lists every mode. The chosen one draws the home and the answer screen.</td>
+</tr>
+</tbody></table></div>
+<h2 id="what-is-built-and-what-is-designed">What is built and what is designed<a class="anchor" href="#what-is-built-and-what-is-designed" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/MODULES.md"><code>docs/MODULES.md</code></a> describes modules as plugins anyone can publish and a person can add. Most of that is designed and not built. This is what the code does today.</p>
+<h3 id="built">Built<a class="anchor" href="#built" aria-label="Link to this section">#</a></h3>
+<ul>
+<li>The registry checks each manifest&#39;s shape and refuses a bad one.</li>
+<li>It hands each kind only the inputs named for it in <code>INPUTS</code> and <code>PROJECTIONS</code>, as frozen objects.</li>
+<li>It loads the modules listed in <code>BUNDLED</code>, from the app&#39;s own address (<code>bundledLoader</code>), in that order.</li>
+</ul>
+<h3 id="not-built">Not built<a class="anchor" href="#not-built" aria-label="Link to this section">#</a></h3>
+<p>The registry says so itself, at the top of <code>registry.js</code>:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// What it does NOT do yet: it does not check the `publisher` and `sig` fields, and it does not run a</span>
+<span class="hljs-comment">// module in a sandbox. Only the modules bundled with this release load, and they run as ordinary code</span>
+<span class="hljs-comment">// in the page. Signature checks and the sandbox come with slice B2.</span></code></pre></div>
+<ul>
+<li><strong>Signatures are not checked.</strong> <code>publisher</code> and <code>sig</code> must be present, as a string or <code>null</code>. Their values are never read. Every bundled manifest has <code>null</code> in both.</li>
+<li><strong>There is no sandbox.</strong> An entry is imported into the page with <code>import()</code> and runs as page code. It can reach anything the page can: the page itself, <code>localStorage</code> and IndexedDB, <code>fetch</code> to any server that accepts the request, and every other file of the app by <code>import</code>. Bundled modules do import app files directly: the hidden details filter imports <code>core/photometa.js</code>, the Default mode imports <code>screens/home.js</code> and <code>screens/answer.js</code>. The inputs a kind gets are the interface the app supports, and nothing stops a module from reaching past them.</li>
+<li><strong>No permission can be granted.</strong> <code>PERMISSIONS</code> is an empty list, so a manifest that asks for any permission is refused.</li>
+<li><strong>Nothing can be installed from outside.</strong> There is no screen, address or file that adds a module. A module loads only when its folder is in <code>public/v2/modules/</code> and listed in <code>BUNDLED</code>, which is a change to the code and a new release of the app.</li>
+<li><strong>A fund module can read the balance key.</strong> <code>wallet.key()</code> returns it, and the bundled fund modules pass it to the engine&#39;s funding calls. A fund module also gets the whole engine client, including <code>chat</code>.</li>
+<li><strong>Four kinds have no module.</strong> <code>cover</code>, <code>guides</code>, <code>protect</code> and <code>language</code> are in the registry&#39;s <code>KINDS</code> and <code>INPUTS</code>, so a manifest of those kinds passes the checks. No screen uses a module of those kinds.</li>
+<li><strong>Voice modules are picked by their ids.</strong> <code>pickVoiceIn</code> and <code>pickVoiceOut</code> in <code>core/state.js</code> and the Voice screen in <code>screens/settings.js</code> know the bundled ids only (<code>bundled</code>, <code>phone</code>, <code>engine</code>, <code>device</code> for voice in; <code>phonon</code>, <code>device</code>, <code>engine</code> for voice out). A voice module with another id loads and is never used. See <a href="/docs/modules/voice-in#how-the-app-picks-one">Voice in</a> and <a href="/docs/modules/voice-out#how-the-app-picks-one">Voice out</a>.</li>
+</ul>
+<h3 id="designed">Designed<a class="anchor" href="#designed" aria-label="Link to this section">#</a></h3>
+<p><code>docs/MODULES.md</code> sets out what comes with slice B2, the plugin loader, signed manifests and the sandbox (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/ROADMAP.md"><code>docs/ROADMAP.md</code></a> gives it five days of work):</p>
+<ul>
+<li>A plugin is signed by its publisher with a Nostr key. The app shows who published it and refuses a package whose signature fails.</li>
+<li>A plugin runs in a sandbox, a web worker or a sandboxed frame, the same in the web app and the native shell. It reaches the network only if its manifest asks and the person agrees.</li>
+<li>The app hands a plugin only its kind&#39;s inputs, and a plugin can never read the wallet, the passphrase or other plugins&#39; data.</li>
+<li>Adding a plugin is deliberate: scan a code or open a file, see the publisher and the permissions, confirm.</li>
+<li>&quot;Reviewed only&quot; is on by default and turns off only in settings, with a plain warning. The default set is reviewed and pinned in each release.</li>
+</ul>
+<p>Still open in that design: which sandbox gives the same guarantees in the web app and the native shell, whether guide packages reuse an existing format, and who reviews plugins for the default set.</p>
+<p>Until B2 lands, a new module reaches people only as a pull request that adds it to the bundled set, reviewed like any other code. <a href="/docs/modules/first-module#send-it-as-a-pull-request">Write your first module</a> shows how.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/README.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

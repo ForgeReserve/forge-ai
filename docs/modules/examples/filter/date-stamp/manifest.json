@@ -1,0 +1,12 @@
+{
+  "id": "org.example.filter.date-stamp",
+  "kind": "filter",
+  "version": "1.0.0",
+  "name": {
+    "en": "Cover a date stamp"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

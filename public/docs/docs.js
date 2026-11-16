@@ -1,4 +1,4 @@
-// Forge AI API guide (/docs/): copy buttons, the section menu on phones, and the current section in the
+// Forge AI docs (/docs/ and /docs/modules/): copy buttons, the section menu on phones, and the current section in the
 // nav. The page works without it: the nav is then shown in full and code is selected by hand.
 (() => {
   const side = document.getElementById('toc');

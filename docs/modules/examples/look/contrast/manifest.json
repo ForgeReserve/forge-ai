@@ -1,0 +1,12 @@
+{
+  "id": "org.example.look.contrast",
+  "kind": "look",
+  "version": "1.0.0",
+  "name": {
+    "en": "High contrast"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}
