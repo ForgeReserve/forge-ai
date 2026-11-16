@@ -335,6 +335,35 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(uses(c.id)).toBe(1);
     expect(warm.errors).toEqual([]);
     await warm.ctx.close();
+
+    // The QR code scanned twice on slow wifi: the link reaches the app again while the first open is
+    // still on its way. One balance is opened, one use spent, and the key it gave is the one kept.
+    const twice = await onLocalEngine();
+    const d = pass();
+    const opens: string[] = [];
+    const answered: string[] = [];
+    await twice.page.route(`${g.url}/v1/wallet/open`, async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      opens.push(route.request().url());
+      await new Promise((r) => setTimeout(r, 1500));
+      const res = await route.fetch();
+      const body = await res.text();
+      const k = JSON.parse(body).key;
+      if (typeof k === 'string') answered.push(k);
+      return route.fulfill({ response: res, body });
+    });
+    await twice.page.evaluate((code) => {
+      (window as any).__join(code);
+      (window as any).__join(code);
+    }, d.code);
+    await twice.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    await twice.page.waitForTimeout(2000);
+    expect(opens).toHaveLength(1);
+    expect(uses(d.id)).toBe(1);
+    expect(answered).toHaveLength(1);
+    expect(await key(twice.page)).toBe(answered[0]);
+    expect(twice.errors).toEqual([]);
+    await twice.ctx.close();
   }, 120_000);
 
   it('keeps the phone\'s bars the colour of the look: Midnight by default, light on the Light look', async () => {

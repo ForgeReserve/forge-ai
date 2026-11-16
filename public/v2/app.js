@@ -1407,8 +1407,22 @@ let joinAsk = false;
  * words, before Private only is turned off for the free models; then the home. A phone that holds a key
  * already keeps it and spends nothing. A refused pass (used up, expired) is said in a toast, and the
  * phone goes on as on any first open: the first run, with its own Start free.
+ *
+ * One at a time: a pass that comes while one is being used (the QR code scanned twice on slow wifi, so
+ * the app gets the link twice) is dropped, not queued. S.key is only set once wallet.open answers, so a
+ * second open would make a second balance, spend a second use of the pass and orphan the first key; and
+ * once the first open is done, joinPlan keeps that key anyway.
  */
-async function joinWith(pass) {
+let joinJob = null;
+function joinWith(pass) {
+  if (joinJob) return joinJob;
+  joinJob = joinOnce(pass).finally(() => {
+    joinJob = null;
+  });
+  return joinJob;
+}
+
+async function joinOnce(pass) {
   if (erased) return;
   const plan = joinPlan({ pass, hasKey: !!S.key });
   if (plan !== 'open') return;
