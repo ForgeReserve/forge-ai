@@ -11,7 +11,8 @@
 import { nextStep, payWays, spokenFor, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
 import { el, icon, toast } from '../core/ui.js';
 import { ART, LIT, PRIVATE_ART, RING } from './firstrun-art.js';
-import { startFree } from './startfree.js';
+import { listenButton } from './parts.js';
+import { codeScanner, startFree } from './startfree.js';
 
 const NIGHT = '#0B0D10';
 
@@ -20,7 +21,6 @@ const SVG = {
   listen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>',
   next: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
   start: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>',
-  ticket: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V7a1 1 0 0 1 1-1z"></path><path d="M14.5 7.5v1.5M14.5 11.25v1.5M14.5 15v1.5"></path></svg>',
   info: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5"></path><circle cx="12" cy="7.8" r="0.6" fill="currentColor"></circle></svg>',
   list: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><circle cx="4.5" cy="6" r="0.9" fill="currentColor"></circle><circle cx="4.5" cy="12" r="0.9" fill="currentColor"></circle><circle cx="4.5" cy="18" r="0.9" fill="currentColor"></circle></svg>',
   padlock: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"></rect><path data-fr="mini-shackle" d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>',
@@ -45,7 +45,7 @@ let shownLit = null;
  *   the phone's own voice (both free, on the phone).
  * Back is the phone's own: each step is an entry in its history.
  */
-export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, reader }) {
+export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, reader, scan = null }) {
   const S = state.S;
   const step = stepOf(param);
   const n = stepNumber(step);
@@ -103,6 +103,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   let toggle = null;
   let update = () => {};
   const sheets = [];
+  sheets.destroyers = [];
   if (step === 'welcome') lead.textContent = t('intro.welcome.lead');
   else if (step === 'pay') ({ link, update } = pay());
   else if (step === 'limits') ({ link } = limits());
@@ -121,11 +122,13 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     ...sheets,
   );
 
-  /** A sheet over the step, for the detail. Closed by its button, a tap outside or Escape. */
+  /** A sheet over the step, for the detail. Closed by its button, a tap outside or Escape. head: more in its head (Listen). */
   function sheet(id, titleKey, ...content) {
     const dialog = el('dialog', { class: 'fr-sheet', id, 'aria-labelledby': `${id}Title` });
     const close = el('button', { type: 'button', class: 'fr-close', id: `${id}Close`, 'aria-label': t('intro.close'), onclick: () => dialog.close() }, icon('x', 22));
-    dialog.append(el('div', { class: 'fr-sheet-in' }, el('div', { class: 'fr-sheet-head' }, el('h2', { id: `${id}Title`, text: t(titleKey) }), close), el('div', { class: 'fr-sheet-body' }, ...content)));
+    const head = el('div', { class: 'fr-sheet-head' }, el('h2', { id: `${id}Title`, text: t(titleKey) }), close);
+    dialog.head = head;
+    dialog.append(el('div', { class: 'fr-sheet-in' }, head, el('div', { class: 'fr-sheet-body' }, ...content)));
     dialog.addEventListener('click', (e) => e.target === dialog && dialog.close());
     sheets.push(dialog);
     return dialog;
@@ -247,21 +250,44 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
     input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
     const hint = el('p', { class: 'note', id: 'introInviteHint', text: t('invite.hint') });
-    const box = el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), input, hint);
+    // Scan beside the field: a printed code, or an event's QR code (its link gives the pass).
+    const scanner = codeScanner({
+      t,
+      scan,
+      id: 'introInvite',
+      cls: 'btn sf-btn fr-scan',
+      onCode: (c) => {
+        input.value = c;
+        wallet.setInvite(c);
+        input.dispatchEvent(new Event('input'));
+      },
+    });
+    const box = el('div', { class: 'field' }, el('label', { for: 'introInvite', class: 'sr-only', text: t('invite.label') }), el('div', { class: 'fr-code-row' }, input, scanner.button), scanner.scanner, hint);
     const done = el('button', { type: 'button', class: 'btn primary block', id: 'introInviteDone', onclick: () => s.close(), text: t('intro.inviteDone') });
     const answered = (words) => {
       redraw();
       toast(words, 4000);
       finish();
     };
-    const free = startFree({ t, state, actions, wallet }, { id: 'intro', field: { input, box }, after: answered });
+    const free = startFree({ t, state, actions, wallet, reader }, { id: 'intro', field: { input, box }, after: answered });
     const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()) }, icon('coins', 20), el('span', { text: t('startFree.money') }));
     const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
     const title = s.querySelector('h2');
-    const label = el('span', { text: t('intro.inviteLink') });
-    let ico = svg(SVG.ticket);
-    const link = el('button', { type: 'button', class: 'fr-link', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, ico, label);
     let shown = null;
+    // Listen in the sheet's head: the title and its line, or the question once it is asked.
+    const sheetListen = listenButton({ t, reader, id: 'inviteListen', pieces: () => [title.textContent, shown ? t('startFree.note') : t('invite.hint')] });
+    // While the question shows, it has its own Listen (startFree): the head's steps aside.
+    const listenSlot = el('span', { class: 'fr-sheet-listen' }, sheetListen.node);
+    s.head.insertBefore(listenSlot, s.head.lastChild);
+    s.addEventListener('close', () => (sheetListen.stop(), scanner.stop()));
+    sheets.destroyers.push(() => (sheetListen.destroy(), free.destroy?.()));
+    // The way to Start free is a clear choice beside the round Start (owner, 2026-11-15): a picture, a
+    // short word and what it needs, never a grey link.
+    const label = el('b', { class: 'fr-choice-word', text: t('intro.inviteLink') });
+    const sub = el('small', { class: 'fr-choice-sub' });
+    let ico = icon('ticket', 24);
+    const tile = el('span', { class: 'fr-choice-ico', 'aria-hidden': 'true' }, ico);
+    const link = el('button', { type: 'button', class: 'fr-choice', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, tile, el('span', { class: 'fr-choice-text' }, label, sub));
     const update = () => {
       // Start free while the sheet shows it: a key opened here keeps the sheet's own words until the
       // question is answered.
@@ -270,12 +296,18 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       link.hidden = (!!wallet.key() && !busy) || !(wallet.inviteOnly() || free0);
       if (free0 !== shown) {
         shown = free0;
-        label.textContent = t(free0 ? 'startFree.link' : 'intro.inviteLink');
-        const swap = free0 ? icon('gift', 22) : svg(SVG.ticket);
+        label.textContent = t(free0 ? 'startFree.title' : 'intro.inviteLink');
+        sub.textContent = free0 ? t('intro.startFreeSub') : '';
+        sub.hidden = !free0;
+        link.classList.toggle('free', free0);
+        link.setAttribute('aria-label', t(free0 ? 'startFree.link' : 'intro.inviteLink'));
+        const swap = icon(free0 ? 'gift' : 'ticket', 24);
         ico.replaceWith(swap);
         ico = swap;
         title.textContent = t(free0 ? 'startFree.title' : 'invite.label');
       }
+      sheetListen.update();
+      listenSlot.hidden = free.busy();
       hint.hidden = free0 || !wallet.inviteOnly();
       free.node.hidden = !free0;
       money.hidden = !free0 || busy;
@@ -301,6 +333,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       stopListening();
       synth?.removeEventListener?.('voiceschanged', drawListen);
       for (const s of sheets) if (s.open) s.close();
+      for (const d of sheets.destroyers) d();
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
       if (bg) bar?.setAttribute('content', bg);
     },

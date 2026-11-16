@@ -75,6 +75,9 @@ describe('v2 in a phone-sized browser', () => {
     expect(await page.isVisible('#hiddenNote')).toBe(true);
     await page.click('#privateOnly');
     await page.click('[data-model="mock-slow"]');
+    // The list closes on the choice (it was opened from More: the home); the choice shows checked there.
+    await page.waitForSelector('[data-screen=home]');
+    await page.goto(`${g.url}/v2/#/more/model`);
     expect(await page.getAttribute('[data-model="mock-slow"]', 'aria-checked')).toBe('true');
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');

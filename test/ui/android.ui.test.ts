@@ -155,10 +155,10 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.textContent('#engineMsg')).toBe('Needs https. Use an address that starts with https.');
     await page.fill('#engineAddress', 'https://ai.forge-reserve.com/');
     await page.click('#engineUse');
-    expect(await page.textContent('#engineMsg')).toBe('Forge already uses this engine.');
+    expect(await page.textContent('#engineMsg')).toBe('Forge already uses this server.');
     await page.fill('#engineAddress', 'https://ai.example.org');
     await page.click('#engineUse');
-    await expect.poll(() => page.textContent('#engineMsg')).toBe('No answer from it. That engine did not answer. Check the address and try again.');
+    await expect.poll(() => page.textContent('#engineMsg')).toBe('No answer from it. That server did not answer. Check the address and try again.');
     await page.fill('#engineAddress', `${g.url}/`);
     await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
     await page.waitForSelector('[data-screen=home]');
@@ -217,7 +217,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
     await page.waitForSelector('#voiceOut-phonon');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeStays here');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeOn phone');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-description')).toBe('Free. Made on this phone, so the answer is not sent anywhere.');
     // The voice lab, one way only: the model loads from the bundle on several threads.
     await page.goto(`${app}/#/voice-lab`);

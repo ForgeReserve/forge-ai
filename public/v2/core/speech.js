@@ -11,12 +11,18 @@ export function speakable(md) {
   s = s.replace(/<[^>]+>/g, ' ');
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
   s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  // A bare address is not read letter by letter, and emoji are not read at all.
+  s = s.replace(/<?\b(https?:\/\/|www\.)[^\s)>]+>?/gi, ' ');
+  s = s.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D\u20E3]/gu, '');
   const lines = s.split('\n').map((line) => {
     let l = line.trim();
     if (/^[\s|:-]+$/.test(l) && l.includes('-')) return ''; // table rule, or a horizontal rule
     if (l.startsWith('|')) l = l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()).filter(Boolean).join(', ') + '.';
     l = l.replace(/^#{1,6}\s+/, '').replace(/^>\s?/, '').replace(/^([-*+]|\d+[.)])\s+/, '');
-    l = l.replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__|\*|_|~~)(?=\S)([^*_~]*?\S)\1/g, '$2');
+    l = l.replace(/^[•·▪◦‣]\s*/, '');
+    l = l.replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2').replace(/(\*|_)(?=\S)([^*_]*?\S)\1/g, '$2');
+    // What is left of the marks (a star or hash the model left open) is never said.
+    l = l.replace(/[*#~`|>]+/g, ' ').replace(/(^|\s)_+|_+(\s|$)/g, '$1$2').replace(/\s+/g, ' ').trim();
     return l;
   });
   // A line that ends without a stop gets one, so a list is read as separate sentences.

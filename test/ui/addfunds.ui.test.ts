@@ -235,7 +235,7 @@ describe('Add money as wallet cards', () => {
     await ctx.close();
   }, 60_000);
 
-  it('respects reduced motion: a tab jumps to its card, and the swipe hint keeps still', async () => {
+  it('respects reduced motion: a tab jumps to its card, with no swipe hint', async () => {
     const { ctx, page } = await phone();
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(`${g.url}/v2/#/funds/add`);
@@ -248,7 +248,8 @@ describe('Add money as wallet cards', () => {
       return { now: t.scrollLeft, want: b.offsetLeft - a.offsetLeft };
     });
     expect(Math.abs(target.now - target.want)).toBeLessThan(2);
-    expect(await page.$eval('.way-hand', (h) => getComputedStyle(h).animationIterationCount)).toBe('1');
+    // No swipe hand under the icons (owner, 2026-11-15): the next card peeking in says it all.
+    expect(await page.locator('.way-hand').count()).toBe(0);
     await ctx.close();
   }, 60_000);
 

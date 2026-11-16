@@ -297,7 +297,8 @@ describe('Share unseen', () => {
     await page.waitForSelector('[data-screen=model]');
     await page.click('#privateOnly');
     await page.click('[data-model="mock-see"]');
-    expect(await page.getAttribute('[data-model="mock-see"]', 'aria-checked')).toBe('true');
+    // The list closes on the choice.
+    await page.waitForSelector('[data-screen=home]');
     // The choice is saved before the page is opened again.
     await expect.poll(() => page.evaluate(async (src) => (await new Function('s', 'return import(s)')(src)).kv.get('settings').then((x: any) => x?.model), '/v2/core/db.js')).toBe('mock-see');
     await pick(page, 'sign.jpg', SIGN);

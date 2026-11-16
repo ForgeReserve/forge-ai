@@ -59,9 +59,11 @@ export function engineScreen({ t, back, engine, reader }) {
       'div',
       { class: 'scroll' },
       sayEl('p', { class: 'lead', id: 'engineLead' }, t('engine.lead'), '', 'server'),
-      el('p', { class: 'note', id: 'engineNow', text: t('engine.now', { address: name(engine.current()) }) }),
+      // The server in use, with a check: the words a person needs. Changing it is for experts, so how is
+      // behind the info button under the field.
+      sayEl('p', { class: 'engine-now', id: 'engineNow' }, t('engine.now', { address: name(engine.current()) }), '', 'check'),
       el('div', { class: 'field' }, el('label', { for: 'engineAddress', class: 'label', text: t('engine.label') }), input),
-      el('p', { class: 'note', text: t('engine.defaultIs', { address: name(engine.fallback) }) }),
+      sayEl('p', { class: 'note', id: 'engineExpert' }, t('engine.defaultIs', { address: name(engine.fallback) }), '', 'keyboard'),
       sayEl('p', { class: 'note', id: 'engineBalance' }, t('engine.balance'), '', 'coins'),
       msg,
     ),

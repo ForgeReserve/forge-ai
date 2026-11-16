@@ -15,6 +15,16 @@ export function pendingMessage(text, pending, { vision = false } = {}) {
 
 export const apiMessages = (messages, { systemPrompt = '', vision = false } = {}) => toApiMessages(messages, { systemPrompt, vision });
 
+/**
+ * The system prompt for the question these messages end on (owner, 2026-11-16, spoken answers): a
+ * question asked by voice (meta.voice on it) adds the voice instruction to the base prompt, so its
+ * answer is short and plain to hear. A typed question, the follow-up to a spoken one too, gets the base.
+ */
+export function systemPromptFor(messages, { base = '', voice = '' } = {}) {
+  const q = [...(messages ?? [])].reverse().find((m) => m.role === 'user');
+  return q?.meta?.voice && voice ? `${base}\n\n${voice}` : base;
+}
+
 /** Input tokens of a request for these messages (about four characters a token, as v1 counts). */
 export function tokensOf(messages, opts) {
   return estimateRequest(apiMessages(messages, opts)).tokens;

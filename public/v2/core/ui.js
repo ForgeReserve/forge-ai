@@ -62,6 +62,16 @@ const PATHS = {
   wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
   ear: '<path d="M7 9a5 5 0 0 1 10 0c0 3-3 4-3 7a3 3 0 0 1-5.5 1.6"/><path d="M10 9.5a2 2 0 0 1 4 0"/>',
   pin: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 15h.01M12 15h.01M16 15h.01"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  // Speed marks (owner, 2026-11-15): a hare sitting up, ears back, for a fast model; a tortoise for a slow one.
+  rabbit: '<path d="M14.4 10.6c-1.3-.7-2.8-1.1-4.5-1.1C5.8 9.5 3 12 3 14.8c0 1.2.5 2.3 1.4 3.1"/><path d="M14.4 10.6c.9-.5 2-.8 3.1-.8 2.2 0 4 1.4 4 3.2 0 1.1-.9 2-2 2h-1.3"/><path d="M18.2 15c-.7 1.3-2 2.1-3.6 2.3l1.1 1.9h2"/><path d="M4.4 17.9l-.9 1.3h4.2c1.3 0 2.3-.6 2.9-1.6"/><path d="M15.4 10.1C14.2 7.6 12.4 5.7 10.2 5c.5 2.5 2 4.4 3.9 5.4"/><path d="M17.9 9.8c-.1-2.6-1-4.9-2.6-6.2-.6 2.3-.3 4.6 1 6.4"/><path d="M3.2 13.4c-.9.1-1.6-.5-1.6-1.4"/><circle cx="18.8" cy="12.1" r=".8" fill="currentColor" stroke="none"/>',
+  turtle: '<path d="M3 15.5a7.5 7 0 0 1 15 0z"/><path d="M6.6 15.5l1.6-3.8h4.6l1.6 3.8"/><path d="M8.2 11.7L7 9.1M12.8 11.7l1.2-2.6"/><path d="M17.7 13.6c.7-1.2 1.7-1.9 2.9-1.9a1.65 1.65 0 0 1 0 3.3H18"/><path d="M5.2 15.5l-.5 2.4h2M15.6 15.5l.5 2.4h2"/><path d="M3 15.5l-1.4.8"/><circle cx="20.5" cy="13.2" r=".6" fill="currentColor" stroke="none"/>',
+  // Add (a photo or a file to the question) is a paper clip; Add money is a bank note with a plus, so the
+  // two never share one plus (owner, 2026-11-15).
+  clip: '<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>',
+  addMoney: '<rect x="1.5" y="11" width="16" height="9" rx="2"/><circle cx="9.5" cy="15.5" r="2"/><path d="M4.8 15.5h.01M14.2 15.5h.01"/><path d="M19.5 3v6.5M16.25 6.25h6.5"/>',
+  ticket: '<path d="M4 6h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V7a1 1 0 0 1 1-1z"/><path d="M14.5 7.5v1.5M14.5 11.25v1.5M14.5 15v1.5"/>',
+  scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="8" y="8" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/><path d="M13 8h3v2M8 13v3h2"/>',
+  newChat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v6M9 10.5h6"/>',
 };
 
 export const ICONS = Object.keys(PATHS);
@@ -164,6 +174,20 @@ export function toast(text, ms = 2600) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+/**
+ * Says `text` to screen readers only (a polite live region), where a toast would cover what the screen
+ * shows: the answer screen says "Answer ready." this way, under the words it is about.
+ */
+export function announce(text) {
+  let n = document.getElementById('announce');
+  if (!n) {
+    n = el('div', { id: 'announce', class: 'sr-only', role: 'status', 'aria-live': 'polite' });
+    document.body.append(n);
+  }
+  n.textContent = '';
+  setTimeout(() => (n.textContent = String(text ?? '')), 30);
 }
 
 /** Hides the toast now (a wait it said is over, and the screen says what came of it). */

@@ -16,12 +16,20 @@ const TICK_MS = 100;
  * download's progress and returns {progress(p), fail(message, retry) -> shown, close()}), and
  * unlockAudio(), called
  * inside every tap that may lead to sound, before anything is awaited (iPhone Safari starts sound only
- * there: adapters.js speaker.unlock).
+ * there: adapters.js speaker.unlock), phoneVoice() (the phone's own voice-out module, or null) and
+ * naturalDeclined {get(), set()} (Not now on the natural voice's offer, kept on the phone).
+ *
+ * Listen speaks at once (owner, 2026-11-15): while the natural voice is not on the phone yet, the phone's
+ * own voice reads the answer, and the natural voice is offered after, as an upgrade (S.voiceOffer, shown
+ * under Listen), until the person gets it or says Not now. Only a phone with no voice of its own asks
+ * before the download, as before.
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {} }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} } }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
+  // {bytes}: the natural voice is offered under Listen (its size), or null.
+  S.voiceOffer = null;
 
   let rec = null; // {mod, ready: Promise<session|null>, session, dropped}
   let timer = 0;
@@ -192,7 +200,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
    * on their own again until the person taps Listen. retry: Try again after a failed download, which
    * the person already agreed to (no second question).
    */
-  function speak(msg, { auto = false, retry = false } = {}) {
+  function speak(msg, { auto = false, retry = false, natural = false } = {}) {
     if (!auto) unlockAudio();
     const mod = voiceOut();
     if (!mod || !msg?.content) return;
@@ -205,8 +213,15 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       if (asking !== ticket) return;
       let view = null;
       if (d.needed) {
+        const phone = retry || natural ? null : phoneVoice();
+        if (phone) {
+          // The phone's own voice reads now; the natural voice waits for the person to ask for it.
+          asking = null;
+          if (!naturalDeclined.get()) store.set({ voiceOffer: { bytes: d.bytes ?? 0 } });
+          return play(phone, msg);
+        }
         if (auto && declined) return;
-        const ok = retry || (await askDownload(d.bytes));
+        const ok = retry || natural || (await askDownload(d.bytes));
         if (asking !== ticket) return;
         declined = !ok;
         if (!ok) return;
@@ -214,8 +229,22 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
         view = showDownload(d.bytes);
       }
       asking = null;
+      if (S.voiceOffer) store.set({ voiceOffer: null });
       play(mod, msg, view);
     })();
+  }
+
+  /** Get on the natural voice's offer: it downloads now (its progress shows), then reads the answer. */
+  function getNatural(msg) {
+    unlockAudio();
+    store.set({ voiceOffer: null });
+    if (msg?.content) speak(msg, { natural: true });
+  }
+
+  /** Not now on the offer: kept, so it is not offered on every Listen. */
+  function naturalNotNow() {
+    naturalDeclined.set();
+    store.set({ voiceOffer: null });
   }
 
   /**
@@ -244,9 +273,10 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       slowSaid = true;
       ui.toast(t('speak.slowPhone'), 6000);
     };
+    // Loading first: a voice that starts at once (the phone's own) says so from inside speak().
+    store.set({ speaking: { key, state: 'loading' } });
     ctl = mod.speak(pieces(msg, mod), { key, onState, onProgress, onNotice });
     speech = { key, ctl, view };
-    store.set({ speaking: { key, state: 'loading' } });
     ctl.done
       .then((r) => {
         if (r?.chargedMsub) refresh();
@@ -288,6 +318,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     speak,
     stopSpeaking,
     speakPrice,
+    getNatural,
+    naturalNotNow,
     clearError: () => S.talk.error && set({ error: null }),
   };
 }

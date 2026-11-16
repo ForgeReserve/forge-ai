@@ -6,7 +6,7 @@ import { kindOf, MAX_FILES, BODY_LIMIT } from '../js/files.js';
 import { lockKey } from '../js/lockkey.js';
 import * as QR from '../js/qr.js';
 import { adapters, setAdapter } from './core/adapters.js';
-import { againHistory, lastExchange, memoryView, pendingMessage, apiMessages, tokensOf } from './core/conversation.js';
+import { againHistory, lastExchange, memoryView, pendingMessage, apiMessages, systemPromptFor, tokensOf } from './core/conversation.js';
 import { chats, kv, onErasedElsewhere, shutdown } from './core/db.js';
 import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
@@ -33,7 +33,7 @@ import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createUpdater } from './core/updates.js';
-import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
+import { createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -145,6 +145,12 @@ const freeKeyStore = () => freeKeyName(engine.base, location.origin);
 
 // ------------------------------------------------------------------ derived view
 
+/**
+ * The system prompt for a question ending these messages: the voice instruction is added to a question
+ * asked by voice, so the answer that is read aloud is short and plain (core/conversation.js).
+ */
+const promptFor = (msgs) => systemPromptFor(msgs, { base: t('system.prompt'), voice: t('system.prompt.voice') });
+
 let memo = { k: '', v: null };
 function memoryNow(model) {
   const k = `${S.conv.id}|${S.conv.messages.length}|${S.streaming}|${S.pending.map((a) => a.id + a.status).join(',')}|${model?.id}`;
@@ -224,7 +230,29 @@ function view() {
     free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
     // Goes up whenever conversations are burned, so an open History screen reads the list again.
     historyVersion,
+    // Waiting for the first words of an answer (screens/answer.js): since when, for the seconds shown.
+    waitSince: S.streaming && S.genStart && !S.conv.messages.at(-1)?.content ? S.genStart : null,
+    // The model that wrote the answer on show: its name and kind, small on the answer (owner, 2026-11-15).
+    answerModel: answerModelOf(lastExchange(S.conv.messages)?.answer),
+    // A fast model the slow-answer note can switch to now, or null (core/state.js fastPick).
+    fastModel: fastModelNow(model),
+    // Free models this engine lists, whatever Private only hides: the Free questions state on Funds.
+    freeModels: S.models.some((m) => isFreeModel(m) && !m.uncensored),
   };
+}
+
+/** {name, private, speed} of the model that wrote an answer, or null. */
+function answerModelOf(a) {
+  const id = a?.meta?.model;
+  if (!id) return null;
+  const m = S.models.find((x) => x.id === id);
+  return { id, name: m?.name ?? id, private: m ? isPrivate(m) : false, speed: m?.speed ?? null };
+}
+
+/** The fast model the slow note offers: a free one, or a paid one when there is money for it. */
+function fastModelNow(model) {
+  const m = fastPick(S.models, S.settings, { current: model, paid: !!(S.key && S.balanceMsub > 0) });
+  return m ? { id: m.id, name: m.name ?? m.id } : null;
 }
 
 // ------------------------------------------------------------------ voice
@@ -293,7 +321,7 @@ const audio = {
 function talkPrice(seconds, inMod, freeVoice = false) {
   // A free voice question: turning it into text costs nothing.
   const toText = freeVoice ? 0 : inMod.price(seconds);
-  const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND))).costMsub;
+  const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND)), { voice: true }).costMsub;
   const reading = readingPrice();
   if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
   return (toText ?? 0) + question + reading;
@@ -353,6 +381,8 @@ function speakView() {
     // The engine's voice reads the answer in plain form on its way to the model: the line says so.
     viaEngine: out?.id === 'engine',
     priceMsub: out && answerMsg && !S.streaming ? talk.speakPrice(answerMsg) : null,
+    // The natural voice, offered under Listen once the phone's own voice read an answer: its size in MB.
+    offer: S.voiceOffer ? { mb: Math.max(1, Math.round((S.voiceOffer.bytes ?? 0) / 1e6)) } : null,
   };
 }
 // subscribe() tells a listener that something changed, never what: the raw state (and the balance key in
@@ -581,7 +611,9 @@ let historyVersion = 0;
 // Conversations burned in this page: never written again, even by an answer still on its way.
 const burned = new Set();
 const newId = (p) => p + '_' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replaceAll('-', '').slice(0, 20);
-let gen = null; // {controller}
+let gen = null; // {controller, quiet}
+// Resolves once the answer being made is settled and saved (actions.useFastModel waits for it).
+let genIdle = Promise.resolve();
 
 /** Saves a conversation (the open one by default). A burned one is never written back. */
 async function saveConv(conv = S.conv) {
@@ -625,15 +657,18 @@ const searchOn = (model) => !!S.search && canSearch(model);
 /** The chat request body generate() sends, also used to price it. */
 const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: api, max_tokens: maxOut, ...(search ? SEARCH_FIELDS : {}) });
 
-function estimateFor(text) {
+function estimateFor(text, { voice = false } = {}) {
   const model = pickModel(S.models, S.settings);
   const unit = S.unit ?? 'usd';
   if (!model) return { costMsub: null, unit };
   const vision = !!model.capabilities?.vision;
-  const msgs = [...S.conv.messages.filter((m) => !m.meta?.error), pendingMessage(text, S.pending, { vision })];
-  const api = apiMessages(msgs, { systemPrompt: t('system.prompt'), vision });
+  const next = pendingMessage(text, S.pending, { vision });
+  if (voice) next.meta = { voice: true };
+  const msgs = [...S.conv.messages.filter((m) => !m.meta?.error), next];
+  const systemPrompt = promptFor(msgs);
+  const api = apiMessages(msgs, { systemPrompt, vision });
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
-  const tokens = tokensOf(msgs, { systemPrompt: t('system.prompt'), vision });
+  const tokens = tokensOf(msgs, { systemPrompt, vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   const search = searchOn(model);
   const modelFree = isFreeModel(model);
@@ -684,9 +719,10 @@ function estimateAgain(model) {
   const history = againHistory(S.conv.messages);
   if (!history.length) return null;
   const vision = !!model.capabilities?.vision;
-  const tokens = tokensOf(history, { systemPrompt: t('system.prompt'), vision });
+  const systemPrompt = promptFor(history);
+  const tokens = tokensOf(history, { systemPrompt, vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const chat = questionHold(model, apiMessages(history, { systemPrompt: t('system.prompt'), vision }), maxOut, tokens, searchOn(model));
+  const chat = questionHold(model, apiMessages(history, { systemPrompt, vision }), maxOut, tokens, searchOn(model));
   const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
   if (chat == null || reading == null) return null;
   return chat + reading;
@@ -710,13 +746,20 @@ async function ask(text, meta = null) {
   generate();
 }
 
-async function generate() {
+function generate() {
+  if (gen || !pickModel(S.models, S.settings)) return;
+  const p = makeAnswer();
+  genIdle = p.catch(() => {});
+  return p;
+}
+
+async function makeAnswer() {
   const model = pickModel(S.models, S.settings);
   if (!model || gen) return;
   const vision = !!model.capabilities?.vision;
   const conv = S.conv;
   const history = conv.messages.filter((m) => !m.meta?.error);
-  const api = apiMessages(history, { systemPrompt: t('system.prompt'), vision });
+  const api = apiMessages(history, { systemPrompt: promptFor(history), vision });
   // A free question is used first, when the model is on the free list and the question fits its caps.
   const fr = freeNow(model, bodyTokens(new TextEncoder().encode(JSON.stringify(api)).length));
   // Search the web applies to this question only, and is never a free question.
@@ -731,8 +774,10 @@ async function generate() {
   if (search) reply.meta.search = true;
   conv.messages.push(reply);
   const controller = new AbortController();
-  gen = { controller };
-  store.set({ streaming: true });
+  // quiet: the answer is stopped to ask again elsewhere (actions.useFastModel), so no "Stopped." is said.
+  const me = { controller, quiet: false };
+  gen = me;
+  store.set({ streaming: true, genStart: Date.now() });
   const maxTokens = useF ? freeMaxTokens(S.free, Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT)) : Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   let forge = null;
   let failure = null;
@@ -780,7 +825,13 @@ async function generate() {
   store.set({ streaming: false });
   // Burned while it streamed: nothing more to say or save, but the balance did change.
   if (burned.has(conv.id)) return refreshBalance();
-  ui.toast(reply.meta.error ? errorText(reply.meta.error, reply.meta.unit) : reply.meta.stopped ? t('answer.stopped') : t('answer.done'), 1800);
+  if (!me.quiet) {
+    const words = reply.meta.error ? errorText(reply.meta.error, reply.meta.unit) : reply.meta.stopped ? t('answer.stopped') : t('answer.done');
+    // On the answer itself the words are on the screen already (the error box, the note): a toast there
+    // would cover the answer, so it is only said to screen readers.
+    if (currentName === 'answer' && S.conv === conv) ui.announce(words);
+    else ui.toast(words, 1800);
+  }
   await saveConv(conv);
   await refreshBalance();
   // A question asked by voice is answered by voice, unless reading aloud is off.
@@ -1089,6 +1140,15 @@ const talk = createTalk({
   askDownload: (bytes) => askVoiceDownload(bytes),
   showDownload: (bytes) => showVoiceDownload(bytes),
   unlockAudio: () => adapters.speaker.unlock?.(),
+  // The phone's own voice, which reads at once while the natural voice is not on the phone yet.
+  phoneVoice: () => reader.mod(),
+  naturalDeclined: {
+    get: () => !!S.settings.naturalNotNow,
+    set: () => {
+      S.settings.naturalNotNow = true;
+      saveSettings();
+    },
+  },
 });
 
 /**
@@ -1168,6 +1228,18 @@ function showVoiceDownload(bytes = 0) {
 }
 
 const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
+
+/**
+ * A new model starts a new conversation (owner, 2026-11-15): the answers already given stay in History,
+ * and the next question goes to the new model with nothing from the old one. What waits for the next
+ * question (photos, files) stays. True when a conversation was left.
+ */
+function modelChanged(before) {
+  const now = pickModel(S.models, S.settings);
+  if (!S.conv.messages.length || before?.id === now?.id) return false;
+  forgetConversation();
+  return true;
+}
 
 const actions = {
   /** Opens the invite module, where a balance for the free models is opened (or Add funds without it). */
@@ -1258,8 +1330,11 @@ const actions = {
     store.set({});
   },
   setPrivateOnly: (on) => {
+    const before = pickModel(S.models, S.settings);
     S.settings.privateOnly = on;
     saveSettings();
+    const m = pickModel(S.models, S.settings);
+    if (modelChanged(before)) ui.toast(t('model.chosenNew', { name: m?.name ?? m?.id ?? '' }), 3000);
     store.set({});
   },
   /**
@@ -1272,9 +1347,11 @@ const actions = {
     const cur = pickModel(S.models, { ...S.settings, privateOnly: false });
     const m = isFreeModel(cur) ? cur : freeModelChoice(S.models);
     if (!m) return null;
+    const before = pickModel(S.models, S.settings);
     S.settings.privateOnly = false;
     S.settings.model = m.id;
     saveSettings();
+    modelChanged(before);
     store.set({});
     return m;
   },
@@ -1310,12 +1387,43 @@ const actions = {
     return { ok: true };
   },
   chooseModel: (id) => {
+    const before = pickModel(S.models, S.settings);
     S.settings.model = id;
     saveSettings();
     const m = S.models.find((x) => x.id === id);
-    ui.toast(t('model.chosen', { name: m?.name ?? id }));
+    const fresh = modelChanged(before);
+    ui.toast(t(fresh ? 'model.chosenNew' : 'model.chosen', { name: m?.name ?? id }), fresh ? 3000 : 2600);
     store.set({});
   },
+  /**
+   * The slow-answer note's one tap (screens/answer.js): stops the answer still waiting, chooses a fast
+   * model (core/state.js fastPick) and asks the same question there, in a new conversation. The slow
+   * one stays in History. With no fast model to use, Choose a model opens.
+   */
+  useFastModel: async () => {
+    const v = view();
+    const m = v.fastModel && S.models.find((x) => x.id === v.fastModel.id);
+    if (!m) return nav('model');
+    const question = S.conv.messages.findLast?.((x) => x.role === 'user');
+    if (gen) {
+      gen.quiet = true;
+      gen.controller.abort();
+      await genIdle;
+    }
+    S.settings.model = m.id;
+    saveSettings();
+    await forgetConversation();
+    ui.toast(t('answer.fastChosen', { name: m.name ?? m.id }), 3000);
+    if (!question) return store.set({});
+    S.conv = { id: newId('c'), messages: [{ ...question, id: newId('m') }], createdAt: Date.now() };
+    await saveConv();
+    nav('answer');
+    generate();
+  },
+  /** The natural voice, asked for from the offer under Listen: it downloads now, then reads the answer. */
+  getNaturalVoice: () => talk.getNatural(lastAnswer()),
+  /** Not now on that offer: it is not offered again on this phone (More, Voice still has it). */
+  naturalNotNow: () => talk.naturalNotNow(),
 };
 
 const format = {
@@ -1514,7 +1622,9 @@ function screenFor(name, params) {
     case 'look':
       return lookScreen(ctx);
     case 'model':
-      return modelScreen(ctx);
+      // A model chosen closes the list: home when it was opened from the More menu (or by its address),
+      // else back where it was opened (an error's Choose a model, say).
+      return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? nav('home', {}, { replace: true }) : back()) });
     case 'voice':
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':

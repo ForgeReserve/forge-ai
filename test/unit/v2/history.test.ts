@@ -361,3 +361,19 @@ describe('the red erase button', () => {
     expect(contrast(t['danger-ink'], t.danger)).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// History's preview is the answer's first words without its Markdown (owner, 2026-11-15).
+describe('the answer preview', () => {
+  it('reads plain: no stars, hashes, list marks, link targets or table rules', () => {
+    const p = (md: string) => H.firstWords(H.plainText(md), 90);
+    expect(p('**The safest option** is to cross')).toBe('The safest option is to cross');
+    expect(p('# Title\n- item one\n- *two* and `code`')).toBe('Title item one two and code');
+    expect(p('See [the docs](https://x.test) now')).toBe('See the docs now');
+    expect(p('| a | b |\n|---|---|\n| 1 | 2 |')).toBe('a b 1 2');
+    expect(p('Keep snake_case and 2 * 3 * 4 = 24')).toBe('Keep snake_case and 2 * 3 * 4 = 24');
+  });
+  it('is what a History card shows', () => {
+    const c = { id: 'c1', createdAt: 1, updatedAt: 2, messages: [{ role: 'user', content: 'Q' }, { role: 'assistant', content: '**Here is what to do:**\n\n* Back up' }] };
+    expect(H.listHistory([c], 'off', 3)[0].answer).toBe('Here is what to do: Back up');
+  });
+});

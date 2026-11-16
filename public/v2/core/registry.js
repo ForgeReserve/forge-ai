@@ -37,7 +37,7 @@ export const INPUTS = {
 export const PROJECTIONS = {
   mode: {
     state: ['view', 'subscribe'],
-    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'], speech: ['available', 'start'], asr: ['available', 'start'] },
   'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load', 'native', 'nativeFailed', 'voice', 'paceKey', 'pace', 'notePace', 'preferNatural'] },

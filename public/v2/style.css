@@ -473,7 +473,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .fr-toggle.off .fr-track { background: #3A3D44; justify-content: flex-start; }
 .fr-next { flex: none; align-self: center; width: 76px; height: 76px; border-radius: 38px; border: 0; background: #F5F5F7; color: #0B0D10; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10); transition: transform 120ms var(--ease); }
 .fr-next:active { transform: scale(.96); }
-.fr-links { flex: none; min-height: 48px; margin-top: clamp(6px, calc(6px + (100dvh - 640px) * 0.0393), 14px); display: flex; justify-content: center; }
+.fr-links { flex: none; min-height: clamp(48px, calc(48px + (100dvh - 640px) * 0.04), 56px); margin-top: clamp(6px, calc(6px + (100dvh - 640px) * 0.0393), 14px); display: flex; justify-content: center; }
 .fr-money { align-self: center; }
 .fr-link { height: 48px; min-width: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
 /* The detail behind Learn more and See the full list, and the invite code: a sheet from the bottom. */
@@ -590,12 +590,10 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .tab-card, .tab-fedimint { color: var(--blue); }
 .tab-othermint { color: var(--violet); }
 .tab-more { color: var(--text-body); }
-.way-hand { flex: none; align-self: center; height: 22px; color: var(--text-2); animation: wayhand 1.6s ease-in-out infinite; }
 .way-go { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }
 .way-go .ico { color: var(--gold); }
 .way-go.way-go-idle { visibility: hidden; }
 @keyframes wayin { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
-@keyframes wayhand { 0%, 100% { transform: translateX(6px); } 50% { transform: translateX(-6px); } }
 
 /* Start free (AddFunds-C2 and C3) */
 .screen.start-free-screen { flex: none; height: 100dvh; min-height: 0; overflow-y: auto; gap: 10px; }
@@ -707,3 +705,137 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .goes { padding-left: 0; }
 .seg button .ico { vertical-align: -3px; margin-right: 4px; }
 .ib { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Choose a model in groups (owner, 2026-11-15): Fast and free (a rabbit), Private, Standard, then Slow (a
+   turtle) below Standard. The chosen model has a check in a filled circle beside its name, not only an
+   outline. */
+.model-group { display: flex; flex-direction: column; gap: 10px; }
+.group-head { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; }
+.group-fast .group-head { color: var(--teal); }
+.group-private .group-head { color: var(--teal); }
+.group-standard .group-head { color: var(--low-ink); }
+.group-slow .group-head { color: var(--text-2); }
+.model-name { display: flex; align-items: center; gap: 10px; width: 100%; }
+.model-name b { flex: 1; min-width: 0; }
+.model-on { flex: none; width: 28px; height: 28px; border-radius: 14px; background: var(--teal); color: var(--primary-ink); display: flex; align-items: center; justify-content: center; }
+.model-card.on { border-width: 2px; border-color: var(--teal); }
+.tag.speed { background: var(--teal-tint); color: var(--teal); }
+.tag.slow { background: var(--surface-2); color: var(--text-2); border: 1px dashed var(--dash); }
+
+/* The answer: the model that wrote it, small under the question. */
+.answer-model { margin: -4px 0 0; display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; min-height: 26px; padding: 2px 10px; border-radius: 13px; background: var(--surface-2); font-size: 13px; font-weight: 600; color: var(--text-2); }
+.answer-model[data-kind="private"] > .ico:first-child { color: var(--teal); }
+.answer-model[data-kind="standard"] > .ico:first-child { color: var(--low-ink); }
+.answer-model[hidden] { display: none; }
+
+/* Waiting for the first words: the rings turn (the gold one way, the teal the other), the centre breathes
+   and the seconds count. With reduced motion the rings keep still and the seconds still count. */
+.wait { display: flex; align-items: center; gap: 14px; min-height: 64px; }
+.wait-art { flex: none; overflow: visible; }
+.wait-spin { transform-origin: 32px 32px; transform-box: view-box; }
+.wait-gold { animation: waitspin 1.8s linear infinite; }
+.wait-teal { animation: waitspin 1.25s linear infinite reverse; }
+.wait-core { transform-origin: 32px 32px; transform-box: view-box; animation: waitcore 1.4s ease-in-out infinite; }
+.wait-text { display: flex; flex-direction: column; gap: 2px; }
+.wait-text b { font-size: 18px; color: var(--ink); }
+.wait-secs { font-size: 15px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+@keyframes waitspin { to { transform: rotate(360deg); } }
+@keyframes waitcore { 50% { transform: scale(.6); opacity: .55; } }
+.slow-note { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 18px; border: 1px dashed var(--dash); background: var(--surface-2); animation: rise 260ms var(--ease) both; }
+.slow-text { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.slow-go { min-height: 56px; }
+:root:not([data-scheme="light"]) .slow-go .ico { color: #0D7A69; }
+.slow-go .ico { color: var(--teal); }
+
+/* The dock: Listen (or Stop) and the bottom row, pinned to the bottom of the screen over a long answer,
+   on a fade of the ground so the words scroll away under it. */
+.answer-dock { position: sticky; bottom: 0; z-index: 6; display: flex; flex-direction: column; gap: 8px; margin: 0 -16px calc(-1 * max(16px, env(safe-area-inset-bottom))); padding: 18px 16px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 18px); }
+.dock-act { display: flex; }
+.dock-act[hidden] { display: none; }
+.dock-btn { flex: 1; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 18px; border: 1px solid var(--teal-line); border-radius: 20px; background: var(--teal-tint); color: var(--teal); font-size: 16px; font-weight: 700; }
+.dock-btn .tile-sub { font-size: 13px; }
+.dock-btn.stop { border-color: var(--line-2); background: var(--surface-2); color: var(--ink); }
+.voice-offer { display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 12px; border-radius: 20px; background: var(--surface); border: 1px solid var(--teal-line); animation: rise 240ms var(--ease) both; }
+.voice-offer[hidden] { display: none; }
+.offer-ico { flex: none; width: 40px; height: 40px; border-radius: 13px; background: var(--teal-tint); color: var(--teal); display: flex; align-items: center; justify-content: center; }
+.offer-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.offer-text b { font-size: 15px; }
+.offer-size { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-2); }
+.btn.offer-get { min-height: 48px; padding: 0 14px; font-size: 15px; }
+/* On the answer, a message sits in the top bar, never over the words. */
+body:has(> #app[data-route="answer"]) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; transform: translate(-50%, -12px); min-height: 48px; display: flex; align-items: center; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+body:has(> #app[data-route="answer"]) .toast.show { transform: translate(-50%, 0); }
+
+/* Hold to burn (screens/burn.js): the tile fills from the left as it is held; the card warms, tilts back
+   and darkens as the fire climbs it (the fire itself is drawn on .burn-fx). */
+.hold-burn { position: relative; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hold-burn > :not(.hold-fill) { position: relative; }
+.hold-fill { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(240,104,90,0.30), rgba(255,170,60,0.42)); transform-origin: left; transform: scaleX(var(--hold, 0)); pointer-events: none; }
+.hold-burn.holding { box-shadow: 0 0 0 2px var(--danger), 0 0 22px rgba(255,120,50,0.35); }
+.hold-sub { color: var(--text-2); }
+.burning { will-change: transform, filter; transform-origin: 50% 0; transform: perspective(900px) rotateX(calc(var(--burn, 0) * -7deg)) scale(calc(1 - var(--burn, 0) * 0.02)); filter: brightness(calc(1 - var(--burn, 0) * 0.32)) saturate(calc(1 - var(--burn, 0) * 0.7)); }
+.burn-fx { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 40; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .burning { transform: none; filter: none; }
+  .hold-fill { background: rgba(240,104,90,0.45); }
+}
+
+/* The first run's last step: Start free is a clear choice under the round Start, a gift on teal with its
+   word and what it needs (owner, 2026-11-15), not a grey link. Without free models it is the invite code. */
+.fr-choice { height: clamp(48px, calc(48px + (100dvh - 640px) * 0.04), 56px); max-width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 20px 0 6px; border-radius: 28px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); color: #F5F5F7; text-align: left; }
+.fr-choice-ico { flex: none; width: clamp(38px, calc(38px + (100dvh - 640px) * 0.03), 44px); aspect-ratio: 1; border-radius: 50%; background: #3FCFB4; color: #0B0D10; display: flex; align-items: center; justify-content: center; }
+.fr-choice:not(.free) .fr-choice-ico { background: rgba(255,255,255,0.08); color: #F5F5F7; }
+.fr-choice-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fr-choice-word { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.fr-choice-sub { font-size: 13px; font-weight: 500; color: #A1A4AB; white-space: nowrap; }
+.fr-code-row { display: flex; gap: 8px; align-items: stretch; }
+.fr-code-row .field-input { flex: 1; min-width: 0; }
+.btn.fr-scan { flex: none; min-height: 56px; padding: 0 14px; }
+.fr-sheet-listen { margin-left: auto; display: flex; }
+.fr-sheet-head h2 { min-width: 0; }
+/* The Private-only question: its words with Listen, and the two answers as big picture tiles. */
+.free-ask-head { display: flex; align-items: flex-start; gap: 10px; }
+.free-ask-head p { flex: 1; min-width: 0; }
+.ask-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ask-choice { min-height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 8px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-size: 15px; font-weight: 700; text-align: center; line-height: 1.2; }
+.ask-choice.use { border: 2px solid var(--ink); }
+.ask-ico { width: 52px; height: 52px; border-radius: 26px; display: flex; align-items: center; justify-content: center; }
+.ask-ico.free { background: var(--gold-tint); color: var(--gold-ink); }
+.ask-ico.private { background: var(--teal-tint); color: var(--teal); }
+.sf-ask-head { display: flex; flex-direction: column; gap: 8px; }
+.sf-ask-head .listen-chip { align-self: flex-end; }
+/* A paid model at $0 on the home: its name with its lock above Add money. */
+.home-empty { flex-wrap: wrap; }
+.home-empty.stacked { flex-direction: column; gap: 10px; }
+/* Add money stays right under the ring (it is what to do); the model's name under it. */
+.home-empty.stacked #addMoney { order: -1; }
+.chip-model { min-width: 0; max-width: 100%; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 12px; border-radius: 22px; border: 1px solid var(--teal-line); background: var(--teal-tint); color: var(--ink); font-size: 14px; font-weight: 700; }
+.chip-model[data-kind="standard"] { border-color: var(--low-line); background: var(--low-tint); }
+.chip-model-ico { display: flex; color: var(--teal); }
+.chip-model[data-kind="standard"] .chip-model-ico { color: var(--low-ink); }
+.funds-free-state { margin: 0; color: var(--gold-ink); font-size: 15px; font-weight: 600; text-align: left; }
+.funds-free-state > .ico { color: var(--gold-ink); }
+.btn.funds-free-go { border-color: var(--gold-callout); color: var(--ink); }
+.btn.funds-free-go .ico { color: var(--gold-ink); }
+button.funds-ring { padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; flex: none; }
+.engine-now { margin: 0; min-height: 52px; padding: 0 16px; border-radius: 18px; background: var(--teal-tint); border: 1px solid var(--teal-line); color: var(--teal); font-weight: 700; }
+/* An amount with its unit in the field: "$ 5.00", or "5000 sat". */
+.amount-field { display: flex; align-items: center; min-height: 64px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); padding: 0 16px; gap: 6px; }
+.amount-field:focus-within { outline: 2px solid var(--focus); }
+.amount-field .field-input { flex: 1; min-width: 0; min-height: 60px; border: 0; background: transparent; padding: 0; font-size: 24px; font-weight: 700; }
+.amount-field .field-input:focus { outline: none; }
+.amount-unit { flex: none; font-size: 24px; font-weight: 700; color: var(--gold-ink); }
+
+/* History: the answer's first words and the times big enough to read. */
+.hist-answer { font-size: 15px; }
+.hist-time { font-size: 14px; }
+.hist-meta .tag { font-size: 13px; }
+.burn-timer, .burn-timer .left { font-size: 14px; }
+.round.burn-one { position: relative; overflow: hidden; }
+
+/* The More menu leaves the status bar in view on a short phone; the card scrolls inside itself. */
+.float-wrap { padding-top: calc(max(16px, env(safe-area-inset-top)) + 60px); }
+
+/* Add money's icon row fits a 360 px phone: the tabs share the width instead of scrolling off. */
+.way-tabs { gap: clamp(4px, calc((100vw - 330px) / 8), 8px); }
+.way-tab { flex: 0 1 52px; min-width: 44px; width: auto; height: auto; aspect-ratio: 1; max-height: 52px; }

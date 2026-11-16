@@ -1,8 +1,14 @@
-// The answer (XAnswerLight): the question, the streamed answer with Markdown, Stop while it streams,
-// then Copy, Ask again and Burn, and Listen (or Stop) to hear it read aloud, with its price when it
-// costs.
-// Smaller rings below with the reply button (hold to talk), and the bottom row. Errors show in plain
-// words with one next step. A voice question shows here as text once it has been heard.
+// The answer (XAnswerLight): the question, the model that answers it (small, with its kind and speed),
+// the streamed answer with Markdown, then Copy, Ask again and Burn (held, screens/burn.js).
+// Smaller rings below with the reply button (hold to talk). Errors show in plain words with one next
+// step. A voice question shows here as text once it has been heard.
+//
+// While the first words are awaited the card shows that it is working: turning rings and the seconds
+// waited; after SLOW_MS a "Slow model" note offers a fast model in one tap (owner, 2026-11-15).
+// The dock stays pinned at the bottom whatever the answer's length: Stop while it is being made, Listen
+// (or Stop) once it is in, with the natural voice offered under it after the phone's own voice read an
+// answer, and the bottom row (Type, Add, More).
+//
 // Markdown (js/markdown.js with marked and DOMPurify, about 80 KB) loads when an answer screen is first
 // made, not with the app, so it does not hold up the first paint. Until it is in, the answer shows as
 // plain text.
@@ -18,14 +24,44 @@ const loadMarkdown = () =>
   ));
 import { errorView } from '../core/errors.js';
 import { priceLine } from '../core/price.js';
-import { el, icon, say, sayEl } from '../core/ui.js';
+import { el, icon, say, sayEl, toast } from '../core/ui.js';
+import { holdToBurn } from './burn.js';
 import { bottomRow, rings, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
+
+/** How long the first words may take before the Slow model note shows. */
+export const SLOW_MS = 20_000;
+
+const NS = 'http://www.w3.org/2000/svg';
+/** The waiting mark: the home's two rings, turning in opposite ways, with a light running round each. */
+function waitArt() {
+  const s = document.createElementNS(NS, 'svg');
+  s.setAttribute('viewBox', '0 0 64 64');
+  s.setAttribute('width', '56');
+  s.setAttribute('height', '56');
+  s.setAttribute('aria-hidden', 'true');
+  s.classList.add('wait-art');
+  s.innerHTML =
+    '<circle cx="32" cy="32" r="27" fill="none" stroke="var(--gold-track)" stroke-width="5"/>' +
+    '<circle cx="32" cy="32" r="17" fill="none" stroke="var(--memory-track)" stroke-width="5"/>' +
+    '<g class="wait-spin wait-gold"><circle cx="32" cy="32" r="27" fill="none" stroke="var(--gold)" stroke-width="5" stroke-linecap="round" stroke-dasharray="44 126"/><circle cx="32" cy="5" r="2.2" fill="#FFF6DC"/></g>' +
+    '<g class="wait-spin wait-teal"><circle cx="32" cy="32" r="17" fill="none" stroke="var(--memory)" stroke-width="5" stroke-linecap="round" stroke-dasharray="30 77"/><circle cx="32" cy="15" r="2" fill="#E6FFF9"/></g>' +
+    '<circle class="wait-core" cx="32" cy="32" r="5" fill="var(--memory)"/>';
+  return s;
+}
 
 export function answer({ t, state, nav, actions, format }) {
   const bar = statusBar({ t, state, nav });
   const asked = el('p', { class: 'asked' });
+  const modelLine = el('p', { class: 'answer-model', id: 'answerModel', hidden: true });
   const body = el('div', { class: 'answer-body md', id: 'answerText', 'aria-live': 'off' });
+  // Waiting for the first words: the turning rings, Thinking and the seconds; then the Slow model note.
+  const secs = el('span', { class: 'wait-secs', id: 'waitSecs' });
+  const waitWord = el('b', { text: t('answer.thinking') });
+  const wait = el('div', { class: 'wait', id: 'answerWait', role: 'status', hidden: true }, waitArt(), el('span', { class: 'wait-text' }, waitWord, secs));
+  const slowText = el('p', { class: 'slow-text', id: 'slowText' });
+  const fastBtn = el('button', { type: 'button', class: 'btn primary slow-go', id: 'useFast', onclick: () => actions.useFastModel() });
+  const slow = el('div', { class: 'slow-note', id: 'slowNote', hidden: true }, slowText, fastBtn);
   const note = el('p', { class: 'answer-note', id: 'answerNote', role: 'status' });
   const speakWhat = el('span');
   const speakVia = el('small', { class: 'speak-via', id: 'speakVia', hidden: true });
@@ -34,73 +70,147 @@ export function answer({ t, state, nav, actions, format }) {
   const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), speakWhat, readyBar, speakVia);
   const errBox = el('div', { class: 'error-box', id: 'answerError', role: 'alert', hidden: true });
   const tiles = el('div', { class: 'action-tiles' });
-  const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, asked, body, errBox, note, tiles);
+  const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, asked, modelLine, wait, slow, body, errBox, note, tiles);
   const r = rings('answer');
   // Hold to talk (screens/talk.js). Where voice cannot be used here, the button opens Type.
   const reply = el('button', { type: 'button', class: 'talk small', id: 'replyBtn', 'aria-describedby': 'replyHint' });
   const hold = holdToTalk(reply, { t, state, actions, nav, hintId: 'replyHint', size: 'small' });
   const hint = hold.hint;
   const ringBtn = el('button', { type: 'button', class: 'ring-hit', onclick: () => nav('funds'), 'aria-label': t('funds.title') });
-  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), hold.info, hint, bottomRow({ t, nav }));
+  // The dock: pinned to the bottom, so Listen and the bottom row never scroll away under a long answer.
+  const offer = el('div', { class: 'voice-offer', id: 'voiceOffer', hidden: true });
+  const act = el('div', { class: 'dock-act' });
+  const dock = el('div', { class: 'answer-dock', id: 'answerDock' }, offer, act, bottomRow({ t, nav }));
+  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), hold.info, hint, dock);
 
   /** The next step's button: its picture and its word. */
-  const NEXT_ICON = { addFunds: 'plus', retry: 'again', chooseModel: 'grid', startFresh: 'trash', takeOut: 'takeout', freeOut: 'gift' };
+  const NEXT_ICON = { addFunds: 'addMoney', retry: 'again', chooseModel: 'grid', startFresh: 'trash', takeOut: 'takeout', freeOut: 'gift' };
   const nextBtn = (next, go) => el('button', { type: 'button', class: 'btn primary', id: 'nextStep', onclick: go }, icon(NEXT_ICON[next] ?? 'next', 20), el('span', { text: t(`next.${next}`) }));
   let shownText = null;
   let shownState = null;
+  let shownAct = null;
   const tile = (id, ico, label, fn, sub = null) => el('button', { type: 'button', class: 'action-tile', id, onclick: fn }, icon(ico, 22), el('span', { text: label }), sub ? el('small', { class: 'tile-sub', text: sub }) : null);
-  /** Burn: removes this conversation from the phone at once (the app then goes home). */
+  /** The dock's one wide button: its icon, its word and, when reading aloud costs, the price. */
+  const dockBtn = (id, ico, label, fn, sub = null, cls = '') => el('button', { type: 'button', class: `dock-btn ${cls}`.trim(), id, onclick: fn }, icon(ico, 22), el('span', { text: label }), sub ? el('small', { class: 'tile-sub', text: sub }) : null);
+
+  // Burn: held, never one tap (screens/burn.js). The conversation card burns as it is held.
+  let burner = null;
   const burnTile = () => {
-    const b = tile('burnBtn', 'flame', t('answer.burn'), () => actions.burn());
-    b.classList.add('danger');
-    b.setAttribute('aria-label', t('answer.burnLabel'));
+    const b = el('button', { type: 'button', class: 'action-tile danger', id: 'burnBtn', 'aria-label': t('answer.burnLabel') }, icon('flame', 22), el('span', { text: t('answer.burn') }), el('small', { class: 'tile-sub hold-sub', text: t('burn.hold') }));
+    burner?.destroy();
+    burner = holdToBurn(b, { target: () => card, below: () => dock, onBurn: () => actions.burn(), onTap: () => toast(t('burn.tap'), 2600) });
     return b;
   };
-  /** Listen (with its price when it costs) or Stop while the answer is being read aloud. */
-  const speakTile = (v) => {
+
+  /** The dock's button now: Stop while the answer (or the voice question) is on its way, else Listen or Stop. */
+  const drawAct = (v, busy) => {
     const sp = v.speak;
-    if (!sp.available) return [];
-    if (sp.current && sp.state !== 'idle') return [tile('speakStopBtn', 'stop', t('speak.stop'), () => actions.stopSpeaking())];
+    const speakingNow = sp.current && sp.state !== 'idle';
     const p = sp.priceMsub > 0 ? priceLine(sp.priceMsub, v.talk.unit) : null;
-    return [tile('speakBtn', 'speaker', t('speak.listen'), () => actions.speak(), p ? t(p.key, p) : null)];
+    const key = busy ? `busy|${v.talk.phase}` : speakingNow ? 'speaking' : sp.available ? `listen|${p ? t(p.key, p) : ''}` : 'none';
+    if (key === shownAct) return;
+    shownAct = key;
+    if (busy) act.replaceChildren(dockBtn('stopBtn', 'stop', t('answer.stop'), () => (v.talk.phase === 'sending' ? actions.talkCancel() : actions.stop()), null, 'stop'));
+    else if (speakingNow) act.replaceChildren(dockBtn('speakStopBtn', 'stop', t('speak.stop'), () => actions.stopSpeaking()));
+    else if (sp.available) act.replaceChildren(dockBtn('speakBtn', 'speaker', t('speak.listen'), () => actions.speak(), p ? t(p.key, p) : null, 'listen'));
+    else act.replaceChildren();
+    act.hidden = !act.childElementCount;
   };
-  const showSpeaking = (v) => {
-    const on = v.speak.current && v.speak.state !== 'idle';
-    speaking.hidden = !on;
-    const loading = v.speak.state === 'loading';
-    const buffering = on && v.speak.state === 'buffering';
-    speakWhat.textContent = !on ? '' : buffering ? t('speak.buffering') : loading && v.speak.progress != null ? t('speak.loadingPct', { pct: v.speak.progress }) : t(loading ? 'speak.loading' : 'speak.speaking');
-    readyBar.hidden = !buffering;
-    if (buffering) {
-      const pct = v.speak.progress ?? 0;
-      readyBar.setAttribute('aria-valuenow', String(pct));
-      readyBar.setAttribute('aria-label', t('speak.buffering'));
-      readyBar.firstChild.style.width = `${pct}%`;
+
+  /** The natural voice's offer, after the phone's own voice read an answer: Get (its size) or Not now. */
+  let shownOffer = '';
+  const drawOffer = (v) => {
+    const o = v.speak.offer;
+    const key = o ? String(o.mb) : '';
+    if (key === shownOffer) return;
+    shownOffer = key;
+    offer.hidden = !o;
+    if (!o) return offer.replaceChildren();
+    offer.replaceChildren(
+      el('span', { class: 'offer-ico', 'aria-hidden': 'true' }, icon('speaker', 20)),
+      el('span', { class: 'offer-text' }, el('b', { text: t('speak.offer') }), el('small', { class: 'offer-size' }, icon('download', 14), el('span', { text: t('speak.offerSize', { mb: o.mb }) }))),
+      el('button', { type: 'button', class: 'btn primary offer-get', id: 'voiceOfferGet', 'aria-label': t('speak.offerGetLabel', { mb: o.mb }), onclick: () => actions.getNaturalVoice() }, icon('download', 18), el('span', { text: t('speak.offerGet') })),
+      el('button', { type: 'button', class: 'info-btn offer-no', id: 'voiceOfferNo', 'aria-label': t('speak.offerNo'), onclick: () => actions.naturalNotNow() }, icon('x', 20)),
+    );
+  };
+
+  /** The model that wrote this answer, small: its kind (lock or open lock), its name, and its speed. */
+  let shownModel = '';
+  const drawModel = (m) => {
+    const key = m ? `${m.id}|${m.private}|${m.speed}` : '';
+    if (key === shownModel) return;
+    shownModel = key;
+    modelLine.hidden = !m;
+    if (!m) return modelLine.replaceChildren();
+    modelLine.dataset.kind = m.private ? 'private' : 'standard';
+    modelLine.setAttribute('aria-label', t('answer.model', { name: m.name }));
+    modelLine.replaceChildren(...[icon(m.private ? 'lock' : 'unlock', 14), el('span', { text: m.name }), m.speed === 'fast' ? icon('rabbit', 16) : m.speed === 'slow' ? icon('turtle', 16) : null].filter(Boolean));
+  };
+
+  // The seconds waited, counted while the first words are awaited.
+  let since = null;
+  let timer = 0;
+  const tickWait = () => {
+    if (since == null) return;
+    const ms = Date.now() - since;
+    const n = Math.max(0, Math.floor(ms / 1000));
+    secs.textContent = t('answer.seconds', { n });
+    const v = state.view();
+    const isSlow = ms >= SLOW_MS && v.waitSince != null;
+    if (isSlow !== !slow.hidden) {
+      slow.hidden = !isSlow;
+      if (isSlow) {
+        say(slowText, t('answer.slow'), '', 'turtle');
+        const f = v.fastModel;
+        fastBtn.replaceChildren(icon(f ? 'rabbit' : 'grid', 22), el('span', { text: f ? t('answer.useFast', { name: f.name }) : t('answer.chooseModel') }));
+      }
     }
-    // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
-    speakVia.hidden = !(on && v.speak.viaEngine);
-    say(speakVia, speakVia.hidden ? '' : t('speak.viaEngine'), '', 'eye');
   };
+  /** Shows the waiting mark from `from` (ms since 1970), or hides it with null. */
+  const setWaiting = (from, word) => {
+    waitWord.textContent = word;
+    if (from === since) return;
+    since = from;
+    wait.hidden = from == null;
+    if (from == null) {
+      clearInterval(timer);
+      timer = 0;
+      slow.hidden = true;
+      return;
+    }
+    tickWait();
+    timer ||= setInterval(tickWait, 250);
+  };
+
+  let hearingSince = null;
   const update = () => {
     const v = state.view();
     bar.update();
     hold.update();
     r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     showSpeaking(v);
+    drawOffer(v);
     const tk = v.talk;
     // A voice question on its way to being text, or one that could not be heard.
     if (tk.phase === 'sending' || tk.error) {
       shownText = null;
       shownState = null;
+      drawModel(null);
       asked.textContent = tk.phase === 'sending' ? t('talk.hearing') : t('talk.notHeard');
-      body.replaceChildren(el('p', { class: 'thinking', text: tk.phase === 'sending' ? t('answer.thinking') : '' }));
+      body.replaceChildren();
       say(note, '');
       if (tk.phase === 'sending') {
+        hearingSince ??= Date.now();
+        setWaiting(hearingSince, t('talk.hearing'));
         errBox.hidden = true;
-        tiles.replaceChildren(tile('stopBtn', 'stop', t('answer.stop'), () => actions.talkCancel()));
+        tiles.replaceChildren();
+        drawAct(v, true);
         return;
       }
+      hearingSince = null;
+      setWaiting(null, '');
       tiles.replaceChildren();
+      drawAct(v, false);
       if (tk.error.key) {
         errBox.replaceChildren(sayEl('p', { id: 'answerErrorText' }, t(tk.error.key), 'err'), sayEl('p', { class: 'hint' }, t('talk.holdAgain'), '', 'mic'));
       } else {
@@ -112,11 +222,15 @@ export function answer({ t, state, nav, actions, format }) {
       errBox.hidden = false;
       return;
     }
+    hearingSince = null;
     const ex = v.lastExchange;
     if (!ex) {
       asked.textContent = '';
+      drawModel(null);
+      setWaiting(null, '');
       body.replaceChildren(sayEl('p', {}, t('answer.none')));
       tiles.replaceChildren();
+      drawAct(v, false);
       say(note, '');
       errBox.hidden = true;
       return;
@@ -124,20 +238,26 @@ export function answer({ t, state, nav, actions, format }) {
     asked.textContent = ex.question;
     const a = ex.answer;
     const streaming = v.streaming;
+    drawModel(v.answerModel);
+    // No words yet: the waiting mark, from when the question was sent (it shows on every redraw, so the
+    // first question's empty card is never left blank).
+    setWaiting(streaming && !a.content ? (v.waitSince ?? Date.now()) : null, t('answer.thinking'));
+    drawAct(v, streaming);
     if (a.content !== shownText) {
       shownText = a.content;
       if (a.content && md) {
         body.innerHTML = md.renderMarkdown(a.content);
         if (!streaming) md.enhance(body);
-      } else if (a.content) body.replaceChildren(el('p', { class: 'plain', text: a.content })); else body.replaceChildren(el('p', { class: 'thinking', text: streaming ? t('answer.thinking') : '' }));
+      } else if (a.content) body.replaceChildren(el('p', { class: 'plain', text: a.content }));
+      else body.replaceChildren();
     }
-    const stateKey = `${streaming}|${a.meta?.error ?? ''}|${a.meta?.stopped ?? ''}|${a.meta?.cost ?? ''}|${v.speak.available}|${v.speak.current}|${v.speak.state}|${v.speak.priceMsub}|${v.againMsub}|${JSON.stringify(v.free)}`;
+    const stateKey = `${streaming}|${a.meta?.error ?? ''}|${a.meta?.stopped ?? ''}|${a.meta?.cost ?? ''}|${v.againMsub}|${JSON.stringify(v.free)}|${!!a.content}`;
     if (stateKey === shownState) return;
     shownState = stateKey;
     if (!streaming && a.content && md) md.enhance(body);
     body.setAttribute('aria-busy', String(streaming));
     if (streaming) {
-      tiles.replaceChildren(tile('stopBtn', 'stop', t('answer.stop'), () => actions.stop()));
+      tiles.replaceChildren();
       say(note, '');
       errBox.hidden = true;
       return;
@@ -147,12 +267,7 @@ export function answer({ t, state, nav, actions, format }) {
       const p = priceLine(v.againMsub, v.talk.unit, v.free);
       return t(p.key, p);
     })();
-    tiles.replaceChildren(
-      ...speakTile(v),
-      ...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []),
-      tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice),
-      burnTile(),
-    );
+    tiles.replaceChildren(...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []), tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice), burnTile());
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
@@ -183,7 +298,25 @@ export function answer({ t, state, nav, actions, format }) {
         : a.meta?.error
           ? ''
           : (freeNote ?? (modelFree ? t('answer.freeModel') : cost ? t('answer.cost', { amount: cost }) : ''));
-    say(note, noteText, '', a.meta?.free || modelFree ? 'gift' : cost ? 'coins' : null);
+    // A stopped answer shows the stop mark, whatever it cost.
+    say(note, noteText, '', a.meta?.stopped ? 'stop' : a.meta?.free || modelFree ? 'gift' : cost ? 'coins' : null);
+  };
+  const showSpeaking = (v) => {
+    const on = v.speak.current && v.speak.state !== 'idle';
+    speaking.hidden = !on;
+    const loading = v.speak.state === 'loading';
+    const buffering = on && v.speak.state === 'buffering';
+    speakWhat.textContent = !on ? '' : buffering ? t('speak.buffering') : loading && v.speak.progress != null ? t('speak.loadingPct', { pct: v.speak.progress }) : t(loading ? 'speak.loading' : 'speak.speaking');
+    readyBar.hidden = !buffering;
+    if (buffering) {
+      const pct = v.speak.progress ?? 0;
+      readyBar.setAttribute('aria-valuenow', String(pct));
+      readyBar.setAttribute('aria-label', t('speak.buffering'));
+      readyBar.firstChild.style.width = `${pct}%`;
+    }
+    // The engine's voice sees the answer on its way to the model: never let Private only imply otherwise.
+    speakVia.hidden = !(on && v.speak.viaEngine);
+    say(speakVia, speakVia.hidden ? '' : t('speak.viaEngine'), '', 'eye');
   };
   update();
   // Once markdown is in, the answer is drawn again with it.
@@ -202,6 +335,8 @@ export function answer({ t, state, nav, actions, format }) {
     update,
     destroy: () => {
       gone = true;
+      clearInterval(timer);
+      burner?.destroy();
       hold.destroy?.();
     },
     focus: card,

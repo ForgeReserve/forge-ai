@@ -187,8 +187,12 @@ async function useModel(page: Page, id: string, privateOnly = false) {
   await page.goto(`${g.url}/v2/#/more/model`);
   await page.waitForSelector('[data-screen=model]');
   if ((await page.getAttribute('#privateOnly', 'aria-checked')) === 'true') await page.click('#privateOnly');
-  await page.click(`[data-model="${id}"]`);
-  if (privateOnly) await page.click('#privateOnly');
+  await page.click(`[data-model="${id}"]`); // the list closes on a choice
+  if (privateOnly) {
+    await page.goto(`${g.url}/v2/#/more/model`);
+    await page.waitForSelector('[data-screen=model]');
+    await page.click('#privateOnly');
+  }
   await page.goto(`${g.url}/v2/#/`);
   await page.waitForSelector('[data-screen=home]');
 }

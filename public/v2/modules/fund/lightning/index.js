@@ -17,16 +17,25 @@ export function create(inputs) {
       const invite = inviteField(inputs);
       const input = ui.el('input', { id: 'lnAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('fund.lightning.amountLabel') });
       const seg = ui.el('div', { class: 'seg', role: 'group', 'aria-label': t('fund.lightning.amountLabel') });
+      // The unit sits in the field itself: "$" before an amount in dollars, "sat" after one in sats.
+      const before = ui.el('span', { class: 'amount-unit before', 'aria-hidden': 'true' });
+      const after = ui.el('span', { class: 'amount-unit after', 'aria-hidden': 'true' });
+      const field = ui.el('div', { class: 'amount-field' }, before, input, after);
       const setUnit = (u) => {
         unit = u;
+        before.textContent = u === 'usd' ? '$' : '';
+        after.textContent = u === 'usd' ? '' : 'sat';
+        before.hidden = u !== 'usd';
+        after.hidden = u === 'usd';
+        input.setAttribute('aria-label', `${t('fund.lightning.amountLabel')} (${u === 'usd' ? 'USD' : 'sat'})`);
         input.value = format.plain(u === 'usd' ? 500 : 5000, u);
         input.inputMode = u === 'usd' ? 'decimal' : 'numeric';
         for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.unit === u));
       };
       if (units.length > 1) for (const u of units) seg.append(ui.el('button', { type: 'button', 'data-unit': u, text: u === 'usd' ? 'USD' : 'sat', onclick: () => setUnit(u) }));
       setUnit(unit);
-      const go = ui.el('button', { type: 'button', class: 'btn primary block', id: 'lnCreate' }, ui.icon('bolt', 20), ui.el('span', { text: t('fund.lightning.create') }));
-      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.el('label', { for: 'lnAmount', class: 'label', text: t('fund.lightning.amount') }), input, units.length > 1 ? seg : null, msg);
+      const go = ui.el('button', { type: 'button', class: 'btn primary block', id: 'lnCreate' }, ui.icon('qr', 20), ui.el('span', { text: t('fund.lightning.create') }));
+      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.el('label', { for: 'lnAmount', class: 'label', text: t('fund.lightning.amount') }), field, units.length > 1 ? seg : null, msg);
       const foot = ui.el('div', { class: 'foot' }, go);
       const node = ui.el('div', { class: 'fund-view' }, body, foot);
       let poller = null;

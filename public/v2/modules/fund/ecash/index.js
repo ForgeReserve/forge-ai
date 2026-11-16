@@ -13,7 +13,7 @@ export function create(inputs) {
     view({ done }) {
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
-      const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd' }, ui.icon('plus', 20), ui.el('span', { text: t('fund.ecash.add') }));
+      const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd' }, ui.icon('addMoney', 22), ui.el('span', { text: t('fund.ecash.add') }));
       const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click() });
       const mints = wallet.mints();
       add.addEventListener('click', async () => {

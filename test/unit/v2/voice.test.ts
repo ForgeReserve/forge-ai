@@ -143,6 +143,18 @@ describe('what is read aloud', () => {
     expect(SPEECH.speakable('Use `npm test` now.')).toBe('Use npm test now.');
   });
 
+  // Spoken answers (owner, 2026-11-16): whatever the model sends, no mark is read aloud.
+  it('never reads a mark, an address or an emoji, even from a model that ignored the voice rule', () => {
+    const md = '## 🌧️ **Rain** today\n\n* Take an *umbrella* 👍\n* See https://weather.test/today or <https://x.test>\n1. **Leave** at __8 am__.\n\n---\n> Stay dry ~~please~~\n• Done';
+    const said = SPEECH.speakable(md);
+    expect(said).toBe('Rain today. Take an umbrella. See or. Leave at 8 am. Stay dry please. Done.');
+    expect(said).not.toMatch(/[*#_~`|>\u{1F300}-\u{1FAFF}]|https?:/u);
+    // A star or hash left open is dropped, and a word with an underscore in it stays one word.
+    expect(SPEECH.speakable('**Note: the total is 5 # items')).toBe('Note: the total is 5 items.');
+    expect(SPEECH.speakable('Call it max_tokens.')).toBe('Call it max_tokens.');
+    expect(SPEECH.speakable('A 🇯🇲 flag and 👋🏽 wave.')).toBe('A flag and wave.');
+  });
+
   it('splits sentences and groups them into pieces no longer than the limit', () => {
     expect(SPEECH.sentences('One. Two? Three! Four')).toEqual(['One.', 'Two?', 'Three!', 'Four']);
     const pieces = SPEECH.chunk('First sentence here. Second one. Third sentence is a bit longer than the others.', 40);
@@ -847,5 +859,29 @@ describe('the talk controller', () => {
     await flush();
     expect(x.S.talk.error).toEqual({ key: 'talk.empty' });
     expect(x.asked).toEqual([]);
+  });
+});
+
+// Spoken answers (owner, 2026-11-16): a question asked by voice carries the voice instruction to the
+// model, on top of the usual prompt; a typed one, even right after a spoken one, carries the usual one.
+describe('the system prompt of a spoken question', () => {
+  it('adds the voice instruction to a voice question only', async () => {
+    const C: any = await import('../../../public/v2/core/conversation.js' as string);
+    const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
+    const opts = { base: en['system.prompt'], voice: en['system.prompt.voice'] };
+    const spoken = [{ role: 'user', content: 'Will it rain?', meta: { voice: true } }];
+    const api = C.apiMessages(spoken, { systemPrompt: C.systemPromptFor(spoken, opts) });
+    expect(api[0].role).toBe('system');
+    expect(api[0].content).toContain(en['system.prompt']);
+    expect(api[0].content).toContain('will hear your answer read aloud');
+    expect(api[0].content).toContain('under 60 words');
+    expect(en['system.prompt.voice']).not.toMatch(/[–—]/);
+    // A typed follow-up: the usual prompt alone.
+    const typed = [...spoken, { role: 'assistant', content: 'Yes, after noon.' }, { role: 'user', content: 'How much?' }];
+    const api2 = C.apiMessages(typed, { systemPrompt: C.systemPromptFor(typed, opts) });
+    expect(api2[0].content).toBe(en['system.prompt']);
+    expect(api2[0].content).not.toContain('read aloud');
+    // The longer prompt is counted in the request size the hold is worked out from.
+    expect(C.tokensOf(spoken, { systemPrompt: C.systemPromptFor(spoken, opts) })).toBeGreaterThan(C.tokensOf(spoken, { systemPrompt: en['system.prompt'] }));
   });
 });
