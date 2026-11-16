@@ -46,6 +46,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* Rings */
 .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; transition: opacity 200ms var(--ease); }
 .stage.faded { opacity: .35; pointer-events: none; }
+/* The home's rings keep their place: the space above them and the box under them share what is left
+   equally, so what comes and goes under the rings (the chips, the recording line) does not move the talk
+   button. The box takes more than its half only when its content needs it. */
+.home-stage { justify-content: flex-start; gap: 0; }
+.home-stage::before { content: ""; flex: 1 1 0; }
+.stage-under { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; min-width: 0; padding-top: 16px; }
 .rings { position: relative; flex: none; display: flex; align-items: center; justify-content: center; }
 .home-rings { width: min(336px, 100%); aspect-ratio: 1; }
 .answer-rings { width: 200px; height: 200px; align-self: center; }
