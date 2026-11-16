@@ -9,6 +9,9 @@ export const GEOMETRY = {
   home: { box: 336, outer: { r: 150, w: 12.7 }, inner: { r: 121, w: 12.7 }, button: 204 },
   answer: { box: 200, outer: { r: 87.5, w: 7.4 }, inner: { r: 69.5, w: 7.4 }, button: 112 },
   card: { box: 92, r: 37, w: 16 },
+  // Playful mode (docs/PLAYFUL.md): the same radii with the design's thick, flat bands.
+  playful: { box: 336, outer: { r: 150, w: 26 }, inner: { r: 121, w: 26 }, button: 204 },
+  playfulAnswer: { box: 200, outer: { r: 87.5, w: 15 }, inner: { r: 69.5, w: 15 }, button: 112 },
 };
 
 /** Context assumed when the engine does not say how much a model can hold. */

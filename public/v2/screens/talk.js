@@ -52,10 +52,11 @@ export function micGlyph(size) {
 
 /**
  * Makes `button` the talk button. size: 'big' (home) or 'small' (answer). Returns {info, update}:
- * `info` is the line shown under the rings while recording.
+ * `info` is the line shown under the rings while recording. A mode may draw its own microphone
+ * (glyph(px) returns the node) and name the button with its own words (word: a string key).
  */
-export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big' }) {
-  const mic = micGlyph(size === 'big' ? 70 : 36);
+export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big', glyph = micGlyph, word = 'home.talk' }) {
+  const mic = glyph(size === 'big' ? 70 : 36);
   const bars = el('span', { class: 'level-bars', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => el('span', { class: 'bar' })));
   const label = el('span', { class: 'talk-label' });
   button.replaceChildren(mic, bars, label);
@@ -158,7 +159,7 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
     mic.style.display = recording ? 'none' : '';
     bars.hidden = !recording;
     if (recording) [...bars.children].forEach((b, i) => b.style.setProperty('--h', String(Math.max(0.12, Math.min(1, tk.level * 1.6 * SHAPE[i])))));
-    label.textContent = recording ? (tk.inside ? t('talk.letGo') : t('talk.letGoCancel')) : tk.phase === 'sending' ? t('talk.sending') : t('home.talk');
+    label.textContent = recording ? (tk.inside ? t('talk.letGo') : t('talk.letGoCancel')) : tk.phase === 'sending' ? t('talk.sending') : t(word);
     hint.textContent = tk.available ? t('home.talkHintVoice') : t('home.talkHint');
     info.hidden = !recording;
     if (recording) {

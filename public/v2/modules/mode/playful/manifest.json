@@ -1,0 +1,12 @@
+{
+  "id": "forge.mode.playful",
+  "kind": "mode",
+  "version": "0.1.0",
+  "name": {
+    "en": "Playful"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

@@ -166,9 +166,12 @@ export function statusBar({ t, state, nav }) {
   return { node: el('div', { class: 'status-bar' }, pill, bal), update };
 }
 
-/** The bottom row: Type, Add, More. `open` is 'add' or 'more' while that sheet is open. */
-export function bottomRow({ t, nav, open = null }) {
-  const b = (name, ico, label) => {
+/**
+ * The bottom row: Type, Add, More. `open` is 'add' or 'more' while that sheet is open. A mode may give
+ * its own pictures (ico: {type, add, more}).
+ */
+export function bottomRow({ t, nav, open = null, ico = {} }) {
+  const b = (name, picture, label) => {
     const isOpen = open === name;
     return el(
       'button',
@@ -179,7 +182,7 @@ export function bottomRow({ t, nav, open = null }) {
         'aria-expanded': name === 'type' ? null : String(isOpen),
         onclick: () => (isOpen ? nav('home') : nav(name)),
       },
-      icon(ico, 20),
+      icon(ico[name] ?? picture, 20),
       el('span', { text: isOpen ? t('home.close') : label }),
     );
   };
