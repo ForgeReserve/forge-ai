@@ -313,10 +313,20 @@ describe('the natural voice', () => {
     expect(await page.textContent('#voiceOffer')).toMatch(/^Better voice6\d MB, onceGet$/);
     expect(await page.locator('#voiceOffer svg').count()).toBeGreaterThanOrEqual(3);
     // Get: the natural voice downloads now (its progress shows), then reads the answer.
+    const spokenBefore = await page.evaluate(() => (window as any).__spoken.length);
     await page.click('#voiceOfferGet');
     await page.waitForSelector('#voiceProgress', { timeout: 20_000 });
     expect(await page.isVisible('#voiceOffer')).toBe(false);
-    await expect.poll(() => played(page), { timeout: 60_000 }).toBeGreaterThan(5);
+    // Once downloaded, the natural voice reads the answer, unless this machine makes it slower than the
+    // fallback allows (core/voicepace.js): then this phone has a voice of its own, which reads it and says
+    // why. The CI runner is that slow and this Mac is not, so either way is right; which one is logged.
+    const slow = () => page.getByText('The natural voice is slow on this phone').count();
+    await expect.poll(async () => (await played(page)) > 5 || (await slow()) > 0, { timeout: 60_000 }).toBe(true);
+    if ((await played(page)) > 5) console.log('natural voice read the answer');
+    else {
+      console.log('the natural voice was too slow here: the phone voice read the answer');
+      await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(spokenBefore);
+    }
     expect(errors).toEqual([]);
     await ctx.close();
   }, 180_000);
