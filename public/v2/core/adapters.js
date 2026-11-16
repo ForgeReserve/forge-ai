@@ -40,10 +40,13 @@ function playbackSession() {
 const defaults = {
   camera: {
     available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
-    /** Starts reading QR codes (single or animated) from the camera into `video`. Returns {promise, stop}. */
-    async open(video, onProgress = () => {}) {
+    /**
+     * Starts reading QR codes (single or animated) from the camera into `video`. Returns {promise, stop}.
+     * It reads eCash and balance keys; with {any: true} it gives back whatever code it reads first.
+     */
+    async open(video, onProgress = () => {}, opts = {}) {
       await loadScript('/js/scan.js');
-      return window.ForgeScan.scan(video, onProgress);
+      return window.ForgeScan.scan(video, onProgress, opts);
     },
   },
 

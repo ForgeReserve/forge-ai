@@ -51,7 +51,8 @@ export function codeScanner({ t, scan, id, onCode, cls = 'btn sf-btn' }) {
     scanner.hidden = false;
     let j = null;
     try {
-      j = await scan.open(video);
+      // An invite code or an event link is no eCash: the scanner hands back any code it reads.
+      j = await scan.open(video, undefined, { any: true });
       if (opening !== mine) return j.stop();
       opening = null;
       job = j;

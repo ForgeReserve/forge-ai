@@ -22,8 +22,9 @@
     });
   }
 
-  /* Feeds scanned texts; result() once done() is true. */
-  function Assembler() { this.kind = null; this.inner = null; this.value = null; }
+  /* Feeds scanned texts; result() once done() is true. any: every code counts, for a caller that reads
+     the text itself (an invite code, an event link, a till's pay code). */
+  function Assembler(any) { this.kind = null; this.inner = null; this.value = null; this.any = !!any; }
   Assembler.prototype.add = function (raw) {
     var text = String(raw || "").trim();
     if (!text) return;
@@ -34,6 +35,8 @@
       if (!window.BCUR) throw new Error("ur decoder not loaded");
       if (this.kind !== "ur") { this.kind = "ur"; this.inner = window.BCUR.decoder(); }
       this.inner.add(text);
+    } else if (this.any) {
+      this.kind = "text"; this.value = text;
     }
   };
   Assembler.prototype.progress = function () { return this.value ? 1 : this.inner ? this.inner.progress() : 0; };
@@ -42,8 +45,8 @@
 
   /* Camera loop: open the rear camera into `video`, decode frames, call onProgress(0..1), and
      resolve with the scanned string. Returns {promise, stop}. */
-  function scan(video, onProgress) {
-    var stopped = false, stream = null, asm = new Assembler(), last = "", raf = 0;
+  function scan(video, onProgress, opts) {
+    var stopped = false, stream = null, asm = new Assembler(opts && opts.any), last = "", raf = 0;
     var canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
     var detector = null;
     var promise = new Promise(function (resolve, reject) {
