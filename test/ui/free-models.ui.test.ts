@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
+import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 import { wayOrder } from './ways.ts';
 
@@ -363,6 +364,39 @@ describe('Start free on the first run', () => {
       await plain.close();
     }
   }, 60_000);
+
+  it('Scan reads an invite code, and an event link gives its pass: the code lands in the field and Start free opens the balance', async () => {
+    const invite = createInvite(g);
+    // What the camera sees, and what the field should hold after the scan.
+    for (const [shown, want] of [
+      [invite, invite],
+      ['https://ai.forge-reserve.com/j#pass-AbCdEfGh1234_xyz', 'pass-AbCdEfGh1234_xyz'],
+    ]) {
+      const b = await chromium.launch({ channel: 'chrome', headless: true, args: cameraArgs(cameraFile([shown!])) });
+      try {
+        const ctx = await b.newContext(PHONE);
+        await ctx.grantPermissions(['camera'], { origin: g.url });
+        const page = await ctx.newPage();
+        const errors: string[] = [];
+        page.on('pageerror', (e) => errors.push(e.message));
+        page.on('console', (m) => m.type() === 'error' && !/40[123]/.test(m.text()) && errors.push(m.text()));
+        await page.goto(`${g.url}/v2/#/start/private`);
+        await page.waitForSelector('#introNext.free');
+        await page.click('#introNext');
+        await page.click('#introInviteScan');
+        await expect.poll(() => page.inputValue('#introInvite'), { timeout: 15_000 }).toBe(want);
+        // The scanner closes once it has read the code.
+        expect(await page.isVisible('#introInviteScanner')).toBe(false);
+        if (shown === invite) {
+          await page.click('#introStartFree');
+          await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('forge.balanceKey')))).toBe(true);
+        }
+        expect(errors).toEqual([]);
+      } finally {
+        await b.close();
+      }
+    }
+  }, 90_000);
 
   it('Scan tapped again while the camera is still opening closes the scanner, and never starts a second scan', async () => {
     // No service worker, so the scanner's script comes through the route below.

@@ -168,7 +168,7 @@ export function create(inputs) {
                 onclick: async () => {
                   box.hidden = false;
                   try {
-                    job = await scan.open(video);
+                    job = await scan.open(video, undefined, { any: true });
                     const text = await job.promise;
                     await use(text);
                   } catch {
