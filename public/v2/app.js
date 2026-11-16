@@ -106,9 +106,10 @@ const store = createStore({
 const S = store.S;
 
 // Inside the Android app (core/native.js): its share sheet, photos shared in, and Forge's engine as the
-// default, since the app's own origin (https://localhost) has no engine. null on the website.
+// default, since the app's own origin (https://localhost) has no engine. null on the website. The iPhone
+// app (capacitor://localhost) has Forge's engine as the default and the website's share sheet.
 const native = createNative();
-if (native) setAdapter('share', native.share);
+if (native?.share) setAdapter('share', native.share);
 
 const engineBase = () => S.settings.engine || defaultEngine(native);
 
@@ -1591,7 +1592,7 @@ async function joinOnce(pass) {
 
 /** The Android app was opened on an event link while it ran: the pass it holds is taken and used. */
 async function joinFromApp() {
-  const pass = await native?.join.take();
+  const pass = await native?.join?.take();
   if (pass) await joinWith(pass);
 }
 
@@ -1719,7 +1720,7 @@ function screenFor(name, params) {
         params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent' }[name] },
         filters: (registry.list('filter') ?? []).map((x) => x.instance),
         share: adapters.share,
-        ...(native ? { take: native.shareIn.take, forget: native.forget } : {}),
+        ...(native?.shareIn ? { take: native.shareIn.take, forget: native.forget } : {}),
       });
     default:
       return mode.home();
@@ -1778,7 +1779,7 @@ async function eraseAll() {
   await workerSettled();
   // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, the web
   // view's own cache, and the till a Fedimint card pays through (its address and token).
-  if (native) await Promise.all([native.shareIn.clear(), native.join.clear(), native.forget(), native.till.forget()]);
+  if (native) await Promise.all([native.shareIn?.clear(), native.join?.clear(), native.forget?.(), native.till?.forget()]);
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
@@ -1875,9 +1876,9 @@ async function start() {
     joinPass = passFrom(location.hash);
     history.replaceState(history.state, '', location.pathname + location.search);
   }
-  if (native) joinPass ??= await native.join.take();
+  if (native?.join) joinPass ??= await native.join.take();
   // In the Android app a photo shared in waits in the app (ForgeShareIn), and opens Share unseen.
-  if (native && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
+  if (native?.shareIn && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
   // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js). A
   // pass that will open a balance decides instead (joinWith).
   const joining = joinPlan({ pass: joinPass, hasKey: !!S.key }) === 'open';
@@ -1910,8 +1911,8 @@ async function start() {
   await stylesReady();
 
   addEventListener('popstate', onPop);
-  native?.shareIn.onShared(() => !erased && nav('photoShared'));
-  native?.join.onJoin(() => !erased && live && joinFromApp());
+  native?.shareIn?.onShared(() => !erased && nav('photoShared'));
+  native?.join?.onJoin(() => !erased && live && joinFromApp());
   addEventListener('online', () => {
     store.set({ online: true });
     retryMethods();
@@ -2036,7 +2037,7 @@ function busyForUpdate() {
 }
 
 function registerWorker() {
-  // The Android app has its files in the APK, so it needs no offline copy and no worker.
+  // The apps have their files on the phone, so they need no offline copy and no worker.
   if (erased || native || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
   const sw = navigator.serviceWorker;
   let storage = null;

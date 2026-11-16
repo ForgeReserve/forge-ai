@@ -161,7 +161,8 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 /* Type: sized to the visual viewport (core/viewport.js), so the field, the price line and Send stay above
    a phone keyboard. Without a visual viewport it is the full screen height. */
 .screen.type { position: fixed; top: var(--vv-top, 0); left: 50%; transform: translateX(-50%); width: min(520px, 100%); height: var(--vv-h, 100dvh); min-height: 0; overflow-y: auto; gap: 10px; }
-.type-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+/* Above a phone keyboard the body can be shorter than what it holds (the No funds box): it scrolls, so nothing runs under Send. */
+.type-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .type-body .field-input { flex: 1; min-height: 72px; resize: none; }
 .type-foot { display: flex; flex-direction: column; gap: 10px; }
 .price-line { margin: 0; display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }

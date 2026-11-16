@@ -38,6 +38,12 @@ describe('the Tap a card module', () => {
     expect(M.create({ t, nfc: { supported: () => true } }).usable()).toBe(true);
   });
 
+  it('is not listed in the iPhone app, which has no reader and no app to point to', () => {
+    const ios = M.create({ t, nfc: NATIVE.NO_READER });
+    expect(ios.available()).toBe(false);
+    expect(ios.usable()).toBe(false);
+  });
+
   it('decides where the eCash goes before the card signs', () => {
     expect(M.routeFor({ trusted: true }, { unit: 'sat', units: ['usd', 'sat'] })).toBe('topup');
     // A dollar balance cannot hold sats from the engine's own mint.

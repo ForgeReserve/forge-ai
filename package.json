@@ -17,6 +17,7 @@
     "test:ui": "vitest run test/ui",
     "test:ui:voice": "vitest run test/ui/phonon.ui.test.ts",
     "test:ui:linux": "scripts/ui-linux.sh",
+    "ios:web": "node scripts/ios-web.ts",
     "test:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run test/live",
     "mint:up": "docker compose -f docker-compose.test.yml up -d --wait",
     "mint:down": "docker compose -f docker-compose.test.yml down",
@@ -38,6 +39,7 @@
   "devDependencies": {
     "@capacitor/android": "6.2.3",
     "@capacitor/core": "6.2.3",
+    "@capacitor/ios": "6.2.3",
     "@types/node": "^26.6.6",
     "playwright-core": "^1.65.0",
     "tsx": "^4.23.15",

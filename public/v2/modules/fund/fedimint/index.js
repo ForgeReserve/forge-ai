@@ -92,8 +92,9 @@ export function create(inputs) {
     id: 'fedimint',
     group: 'unlinked',
     icon: 'card',
-    // The till pays the engine's Lightning invoice, so the row needs Lightning at the engine.
-    available: (methods) => !!methods?.lightning?.enabled,
+    // The till pays the engine's Lightning invoice, so the row needs Lightning at the engine. Not in the
+    // iPhone app, which has no reader yet (core/native.js NO_READER).
+    available: (methods) => nfc?.listed?.() !== false && !!methods?.lightning?.enabled,
     usable: () => ready(),
     /** The row's line: what is needed while no till is set. */
     sub: () => (ready() && !till.settings.get() ? 'fund.fedimint.subNoTill' : 'fund.fedimint.sub'),

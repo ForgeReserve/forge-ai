@@ -312,7 +312,8 @@ const defaults = {
 
   /**
    * Card taps. A web page cannot talk to these cards, so on the website there is no reader: supported()
-   * is false. The Android app puts its own in place (core/native.js nativeNfc). There, start(onCard)
+   * is false, and the card ways are still listed to point to the Android app. The Android app puts its
+   * own in place (core/native.js nativeNfc); the iPhone app one whose listed() is false (NO_READER). There, start(onCard)
    * calls onCard({transceive(bytes) -> bytes, close()}) for each card that comes into the field (null for
    * one that is not a smart card) and returns {started, stop()}.
    */

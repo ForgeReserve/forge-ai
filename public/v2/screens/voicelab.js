@@ -94,7 +94,7 @@ export function voiceLabScreen({ t, back, phonon, speaker, native = null, native
     nativeOn = nst?.available === true;
     env = {
       userAgent: navigator.userAgent,
-      app: native ? 'android' : 'web',
+      app: native?.platform ?? 'web',
       native: nst,
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       cores: navigator.hardwareConcurrency ?? null,

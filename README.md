@@ -328,6 +328,7 @@ First-load JavaScript is about 59 KB gzipped (page code and the Markdown librari
 - **Strings:** every word is in `public/v2/strings/en.js`, the printed notes' words too.
 - **Engine:** More, Engine sets the address questions and payments go to (HTTPS only; the engine must answer before the app switches). The website's default is its own engine.
 - **Android app:** `android/` wraps the v2 app in Capacitor, with its files in the APK, application id `com.forgereserve.ai`, Android 9 and up, no Google services. It takes photos shared from other apps into Share unseen and shares out through Android's share sheet. `scripts/android-release.sh` signs a release with the owner's keystore, and `/download` offers the APK set in `FORGE_APK_PATH` with its SHA-256. A second APK, **Forge Private Voice** (`com.forgereserve.ai.privatevoice`, the `privatevoice` flavour, 68 MB more), hears Hold to talk with its own speech to text on the phone (Moonshine tiny through sherpa-onnx), for GrapheneOS, which has no recogniser; `FORGE_APK_PRIVATE_VOICE_PATH` makes `/download` offer it beside the universal one. See [docs/ANDROID.md](docs/ANDROID.md) and [docs/VOICE.md](docs/VOICE.md).
+- **iPhone app:** `ios/` wraps the same bundle in Capacitor iOS, bundle id `com.forgereserve.ai`, iPhone only, iOS 16.4 and up. Only the status bar is native; sharing, voice and Hold to talk work as in Safari, and the card ways are left out. Built and walked in the Simulator only. See [docs/IOS.md](docs/IOS.md).
 
 ### Printing free question vouchers
 
