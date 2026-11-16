@@ -1,0 +1,12 @@
+{
+  "id": "org.example.mode.plain",
+  "kind": "mode",
+  "version": "1.0.0",
+  "name": {
+    "en": "Plain"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

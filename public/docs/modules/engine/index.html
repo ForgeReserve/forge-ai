@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Engine modules | Forge AI</title>
+<meta name="description" content="The gateway side: the supplier interface for AI models and the funding methods.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/engine.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine" aria-current="page">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#the-engine-s-parts">The engine&#39;s parts</a><ul>
+</ul></li>
+<li><a href="#suppliers">Suppliers</a><ul>
+<li><a href="#the-interface">The interface</a></li>
+<li><a href="#how-the-engine-builds-them">How the engine builds them</a></li>
+<li><a href="#configuring-one">Configuring one</a></li>
+<li><a href="#adding-a-supplier">Adding a supplier</a></li>
+</ul></li>
+<li><a href="#funding-methods">Funding methods</a><ul>
+<li><a href="#what-the-app-sees">What the app sees</a></li>
+<li><a href="#how-a-funding-runs">How a funding runs</a></li>
+<li><a href="#adding-a-funding-method">Adding a funding method</a></li>
+</ul></li>
+<li><a href="#running-the-engine-locally">Running the engine locally</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Engine modules</h1>
+<p>The engine is the gateway in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/src"><code>src/</code></a>: the server the app sends questions and payments to. It has modules too. Each part sits behind a small interface, so a different module can replace it without touching the rest. This page covers the two an outside contributor is most likely to add: a supplier, which brings AI models, and a funding method, which brings a way to pay. The public routes they serve are in the <a href="/docs/">API guide</a>.</p>
+<h2 id="the-engine-s-parts">The engine&#39;s parts<a class="anchor" href="#the-engine-s-parts" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Interface</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Suppliers</td>
+<td><code>Supplier</code>: <code>chat</code>, and optional <code>forwardEncrypted</code>, <code>transcribe</code>, <code>speech</code>, <code>attestation</code>, <code>hpkeKeys</code></td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/suppliers/types.ts"><code>src/suppliers/types.ts</code></a></td>
+</tr>
+<tr>
+<td>Funding methods</td>
+<td><code>FundingService</code> with <code>methods()</code> and a create step per method</td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/funding.ts"><code>src/funding.ts</code></a></td>
+</tr>
+<tr>
+<td>Cashu card relay</td>
+<td>The routes that carry a card&#39;s swap to its mint</td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/cardrelay.ts"><code>src/cardrelay.ts</code></a></td>
+</tr>
+<tr>
+<td>Mint policy</td>
+<td><code>vetForeignMint</code> in <code>FundingService</code>, and discovery of reviewed mints</td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/mint-discovery.ts"><code>src/mint-discovery.ts</code></a></td>
+</tr>
+<tr>
+<td>Pricing</td>
+<td>The model catalog&#39;s prices, with a markup</td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/pricing.ts"><code>src/pricing.ts</code></a></td>
+</tr>
+<tr>
+<td>Exchange rates</td>
+<td><code>RateSource</code>: <code>name</code> and <code>fetchBtcUsd(signal)</code></td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/rates.ts"><code>src/rates.ts</code></a></td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>One SQLite file</td>
+<td><a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/db.ts"><code>src/db.ts</code></a></td>
+</tr>
+</tbody></table></div>
+<h2 id="suppliers">Suppliers<a class="anchor" href="#suppliers" aria-label="Link to this section">#</a></h2>
+<p>A supplier is an AI provider the engine forwards questions to. The engine ships with three kinds: any OpenAI-compatible API (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/suppliers/openai.ts"><code>src/suppliers/openai.ts</code></a>), Tinfoil&#39;s enclaves, which also take encrypted requests (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/suppliers/tinfoil.ts"><code>src/suppliers/tinfoil.ts</code></a>), and an in-process mock for tests and local work (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/suppliers/mock.ts"><code>src/suppliers/mock.ts</code></a>).</p>
+<h3 id="the-interface">The interface<a class="anchor" href="#the-interface" aria-label="Link to this section">#</a></h3>
+<p>From <code>src/suppliers/types.ts</code>:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">export</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Supplier</span> {
+  <span class="hljs-keyword">readonly</span> <span class="hljs-attr">id</span>: <span class="hljs-built_in">string</span>;
+  <span class="hljs-keyword">readonly</span> <span class="hljs-attr">config</span>: <span class="hljs-title class_">SupplierConfig</span>;
+  <span class="hljs-comment">/** Plaintext OpenAI-compatible call. Returns the upstream Response (any status). */</span>
+  <span class="hljs-title function_">chat</span>(<span class="hljs-attr">call</span>: <span class="hljs-title class_">ChatCall</span>): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">Response</span>&gt;;
+  <span class="hljs-comment">/** Encrypted pass-through (EHBP). Only suppliers that support it implement this. */</span>
+  forwardEncrypted?(<span class="hljs-attr">call</span>: <span class="hljs-title class_">EncryptedCall</span>): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">EncryptedResponse</span>&gt;;
+  <span class="hljs-comment">/** OpenAI-compatible POST /audio/transcriptions. Returns the upstream Response (any status). */</span>
+  transcribe?(<span class="hljs-attr">call</span>: <span class="hljs-title class_">TranscribeCall</span>): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">Response</span>&gt;;
+  <span class="hljs-comment">/** OpenAI-compatible POST /audio/speech. Returns the upstream Response (any status). */</span>
+  speech?(<span class="hljs-attr">call</span>: <span class="hljs-title class_">SpeechCall</span>): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">Response</span>&gt;;
+  <span class="hljs-comment">/** Proxy for the supplier&#x27;s attestation bundle, if any. */</span>
+  attestation?(): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">Response</span>&gt;;
+  <span class="hljs-comment">/** Proxy for the enclave&#x27;s HPKE key config (/.well-known/hpke-keys), if any. */</span>
+  hpkeKeys?(): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-title class_">Response</span>&gt;;
+}</code></pre></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Member</th>
+<th>What the engine does with it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>The supplier&#39;s name in the catalog.</td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td>Its catalog entry (below).</td>
+</tr>
+<tr>
+<td><code>chat(call)</code></td>
+<td>Every plain question. <code>call</code> is <code>{model, body, stream, signal}</code>: <code>model</code> is the catalog entry, <code>body</code> the OpenAI request already rewritten for the upstream (its model name, its output limit, and <code>stream_options.include_usage</code> when streaming). Return the upstream&#39;s <code>Response</code> whatever its status. For a metered supplier the engine reads the usage from the answer (the last chunk of a stream) and charges for it.</td>
+</tr>
+<tr>
+<td><code>forwardEncrypted(call)</code></td>
+<td>Encrypted questions, which the engine passes on without reading. Only a supplier with it can serve them; without it the engine answers <code>400</code>.</td>
+</tr>
+<tr>
+<td><code>transcribe(call)</code>, <code>speech(call)</code></td>
+<td>Speech to text and text to speech. <code>call.audio</code> and <code>call.input</code> are held in memory only and never logged. Only a supplier with them can serve audio models.</td>
+</tr>
+<tr>
+<td><code>attestation()</code>, <code>hpkeKeys()</code></td>
+<td>Proxies for an enclave&#39;s attestation bundle and key config, served at <a href="/docs/#get-attestation"><code>GET /attestation</code></a> and <a href="/docs/#get-well-known-hpke-keys"><code>GET /.well-known/hpke-keys</code></a>.</td>
+</tr>
+</tbody></table></div>
+<p>Throw <code>UpstreamError(message, status)</code> from <code>types.ts</code> for a failure before any answer. The engine charges nothing for a request that fails before the answer starts.</p>
+<h3 id="how-the-engine-builds-them">How the engine builds them<a class="anchor" href="#how-the-engine-builds-them" aria-label="Link to this section">#</a></h3>
+<p><code>buildSuppliers</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/suppliers/index.ts"><code>src/suppliers/index.ts</code></a> makes one supplier per catalog entry, by its <code>type</code>:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> [id, s] <span class="hljs-keyword">of</span> <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">entries</span>(config.<span class="hljs-property">catalog</span>.<span class="hljs-property">suppliers</span>)) {
+  <span class="hljs-keyword">if</span> (s.<span class="hljs-property">type</span> === <span class="hljs-string">&#x27;mock&#x27;</span>) out.<span class="hljs-title function_">set</span>(id, <span class="hljs-keyword">new</span> <span class="hljs-title class_">MockSupplier</span>(id, s));
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (s.<span class="hljs-property">type</span> === <span class="hljs-string">&#x27;tinfoil&#x27;</span>) out.<span class="hljs-title function_">set</span>(id, <span class="hljs-keyword">new</span> <span class="hljs-title class_">TinfoilSupplier</span>(id, s, env, retry));
+  <span class="hljs-keyword">else</span> out.<span class="hljs-title function_">set</span>(id, <span class="hljs-keyword">new</span> <span class="hljs-title class_">OpenAISupplier</span>(id, s, env, retry));
+}</code></pre></div>
+<h3 id="configuring-one">Configuring one<a class="anchor" href="#configuring-one" aria-label="Link to this section">#</a></h3>
+<p>Suppliers and models live in the model catalog, a JSON file: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/config/models.json"><code>config/models.json</code></a>, or the file <code>FORGE_MODELS_FILE</code> names. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/config/models.dev.json"><code>config/models.dev.json</code></a> is the catalog for local work, with the mock supplier. <code>CatalogSchema</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/config.ts"><code>src/config.ts</code></a> checks it when the engine starts and refuses a bad one.</p>
+<p>A supplier entry:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>type</code></td>
+<td><code>openai</code>, <code>tinfoil</code> or <code>mock</code>.</td>
+</tr>
+<tr>
+<td><code>baseUrl</code></td>
+<td>The API&#39;s address, such as <code>https://inference.tinfoil.sh/v1</code>.</td>
+</tr>
+<tr>
+<td><code>apiKeyEnv</code></td>
+<td>The name of the environment variable that holds the API key. The key itself never goes in the catalog.</td>
+</tr>
+<tr>
+<td><code>tier</code></td>
+<td><code>enclave</code> for models in sealed hardware whose operator cannot read the questions, else <code>standard</code>. The app shows <code>enclave</code> models as Private and Private only allows only them.</td>
+</tr>
+<tr>
+<td><code>pricing</code></td>
+<td><code>metered</code> (charge the usage the supplier reports) or <code>flat</code> (charge a fixed schedule, <code>flat</code>).</td>
+</tr>
+<tr>
+<td><code>idempotencyHeader</code></td>
+<td>The header the supplier honours as an idempotency key, when it documents one. With it, failed requests are retried.</td>
+</tr>
+<tr>
+<td><code>allowPlaintext</code>, <code>enclaveHosts</code>, <code>enclaveUrl</code>, <code>attestationUrl</code>, <code>allowInsecureEnclave</code>, <code>web_search</code></td>
+<td>Tinfoil only: plain requests, the enclave hosts allowed, attestation, and the web search fee.</td>
+</tr>
+</tbody></table></div>
+<p>A model entry names its supplier and the model&#39;s name there:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock-echo&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;supplier&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;upstream&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock-echo&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;input_usd_per_mtok&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;output_usd_per_mtok&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">100</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;price_verified&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;max_output_tokens&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">512</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;uncensored&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p>Its other fields are <code>name</code>, <code>pricing</code> (<code>paid</code> or <code>free</code>, with <code>free_reason</code>), <code>context_length</code>, <code>vision</code>, <code>reasoning</code>, <code>reasoning_efforts</code>, <code>speed</code> and <code>web_search</code>. Prices are the supplier&#39;s cost per million tokens in US dollars; the engine adds <code>FORGE_MARKUP</code>. An audio model goes in the catalog&#39;s <code>audio</code> list, with <code>kind</code> (<code>transcription</code> or <code>speech</code>), its prices per request and per second or per thousand characters, <code>max_seconds</code> or <code>max_chars</code>, and <code>voices</code>.</p>
+<h3 id="adding-a-supplier">Adding a supplier<a class="anchor" href="#adding-a-supplier" aria-label="Link to this section">#</a></h3>
+<p>An OpenAI-compatible API needs no code: add a supplier entry with <code>&quot;type&quot;: &quot;openai&quot;</code>, its <code>baseUrl</code>, <code>apiKeyEnv</code> and <code>tier</code>, then its models, and set the key in that environment variable.</p>
+<p>Any other API needs a supplier of its own:</p>
+<ol>
+<li>Write a class that implements <code>Supplier</code> in a new file in <code>src/suppliers/</code>. <code>MockSupplier</code> is the shortest working one; <code>OpenAISupplier</code> shows retries and timeouts (<code>fetchWithRetry</code>). <code>chat</code> must return an OpenAI-compatible answer, a JSON body or an SSE stream that ends with a usage chunk, because the engine charges from it.</li>
+<li>Add its <code>type</code> to <code>SupplierSchema</code> in <code>src/config.ts</code> and a branch for it in <code>buildSuppliers</code>.</li>
+<li>Add tests in <code>test/unit/</code> with a stub upstream, and a catalog entry in a test catalog. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/tinfoil.test.ts"><code>test/unit/tinfoil.test.ts</code></a> tests a supplier this way.</li>
+<li>Mark a supplier <code>enclave</code> only when its models run in attested sealed hardware. The app tells people those models are private.</li>
+</ol>
+<h2 id="funding-methods">Funding methods<a class="anchor" href="#funding-methods" aria-label="Link to this section">#</a></h2>
+<p>A funding method turns a payment into credit on a balance. The engine has three, built into one service, <code>FundingService</code> in <code>src/funding.ts</code>:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">export</span> <span class="hljs-keyword">type</span> <span class="hljs-title class_">FundingMethod</span> = <span class="hljs-string">&#x27;lightning&#x27;</span> | <span class="hljs-string">&#x27;onchain&#x27;</span> | <span class="hljs-string">&#x27;foreign&#x27;</span>;
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">type</span> <span class="hljs-title class_">FundingState</span> = <span class="hljs-string">&#x27;quoted&#x27;</span> | <span class="hljs-string">&#x27;receiving&#x27;</span> | <span class="hljs-string">&#x27;melting&#x27;</span> | <span class="hljs-string">&#x27;pending&#x27;</span> | <span class="hljs-string">&#x27;minting&#x27;</span> | <span class="hljs-string">&#x27;done&#x27;</span> | <span class="hljs-string">&#x27;expired&#x27;</span> | <span class="hljs-string">&#x27;failed&#x27;</span> | <span class="hljs-string">&#x27;refunded&#x27;</span>;</code></pre></div>
+<p>Topping up with eCash from a mint the engine takes (<a href="/docs/#post-v1-wallet-topup"><code>POST /v1/wallet/topup</code></a>), the faucet&#39;s vouchers among them, needs no funding: the engine takes the token in the same request.</p>
+<h3 id="what-the-app-sees">What the app sees<a class="anchor" href="#what-the-app-sees" aria-label="Link to this section">#</a></h3>
+<p><code>methods()</code> returns what <a href="/docs/#get-v1-wallet-fund-methods"><code>GET /v1/wallet/fund/methods</code></a> sends, which every fund module&#39;s <code>available(methods)</code> reads:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">export</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">FundingMethods</span> {
+  <span class="hljs-attr">ecash</span>: { <span class="hljs-attr">mints</span>: <span class="hljs-built_in">string</span>[]; <span class="hljs-attr">units</span>: <span class="hljs-title class_">Unit</span>[] };
+  <span class="hljs-attr">lightning</span>: { <span class="hljs-attr">enabled</span>: <span class="hljs-built_in">boolean</span>; <span class="hljs-attr">units</span>: <span class="hljs-title class_">Unit</span>[]; <span class="hljs-attr">min</span>: <span class="hljs-title class_">Partial</span>&lt;<span class="hljs-title class_">Record</span>&lt;<span class="hljs-title class_">Unit</span>, <span class="hljs-built_in">number</span>&gt;&gt;; <span class="hljs-attr">max</span>: <span class="hljs-title class_">Partial</span>&lt;<span class="hljs-title class_">Record</span>&lt;<span class="hljs-title class_">Unit</span>, <span class="hljs-built_in">number</span>&gt;&gt; };
+  <span class="hljs-attr">onchain</span>: { <span class="hljs-attr">enabled</span>: <span class="hljs-built_in">boolean</span>; <span class="hljs-attr">unit</span>: <span class="hljs-string">&#x27;sat&#x27;</span>; <span class="hljs-attr">min_amount</span>: <span class="hljs-built_in">number</span>; <span class="hljs-attr">confirmations</span>: <span class="hljs-built_in">number</span> };
+  <span class="hljs-attr">foreign</span>: {
+    <span class="hljs-attr">enabled</span>: <span class="hljs-built_in">boolean</span>;
+    <span class="hljs-attr">max</span>: { <span class="hljs-attr">sat</span>: <span class="hljs-built_in">number</span>; <span class="hljs-attr">usd</span>: <span class="hljs-built_in">number</span> };
+    <span class="hljs-attr">policy</span>: <span class="hljs-title class_">ForeignPolicy</span>;
+    <span class="hljs-attr">mints</span>: <span class="hljs-built_in">string</span>[];
+    <span class="hljs-attr">mints_url</span>: <span class="hljs-built_in">string</span>;
+    <span class="hljs-comment">/** Mints that are not accepted may still be used after a warning, up to max (sat / cents). */</span>
+    <span class="hljs-attr">unlisted</span>: { <span class="hljs-attr">enabled</span>: <span class="hljs-built_in">boolean</span>; <span class="hljs-attr">max</span>: { <span class="hljs-attr">sat</span>: <span class="hljs-built_in">number</span>; <span class="hljs-attr">usd</span>: <span class="hljs-built_in">number</span> } };
+  };
+}</code></pre></div>
+<p>The route adds <code>invite_only</code>, <code>free_voice</code>, <code>free</code> (the faucet) and <code>open</code> (free models) from the engine&#39;s other settings. Each method is on or off from the engine&#39;s configuration (<code>FORGE_LIGHTNING_ENABLED</code>, <code>FORGE_ONCHAIN_ENABLED</code>, <code>FORGE_FOREIGN_ENABLED</code> and their limits, in the README&#39;s configuration table) and from what the engine&#39;s own mint offers.</p>
+<h3 id="how-a-funding-runs">How a funding runs<a class="anchor" href="#how-a-funding-runs" aria-label="Link to this section">#</a></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th><code>FundingService</code></th>
+<th>Route</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Create</td>
+<td><code>createLightning(accountId, unit, amount)</code>, <code>createOnchain(accountId)</code>, <code>quoteForeign(accountId, unit, token, lockPubkey, opts)</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-lightning"><code>POST /v1/wallet/fund/lightning</code></a>, <a href="/docs/#post-v1-wallet-fund-onchain"><code>.../onchain</code></a>, <a href="/docs/#post-v1-wallet-fund-foreign-quote"><code>.../foreign/quote</code></a></td>
+</tr>
+<tr>
+<td>Confirm</td>
+<td><code>confirmForeign(id, token, lockPubkey)</code></td>
+<td><a href="/docs/#post-v1-wallet-fund-foreign-confirm"><code>POST /v1/wallet/fund/foreign/confirm</code></a></td>
+</tr>
+<tr>
+<td>Move on</td>
+<td><code>advance(id)</code>: checks the mint and moves the funding to its next state, crediting the balance at <code>done</code></td>
+<td><a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>, and a background <code>tick()</code> every few seconds</td>
+</tr>
+<tr>
+<td>Show</td>
+<td><code>view(row)</code>: the funding as the routes send it</td>
+<td><a href="/docs/#get-v1-wallet-fund"><code>GET /v1/wallet/fund</code></a></td>
+</tr>
+</tbody></table></div>
+<p>Every funding is a row in the <code>fundings</code> table, written before the invoice or address is shown, so a restart picks it up where it was.</p>
+<h3 id="adding-a-funding-method">Adding a funding method<a class="anchor" href="#adding-a-funding-method" aria-label="Link to this section">#</a></h3>
+<p>The three methods are built inline in <code>FundingService</code>. Splitting them into one file per method behind one interface is planned (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/MODULES.md"><code>docs/MODULES.md</code></a>, What changes in the code) and not done. Today a new method means, in one pull request:</p>
+<ol>
+<li>A new <code>FundingMethod</code> value and a create step in <code>FundingService</code>, with its states in <code>advance</code>.</li>
+<li>A route in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/src/app.ts"><code>src/app.ts</code></a> and a field in <code>FundingMethods</code>, so the app can tell when it is on.</li>
+<li>The route documented in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/API.md"><code>docs/API.md</code></a> under a <code>### `POST /v1/...` </code> heading: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/api-docs.test.ts"><code>test/unit/api-docs.test.ts</code></a> fails while a public route is undocumented.</li>
+<li>Tests against the local test mints in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/e2e"><code>test/e2e/</code></a>, as <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/e2e/funding.e2e.test.ts"><code>test/e2e/funding.e2e.test.ts</code></a> does.</li>
+<li>A <a href="/docs/modules/fund">fund module</a> in the app that offers it.</li>
+</ol>
+<h2 id="running-the-engine-locally">Running the engine locally<a class="anchor" href="#running-the-engine-locally" aria-label="Link to this section">#</a></h2>
+<p><a href="/docs/modules/first-module#run-the-app-on-your-computer">Write your first module</a> shows how to run the engine with the mock supplier and the local test mints.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/engine.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

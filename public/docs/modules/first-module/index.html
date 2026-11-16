@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Write your first module | Forge AI</title>
+<meta name="description" content="Build a look and a photo filter for the Forge app, run the app on your computer, test them and send them as a pull request.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/first-module.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module" aria-current="page">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#what-you-need">What you need</a><ul>
+</ul></li>
+<li><a href="#run-the-app-on-your-computer">Run the app on your computer</a><ul>
+</ul></li>
+<li><a href="#how-a-module-reaches-the-app">How a module reaches the app</a><ul>
+</ul></li>
+<li><a href="#a-look-high-contrast">A look: High contrast</a><ul>
+<li><a href="#step-1-the-look-s-manifest">Step 1: the look&#39;s manifest</a></li>
+<li><a href="#step-2-the-colours">Step 2: the colours</a></li>
+<li><a href="#step-3-the-look-s-words">Step 3: the look&#39;s words</a></li>
+<li><a href="#step-4-list-the-look">Step 4: list the look</a></li>
+<li><a href="#step-5-the-preload-list">Step 5: the preload list</a></li>
+<li><a href="#step-6-see-the-look">Step 6: see the look</a></li>
+<li><a href="#step-7-test-the-look">Step 7: test the look</a></li>
+</ul></li>
+<li><a href="#a-filter-cover-a-date-stamp">A filter: cover a date stamp</a><ul>
+<li><a href="#step-1-the-filter-s-manifest">Step 1: the filter&#39;s manifest</a></li>
+<li><a href="#step-2-the-search">Step 2: the search</a></li>
+<li><a href="#step-3-list-the-filter">Step 3: list the filter</a></li>
+<li><a href="#step-4-see-the-filter">Step 4: see the filter</a></li>
+<li><a href="#step-5-test-the-search">Step 5: test the search</a></li>
+<li><a href="#step-6-test-the-filter-in-the-app">Step 6: test the filter in the app</a></li>
+</ul></li>
+<li><a href="#the-app-s-rules">The app&#39;s rules</a><ul>
+</ul></li>
+<li><a href="#check-everything">Check everything</a><ul>
+</ul></li>
+<li><a href="#send-it-as-a-pull-request">Send it as a pull request</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Write your first module</h1>
+<p>This guide builds two modules for the Forge app and ends with both working: a look, which is only colours, and a filter for Share unseen, which has real logic. Each step shows the files and the code. The finished modules are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples"><code>docs/modules/examples/</code></a>, and a test loads them through the app&#39;s registry, so the code on this page is the code that runs.</p>
+<p>Read <a href="/docs/modules/">the overview</a> first if you have not: it explains the manifest, the registry, and what a module can and cannot do today.</p>
+<h2 id="what-you-need">What you need<a class="anchor" href="#what-you-need" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>Node 22.18 or later, and pnpm.</li>
+<li>Docker, for the local test mints. A look or a filter does not need them; a fund module and the UI tests do.</li>
+<li>Chrome, for the UI tests.</li>
+<li>A fork of <a href="https://github.com/ForgeReserve/forge-ai">ForgeReserve/forge-ai</a> on GitHub.</li>
+</ul>
+<h2 id="run-the-app-on-your-computer">Run the app on your computer<a class="anchor" href="#run-the-app-on-your-computer" aria-label="Link to this section">#</a></h2>
+<p>The engine and the app are one Node server. It serves the app at <code>/v2/</code> with no build step: change a file, reload the page.</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">git <span class="hljs-built_in">clone</span> https://github.com/&lt;you&gt;/forge-ai.git
+<span class="hljs-built_in">cd</span> forge-ai
+pnpm install
+pnpm mint:up
+FORGE_TRUSTED_MINTS=http://127.0.0.1:3338 \
+FORGE_MODELS_FILE=config/models.dev.json \
+FORGE_DB_PATH=data/dev.db \
+FORGE_INVITE_ONLY=<span class="hljs-literal">false</span> \
+FORGE_FOREIGN_DISCOVERY_RELAYS= \
+pnpm start</code></pre></div>
+<p>Then open <code>http://localhost:8787/v2/</code>.</p>
+<p>What each part does:</p>
+<ul>
+<li><code>pnpm mint:up</code>: starts four local Cashu mints in Docker, on <code>127.0.0.1:3338</code> to <code>3341</code>. Their eCash is test money: invoices are paid on their own.</li>
+<li><code>FORGE_TRUSTED_MINTS</code>: the engine takes eCash from the first local mint.</li>
+<li><code>FORGE_MODELS_FILE</code>: the local catalog, with a mock model that answers without any API key.</li>
+<li><code>FORGE_DB_PATH</code>: the engine&#39;s database, in <code>data/</code>, which git ignores.</li>
+<li><code>FORGE_INVITE_ONLY=false</code>: new balances open without an invite code.</li>
+<li><code>FORGE_FOREIGN_DISCOVERY_RELAYS=</code>: the engine does not read public Nostr relays for other mints.</li>
+</ul>
+<p>To put test money on the app, make a token and paste it in Add money, eCash:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">pnpm test-token 50 usd</code></pre></div>
+<p>It prints a token worth 50 cents from the local mint. The mock models are Standard models, so turn Private only off in More, Choose a model, to ask them a question.</p>
+<p>One part of the app is not in the repository: the natural voice&#39;s files (about 68 MB), fetched with <code>node scripts/phonon-model.ts</code>; without them the browser logs one <code>404</code> for <code>/v2/voice/phonon/index.json</code> and the natural voice is not offered. The UI tests need them.</p>
+<h2 id="how-a-module-reaches-the-app">How a module reaches the app<a class="anchor" href="#how-a-module-reaches-the-app" aria-label="Link to this section">#</a></h2>
+<p>Every module, of any kind, takes the same five steps:</p>
+<ol>
+<li>A folder <code>public/v2/modules/&lt;kind&gt;/&lt;name&gt;/</code> with <code>manifest.json</code> and <code>index.js</code>.</li>
+<li>A line in <code>BUNDLED</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/registry.js"><code>public/v2/core/registry.js</code></a>.</li>
+<li>Its words in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/strings/en.js"><code>public/v2/strings/en.js</code></a>.</li>
+<li><code>node scripts/v2-preload.ts</code>, which adds its files to the page&#39;s preload list.</li>
+<li>Tests.</li>
+</ol>
+<h2 id="a-look-high-contrast">A look: High contrast<a class="anchor" href="#a-look-high-contrast" aria-label="Link to this section">#</a></h2>
+<p>A look is a set of colours. This one is black on white with dark colours and solid edges, for people who see poorly or use the phone in bright sun.</p>
+<h3 id="step-1-the-look-s-manifest">Step 1: the look&#39;s manifest<a class="anchor" href="#step-1-the-look-s-manifest" aria-label="Link to this section">#</a></h3>
+<p>Make the folder <code>public/v2/modules/look/contrast/</code> and put this <code>manifest.json</code> in it:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.look.contrast&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;look&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;High contrast&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p>The registry checks every field: <a href="/docs/modules/#the-manifest">the manifest rules</a>.</p>
+<h3 id="step-2-the-colours">Step 2: the colours<a class="anchor" href="#step-2-the-colours" aria-label="Link to this section">#</a></h3>
+<p><code>index.js</code> exports <code>create()</code>, which returns the look: its <code>id</code>, its <code>scheme</code> and its <code>tokens</code>. A look needs every token the bundled looks have; a token left out keeps the colour of the look shown before. Start from a copy of <code>public/v2/modules/look/light/index.js</code> and change the colours:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// A look module: black on white, with dark colours and solid edges, for people who see poorly or use</span>
+<span class="hljs-comment">// the phone in bright sun. Design tokens only; a look is handed no inputs.</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> tokens = <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">freeze</span>({
+  <span class="hljs-string">&quot;bg&quot;</span>: <span class="hljs-string">&quot;#FFFFFF&quot;</span>,
+  <span class="hljs-string">&quot;backdrop&quot;</span>: <span class="hljs-string">&quot;#E6E6E6&quot;</span>,
+  <span class="hljs-string">&quot;surface&quot;</span>: <span class="hljs-string">&quot;#FFFFFF&quot;</span>,
+  <span class="hljs-string">&quot;surface-2&quot;</span>: <span class="hljs-string">&quot;#F2F2F2&quot;</span>,
+  <span class="hljs-string">&quot;ink&quot;</span>: <span class="hljs-string">&quot;#000000&quot;</span>,
+  <span class="hljs-string">&quot;text-2&quot;</span>: <span class="hljs-string">&quot;#333333&quot;</span>,
+  <span class="hljs-string">&quot;text-body&quot;</span>: <span class="hljs-string">&quot;#111111&quot;</span>,
+  <span class="hljs-string">&quot;line&quot;</span>: <span class="hljs-string">&quot;#5C5C5C&quot;</span>,
+  <span class="hljs-string">&quot;line-2&quot;</span>: <span class="hljs-string">&quot;#3D3D3D&quot;</span>,
+  <span class="hljs-string">&quot;bar-track&quot;</span>: <span class="hljs-string">&quot;#D9D9D9&quot;</span>,
+  <span class="hljs-string">&quot;grabber&quot;</span>: <span class="hljs-string">&quot;#5C5C5C&quot;</span>,
+  <span class="hljs-string">&quot;dash&quot;</span>: <span class="hljs-string">&quot;#5C5C5C&quot;</span>,
+  <span class="hljs-string">&quot;teal&quot;</span>: <span class="hljs-string">&quot;#005A4E&quot;</span>,
+  <span class="hljs-string">&quot;teal-tint&quot;</span>: <span class="hljs-string">&quot;#E0F2EE&quot;</span>,
+  <span class="hljs-string">&quot;teal-line&quot;</span>: <span class="hljs-string">&quot;#005A4E&quot;</span>,
+  <span class="hljs-string">&quot;teal-bright&quot;</span>: <span class="hljs-string">&quot;#007A69&quot;</span>,
+  <span class="hljs-string">&quot;memory&quot;</span>: <span class="hljs-string">&quot;#006B5D&quot;</span>,
+  <span class="hljs-string">&quot;memory-track&quot;</span>: <span class="hljs-string">&quot;#CDEBE4&quot;</span>,
+  <span class="hljs-string">&quot;gold&quot;</span>: <span class="hljs-string">&quot;#8A5A00&quot;</span>,
+  <span class="hljs-string">&quot;gold-track&quot;</span>: <span class="hljs-string">&quot;#F0DDB0&quot;</span>,
+  <span class="hljs-string">&quot;gold-ink&quot;</span>: <span class="hljs-string">&quot;#6B4500&quot;</span>,
+  <span class="hljs-string">&quot;gold-line&quot;</span>: <span class="hljs-string">&quot;#6B4500&quot;</span>,
+  <span class="hljs-string">&quot;gold-callout&quot;</span>: <span class="hljs-string">&quot;#8A5A00&quot;</span>,
+  <span class="hljs-string">&quot;gold-tint&quot;</span>: <span class="hljs-string">&quot;#FBEFD2&quot;</span>,
+  <span class="hljs-string">&quot;gold-free&quot;</span>: <span class="hljs-string">&quot;#C99A3A&quot;</span>,
+  <span class="hljs-string">&quot;danger&quot;</span>: <span class="hljs-string">&quot;#A1200F&quot;</span>,
+  <span class="hljs-string">&quot;danger-tint&quot;</span>: <span class="hljs-string">&quot;#FDE3DF&quot;</span>,
+  <span class="hljs-string">&quot;danger-ink&quot;</span>: <span class="hljs-string">&quot;#FFFFFF&quot;</span>,
+  <span class="hljs-string">&quot;low&quot;</span>: <span class="hljs-string">&quot;#A14A00&quot;</span>,
+  <span class="hljs-string">&quot;low-tint&quot;</span>: <span class="hljs-string">&quot;#FDEBD9&quot;</span>,
+  <span class="hljs-string">&quot;low-line&quot;</span>: <span class="hljs-string">&quot;#A14A00&quot;</span>,
+  <span class="hljs-string">&quot;low-ink&quot;</span>: <span class="hljs-string">&quot;#6E2E00&quot;</span>,
+  <span class="hljs-string">&quot;blue&quot;</span>: <span class="hljs-string">&quot;#003F9E&quot;</span>,
+  <span class="hljs-string">&quot;blue-tint&quot;</span>: <span class="hljs-string">&quot;#DCE8FF&quot;</span>,
+  <span class="hljs-string">&quot;violet&quot;</span>: <span class="hljs-string">&quot;#3F1FA8&quot;</span>,
+  <span class="hljs-string">&quot;violet-tint&quot;</span>: <span class="hljs-string">&quot;#E8E0FF&quot;</span>,
+  <span class="hljs-string">&quot;green&quot;</span>: <span class="hljs-string">&quot;#2F5200&quot;</span>,
+  <span class="hljs-string">&quot;green-tint&quot;</span>: <span class="hljs-string">&quot;#E5F2CC&quot;</span>,
+  <span class="hljs-string">&quot;primary&quot;</span>: <span class="hljs-string">&quot;#000000&quot;</span>,
+  <span class="hljs-string">&quot;primary-ink&quot;</span>: <span class="hljs-string">&quot;#FFFFFF&quot;</span>,
+  <span class="hljs-string">&quot;talk&quot;</span>: <span class="hljs-string">&quot;#000000&quot;</span>,
+  <span class="hljs-string">&quot;talk-ink&quot;</span>: <span class="hljs-string">&quot;#FFFFFF&quot;</span>,
+  <span class="hljs-string">&quot;shadow-raised&quot;</span>: <span class="hljs-string">&quot;inset 0 0 0 2px #000000&quot;</span>,
+  <span class="hljs-string">&quot;shadow-raised-sm&quot;</span>: <span class="hljs-string">&quot;inset 0 0 0 2px #000000&quot;</span>,
+  <span class="hljs-string">&quot;shadow-primary&quot;</span>: <span class="hljs-string">&quot;inset 0 -4px 0 rgba(255,255,255,0.25)&quot;</span>,
+  <span class="hljs-string">&quot;shadow-talk&quot;</span>: <span class="hljs-string">&quot;inset 0 -6px 0 rgba(255,255,255,0.25)&quot;</span>,
+  <span class="hljs-string">&quot;shadow-float&quot;</span>: <span class="hljs-string">&quot;0 0 0 2px #000000, 0 12px 40px rgba(0,0,0,0.25)&quot;</span>,
+  <span class="hljs-string">&quot;focus&quot;</span>: <span class="hljs-string">&quot;#003F9E&quot;</span>
+});
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">return</span> { <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;contrast&#x27;</span>, <span class="hljs-attr">scheme</span>: <span class="hljs-string">&#x27;light&#x27;</span>, tokens };
+}</code></pre></div>
+<p><a href="/docs/modules/look#tokens">Look modules</a> lists what each token colours.</p>
+<h3 id="step-3-the-look-s-words">Step 3: the look&#39;s words<a class="anchor" href="#step-3-the-look-s-words" aria-label="Link to this section">#</a></h3>
+<p>More, Mode and look shows each look&#39;s name and a short line, from the string table. Add two lines to <code>public/v2/strings/en.js</code>, after the Midnight look&#39;s:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js">  <span class="hljs-string">&#x27;look.contrast.name&#x27;</span>: <span class="hljs-string">&#x27;High contrast&#x27;</span>,
+  <span class="hljs-string">&#x27;look.contrast.sub&#x27;</span>: <span class="hljs-string">&#x27;Black on white, for easy reading.&#x27;</span>,</code></pre></div>
+<h3 id="step-4-list-the-look">Step 4: list the look<a class="anchor" href="#step-4-list-the-look" aria-label="Link to this section">#</a></h3>
+<p>Add the look to <code>BUNDLED</code> in <code>public/v2/core/registry.js</code>, after Midnight. The app lists looks in this order:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> <span class="hljs-variable constant_">BUNDLED</span> = [
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;look&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;light&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;look&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;dark&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;look&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;midnight&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;look&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;contrast&#x27;</span> },</code></pre></div>
+<h3 id="step-5-the-preload-list">Step 5: the preload list<a class="anchor" href="#step-5-the-preload-list" aria-label="Link to this section">#</a></h3>
+<p>The page names every bundled file up front so the browser fetches them at once. Write the list again:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">node scripts/v2-preload.ts</code></pre></div>
+<p>It prints <code>public/v2/index.html: preload list written</code>, and <code>test/unit/v2/preload.test.ts</code> fails until you do.</p>
+<h3 id="step-6-see-the-look">Step 6: see the look<a class="anchor" href="#step-6-see-the-look" aria-label="Link to this section">#</a></h3>
+<p>Reload <code>http://localhost:8787/v2/</code>, open More, then Mode and look, and tap High contrast. The whole app turns black on white at once, and stays so after a reload.</p>
+<h3 id="step-7-test-the-look">Step 7: test the look<a class="anchor" href="#step-7-test-the-look" aria-label="Link to this section">#</a></h3>
+<p>Add <code>test/unit/v2/contrast-look.test.ts</code>. It checks the two things a look can get wrong: a missing token, and text too faint to read.</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">import</span> { describe, expect, it } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;vitest&#x27;</span>;
+
+<span class="hljs-comment">// The High contrast look (public/v2/modules/look/contrast/): every token Midnight has, and text that</span>
+<span class="hljs-comment">// keeps a contrast of 4.5 to 1 or more on its ground.</span>
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">load</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params"><span class="hljs-attr">id</span>: <span class="hljs-built_in">string</span></span>) =&gt; ((<span class="hljs-keyword">await</span> <span class="hljs-keyword">import</span>(<span class="hljs-string">`../../../public/v2/modules/look/<span class="hljs-subst">${id}</span>/index.js`</span> <span class="hljs-keyword">as</span> <span class="hljs-built_in">string</span>)) <span class="hljs-keyword">as</span> <span class="hljs-built_in">any</span>).<span class="hljs-title function_">create</span>();
+<span class="hljs-keyword">const</span> look = <span class="hljs-keyword">await</span> <span class="hljs-title function_">load</span>(<span class="hljs-string">&#x27;contrast&#x27;</span>);
+<span class="hljs-keyword">const</span> midnight = <span class="hljs-keyword">await</span> <span class="hljs-title function_">load</span>(<span class="hljs-string">&#x27;midnight&#x27;</span>);
+
+<span class="hljs-comment">/** The WCAG contrast of two #RRGGBB colours. */</span>
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">contrast</span>(<span class="hljs-params"><span class="hljs-attr">a</span>: <span class="hljs-built_in">string</span>, <span class="hljs-attr">b</span>: <span class="hljs-built_in">string</span></span>): <span class="hljs-built_in">number</span> {
+  <span class="hljs-keyword">const</span> <span class="hljs-title function_">lum</span> = (<span class="hljs-params"><span class="hljs-attr">hex</span>: <span class="hljs-built_in">string</span></span>) =&gt; {
+    <span class="hljs-keyword">const</span> c = [<span class="hljs-number">1</span>, <span class="hljs-number">3</span>, <span class="hljs-number">5</span>].<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">i</span>) =&gt;</span> <span class="hljs-built_in">parseInt</span>(hex.<span class="hljs-title function_">slice</span>(i, i + <span class="hljs-number">2</span>), <span class="hljs-number">16</span>) / <span class="hljs-number">255</span>).<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">v</span>) =&gt;</span> (v &lt;= <span class="hljs-number">0.03928</span> ? v / <span class="hljs-number">12.92</span> : ((v + <span class="hljs-number">0.055</span>) / <span class="hljs-number">1.055</span>) ** <span class="hljs-number">2.4</span>));
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0.2126</span> * c[<span class="hljs-number">0</span>]! + <span class="hljs-number">0.7152</span> * c[<span class="hljs-number">1</span>]! + <span class="hljs-number">0.0722</span> * c[<span class="hljs-number">2</span>]!;
+  };
+  <span class="hljs-keyword">const</span> [x, y] = [<span class="hljs-title function_">lum</span>(a), <span class="hljs-title function_">lum</span>(b)].<span class="hljs-title function_">sort</span>(<span class="hljs-function">(<span class="hljs-params">p, q</span>) =&gt;</span> q - p);
+  <span class="hljs-keyword">return</span> (x! + <span class="hljs-number">0.05</span>) / (y! + <span class="hljs-number">0.05</span>);
+}
+
+<span class="hljs-title function_">describe</span>(<span class="hljs-string">&#x27;High contrast look&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;has every token Midnight has&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+    <span class="hljs-title function_">expect</span>(look.<span class="hljs-property">id</span>).<span class="hljs-title function_">toBe</span>(<span class="hljs-string">&#x27;contrast&#x27;</span>);
+    <span class="hljs-title function_">expect</span>(<span class="hljs-title class_">Object</span>.<span class="hljs-title function_">keys</span>(look.<span class="hljs-property">tokens</span>).<span class="hljs-title function_">sort</span>()).<span class="hljs-title function_">toEqual</span>(<span class="hljs-title class_">Object</span>.<span class="hljs-title function_">keys</span>(midnight.<span class="hljs-property">tokens</span>).<span class="hljs-title function_">sort</span>());
+  });
+
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;keeps text at 4.5 to 1 or more&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+    <span class="hljs-keyword">const</span> t = look.<span class="hljs-property">tokens</span>;
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> [fg, bg] <span class="hljs-keyword">of</span> [[<span class="hljs-string">&#x27;ink&#x27;</span>, <span class="hljs-string">&#x27;bg&#x27;</span>], [<span class="hljs-string">&#x27;text-2&#x27;</span>, <span class="hljs-string">&#x27;bg&#x27;</span>], [<span class="hljs-string">&#x27;text-body&#x27;</span>, <span class="hljs-string">&#x27;surface&#x27;</span>], [<span class="hljs-string">&#x27;primary-ink&#x27;</span>, <span class="hljs-string">&#x27;primary&#x27;</span>], [<span class="hljs-string">&#x27;talk-ink&#x27;</span>, <span class="hljs-string">&#x27;talk&#x27;</span>], [<span class="hljs-string">&#x27;teal&#x27;</span>, <span class="hljs-string">&#x27;teal-tint&#x27;</span>], [<span class="hljs-string">&#x27;danger&#x27;</span>, <span class="hljs-string">&#x27;surface&#x27;</span>]] <span class="hljs-keyword">as</span> <span class="hljs-title class_">Array</span>&lt;[<span class="hljs-built_in">string</span>, <span class="hljs-built_in">string</span>]&gt;) {
+      <span class="hljs-title function_">expect</span>(<span class="hljs-title function_">contrast</span>(t[fg], t[bg]), <span class="hljs-string">`<span class="hljs-subst">${fg}</span> on <span class="hljs-subst">${bg}</span>`</span>).<span class="hljs-title function_">toBeGreaterThanOrEqual</span>(<span class="hljs-number">4.5</span>);
+    }
+  });
+});</code></pre></div>
+<p>Run it on its own, then the whole unit suite:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">pnpm <span class="hljs-built_in">exec</span> vitest run <span class="hljs-built_in">test</span>/unit/v2/contrast-look.test.ts
+pnpm -s <span class="hljs-built_in">test</span></code></pre></div>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/copy-and-looks.test.ts"><code>test/unit/v2/copy-and-looks.test.ts</code></a> runs the same checks on the bundled looks, with more pairs of colours.</p>
+<h2 id="a-filter-cover-a-date-stamp">A filter: cover a date stamp<a class="anchor" href="#a-filter-cover-a-date-stamp" aria-label="Link to this section">#</a></h2>
+<p>Some cameras print the date in orange in a corner of every photo. A date can say where a person was and when. This filter finds that orange in the bottom right corner and covers it with a solid block, on the phone, before the photo is shared.</p>
+<h3 id="step-1-the-filter-s-manifest">Step 1: the filter&#39;s manifest<a class="anchor" href="#step-1-the-filter-s-manifest" aria-label="Link to this section">#</a></h3>
+<p>Make the folder <code>public/v2/modules/filter/date-stamp/</code> with this <code>manifest.json</code>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.filter.date-stamp&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;filter&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Cover a date stamp&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<h3 id="step-2-the-search">Step 2: the search<a class="anchor" href="#step-2-the-search" aria-label="Link to this section">#</a></h3>
+<p><code>analyse(photo)</code> gets the photo&#39;s pixels and returns the blocks to paint. The search is a plain function, <code>findStamp</code>, exported so a test can call it without a browser.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// A filter for Share unseen: covers a date stamp, the orange date and time some cameras print in the</span>
+<span class="hljs-comment">// bottom right corner of a photo. It reads only the photo&#x27;s pixels, on the phone. Its blocks are of the</span>
+<span class="hljs-comment">// kind &#x27;writing&#x27;, so the app counts them with the other writing it covered.</span>
+
+<span class="hljs-comment">/** The part of the photo searched: the right half of its bottom quarter. */</span>
+<span class="hljs-keyword">const</span> <span class="hljs-variable constant_">AREA</span> = { <span class="hljs-attr">left</span>: <span class="hljs-number">0.5</span>, <span class="hljs-attr">top</span>: <span class="hljs-number">0.75</span> };
+
+<span class="hljs-comment">/** True for the orange of a printed date stamp: strong red, some green, little blue. */</span>
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">stampColour</span> = (<span class="hljs-params">r, g, b</span>) =&gt; r &gt;= <span class="hljs-number">200</span> &amp;&amp; g &gt;= <span class="hljs-number">70</span> &amp;&amp; g &lt;= <span class="hljs-number">190</span> &amp;&amp; b &lt;= <span class="hljs-number">90</span> &amp;&amp; r - b &gt;= <span class="hljs-number">140</span>;
+
+<span class="hljs-comment">/**
+ * Where a date stamp is, as a box in the photo&#x27;s pixels ({x, y, w, h}), or null. `pixels` is the photo&#x27;s
+ * ImageData: {width, height, data}, with four bytes (red, green, blue, alpha) per pixel.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">findStamp</span>(<span class="hljs-params">{ width, height, data }</span>) {
+  <span class="hljs-keyword">const</span> x0 = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">floor</span>(width * <span class="hljs-variable constant_">AREA</span>.<span class="hljs-property">left</span>);
+  <span class="hljs-keyword">const</span> y0 = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">floor</span>(height * <span class="hljs-variable constant_">AREA</span>.<span class="hljs-property">top</span>);
+  <span class="hljs-keyword">let</span> n = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">let</span> left = width;
+  <span class="hljs-keyword">let</span> top = height;
+  <span class="hljs-keyword">let</span> right = -<span class="hljs-number">1</span>;
+  <span class="hljs-keyword">let</span> bottom = -<span class="hljs-number">1</span>;
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> y = y0; y &lt; height; y++) {
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> x = x0; x &lt; width; x++) {
+      <span class="hljs-keyword">const</span> i = (y * width + x) * <span class="hljs-number">4</span>;
+      <span class="hljs-keyword">if</span> (!<span class="hljs-title function_">stampColour</span>(data[i], data[i + <span class="hljs-number">1</span>], data[i + <span class="hljs-number">2</span>])) <span class="hljs-keyword">continue</span>;
+      n++;
+      left = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">min</span>(left, x);
+      right = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">max</span>(right, x);
+      top = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">min</span>(top, y);
+      bottom = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">max</span>(bottom, y);
+    }
+  }
+  <span class="hljs-keyword">const</span> area = (width - x0) * (height - y0);
+  <span class="hljs-comment">// Too few orange pixels to be writing, or so many that they are part of the picture (a sunset).</span>
+  <span class="hljs-keyword">if</span> (n &lt; <span class="hljs-number">30</span> || n &gt; area * <span class="hljs-number">0.25</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+  <span class="hljs-comment">// Orange spread over most of the corner is part of the picture too.</span>
+  <span class="hljs-keyword">if</span> ((right - left + <span class="hljs-number">1</span>) * (bottom - top + <span class="hljs-number">1</span>) &gt; area * <span class="hljs-number">0.5</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+  <span class="hljs-keyword">const</span> pad = <span class="hljs-number">6</span>;
+  <span class="hljs-keyword">const</span> x = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">max</span>(<span class="hljs-number">0</span>, left - pad);
+  <span class="hljs-keyword">const</span> y = <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">max</span>(<span class="hljs-number">0</span>, top - pad);
+  <span class="hljs-keyword">return</span> { x, y, <span class="hljs-attr">w</span>: <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">min</span>(width, right + <span class="hljs-number">1</span> + pad) - x, <span class="hljs-attr">h</span>: <span class="hljs-title class_">Math</span>.<span class="hljs-title function_">min</span>(height, bottom + <span class="hljs-number">1</span> + pad) - y };
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">return</span> {
+    <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;date-stamp&#x27;</span>,
+    <span class="hljs-attr">what</span>: <span class="hljs-string">&#x27;writing&#x27;</span>,
+    <span class="hljs-keyword">async</span> <span class="hljs-title function_">analyse</span>(<span class="hljs-params">photo</span>) {
+      <span class="hljs-keyword">const</span> box = <span class="hljs-title function_">findStamp</span>(photo.<span class="hljs-property">pixels</span>);
+      <span class="hljs-keyword">return</span> { <span class="hljs-attr">covers</span>: box ? [{ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;writing&#x27;</span>, ...box }] : [] };
+    },
+  };
+}</code></pre></div>
+<p><code>what: &#39;writing&#39;</code> puts it among the writing checks: its step on the screen reads &quot;Writing and numbers&quot;, and the list of changes counts its block with the writing covered. It needs no new words. <a href="/docs/modules/filter#analyse-photo">Filter modules</a> has the whole interface.</p>
+<h3 id="step-3-list-the-filter">Step 3: list the filter<a class="anchor" href="#step-3-list-the-filter" aria-label="Link to this section">#</a></h3>
+<p>Add it to <code>BUNDLED</code> after the other filters. Share unseen runs them in this order:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js">  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;strip-details&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;cover-faces&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;cover-numbers&#x27;</span> },
+  { <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;date-stamp&#x27;</span> },</code></pre></div>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts"><code>test/unit/v2/photo.test.ts</code></a> checks the list of bundled filters. Add <code>&#39;date-stamp&#39;</code> to the list it expects in &quot;run in the order hidden details, faces, writing, and are handed only t&quot;. Then write the preload list again:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">node scripts/v2-preload.ts</code></pre></div>
+<h3 id="step-4-see-the-filter">Step 4: see the filter<a class="anchor" href="#step-4-see-the-filter" aria-label="Link to this section">#</a></h3>
+<p>Reload the app and open Add, then Photo. Pick a photo with an orange date in the corner. The screen shows each check as it runs, then the photo with a black block over the date, and &quot;Writing and numbers&quot; in the list of changes. Tap the block to take it away; tap the photo to add one.</p>
+<h3 id="step-5-test-the-search">Step 5: test the search<a class="anchor" href="#step-5-test-the-search" aria-label="Link to this section">#</a></h3>
+<p>Add <code>test/unit/v2/date-stamp.test.ts</code>. It runs in Node, with pictures made of plain numbers, and runs the filter through the app&#39;s own chain, <code>runFilters</code> from <code>public/v2/core/filters.js</code>:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">import</span> { resolve } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;node:path&#x27;</span>;
+<span class="hljs-keyword">import</span> { describe, expect, it } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;vitest&#x27;</span>;
+
+<span class="hljs-comment">// The date stamp filter (public/v2/modules/filter/date-stamp/): it finds orange marks in the bottom right</span>
+<span class="hljs-comment">// corner, nothing in a plain picture, and runs in the app&#x27;s own filter chain.</span>
+<span class="hljs-keyword">const</span> <span class="hljs-variable constant_">V2</span> = <span class="hljs-title function_">resolve</span>(<span class="hljs-keyword">import</span>.<span class="hljs-property">meta</span>.<span class="hljs-property">dirname</span>, <span class="hljs-string">&#x27;../../../public/v2&#x27;</span>);
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">imp</span> = (<span class="hljs-params"><span class="hljs-attr">p</span>: <span class="hljs-built_in">string</span></span>) =&gt; <span class="hljs-keyword">import</span>(<span class="hljs-title function_">resolve</span>(<span class="hljs-variable constant_">V2</span>, p) <span class="hljs-keyword">as</span> <span class="hljs-built_in">string</span>) <span class="hljs-keyword">as</span> <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-built_in">any</span>&gt;;
+<span class="hljs-keyword">const</span> { create, findStamp } = <span class="hljs-keyword">await</span> <span class="hljs-title function_">imp</span>(<span class="hljs-string">&#x27;modules/filter/date-stamp/index.js&#x27;</span>);
+<span class="hljs-keyword">const</span> { runFilters } = <span class="hljs-keyword">await</span> <span class="hljs-title function_">imp</span>(<span class="hljs-string">&#x27;core/filters.js&#x27;</span>);
+
+<span class="hljs-comment">/** A 400 by 300 picture in one dark blue, as ImageData is shaped. */</span>
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">picture</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">const</span> width = <span class="hljs-number">400</span>;
+  <span class="hljs-keyword">const</span> height = <span class="hljs-number">300</span>;
+  <span class="hljs-keyword">const</span> data = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Uint8ClampedArray</span>(width * height * <span class="hljs-number">4</span>);
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; width * height; i++) data.<span class="hljs-title function_">set</span>([<span class="hljs-number">40</span>, <span class="hljs-number">60</span>, <span class="hljs-number">90</span>, <span class="hljs-number">255</span>], i * <span class="hljs-number">4</span>);
+  <span class="hljs-keyword">return</span> { width, height, data };
+}
+
+<span class="hljs-comment">/** Paints orange strokes where a camera prints the date. */</span>
+<span class="hljs-keyword">function</span> stamp&lt;T <span class="hljs-keyword">extends</span> { <span class="hljs-attr">width</span>: <span class="hljs-built_in">number</span>; <span class="hljs-attr">data</span>: <span class="hljs-title class_">Uint8ClampedArray</span> }&gt;(<span class="hljs-attr">img</span>: T): T {
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> y = <span class="hljs-number">260</span>; y &lt; <span class="hljs-number">280</span>; y++) <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> x = <span class="hljs-number">300</span>; x &lt; <span class="hljs-number">380</span>; x++) <span class="hljs-keyword">if</span> (x % <span class="hljs-number">8</span> &lt; <span class="hljs-number">4</span>) img.<span class="hljs-property">data</span>.<span class="hljs-title function_">set</span>([<span class="hljs-number">255</span>, <span class="hljs-number">140</span>, <span class="hljs-number">30</span>, <span class="hljs-number">255</span>], (y * img.<span class="hljs-property">width</span> + x) * <span class="hljs-number">4</span>);
+  <span class="hljs-keyword">return</span> img;
+}
+
+<span class="hljs-title function_">describe</span>(<span class="hljs-string">&#x27;date stamp filter&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;finds nothing in a plain picture&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+    <span class="hljs-title function_">expect</span>(<span class="hljs-title function_">findStamp</span>(<span class="hljs-title function_">picture</span>())).<span class="hljs-title function_">toBeNull</span>();
+  });
+
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;finds the stamp, with a margin of 6 pixels&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+    <span class="hljs-title function_">expect</span>(<span class="hljs-title function_">findStamp</span>(<span class="hljs-title function_">stamp</span>(<span class="hljs-title function_">picture</span>()))).<span class="hljs-title function_">toEqual</span>({ <span class="hljs-attr">x</span>: <span class="hljs-number">298</span>, <span class="hljs-attr">y</span>: <span class="hljs-number">254</span>, <span class="hljs-attr">w</span>: <span class="hljs-number">88</span>, <span class="hljs-attr">h</span>: <span class="hljs-number">32</span> });
+  });
+
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;runs in the filter chain as a check for writing&#x27;</span>, <span class="hljs-title function_">async</span> () =&gt; {
+    <span class="hljs-keyword">const</span> img = <span class="hljs-title function_">stamp</span>(<span class="hljs-title function_">picture</span>());
+    <span class="hljs-keyword">const</span> { steps, covers } = <span class="hljs-keyword">await</span> <span class="hljs-title function_">runFilters</span>([<span class="hljs-title function_">create</span>()], { <span class="hljs-attr">width</span>: img.<span class="hljs-property">width</span>, <span class="hljs-attr">height</span>: img.<span class="hljs-property">height</span>, <span class="hljs-attr">pixels</span>: img });
+    <span class="hljs-title function_">expect</span>(steps[<span class="hljs-number">0</span>]).<span class="hljs-title function_">toMatchObject</span>({ <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;date-stamp&#x27;</span>, <span class="hljs-attr">what</span>: <span class="hljs-string">&#x27;writing&#x27;</span>, <span class="hljs-attr">ok</span>: <span class="hljs-literal">true</span>, <span class="hljs-attr">count</span>: <span class="hljs-number">1</span> });
+    <span class="hljs-title function_">expect</span>(covers[<span class="hljs-number">0</span>]).<span class="hljs-title function_">toMatchObject</span>({ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;writing&#x27;</span>, <span class="hljs-attr">x</span>: <span class="hljs-number">298</span>, <span class="hljs-attr">y</span>: <span class="hljs-number">254</span>, <span class="hljs-attr">w</span>: <span class="hljs-number">88</span>, <span class="hljs-attr">h</span>: <span class="hljs-number">32</span>, <span class="hljs-attr">by</span>: <span class="hljs-string">&#x27;date-stamp&#x27;</span> });
+  });
+});</code></pre></div>
+<h3 id="step-6-test-the-filter-in-the-app">Step 6: test the filter in the app<a class="anchor" href="#step-6-test-the-filter-in-the-app" aria-label="Link to this section">#</a></h3>
+<p>UI tests open the app in Chrome on a phone-sized screen, against a gateway the test starts on its own. Add <code>test/ui/date-stamp.ui.test.ts</code>:</p>
+<div class="code"><span class="lang">ts</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-ts"><span class="hljs-keyword">import</span> { afterAll, beforeAll, describe, expect, it } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;vitest&#x27;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-keyword">type</span> <span class="hljs-title class_">Browser</span>, chromium } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;playwright-core&#x27;</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-keyword">type</span> <span class="hljs-title class_">Gateway</span>, startGateway } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;../e2e/helpers.ts&#x27;</span>;
+<span class="hljs-keyword">import</span> { pastFirstRun } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;./firstrun-seen.ts&#x27;</span>;
+
+<span class="hljs-comment">// Share unseen with the date stamp filter, in Chrome on a phone-sized screen, against a local gateway.</span>
+<span class="hljs-keyword">let</span> <span class="hljs-attr">g</span>: <span class="hljs-title class_">Gateway</span>;
+<span class="hljs-keyword">let</span> <span class="hljs-attr">browser</span>: <span class="hljs-title class_">Browser</span>;
+
+<span class="hljs-title function_">beforeAll</span>(<span class="hljs-title function_">async</span> () =&gt; {
+  g = <span class="hljs-keyword">await</span> <span class="hljs-title function_">startGateway</span>();
+  browser = <span class="hljs-keyword">await</span> chromium.<span class="hljs-title function_">launch</span>({ <span class="hljs-attr">channel</span>: <span class="hljs-string">&#x27;chrome&#x27;</span>, <span class="hljs-attr">headless</span>: <span class="hljs-literal">true</span> });
+}, <span class="hljs-number">60_000</span>);
+
+<span class="hljs-title function_">afterAll</span>(<span class="hljs-title function_">async</span> () =&gt; {
+  <span class="hljs-keyword">await</span> browser?.<span class="hljs-title function_">close</span>();
+  <span class="hljs-keyword">await</span> g?.<span class="hljs-title function_">close</span>();
+});
+
+<span class="hljs-title function_">describe</span>(<span class="hljs-string">&#x27;Share unseen&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-title function_">it</span>(<span class="hljs-string">&#x27;covers an orange date stamp&#x27;</span>, <span class="hljs-title function_">async</span> () =&gt; {
+    <span class="hljs-keyword">const</span> ctx = <span class="hljs-keyword">await</span> browser.<span class="hljs-title function_">newContext</span>({ <span class="hljs-attr">viewport</span>: { <span class="hljs-attr">width</span>: <span class="hljs-number">412</span>, <span class="hljs-attr">height</span>: <span class="hljs-number">915</span> }, <span class="hljs-attr">isMobile</span>: <span class="hljs-literal">true</span>, <span class="hljs-attr">hasTouch</span>: <span class="hljs-literal">true</span> });
+    <span class="hljs-keyword">await</span> <span class="hljs-title function_">pastFirstRun</span>(ctx);
+    <span class="hljs-keyword">const</span> page = <span class="hljs-keyword">await</span> ctx.<span class="hljs-title function_">newPage</span>();
+    <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">goto</span>(<span class="hljs-string">`<span class="hljs-subst">${g.url}</span>/v2/#/photo`</span>);
+    <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">waitForSelector</span>(<span class="hljs-string">&#x27;#photoFile&#x27;</span>, { <span class="hljs-attr">state</span>: <span class="hljs-string">&#x27;attached&#x27;</span> });
+    <span class="hljs-comment">// A photo made in the page: a plain sky with one orange mark where cameras print the date. The writing</span>
+    <span class="hljs-comment">// filter does not take one mark for writing, so the block over it comes from the date stamp filter.</span>
+    <span class="hljs-keyword">const</span> jpeg = <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">evaluate</span>(<span class="hljs-function">() =&gt;</span> {
+      <span class="hljs-keyword">const</span> c = <span class="hljs-variable language_">document</span>.<span class="hljs-title function_">createElement</span>(<span class="hljs-string">&#x27;canvas&#x27;</span>);
+      c.<span class="hljs-property">width</span> = <span class="hljs-number">1200</span>;
+      c.<span class="hljs-property">height</span> = <span class="hljs-number">900</span>;
+      <span class="hljs-keyword">const</span> g = c.<span class="hljs-title function_">getContext</span>(<span class="hljs-string">&#x27;2d&#x27;</span>)!;
+      g.<span class="hljs-property">fillStyle</span> = <span class="hljs-string">&#x27;#5A7FA8&#x27;</span>;
+      g.<span class="hljs-title function_">fillRect</span>(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">1200</span>, <span class="hljs-number">900</span>);
+      g.<span class="hljs-property">fillStyle</span> = <span class="hljs-string">&#x27;#FF8C1A&#x27;</span>;
+      g.<span class="hljs-title function_">fillRect</span>(<span class="hljs-number">900</span>, <span class="hljs-number">820</span>, <span class="hljs-number">200</span>, <span class="hljs-number">40</span>);
+      <span class="hljs-keyword">return</span> c.<span class="hljs-title function_">toDataURL</span>(<span class="hljs-string">&#x27;image/jpeg&#x27;</span>, <span class="hljs-number">0.92</span>).<span class="hljs-title function_">split</span>(<span class="hljs-string">&#x27;,&#x27;</span>)[<span class="hljs-number">1</span>]!;
+    });
+    <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">setInputFiles</span>(<span class="hljs-string">&#x27;#photoFile&#x27;</span>, { <span class="hljs-attr">name</span>: <span class="hljs-string">&#x27;stamp.jpg&#x27;</span>, <span class="hljs-attr">mimeType</span>: <span class="hljs-string">&#x27;image/jpeg&#x27;</span>, <span class="hljs-attr">buffer</span>: <span class="hljs-title class_">Buffer</span>.<span class="hljs-title function_">from</span>(jpeg, <span class="hljs-string">&#x27;base64&#x27;</span>) });
+    <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">waitForSelector</span>(<span class="hljs-string">&#x27;#photoChanges&#x27;</span>);
+    <span class="hljs-keyword">const</span> boxes = <span class="hljs-keyword">await</span> page.<span class="hljs-title function_">locator</span>(<span class="hljs-string">&#x27;#coverLayer .cover-box[data-kind=writing]&#x27;</span>).<span class="hljs-title function_">evaluateAll</span>(<span class="hljs-function">(<span class="hljs-params">n</span>) =&gt;</span> n.<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">x</span>) =&gt;</span> x.<span class="hljs-title function_">getAttribute</span>(<span class="hljs-string">&#x27;data-box&#x27;</span>)!.<span class="hljs-title function_">split</span>(<span class="hljs-string">&#x27;,&#x27;</span>).<span class="hljs-title function_">map</span>(<span class="hljs-title class_">Number</span>)));
+    <span class="hljs-title function_">expect</span>(boxes).<span class="hljs-title function_">toHaveLength</span>(<span class="hljs-number">1</span>);
+    <span class="hljs-keyword">const</span> [x, y, w, h] = boxes[<span class="hljs-number">0</span>] <span class="hljs-keyword">as</span> [<span class="hljs-built_in">number</span>, <span class="hljs-built_in">number</span>, <span class="hljs-built_in">number</span>, <span class="hljs-built_in">number</span>];
+    <span class="hljs-comment">// The block holds the whole mark.</span>
+    <span class="hljs-title function_">expect</span>(x).<span class="hljs-title function_">toBeLessThanOrEqual</span>(<span class="hljs-number">900</span>);
+    <span class="hljs-title function_">expect</span>(y).<span class="hljs-title function_">toBeLessThanOrEqual</span>(<span class="hljs-number">820</span>);
+    <span class="hljs-title function_">expect</span>(x + w).<span class="hljs-title function_">toBeGreaterThanOrEqual</span>(<span class="hljs-number">1100</span>);
+    <span class="hljs-title function_">expect</span>(y + h).<span class="hljs-title function_">toBeGreaterThanOrEqual</span>(<span class="hljs-number">860</span>);
+    <span class="hljs-keyword">await</span> ctx.<span class="hljs-title function_">close</span>();
+  });
+});</code></pre></div>
+<p>Run it with Chrome installed:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">pnpm <span class="hljs-built_in">exec</span> vitest run <span class="hljs-built_in">test</span>/ui/date-stamp.ui.test.ts</code></pre></div>
+<p>Before you send a change to how the app looks, run the UI tests the way the repository&#39;s CI does, in Linux: <code>pnpm test:ui:linux test/ui/date-stamp.ui.test.ts</code> (it needs Docker with host networking on, and the local mints).</p>
+<h2 id="the-app-s-rules">The app&#39;s rules<a class="anchor" href="#the-app-s-rules" aria-label="Link to this section">#</a></h2>
+<p>The app is made for people who may read poorly and who cannot afford to be linked to a question. A module follows the same rules as the app&#39;s own screens; reviewers check them.</p>
+<ul>
+<li><strong>Icons first, few words.</strong> Every button has an icon and one word or a short label. No more than eight words in a row on screen: anything longer goes behind a round info button, where Listen reads it too. <code>ui.say</code> and <code>ui.msgLine</code> write a message headline first and put the rest behind that button for you. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/literacy.ui.test.ts"><code>test/ui/literacy.ui.test.ts</code></a> checks the app&#39;s screens this way.</li>
+<li><strong>Big targets.</strong> Everything a person taps is at least 48 by 48 pixels. The app&#39;s <code>.btn</code> and <code>.round</code> classes are.</li>
+<li><strong>All words in the string table.</strong> Every word comes from <code>public/v2/strings/en.js</code> through <code>t(key)</code>, so the app can be translated. Use named slots such as <code>{amount}</code>; never build a sentence from pieces.</li>
+<li><strong>Copy.</strong> Spell it eCash. No long dashes. Short plain sentences. Never say something is private, hidden or deleted unless the code makes it so. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/copy-and-looks.test.ts"><code>test/unit/v2/copy-and-looks.test.ts</code></a> checks the string table.</li>
+<li><strong>No network of your own.</strong> Reach the engine only through the inputs the app hands your kind. Load your own files (a model, a font) from the app&#39;s own address, as Cover faces does. Nothing goes to another site: no fonts, scripts or analytics from elsewhere.</li>
+<li><strong>Never lose money.</strong> A fund module stores eCash on the phone before it sends it, and shows the price before anything is paid. <a href="/docs/modules/fund#errors">Fund modules</a> explains how.</li>
+<li><strong>Every look, every phone.</strong> Check your screens in Midnight, Light and Dark, at 360 pixels wide, and with reduced motion.</li>
+<li><strong>New libraries.</strong> Vendor a file with its licence in <code>public/vendor/licenses/</code>, or add a package under the repository&#39;s pnpm rule: a version at least three days old.</li>
+</ul>
+<h2 id="check-everything">Check everything<a class="anchor" href="#check-everything" aria-label="Link to this section">#</a></h2>
+<p>Run these before you send the pull request. All must pass.</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">pnpm -s typecheck
+pnpm -s <span class="hljs-built_in">test</span>
+node scripts/v2-preload.ts
+pnpm <span class="hljs-built_in">test</span>:ui:linux</code></pre></div>
+<h2 id="send-it-as-a-pull-request">Send it as a pull request<a class="anchor" href="#send-it-as-a-pull-request" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>Make a branch in your fork: <code>git switch -c look-contrast</code>.</li>
+<li>Commit the module&#39;s folder, its line in <code>BUNDLED</code>, its words, the preload list in <code>public/v2/index.html</code> and its tests. One module a pull request.</li>
+<li>Push the branch to your fork and open a pull request against <code>main</code> of <a href="https://github.com/ForgeReserve/forge-ai">ForgeReserve/forge-ai</a>.</li>
+<li>In the description say what the module does, on which phones and browsers you tried it, and what you could not try. Add screenshots of its screens in Midnight and in Light.</li>
+</ol>
+<p>A module joins the app as part of the bundled set, reviewed like any other code. Until signed modules and their sandbox are built, there is no other way in: see <a href="/docs/modules/#what-is-built-and-what-is-designed">What is built and what is designed</a>.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/first-module.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

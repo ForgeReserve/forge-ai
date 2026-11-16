@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Filter modules | Forge AI</title>
+<meta name="description" content="Reference for filter modules: the photo checks of Share unseen.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/modules/filter.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">Modules</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav class="pages" aria-label="Pages">
+<p class="pages-head">API</p><ul>
+<li><a href="/docs/">API guide</a></li>
+</ul>
+<p class="pages-head">Modules</p><ul>
+<li><a href="/docs/modules/">Overview</a></li>
+<li><a href="/docs/modules/first-module">Write your first module</a></li>
+<li><a href="/docs/modules/list">Module list</a></li>
+<li><a href="/docs/modules/fund">Fund</a></li>
+<li><a href="/docs/modules/voice-in">Voice in</a></li>
+<li><a href="/docs/modules/voice-out">Voice out</a></li>
+<li><a href="/docs/modules/filter" aria-current="page">Filter</a></li>
+<li><a href="/docs/modules/look">Look</a></li>
+<li><a href="/docs/modules/mode">Mode</a></li>
+<li><a href="/docs/modules/engine">Engine modules</a></li>
+</ul>
+</nav>
+<nav aria-label="Sections"><ul>
+<li><a href="#manifest">Manifest</a><ul>
+</ul></li>
+<li><a href="#inputs">Inputs</a><ul>
+<li><a href="#t"><code>t</code></a></li>
+</ul></li>
+<li><a href="#the-photo">The photo</a><ul>
+</ul></li>
+<li><a href="#what-a-filter-provides">What a filter provides</a><ul>
+<li><a href="#id"><code>id</code></a></li>
+<li><a href="#what"><code>what</code></a></li>
+<li><a href="#analyse-photo"><code>analyse(photo)</code></a></li>
+<li><a href="#finish-bytes"><code>finish(bytes)</code></a></li>
+<li><a href="#prepare"><code>prepare()</code></a></li>
+</ul></li>
+<li><a href="#lifecycle">Lifecycle</a><ul>
+</ul></li>
+<li><a href="#errors">Errors</a><ul>
+</ul></li>
+<li><a href="#how-the-app-lists-and-orders-them">How the app lists and orders them</a><ul>
+</ul></li>
+<li><a href="#platforms">Platforms</a><ul>
+</ul></li>
+<li><a href="#a-minimal-filter">A minimal filter</a><ul>
+</ul></li>
+<li><a href="#tests">Tests</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Filter modules</h1>
+<p>A filter module checks a photo in Share unseen before it is shared. It finds hidden details in the file to take out, or places in the picture to cover with solid blocks: faces, writing, a number plate. Every filter runs on every photo, one after another, on the phone.</p>
+<p>Read <a href="/docs/modules/">the overview</a> first. The bundled filters are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter"><code>public/v2/modules/filter/</code></a> and described in the <a href="/docs/modules/list#filter">module list</a>. <a href="/docs/modules/first-module#a-filter-cover-a-date-stamp">Write your first module</a> builds one step by step.</p>
+<h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
+<p><code>kind</code> is <code>filter</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>.</p>
+<h2 id="inputs">Inputs<a class="anchor" href="#inputs" aria-label="Link to this section">#</a></h2>
+<p>A filter gets one input when it is made. The photo itself comes later, with each call to <code>analyse</code>.</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-attr">filter</span>: [<span class="hljs-string">&#x27;t&#x27;</span>],</code></pre></div>
+<h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
+<p><code>t(key, params)</code> returns the text for <code>key</code> from the string table. See <a href="/docs/modules/fund#t">Fund</a>.</p>
+<h2 id="the-photo">The photo<a class="anchor" href="#the-photo" aria-label="Link to this section">#</a></h2>
+<p><code>analyse(photo)</code> gets the photo the person picked or took, opened on the phone by <code>openPhoto</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/photo.js"><code>public/v2/core/photo.js</code></a>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>width</code>, <code>height</code></td>
+<td>The size of the working picture, at most 2,048 pixels on its long side, turned the way the camera meant.</td>
+</tr>
+<tr>
+<td><code>canvas</code></td>
+<td>A canvas holding the working picture.</td>
+</tr>
+<tr>
+<td><code>pixels</code></td>
+<td>Its <code>ImageData</code>: <code>{width, height, data}</code>, four bytes per pixel (red, green, blue, alpha).</td>
+</tr>
+<tr>
+<td><code>bytes</code></td>
+<td>The original file as a <code>Uint8Array</code>. Only the hidden details filter reads it.</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>The file&#39;s type, such as <code>image/jpeg</code>.</td>
+</tr>
+</tbody></table></div>
+<p>Blocks are in the working picture&#39;s pixels.</p>
+<h2 id="what-a-filter-provides">What a filter provides<a class="anchor" href="#what-a-filter-provides" aria-label="Link to this section">#</a></h2>
+<h3 id="id"><code>id</code><a class="anchor" href="#id" aria-label="Link to this section">#</a></h3>
+<p>Required. A short name such as <code>&#39;cover-faces&#39;</code>. Each step row on the screen and each block a filter makes carries it.</p>
+<h3 id="what"><code>what</code><a class="anchor" href="#what" aria-label="Link to this section">#</a></h3>
+<p>Required. What the filter looks for: <code>&#39;details&#39;</code>, <code>&#39;faces&#39;</code> or <code>&#39;writing&#39;</code>. The step row&#39;s words are the string <code>photo.step.&lt;what&gt;</code>, and the list of changes groups blocks by it. A new value needs its own <code>photo.step.&lt;what&gt;</code> string, and its blocks are painted and left out of the list of changes; use one of the three.</p>
+<h3 id="analyse-photo"><code>analyse(photo)</code><a class="anchor" href="#analyse-photo" aria-label="Link to this section">#</a></h3>
+<p>Required. Looks at the photo and resolves:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>covers</code></td>
+<td>Blocks to paint: <code>[{x, y, w, h, kind}]</code> in the photo&#39;s pixels. <code>kind</code> is <code>&#39;face&#39;</code> or <code>&#39;writing&#39;</code>; without it a <code>faces</code> filter&#39;s blocks are faces and any other&#39;s are writing. Blocks are cut to the photo and empty ones dropped.</td>
+</tr>
+<tr>
+<td><code>found</code></td>
+<td>For a <code>details</code> filter: the hidden details the original file holds, from <code>&#39;location&#39;</code>, <code>&#39;device&#39;</code>, <code>&#39;time&#39;</code>, <code>&#39;thumbnail&#39;</code> and <code>&#39;other&#39;</code>.</td>
+</tr>
+<tr>
+<td><code>known</code></td>
+<td>For a <code>details</code> filter: <code>false</code> when it could not read the file&#39;s details at all.</td>
+</tr>
+</tbody></table></div>
+<p>Resolve <code>{covers: []}</code> when there is nothing to cover.</p>
+<h3 id="finish-bytes"><code>finish(bytes)</code><a class="anchor" href="#finish-bytes" aria-label="Link to this section">#</a></h3>
+<p>Optional. After the person picks Share, Save or Ask about it, the app draws the photo again with every block painted solid, makes a new JPEG, and hands its bytes to each filter&#39;s <code>finish</code> in turn. Return the cleaned bytes (a <code>Uint8Array</code>, or a promise of one). The hidden details filter takes every place for notes out of the JPEG here.</p>
+<h3 id="prepare"><code>prepare()</code><a class="anchor" href="#prepare" aria-label="Link to this section">#</a></h3>
+<p>Optional. Starts slow work early, such as loading a model. The app calls it once, shortly after Share unseen opens, and ignores its errors. Return a promise.</p>
+<h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>The registry calls <code>create(inputs)</code> once when the app starts.</li>
+<li>Share unseen opens: after 300 ms the app calls <code>prepare()</code> on every filter that has one.</li>
+<li>The person picks or takes a photo, or shares one in from another app. The app runs <code>analyse(photo)</code> on each filter in turn, through <code>runFilters</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js"><code>public/v2/core/filters.js</code></a>, and shows each step as it runs.</li>
+<li>The person sees the photo before and after, with every block. They can take blocks away and add their own.</li>
+<li>Share, Save or Ask about it: the app paints the blocks into a new JPEG, calls each <code>finish(bytes)</code> in turn, and checks that the file holds no hidden details before it goes anywhere.</li>
+</ol>
+<h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>A filter that throws, rejects or takes longer than 45 seconds is listed as not checked, and the chain goes on with the next one. Before the photo is shared the person is told a check did not run and taps again to share anyway.</li>
+<li>A <code>finish</code> that throws stops the photo from being shared; the app shows its <code>photo.shareFailed</code> words.</li>
+<li>The app checks the final file with <code>leftDetails</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/photometa.js"><code>public/v2/core/photometa.js</code></a>. A <code>finish</code> that puts details back makes the app refuse the file with its <code>photo.unsafe</code> words.</li>
+</ul>
+<h2 id="how-the-app-lists-and-orders-them">How the app lists and orders them<a class="anchor" href="#how-the-app-lists-and-orders-them" aria-label="Link to this section">#</a></h2>
+<p>Share unseen (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/screens/photo.js"><code>public/v2/screens/photo.js</code></a>) runs every loaded filter, in the order of <code>BUNDLED</code>:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-comment">// Share unseen runs the filters in this order: hidden details, then faces, then writing.</span>
+{ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;strip-details&#x27;</span> },
+{ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;cover-faces&#x27;</span> },
+{ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;filter&#x27;</span>, <span class="hljs-attr">folder</span>: <span class="hljs-string">&#x27;cover-numbers&#x27;</span> },</code></pre></div>
+<p>There is no setting to turn a filter off. A filter added after these runs last.</p>
+<h2 id="platforms">Platforms<a class="anchor" href="#platforms" aria-label="Link to this section">#</a></h2>
+<p>Share unseen works the same on the website, in the Android app and in the iPhone app. A filter sees only the photo object. The photo comes from the camera or the gallery, or from another app&#39;s share sheet: through the web app&#39;s share target on the website, and through the app itself on Android.</p>
+<h2 id="a-minimal-filter">A minimal filter<a class="anchor" href="#a-minimal-filter" aria-label="Link to this section">#</a></h2>
+<p>This filter covers the orange date some cameras print on a photo. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/filter/date-stamp"><code>docs/modules/examples/filter/date-stamp/</code></a>, and <a href="/docs/modules/first-module#a-filter-cover-a-date-stamp">Write your first module</a> builds it step by step. Its <code>manifest.json</code>:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;org.example.filter.date-stamp&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;filter&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;en&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Cover a date stamp&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;entry&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;index.js&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;publisher&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sig&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p>Its <code>index.js</code> is shown in full in the guide. The part the app calls:</p>
+<div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">create</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">return</span> {
+    <span class="hljs-attr">id</span>: <span class="hljs-string">&#x27;date-stamp&#x27;</span>,
+    <span class="hljs-attr">what</span>: <span class="hljs-string">&#x27;writing&#x27;</span>,
+    <span class="hljs-keyword">async</span> <span class="hljs-title function_">analyse</span>(<span class="hljs-params">photo</span>) {
+      <span class="hljs-keyword">const</span> box = <span class="hljs-title function_">findStamp</span>(photo.<span class="hljs-property">pixels</span>);
+      <span class="hljs-keyword">return</span> { <span class="hljs-attr">covers</span>: box ? [{ <span class="hljs-attr">kind</span>: <span class="hljs-string">&#x27;writing&#x27;</span>, ...box }] : [] };
+    },
+  };
+}</code></pre></div>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts"><code>test/unit/v2/photo.test.ts</code></a> tests the filter chain with fake filters, the writing finder and the details reader on real camera files in <code>test/unit/fixtures/photos/</code>. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts"><code>test/ui/photo.ui.test.ts</code></a> picks a photo in Chrome and checks the blocks and the list of changes.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/modules/filter.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

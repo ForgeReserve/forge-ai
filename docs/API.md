@@ -936,3 +936,11 @@ What this means for a builder:
 - **Privacy is a choice per request.** Pick a private model (`tier: "enclave"`) and encrypt with Tinfoil's SDK, or use a standard model when that is enough.
 
 Inside the Forge app, the same idea runs through app modules: each way to fund (paper note, Lightning, Cashu card, other mint), each voice in and out, each photo filter and each look is a module with a manifest and a small interface. Today only the modules bundled with the app load. Signed third-party modules, their sandbox and their permissions are designed but not built yet.
+
+The [module guide](modules/README.md) documents them:
+
+- [Modules](modules/README.md): what a module is, the six kinds, how the app loads them, and what is built and what is designed.
+- [Write your first module](modules/first-module.md): a look and a photo filter, step by step, with tests.
+- [Module list](modules/list.md): every module the app ships with.
+- One reference page for each kind: [fund](modules/fund.md), [voice in](modules/voice-in.md), [voice out](modules/voice-out.md), [filter](modules/filter.md), [look](modules/look.md) and [mode](modules/mode.md).
+- [Engine modules](modules/engine.md): the gateway's suppliers and funding methods.

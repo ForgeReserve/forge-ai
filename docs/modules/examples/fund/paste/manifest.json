@@ -1,0 +1,12 @@
+{
+  "id": "org.example.fund.paste",
+  "kind": "fund",
+  "version": "1.0.0",
+  "name": {
+    "en": "Paste eCash"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

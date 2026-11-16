@@ -1,0 +1,12 @@
+{
+  "id": "org.example.voice-out.say",
+  "kind": "voice-out",
+  "version": "1.0.0",
+  "name": {
+    "en": "Say it on the phone"
+  },
+  "permissions": [],
+  "entry": "index.js",
+  "publisher": null,
+  "sig": null
+}

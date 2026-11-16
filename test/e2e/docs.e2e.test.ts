@@ -40,6 +40,41 @@ describe('API guide at /docs', () => {
     expect((await fetch(g.url + font)).status).toBe(200);
   });
 
+  it('serves the module guide as HTML at /docs/modules/ and one address per page', async () => {
+    const pages: Array<[string, string, string[]]> = [
+      ['/docs/modules/', '<title>Modules | Forge AI</title>', ['the-six-kinds', 'what-is-built-and-what-is-designed']],
+      ['/docs/modules/fund', '<title>Fund modules | Forge AI</title>', ['inputs', 'wallet', 'available-methods', 'a-minimal-fund-module']],
+      ['/docs/modules/voice-in', '<title>Voice-in modules | Forge AI</title>', ['inputs', 'how-the-app-picks-one']],
+      ['/docs/modules/voice-out', '<title>Voice-out modules | Forge AI</title>', ['inputs', 'how-the-app-picks-one']],
+      ['/docs/modules/filter', '<title>Filter modules | Forge AI</title>', ['the-photo', 'analyse-photo']],
+      ['/docs/modules/look', '<title>Look modules | Forge AI</title>', ['tokens']],
+      ['/docs/modules/mode', '<title>Mode modules | Forge AI</title>', ['actions', 'the-screen']],
+      ['/docs/modules/list', '<title>Module list | Forge AI</title>', ['at-a-glance', 'scan-a-note', 'natural-voice']],
+      ['/docs/modules/first-module', '<title>Write your first module | Forge AI</title>', ['run-the-app-on-your-computer', 'send-it-as-a-pull-request']],
+      ['/docs/modules/engine', '<title>Engine modules | Forge AI</title>', ['suppliers', 'funding-methods']],
+    ];
+    for (const [path, title, ids] of pages) {
+      const r = await fetch(`${g.url}${path}`);
+      expect(r.status, path).toBe(200);
+      expect(r.headers.get('content-type'), path).toMatch(/^text\/html/);
+      expect(r.headers.get('cache-control'), path).toBe('no-cache');
+      const html = await r.text();
+      expect(html, path).toContain(title);
+      for (const id of ids) expect(html, `${path} #${id}`).toContain(`id="${id}"`);
+      // The same script and style as the API guide, from this origin only, and no script in the page.
+      expect(html, path).toContain('<script src="/docs/docs.js" defer></script>');
+      expect(html, path).toContain('<link rel="stylesheet" href="/docs/docs.css">');
+      expect(html, path).not.toMatch(/<(script|link)[^>]+(src|href)="https?:/);
+      expect(html, path).not.toMatch(/<script>/);
+      // Every page lists every other page.
+      for (const [other] of pages) expect(html, `${path} links ${other}`).toContain(`href="${other}"`);
+    }
+    // The API guide links the module guide, in its Modules section and in its list of pages.
+    const api = await (await fetch(`${g.url}/docs/`)).text();
+    expect(api).toContain('href="/docs/modules/"');
+    expect(api).toContain('href="/docs/modules/first-module"');
+  });
+
   it('is linked from the v1 page at the root', async () => {
     const v1 = await (await fetch(`${g.url}/`)).text();
     expect(v1).toContain('href="/docs/"');
