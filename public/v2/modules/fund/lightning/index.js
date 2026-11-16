@@ -43,20 +43,20 @@ export function create(inputs) {
           if (r.body?.key) wallet.setKey(r.body.key);
           if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           const f = r.body;
-          const st = ui.el('p', { class: 'status-line', id: 'lnStatus', role: 'status', text: t('fund.lightning.waiting') });
+          const st = ui.sayEl('p', { class: 'status-line', id: 'lnStatus', role: 'status' }, t('fund.lightning.waiting'));
           body.replaceChildren(ui.el('div', { class: 'amount-tag', text: format.units(f.amount, f.unit) }), requestQR(inputs, { uri: 'lightning:' + f.request, copyText: f.request, copyLabel: t('fund.lightning.copy'), qrLabel: t('fund.lightning.qr'), openLabel: t('fund.lightning.open') }), st);
           foot.replaceChildren();
           const update = (x) => {
             if (x.state === 'done') {
-              st.textContent = t('fund.lightning.paid', { amount: format.units(x.credited, x.unit) });
+              ui.say(st, t('fund.lightning.paid', { amount: format.units(x.credited, x.unit) }));
               st.className = 'status-line ok';
               wallet.refresh();
               foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', id: 'fundDone', text: t('fund.done'), onclick: done }));
               return true;
             }
-            if (x.state === 'minting') st.textContent = t('fund.lightning.minting');
+            if (x.state === 'minting') ui.say(st, t('fund.lightning.minting'));
             if (x.state === 'expired' || x.state === 'failed') {
-              st.textContent = x.state === 'expired' ? t('fund.lightning.expired') : t('fund.failed', { message: x.error ?? '' });
+              ui.say(st, x.state === 'expired' ? t('fund.lightning.expired') : t('fund.failed', { message: x.error ?? '' }));
               st.className = 'status-line err';
               return true;
             }

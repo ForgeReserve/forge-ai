@@ -13,8 +13,13 @@ const R: any = await import('../../../public/v2/core/registry.js' as string);
 const CTL: any = await import('../../../public/v2/core/talkctl.js' as string);
 const VIN: any = await import('../../../public/v2/modules/voice-in/engine/index.js' as string);
 const VIN_DEVICE: any = await import('../../../public/v2/modules/voice-in/device/index.js' as string);
+const VIN_PHONE: any = await import('../../../public/v2/modules/voice-in/phone/index.js' as string);
+const VIN_BUNDLED: any = await import('../../../public/v2/modules/voice-in/bundled/index.js' as string);
+const N: any = await import('../../../public/v2/core/native.js' as string);
 const VOUT: any = await import('../../../public/v2/modules/voice-out/engine/index.js' as string);
 const VOUT_DEVICE: any = await import('../../../public/v2/modules/voice-out/device/index.js' as string);
+const ERR: any = await import('../../../public/v2/core/errors.js' as string);
+const EN: any = (await import('../../../public/v2/strings/en.js' as string)).default;
 
 /** Runs events through the state machine from idle; returns the final state and every effect. */
 function run(events: object[]) {
@@ -187,12 +192,60 @@ describe('voice prices and models', () => {
   const mod = (id: string, available: boolean, priv: boolean) => ({ id, available: () => available, private: () => priv });
   it('chooses voice in: the engine by default, the browser only when chosen and Private only is off', () => {
     const mods = { engine: mod('engine', true, true), device: mod('device', true, false) };
-    expect(STATE.DEFAULT_SETTINGS.voiceIn).toBe('engine');
+    expect(STATE.DEFAULT_SETTINGS.voiceIn).toBe('auto');
     expect(STATE.pickVoiceIn(mods, { ...STATE.DEFAULT_SETTINGS })?.id).toBe('engine');
     expect(STATE.pickVoiceIn(mods, { privateOnly: true, voiceIn: 'device' })?.id).toBe('engine');
     expect(STATE.pickVoiceIn(mods, { privateOnly: false, voiceIn: 'device' })?.id).toBe('device');
     expect(STATE.pickVoiceIn({ engine: mod('engine', false, true), device: mods.device }, { privateOnly: true, voiceIn: 'engine' })).toBeNull();
     expect(STATE.pickVoiceIn({ engine: mod('engine', true, false) }, { privateOnly: true, voiceIn: 'engine' })).toBeNull();
+  });
+
+  it("chooses voice in: the phone's own recogniser first in the app where it has the language, else the engine", () => {
+    const engine = mod('engine', true, true);
+    const device = mod('device', true, false);
+    const phone = mod('phone', true, true);
+    const auto = { ...STATE.DEFAULT_SETTINGS };
+    // In the app, available: the phone, with Private only on or off.
+    expect(STATE.pickVoiceIn({ phone, engine, device }, auto)?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { ...auto, privateOnly: false })?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ phone, engine }, { ...auto, voiceIn: 'phone' })?.id).toBe('phone');
+    // In the app, but the recogniser lacks the language (or there is none): the engine.
+    const noLang = mod('phone', false, true);
+    expect(STATE.pickVoiceIn({ phone: noLang, engine, device }, auto)?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ phone: noLang, engine }, { ...auto, voiceIn: 'phone' })?.id).toBe('engine');
+    // On the website there is no phone module's recogniser to use: the engine.
+    expect(STATE.pickVoiceIn({ phone: mod('phone', false, true), engine, device }, auto)?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ engine, device }, auto)?.id).toBe('engine');
+    // The engine picked in More, Voice: the engine, and the phone only when the engine has no model.
+    expect(STATE.pickVoiceIn({ phone, engine }, { ...auto, voiceIn: 'engine' })?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ phone, engine: mod('engine', false, true) }, { ...auto, voiceIn: 'engine' })?.id).toBe('phone');
+    // The browser's recogniser still only when chosen and Private only is off.
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { privateOnly: false, voiceIn: 'device' })?.id).toBe('device');
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { privateOnly: true, voiceIn: 'device' })?.id).toBe('phone');
+  });
+
+  it("chooses Forge Private Voice's own speech to text first, then the phone's recogniser, then the engine", () => {
+    const engine = mod('engine', true, true);
+    const phone = mod('phone', true, true);
+    const bundled = mod('bundled', true, true);
+    const auto = { ...STATE.DEFAULT_SETTINGS };
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, auto)?.id).toBe('bundled');
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, { ...auto, voiceIn: 'phone' })?.id).toBe('bundled');
+    // The universal APK and the website: no bundled model, so as before.
+    const none = mod('bundled', false, true);
+    expect(STATE.pickVoiceIn({ bundled: none, phone, engine }, auto)?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ bundled: none, phone: mod('phone', false, true), engine }, auto)?.id).toBe('engine');
+    // The engine picked: the engine first, then the phone's ways.
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, { ...auto, voiceIn: 'engine' })?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ bundled, phone, engine: mod('engine', false, true) }, { ...auto, voiceIn: 'engine' })?.id).toBe('bundled');
+  });
+
+  it("reads a saved 'engine' as the old default, unless it was picked since 'auto' came", () => {
+    expect(STATE.loadedSettings(null).voiceIn).toBe('auto');
+    expect(STATE.loadedSettings({ voiceIn: 'engine', look: 'dark' })).toMatchObject({ voiceIn: 'auto', look: 'dark' });
+    expect(STATE.loadedSettings({ voiceIn: 'engine', voiceInPicked: true }).voiceIn).toBe('engine');
+    expect(STATE.loadedSettings({ voiceIn: 'device' }).voiceIn).toBe('device');
+    expect(STATE.loadedSettings({ voiceIn: 'phone', voiceInPicked: true }).voiceIn).toBe('phone');
   });
 
   it('chooses voice out: the phone voice when it has one, else the engine, or none when off', () => {
@@ -216,7 +269,7 @@ describe('the engine client audio calls', () => {
       },
     });
     const r = await engine.transcribe('sk-forge-k', { model: 'stt', audio: WAV.encodeWav(new Float32Array(16000)), seconds: 1, language: 'en' });
-    expect(r).toEqual({ text: 'Hello', chargedMsub: 1250, balanceMsub: 98750 });
+    expect(r).toEqual({ text: 'Hello', chargedMsub: 1250, balanceMsub: 98750, freeVoiceLeft: null });
     expect(seen.url).toBe('/v1/audio/transcriptions');
     expect(seen.init.headers.authorization).toBe('Bearer sk-forge-k');
     const form: FormData = seen.init.body;
@@ -226,6 +279,17 @@ describe('the engine client audio calls', () => {
     const file = form.get('file') as File;
     expect(file.type).toBe('audio/wav');
     expect(WAV.wavSeconds(new Uint8Array(await file.arrayBuffer()))).toBe(1);
+  });
+
+  it('reads what a free voice question leaves for today, and says plainly when they are used up', async () => {
+    const engine = E.createEngine({
+      fetch: async () => new Response(JSON.stringify({ text: 'Hi' }), { headers: { 'x-forge-charged-msub': '0', 'x-forge-balance-msub': '0', 'x-forge-free-voice-left': '19' } }),
+    });
+    expect(await engine.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).toEqual({ text: 'Hi', chargedMsub: 0, balanceMsub: 0, freeVoiceLeft: 19 });
+    const used = E.createEngine({ fetch: async () => new Response(JSON.stringify({ error: { code: 'free_voice_limit', message: 'used up' }, free_voice: { left: 0 } }), { status: 402 }) });
+    await expect(used.transcribe('k', { model: 'stt', audio: new Uint8Array(44) })).rejects.toMatchObject({ code: 'free_voice_limit', status: 402 });
+    expect(ERR.errorView('free_voice_limit', 'used up')).toEqual({ key: 'talk.freeVoiceOut', next: 'addFunds' });
+    expect(EN['talk.freeVoiceOut']).toBe('No free voice today. Free voice questions are used up for today. Type instead, or add funds.');
   });
 
   it('turns a refused or failed audio request into an EngineError, and answers proof of work', async () => {
@@ -266,10 +330,12 @@ describe('the engine client audio calls', () => {
 describe('voice modules get only their own inputs', () => {
   it('hands voice in the microphone and speech to text, voice out the speaker and text to speech', () => {
     const fn = () => {};
-    const all = { t: fn, ui: {}, engine: {}, wallet: {}, vault: {}, state: {}, actions: {}, mic: {}, recognizer: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, transcribe: fn, speak: fn } };
+    const all = { t: fn, ui: {}, engine: {}, wallet: {}, vault: {}, state: {}, actions: {}, mic: {}, recognizer: {}, speaker: {}, synth: {}, audio: { model: fn, price: fn, transcribe: fn, speak: fn }, speech: { available: fn, start: fn, other: fn }, asr: { available: fn, start: fn, other: fn } };
     const vin = R.inputsFor('voice-in', all);
-    expect(Object.keys(vin).sort()).toEqual(['audio', 'mic', 'recognizer', 't']);
+    expect(Object.keys(vin).sort()).toEqual(['asr', 'audio', 'mic', 'recognizer', 'speech', 't']);
     expect(Object.keys(vin.audio).sort()).toEqual(['model', 'price', 'transcribe']);
+    expect(Object.keys(vin.speech).sort()).toEqual(['available', 'start']);
+    expect(Object.keys(vin.asr).sort()).toEqual(['available', 'start']);
     const vout = R.inputsFor('voice-out', all);
     expect(Object.keys(vout).sort()).toEqual(['audio', 'speaker', 'synth', 't']);
     expect(Object.keys(vout.audio).sort()).toEqual(['model', 'price', 'speak']);
@@ -278,7 +344,9 @@ describe('voice modules get only their own inputs', () => {
 
   it('bundles both ways for each direction', () => {
     const ids = R.BUNDLED.filter((b: any) => b.kind.startsWith('voice')).map((b: any) => `${b.kind}/${b.folder}`);
-    expect(ids.sort()).toEqual(['voice-in/device', 'voice-in/engine', 'voice-out/device', 'voice-out/engine']);
+    expect(ids.sort()).toEqual(['voice-in/bundled', 'voice-in/device', 'voice-in/engine', 'voice-in/phone', 'voice-out/device', 'voice-out/engine', 'voice-out/phonon']);
+    // Forge Private Voice's own speech to text is listed first, then the phone's own recogniser.
+    expect(R.BUNDLED.filter((b: any) => b.kind === 'voice-in').map((b: any) => b.folder)).toEqual(['bundled', 'phone', 'engine', 'device']);
   });
 });
 
@@ -374,6 +442,173 @@ describe('voice in through the engine', () => {
     const s = await m.start({ onText: (x: string) => heard.push(x) });
     expect(heard).toEqual(['Hello']);
     expect(await s.finish()).toEqual({ text: 'Hello there', chargedMsub: 0, balanceMsub: null });
+  });
+});
+
+/**
+ * The ForgeSpeech plugin as nativeSpeech sees it, over a fake bridge: availability as given, and each
+ * start answered by `script(emit, opts)`, which plays the plugin's events.
+ */
+function fakeSpeech({ onDevice = true, reason = null as string | null, startError = null as any, onStop = (emit: (ev: any) => void) => (emit({ type: 'final', text: 'What should I bring?' }), emit({ type: 'end' })) } = {}) {
+  const calls: Array<[string, any]> = [];
+  let listener: (ev: any) => void = () => {};
+  const call = async (plugin: string, method: string, opts: any) => {
+    expect(plugin).toBe('ForgeSpeech');
+    calls.push([method, opts]);
+    if (method === 'available') return { onDevice, reason, locale: 'en-US' };
+    if (method === 'start') {
+      if (startError) throw startError;
+      const emit = (ev: any) => listener({ id: opts.id, ...ev });
+      emit({ type: 'started' });
+      emit({ type: 'level', level: 0.4 });
+      emit({ type: 'partial', text: 'What should' });
+      fake.emit = emit;
+      return {};
+    }
+    if (method === 'stop') setTimeout(() => onStop(fake.emit), 5);
+    return {};
+  };
+  const on = (_plugin: string, _event: string, fn: any) => ((listener = fn), { remove: async () => {} });
+  const fake = { speech: N.nativeSpeech(call, on), calls, emit: (_ev: any) => {} };
+  return fake;
+}
+
+/** A stand-in for ForgeAsr over the bridge, as nativeAsr sees it. */
+function fakeAsr({ available = true, reason = null as string | null, onStop = (emit: (ev: any) => void) => (emit({ type: 'final', text: 'Is it safe to swim?' }), emit({ type: 'end' })) } = {}) {
+  const calls: Array<[string, any]> = [];
+  let listener: (ev: any) => void = () => {};
+  let emit: (ev: any) => void = () => {};
+  const call = async (plugin: string, method: string, opts: any) => {
+    expect(plugin).toBe('ForgeAsr');
+    calls.push([method, opts]);
+    if (method === 'available') return { available, reason, model: available ? 'moonshine-tiny-en' : null, language: 'en' };
+    if (method === 'start') {
+      emit = (ev: any) => listener({ id: opts.id, ...ev });
+      emit({ type: 'started' });
+      emit({ type: 'partial', text: 'Is it' });
+      return {};
+    }
+    if (method === 'stop') setTimeout(() => onStop(emit), 5);
+    return {};
+  };
+  const on = (plugin: string, event: string, fn: any) => (expect([plugin, event]).toEqual(['ForgeAsr', 'asr']), (listener = fn), { remove: async () => {} });
+  return { asr: N.nativeAsr(call, on), calls };
+}
+
+describe("voice in on this phone (Forge Private Voice's own speech to text)", () => {
+  it('is offered only where the app carries the model, free and private', async () => {
+    const m = VIN_BUNDLED.create({ asr: fakeAsr().asr });
+    expect(m.id).toBe('bundled');
+    expect(m.available()).toBe(false); // until the app answers
+    await m.checked;
+    expect(m.available()).toBe(true);
+    expect(m.private()).toBe(true);
+    expect(m.price(30)).toBe(0);
+    // The universal APK, the website, and what the registry hands on the website.
+    for (const asr of [fakeAsr({ available: false, reason: 'no speech to text in this app' }).asr, null]) {
+      const x = VIN_BUNDLED.create({ asr });
+      await x.checked;
+      expect(x.available()).toBe(false);
+    }
+    const projected = VIN_BUNDLED.create(R.inputsFor('voice-in', { t: () => '', asr: null }));
+    await projected.checked;
+    expect(projected.available()).toBe(false);
+    expect(VIN_BUNDLED.bridgeFor({})).toBeNull();
+  });
+
+  it('shows the words as they come and sends the whole recording heard when the button is let go', async () => {
+    const f = fakeAsr();
+    const m = VIN_BUNDLED.create({ asr: f.asr });
+    await m.checked;
+    const heard: string[] = [];
+    const s = await m.start({ onText: (x: string) => heard.push(x) });
+    expect(heard).toEqual(['Is it']);
+    expect(await s.finish()).toEqual({ text: 'Is it safe to swim?', chargedMsub: 0, balanceMsub: null });
+    expect(f.calls.map(([x]) => x)).toEqual(['available', 'start', 'stop']);
+  });
+
+  it('a crash or failed load in the app hands the next question to the next way', async () => {
+    const f = fakeAsr({ onStop: (emit) => (emit({ type: 'error', code: 'unavailable' }), emit({ type: 'end' })) });
+    const m = VIN_BUNDLED.create({ asr: f.asr });
+    await m.checked;
+    await expect((await m.start()).finish()).rejects.toMatchObject({ key: 'talk.phoneFailed' });
+    expect(m.available()).toBe(false);
+  });
+});
+
+describe("voice in on this phone (the Android app's on-device recogniser)", () => {
+  it('asks the phone once whether its on-device recogniser has the language, and is free and private', async () => {
+    const f = fakeSpeech();
+    const m = VIN_PHONE.create({ speech: f.speech });
+    expect(m.available()).toBe(false); // until the phone answers
+    await m.checked;
+    expect(m.available()).toBe(true);
+    expect(m.private()).toBe(true);
+    expect(m.price(30)).toBe(0);
+    expect(f.calls.filter(([x]) => x === 'available')).toHaveLength(1);
+    expect(f.calls[0]![1].locale).toMatch(/^en/);
+  });
+
+  it('is not offered on the website or where the phone lacks the language', async () => {
+    const web = VIN_PHONE.create({ speech: null });
+    await web.checked;
+    expect(web.available()).toBe(false);
+    // What the registry hands on the website: the projection of no bridge, an empty object.
+    const projected = VIN_PHONE.create(R.inputsFor('voice-in', { t: () => '', speech: null }));
+    await projected.checked;
+    expect(projected.available()).toBe(false);
+    const none = VIN_PHONE.create({ speech: fakeSpeech({ onDevice: false, reason: 'language-not-downloaded' }).speech });
+    await none.checked;
+    expect(none.available()).toBe(false);
+    expect(none.status().reason).toBe('language-not-downloaded');
+  });
+
+  it('listens in English: the phone\'s own English, else US English', () => {
+    expect(VIN_PHONE.localeFor('en-GB')).toBe('en-GB');
+    expect(VIN_PHONE.localeFor('en_IN')).toBe('en-IN');
+    expect(VIN_PHONE.localeFor('de-DE')).toBe('en-US');
+    expect(VIN_PHONE.localeFor(undefined)).toBe('en-US');
+  });
+
+  it('shows the words as they come and sends the final words when the button is let go', async () => {
+    const f = fakeSpeech();
+    const m = VIN_PHONE.create({ speech: f.speech });
+    await m.checked;
+    const heard: string[] = [];
+    const levels: number[] = [];
+    const s = await m.start({ onText: (x: string) => heard.push(x), onLevel: (l: number) => levels.push(l) });
+    expect(heard).toEqual(['What should']);
+    expect(levels).toEqual([0.4]);
+    expect(await s.finish()).toEqual({ text: 'What should I bring?', chargedMsub: 0, balanceMsub: null });
+    expect(f.calls.map(([x]) => x)).toEqual(['available', 'start', 'stop']);
+  });
+
+  it('nothing heard is an empty question; a failure says so in its own words; cancel drops it', async () => {
+    const quiet = fakeSpeech({ onStop: (emit) => (emit({ type: 'error', code: 'no-speech' }), emit({ type: 'end' })) });
+    const a = VIN_PHONE.create({ speech: quiet.speech });
+    await a.checked;
+    expect((await (await a.start()).finish()).text).toBe('');
+
+    const broken = fakeSpeech({ onStop: (emit) => (emit({ type: 'error', code: 'unavailable' }), emit({ type: 'end' })) });
+    const b = VIN_PHONE.create({ speech: broken.speech });
+    await b.checked;
+    await expect((await b.start()).finish()).rejects.toMatchObject({ key: 'talk.phoneFailed' });
+    // The phone lost its recogniser: the next question goes to the engine.
+    expect(b.available()).toBe(false);
+
+    const c = fakeSpeech();
+    const cm = VIN_PHONE.create({ speech: c.speech });
+    await cm.checked;
+    (await cm.start()).cancel();
+    expect(c.calls.map(([x]) => x)).toEqual(['available', 'start', 'cancel']);
+  });
+
+  it('a refused microphone reads as the microphone adapter says it', async () => {
+    const f = fakeSpeech({ startError: { message: 'The microphone is not allowed.', code: 'permission' } });
+    const m = VIN_PHONE.create({ speech: f.speech });
+    await m.checked;
+    await expect(m.start()).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(m.available()).toBe(true);
   });
 });
 
@@ -501,7 +736,7 @@ describe('voice out through the engine', () => {
 });
 
 describe('the talk controller', () => {
-  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?' } = {}) {
+  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?', result = null as any } = {}) {
     let now = 0;
     const S: any = {};
     const store = { S, set: (p: object) => Object.assign(S, p) };
@@ -516,7 +751,7 @@ describe('the talk controller', () => {
       start: async () => ({
         finish: async () => {
           if (failWith) throw failWith;
-          return { text, chargedMsub: 1300, balanceMsub: 4000 };
+          return result ?? { text, chargedMsub: 1300, balanceMsub: 4000 };
         },
         cancel: () => cancelled++,
       }),
@@ -553,6 +788,19 @@ describe('the talk controller', () => {
     expect(x.S.balanceMsub).toBe(4000);
     expect(x.S.talk.phase).toBe('idle');
     expect(x.pulses.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps what a free voice question leaves for today', async () => {
+    const x = setup({ result: { text: 'Hi', chargedMsub: 0, balanceMsub: 0, freeVoiceLeft: 4 } });
+    x.S.freeVoice = { enabled: true, per_day: 20, left: 5, resets_at: 1 };
+    x.ctl.down();
+    await flush();
+    x.advance(1500);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.freeVoice).toEqual({ enabled: true, per_day: 20, left: 4, resets_at: 1 });
+    expect(x.S.balanceMsub).toBe(0);
   });
 
   it('does not record when a question cannot be asked, and says why', () => {

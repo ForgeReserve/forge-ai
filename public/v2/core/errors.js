@@ -52,6 +52,9 @@ export function errorView(code, message, charged = 0) {
       return { key: 'talk.tooLong', next: 'retry' };
     case 'unsupported_audio':
       return { key: 'talk.cannotUse', next: 'retry' };
+    // Free voice questions (docs/PAYMENTS.md) are used up today, for this balance or for everyone.
+    case 'free_voice_limit':
+      return { key: 'talk.freeVoiceOut', next: 'addFunds' };
     case 'account_frozen':
       return { key: 'error.frozen', next: 'takeOut' };
     // Free questions (docs/FREE-TIER.md): the engine refused one before any charge.

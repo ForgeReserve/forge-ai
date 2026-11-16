@@ -1,23 +1,23 @@
 /* Forge AI v2. Colours come from the look module as CSS custom properties; the values below are the
-   Light look, so the first paint matches it before the modules load. No remote fonts: Inter is used
+   Midnight look, the default, so the first paint matches it before the modules load. No remote fonts: Inter is used
    when the phone has it, else the system font. */
 :root {
-  --bg: #F6F5F1; --backdrop: #D9D6CD; --surface: #FFFFFF; --surface-2: #F6F5F1; --ink: #14161A; --text-2: #5B6068; --text-body: #3F4348;
-  --line: #E3E0D8; --line-2: #DAD8D0; --bar-track: #E6E4DD; --grabber: #C9C6BE; --dash: #B9B5AA;
-  --teal: #0D7A69; --teal-tint: #E3F4F0; --teal-line: #9AD3C8; --teal-bright: #3FCFB4; --memory: #0E7C6B; --memory-track: #D5F2EA;
-  --gold: #D4A544; --gold-track: #F3E3BC; --gold-ink: #8A6410; --gold-line: #C9A24A; --gold-callout: #D9B45A; --gold-tint: #F6E9C8; --gold-free: #E8C97A;
-  --danger: #B3402F; --danger-tint: #FBDAD5; --danger-ink: #FFFFFF; --low: #C2600A; --low-tint: #FCE9D6; --low-line: #E7B98A; --low-ink: #8A3A12;
-  --blue: #2459B8; --blue-tint: #DCE9FF; --violet: #5B3FC4; --violet-tint: #E8E0FF; --green: #4C7A12; --green-tint: #E9F5C9;
-  --primary: #14161A; --primary-ink: #FFFFFF; --talk: #14161A; --talk-ink: #FFFFFF; --focus: #2459B8;
-  --shadow-raised: inset 0 -5px 0 rgba(20,22,26,0.09), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08);
-  --shadow-raised-sm: inset 0 -4px 0 rgba(20,22,26,0.08), inset 0 2px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(20,22,26,0.08);
-  --shadow-primary: inset 0 -5px 0 rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.14);
-  --shadow-talk: inset 0 -9px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14);
-  --shadow-float: 0 12px 40px rgba(20,22,26,0.18), inset 0 2px 0 rgba(255,255,255,0.75);
+  --bg: #0B0D10; --backdrop: #050608; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
+  --line: #2A2F3A; --line-2: #333946; --bar-track: #1E222B; --grabber: #3A404C; --dash: #4A505C;
+  --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55; --teal-bright: #3FCFB4; --memory: #3FCFB4; --memory-track: #16302C;
+  --gold: #D4A544; --gold-track: #3A3320; --gold-ink: #D4A544; --gold-line: #6B5527; --gold-callout: #6B5527; --gold-tint: #2A2416; --gold-free: #7A632E;
+  --danger: #F0685A; --danger-tint: #2E1A1C; --danger-ink: #0B0D10; --low: #F0904A; --low-tint: #2E2116; --low-line: #6A4426; --low-ink: #F5B27A;
+  --blue: #7FB4FF; --blue-tint: #16202F; --violet: #B9A2FF; --violet-tint: #1F1B31; --green: #C6E66B; --green-tint: #1D2514;
+  --primary: #F1EFE9; --primary-ink: #0B0D10; --talk: #F1EFE9; --talk-ink: #0B0D10; --focus: #7FB4FF;
+  --shadow-raised: inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --shadow-raised-sm: inset 0 -4px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --shadow-primary: inset 0 -5px 0 rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5);
+  --shadow-talk: inset 0 -9px 0 rgba(0,0,0,0.22), inset 0 3px 0 rgba(255,255,255,0.5);
+  --shadow-float: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
   --font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --ease: cubic-bezier(.2, .8, .2, 1);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -48,17 +48,44 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .rings { position: relative; flex: none; display: flex; align-items: center; justify-content: center; }
 .home-rings { width: min(336px, 100%); aspect-ratio: 1; }
 .answer-rings { width: 200px; height: 200px; align-self: center; }
-.rings-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ring-fill { transition: stroke-dasharray 700ms var(--ease), stroke 300ms; }
+.rings-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* The rings fill and empty smoothly, the lit layers and the tip with them (instant with reduced motion). */
+.ring-fill, .ring-lit { transition: stroke-dasharray 700ms var(--ease), stroke-dashoffset 700ms var(--ease), stroke 300ms, opacity 300ms; }
+.ring-track { transition: stroke 300ms; }
+.ring-tip { transition: transform 700ms var(--ease), opacity 300ms; }
+.ring-tip-glow { transition: fill 300ms; }
+/* The one glow under each lit arc, as on the first run; stronger on the Light look's pale ground. */
+.ring-glow { opacity: .35; }
+:root[data-scheme="light"] .ring-glow { opacity: .5; }
+:root[data-scheme="light"] .ring-sheen-light { stop-opacity: .2; }
 .ring-hit { position: absolute; inset: 0; border-radius: 50%; border: 0; background: transparent; padding: 0; }
-.talk { position: relative; width: 60.7%; aspect-ratio: 1; border-radius: 50%; background: var(--talk); border: 0; box-shadow: var(--shadow-talk); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--talk-ink); font-size: 16px; font-weight: 700; line-height: 1.1; text-align: center; padding: 0 6px; transition: transform 120ms var(--ease); }
-.talk:active { transform: scale(.97); }
-.talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; box-shadow: inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14); }
+/* The talk button as a polished object, lit like the first run's art: a glossy body in the look's talk
+   colour, a key light from the top left (a highlight and a gloss), a teal rim light from the bottom
+   right, a bevel at its edge and a soft contact shadow under it. Its size is the design's. */
+.talk {
+  --talk-bevel: inset 0 2px 1px rgba(255,255,255,0.22), inset 0 -9px 16px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --talk-drop: 0 18px 26px -12px rgba(20,22,26,0.6), 0 5px 10px rgba(20,22,26,0.16);
+  position: relative; width: 60.7%; aspect-ratio: 1; border-radius: 50%; border: 0;
+  background-color: var(--talk);
+  background-image:
+    radial-gradient(115% 115% at 30% 20%, rgba(255,255,255,0.17) 0%, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0) 52%),
+    radial-gradient(55% 55% at 80% 88%, rgba(63,207,180,0.2), rgba(63,207,180,0) 72%),
+    linear-gradient(155deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.36) 100%);
+  box-shadow: var(--talk-bevel), var(--talk-drop);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--talk-ink); font-size: 16px; font-weight: 700; line-height: 1.1; text-align: center; padding: 0 6px;
+  transition: transform 160ms var(--ease), background-color 220ms var(--ease), box-shadow 260ms var(--ease), opacity 220ms;
+}
+/* The gloss (key light) and the bevel's facet, under the microphone and the words. */
+.talk::before { content: ''; position: absolute; left: 15%; top: 5%; width: 58%; height: 36%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,0.24), rgba(255,255,255,0.06) 60%, rgba(255,255,255,0)); transform: rotate(-22deg); pointer-events: none; }
+.talk::after { content: ''; position: absolute; inset: 3.5%; border-radius: 50%; pointer-events: none; background: linear-gradient(150deg, rgba(255,255,255,0.3), rgba(255,255,255,0) 38%, rgba(0,0,0,0) 62%, rgba(63,207,180,0.45)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.4px), #000 calc(100% - 1px)); mask: radial-gradient(farthest-side, transparent calc(100% - 1.4px), #000 calc(100% - 1px)); }
+.talk > * { position: relative; z-index: 1; }
+.talk-mic { overflow: visible; }
+.talk:active { transform: scale(.97); --talk-drop: 0 10px 16px -10px rgba(20,22,26,0.55), 0 2px 5px rgba(20,22,26,0.16); }
+.talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; --talk-bevel: inset 0 1.5px 1px rgba(255,255,255,0.22), inset 0 -5px 10px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07); --talk-drop: 0 10px 16px -8px rgba(20,22,26,0.55), 0 3px 6px rgba(20,22,26,0.14); }
 .chip-low { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--low-tint); border: 1px solid var(--low-line); color: var(--low-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
 .held-line { margin: 0; color: var(--text-2); font-size: 14px; font-weight: 600; }
-/* No funds: the gold ring invites a paper note scan. Its track breathes, unless reduced motion is on. */
-.chip-scan { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--gold-tint); border: 1px solid var(--gold-callout); color: var(--gold-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
-.home-rings.invite .rings-svg circle:first-child { animation: pulse 2.4s var(--ease) infinite; }
+/* No funds on a paid model: the gold ring's track breathes, unless reduced motion is on. */
+.home-rings.invite .ring-track-gold { animation: pulse 2.4s var(--ease) infinite; }
 
 /* Bottom row */
 .bottom-row { display: flex; gap: 8px; }
@@ -90,7 +117,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .back-head h1 { margin: 0; text-align: center; font-size: 18px; font-weight: 700; }
 .back-head h1:focus { outline: none; }
 .round { width: 48px; height: 48px; border-radius: 24px; border: 0; background: var(--surface); box-shadow: var(--shadow-raised-sm); display: flex; align-items: center; justify-content: center; color: var(--ink); }
-.round.small { width: 44px; height: 44px; }
+.round.small { width: 48px; height: 48px; }
 .scroll { flex: 1; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
 .foot { display: flex; flex-direction: column; gap: 10px; }
 .pad { padding: 16px; }
@@ -112,11 +139,23 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: 16px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; }
 .btn.primary { min-height: 56px; background: var(--primary); color: var(--primary-ink); border: 0; box-shadow: var(--shadow-primary); font-size: 16px; }
 .btn.soft { background: var(--surface-2); border: 0; }
-.btn.small { min-height: 44px; font-size: 14px; }
+.btn.small { min-height: 48px; font-size: 14px; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 .btn.block { width: 100%; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+/* The one-time question before the natural voice downloads (app.js askVoiceDownload). */
+dialog.voice-dl { border: 0; color: var(--ink); width: min(92vw, 420px); padding: 20px; gap: 12px; }
+dialog.voice-dl h2 { margin: 0; font-size: 20px; }
+dialog.voice-dl p { margin: 0; color: var(--text-2); line-height: 1.45; }
+dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .row-btns .btn { flex: 1; }
+/* Start free (screens/startfree.js): the invite flow and its one question before Private only goes off. */
+.start-free { display: flex; flex-direction: column; gap: 12px; }
+/* The status line stays in the page (it is read out when it changes) but takes no room while empty. */
+.start-free .msg:empty { min-height: 0; margin-top: -12px; }
+.free-ask { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--gold-callout); background: var(--surface); }
+.free-ask p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.free-ask .btn { min-height: 48px; }
 
 /* Type: sized to the visual viewport (core/viewport.js), so the field, the price line and Send stay above
    a phone keyboard. Without a visual viewport it is the full screen height. */
@@ -131,7 +170,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; max-width: 100%; }
 .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip-x { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 22px; display: flex; align-items: center; justify-content: center; }
+.chip-x { width: 48px; height: 48px; border: 0; background: transparent; border-radius: 22px; display: flex; align-items: center; justify-content: center; }
 .notice { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--gold-callout); background: var(--surface); }
 .notice p { margin: 0; }
 
@@ -170,6 +209,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .held-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar { height: 5px; border-radius: 3px; background: var(--bar-track); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--memory); border-radius: 3px; }
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter .meter-bar { height: 8px; border-radius: 4px; }
+.meter .meter-bar > span { background: var(--gold); border-radius: 4px; transition: width 120ms linear; }
+.meter p { margin: 0; font-size: 14px; }
+.meter .meter-amount { color: var(--ink); font-variant-numeric: tabular-nums; }
+.meter .meter-phase { color: var(--text-2); }
 .vault-box { display: flex; flex-direction: column; gap: 10px; }
 .vault-row { padding: 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--gold-callout); display: flex; flex-direction: column; gap: 8px; }
 .vault-row.refused { border-color: var(--danger); }
@@ -187,7 +232,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .qr svg { width: 100%; height: 100%; display: block; }
 .keyline { text-align: center; }
 .seg { display: flex; gap: 4px; }
-.seg button { flex: 1; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.seg button { flex: 1; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
 .seg button[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); }
 .scanner video { width: 100%; border-radius: 16px; background: #000; }
 .note-view .scanner video { aspect-ratio: 1; object-fit: cover; }
@@ -253,6 +298,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; transition: transform 160ms var(--ease); }
 .switch[aria-checked="true"] .track { background: var(--teal); }
 .switch[aria-checked="true"] .knob { transform: translateX(22px); }
+/* On a dark look the teal is bright: the knob takes the surface colour there, so it stands out (white on Light). */
+.switch[aria-checked="true"] .knob { background: var(--surface); }
 .dashed-box { padding: 14px; border-radius: 18px; border: 2px dashed var(--dash); }
 .dashed-box p { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
 
@@ -262,12 +309,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* Hold to talk (XListenLight). The press must not scroll, select or open the long-press menu. */
 .talk { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.talk.recording { transform: scale(1.04); box-shadow: var(--shadow-talk), 0 0 0 10px var(--teal-tint); }
-.talk.recording.leaving { background: var(--danger); box-shadow: var(--shadow-talk), 0 0 0 10px var(--danger-tint); transform: scale(.96); }
-.talk.sending { opacity: .8; }
-.talk-label { pointer-events: none; }
+/* Held: the button lifts, with a teal halo and glow; slid off, it turns to the danger colour. */
+.talk.recording { transform: scale(1.04); box-shadow: var(--talk-bevel), 0 0 0 10px var(--teal-tint), 0 0 34px 8px rgba(63,207,180,0.32), var(--talk-drop); }
+.talk.recording.leaving { background-color: var(--danger); box-shadow: var(--talk-bevel), 0 0 0 10px var(--danger-tint), 0 0 30px 6px rgba(179,64,47,0.25), var(--talk-drop); transform: scale(.96); }
+/* Sending: the halo breathes while the question goes (it keeps still with reduced motion). */
+.talk.sending { opacity: .88; animation: talkbusy 1.6s ease-in-out infinite; }
+@keyframes talkbusy { 50% { box-shadow: var(--talk-bevel), 0 0 0 8px var(--teal-tint), 0 0 28px 4px rgba(63,207,180,0.28), var(--talk-drop); } }
+.talk-label { pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
 .level-bars { display: flex; align-items: center; gap: 5px; height: 40%; pointer-events: none; }
-.level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; transition: height 90ms linear; }
+.level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; background-image: linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%, rgba(0,0,0,0.18)); box-shadow: 0 0 10px rgba(63,207,180,0.45), 0 1px 2px rgba(0,0,0,0.3); transition: height 90ms linear; }
 .talk.small .level-bars { gap: 3px; }
 .talk.small .level-bars .bar { width: 5px; }
 .listen-info { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: center; }
@@ -279,6 +329,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .listen-route[data-route="engine-standard"], .listen-route[data-route="device"] { color: var(--low-ink); }
 .listen-price { color: var(--gold-ink); white-space: nowrap; }
 .speak-state { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--teal); }
+.speak-ready { display: inline-block; width: 56px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.speak-ready[hidden] { display: none; }
+.speak-ready-fill { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.2s linear; }
 .speak-via { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--low-ink); }
 .tile-sub { font-size: 11px; font-weight: 600; color: var(--gold-ink); }
 
@@ -345,6 +398,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .cover-layer { position: absolute; inset: 0; pointer-events: none; }
 .photo-stage[data-view="before"] .cover-layer { display: none; }
 .cover-box { position: absolute; padding: 0; margin: 0; border: 2px solid var(--gold); border-radius: 4px; background: transparent; pointer-events: auto; min-width: 12px; min-height: 12px; }
+.cover-box::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 48px); height: max(100%, 48px); transform: translate(-50%, -50%); }
 .cover-box:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
 .cover-draft { position: absolute; border: 2px dashed var(--gold); background: rgba(0, 0, 0, 0.35); pointer-events: none; }
 .changes { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
@@ -357,19 +411,81 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .note.warn-text { color: var(--low-ink); }
 .centre-text { text-align: center; }
 
-/* First run (DWelcome, DHowPay, DLimits, DPrivateOnly), built from the canvas tokens */
-.screen.intro { padding-left: 20px; padding-right: 20px; }
-.intro-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; }
-.intro-top-end { display: flex; align-items: center; gap: 8px; }
-.wordmark { font-size: 15px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
-.btn.text { border: 0; padding: 0 10px; min-height: 48px; min-width: 48px; color: var(--text-2); }
-.listen-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px; background: var(--teal-tint); color: var(--teal); border: 1px solid var(--teal-line); border-radius: 12px; font-size: 14px; font-weight: 600; }
-.intro-body { gap: 16px; }
-.intro-content { display: flex; flex-direction: column; gap: 14px; }
-.intro-title { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
-.intro-title:focus { outline: none; }
-[data-step="welcome"] .intro-title { font-size: 32px; line-height: 1.15; }
-.intro-lead { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+/* First run (C-Welcome, C-Pay, C-Limits, C-Private, approved 2026-11-14). Its own screen on the dark
+   Night ground in every look: the tokens are set here, so the parts it shares with other screens (the
+   lists, the field and the buttons in its sheets) are dark too. The frame is the design's 390 by 844:
+   the top row at 18, the 300 px hero at 92, the heading at 416, Next at 664 and the link below it. On a
+   shorter phone the gaps and then the hero shrink, the same on every step, so nothing scrolls. Each gap
+   goes from the design's at 844 px high down to its least at 640, so a 360 by 640 phone keeps room for
+   a heading that wraps to two lines in a wider font than the design's (Linux and many Android phones
+   have neither Inter nor SF); between 640 and 844 the hero grows from 156 to 300 along a line too, so
+   that room stays. If the words still do not fit (a larger text size), the hero gives up its height
+   before anything scrolls. */
+.screen.fr {
+  --bg: #0B0D10; --surface: #1A1E25; --surface-2: #171A22; --ink: #F5F5F7; --text-2: #A1A4AB; --text-body: #C9CBD1;
+  --line: #2A2F3A; --dash: #4A505C; --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55; --memory: #3FCFB4; --memory-track: #16302C;
+  --gold: #E2B552; --gold-ink: #E2B552; --gold-tint: #2A2416; --gold-callout: #6B5527; --blue: #7FB4FF; --blue-tint: #16202F;
+  --primary: #F5F5F7; --primary-ink: #0B0D10; --shadow-primary: none; --shadow-raised-sm: none; --focus: #3FCFB4;
+  color-scheme: dark;
+  position: fixed; inset: 0; z-index: 5; min-height: 0; gap: 0; overflow-x: hidden; overflow-y: auto;
+  padding: max(18px, env(safe-area-inset-top)) max(24px, calc(50vw - 236px)) max(clamp(12px, calc(12px + (100dvh - 640px) * 0.147), 42px), env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--ink);
+}
+.fr :focus-visible { outline: 2px solid #3FCFB4; outline-offset: 3px; }
+.fr-top { flex: none; height: 48px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; }
+/* Listen (here and .listen-chip on the other screens) is one plain pill in every browser. The owner saw it
+   break in DuckDuckGo on an iPhone (a WKWebView; Safari drew it right): a shifted rounded piece with a
+   dark box behind the word, most likely its see-through tint and border composited apart from the text
+   in that web view. So the pill takes no see-through paint at all
+   (its colours are the tint already laid on the Night ground), no native button look, and clips what it
+   holds: background, radius, overflow hidden, nothing else. */
+.fr-listen, .listen-chip { -webkit-appearance: none; appearance: none; margin: 0; flex: none; white-space: nowrap; overflow: hidden; isolation: isolate; -webkit-background-clip: border-box; background-clip: border-box; background-image: none; box-shadow: none; text-shadow: none; }
+.fr-listen > *, .listen-chip > * { flex: none; background: none; }
+.fr-listen { grid-column: 1; justify-self: start; height: 48px; border-radius: 24px; border: 1px solid #256F63; background-color: #102020; display: inline-flex; gap: 8px; align-items: center; padding: 0 16px 0 14px; font-size: 15px; font-weight: 500; line-height: 1; color: #3FCFB4; }
+.fr-dots { grid-column: 2; justify-self: center; display: flex; gap: 6px; align-items: center; }
+.fr-dots span { width: 6px; height: 6px; border-radius: 3px; background: #3A3D44; }
+.fr-dots span.done, .fr-dots span.now { background: #F5F5F7; }
+.fr-dots span.now { width: 22px; }
+.fr-skip { grid-column: 3; justify-self: end; height: 48px; min-width: 48px; padding: 0 6px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
+.fr-hero { flex: 0 1 auto; height: clamp(112px, min(100dvh - 484px, 156px + (100dvh - 640px) * 0.706), 300px); min-height: 88px; margin-top: clamp(8px, calc(8px + (100dvh - 640px) * 0.0883), 26px); display: flex; justify-content: center; }
+.fr-hero svg { width: auto; height: 100%; aspect-ratio: 1; }
+.fr-text { flex: none; margin-top: clamp(12px, calc(12px + (100dvh - 640px) * 0.0589), 24px); display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.fr .intro-title { margin: 0; font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; }
+.fr .intro-title:focus { outline: none; }
+.fr-lead { margin: 0; max-width: 330px; font-size: 17px; line-height: 1.45; color: #A1A4AB; }
+.fr-space { flex: 1 0 8px; }
+/* The Private only card: the switch (tile, words, track) and, at its end, the info button for Learn more. */
+.fr-toggle { flex: none; width: 100%; min-height: 72px; margin-bottom: clamp(12px, calc(12px + (100dvh - 640px) * 0.0981), 32px); border-radius: 22px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: flex; align-items: stretch; padding: 0 4px 0 0; color: #F5F5F7; }
+/* At 360 px wide the gaps in the switch are 8 and its padding 10 (12 and 14 from 390 up), so Private only
+   stays on one line in a wider font than the design's (DejaVu Sans on Linux needs 123 px for it). */
+.fr-switch { flex: 1 1 auto; min-width: 0; min-height: 72px; border: 0; border-radius: 21px; background: none; color: inherit; display: flex; align-items: center; gap: clamp(8px, calc(8px + (100vw - 360px) * 0.1333), 12px); padding: 0 6px 0 clamp(10px, calc(10px + (100vw - 360px) * 0.1333), 14px); text-align: left; }
+.fr-info { flex: none; align-self: center; width: 48px; height: 48px; border: 0; border-radius: 24px; background: none; color: #A1A4AB; display: flex; align-items: center; justify-content: center; }
+.fr-toggle-tile { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; background: rgba(63,207,180,0.16); color: #3FCFB4; display: flex; align-items: center; justify-content: center; }
+.fr-toggle-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.fr-toggle-label { font-size: 18px; font-weight: 600; }
+.fr-toggle-state { font-size: 15px; font-weight: 500; color: #3FCFB4; }
+.fr-track { width: 56px; height: 32px; flex-shrink: 0; border-radius: 16px; background: #0E7C6B; display: flex; align-items: center; justify-content: flex-end; padding: 3px; }
+.fr-knob { width: 26px; height: 26px; border-radius: 13px; background: #F5F5F7; display: block; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+.fr-toggle.off { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); }
+.fr-toggle.off .fr-toggle-tile { background: rgba(255,138,120,0.12); color: #FF8A78; }
+.fr-toggle.off .fr-toggle-state { color: #FF8A78; }
+.fr-toggle.off .fr-track { background: #3A3D44; justify-content: flex-start; }
+.fr-next { flex: none; align-self: center; width: 76px; height: 76px; border-radius: 38px; border: 0; background: #F5F5F7; color: #0B0D10; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10); transition: transform 120ms var(--ease); }
+.fr-next:active { transform: scale(.96); }
+.fr-links { flex: none; min-height: 48px; margin-top: clamp(6px, calc(6px + (100dvh - 640px) * 0.0393), 14px); display: flex; justify-content: center; }
+.fr-money { align-self: center; }
+.fr-link { height: 48px; min-width: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
+/* The detail behind Learn more and See the full list, and the invite code: a sheet from the bottom. */
+.fr-sheet { margin: auto auto 0; width: min(520px, 100%); max-width: 100%; max-height: 88dvh; padding: 0; border: 0; border-radius: 26px 26px 0 0; background: #111317; color: var(--ink); box-shadow: 0 -12px 40px rgba(0,0,0,0.5); }
+.fr-sheet[open] { animation: rise 220ms var(--ease) both; }
+.fr-sheet::backdrop { background: rgba(5,6,8,0.65); }
+.fr-sheet-in { display: flex; flex-direction: column; max-height: 88dvh; padding: 8px 20px max(20px, env(safe-area-inset-bottom)); }
+.fr-sheet-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; }
+.fr-sheet-head h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.fr-close { flex: none; width: 48px; height: 48px; border: 0; border-radius: 24px; background: rgba(255,255,255,0.06); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.fr-sheet-body { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.fr-sheet .note { font-size: 15px; line-height: 1.5; color: var(--text-body); }
+.fr-sheet .callout { background: var(--surface); color: var(--text-body); }
 .intro-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); }
 .intro-list.can { border-color: var(--teal-line); }
 .intro-list.cannot { border-color: var(--gold-callout); }
@@ -381,19 +497,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .ring-dot.memory { border-color: var(--memory); }
 .callout { margin: 0; padding: 14px 16px; border-radius: 18px; background: var(--surface); font-size: 14px; line-height: 1.45; }
 .callout.gold { border: 1px solid var(--gold-callout); }
-.intro-panel { flex-direction: column; align-items: stretch; gap: 10px; }
-.intro-panel p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-body); }
-.teal-panel-head { display: flex; align-items: center; gap: 10px; color: var(--teal); }
-.teal-panel-head b { flex: 1; font-size: 18px; }
-.intro-panel.off { background: var(--low-tint); border-color: var(--low-line); }
-.intro-panel.off .teal-panel-head, .intro-panel.off .teal-panel-head b { color: var(--low-ink); }
-.note.center { text-align: center; }
 /* Ways to pay, by icon first, the word under it */
 .way-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .way { min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-raised-sm); color: var(--ink); font-size: 13px; font-weight: 600; text-align: center; }
 .way .tile-ico { width: 48px; height: 48px; }
-.funds-ways { display: flex; flex-direction: column; gap: 8px; }
-.funds-ways .way { background: var(--surface-2); box-shadow: none; }
 
 /* Empty states */
 .chip-ways { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 24px; font-size: 14px; font-weight: 600; }
@@ -409,17 +516,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .pow-ring .pow-pct { grid-area: 1 / 1; position: relative; font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 .pow-ring[hidden] { display: none; }
 
-/* First run: one idea a step. Icons first, then a short heading and one sentence; the detail is under
-   Learn more. */
-.intro-icons .way { min-height: 104px; }
-.intro-icons .tile-ico { width: 56px; height: 56px; border-radius: 18px; }
-[data-step] .intro-lead { font-size: 18px; line-height: 1.45; color: var(--text-body); }
-.learn { border-top: 1px solid var(--line); }
-.learn > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 48px; color: var(--teal); font-size: 15px; font-weight: 600; cursor: pointer; }
-.learn > summary::-webkit-details-marker { display: none; }
-.learn[open] > summary .ico { transform: rotate(45deg); }
-.learn-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
-
 /* Search the web: a switch for the next question, with one line while it is on. */
 .search-box { display: flex; flex-direction: column; gap: 4px; }
 .search-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); font-size: 15px; font-weight: 600; }
@@ -427,3 +523,186 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .search-row .ico { color: var(--teal); }
 .search-note { margin: 0; padding: 0 4px; font-size: 13px; line-height: 1.4; color: var(--text-2); }
 .home .search-box { width: min(336px, 100%); }
+
+/* The voice lab (#/voice-lab), a developer page. */
+.voicelab .lab-env { margin: 0 0 12px; padding-left: 18px; color: var(--text-body); font-size: 14px; }
+.voicelab .lab-check { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
+.voicelab .lab-check input { width: 22px; height: 22px; flex: none; }
+.voicelab .lab-select { min-height: 44px; flex: 1; font-size: 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 10px; }
+.voicelab .lab-results { overflow-x: auto; margin: 12px 0; }
+.voicelab .lab-error { color: var(--danger); font-weight: 600; }
+.voicelab table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.voicelab th, .voicelab td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
+
+/* Listen in a sub screen's header (AddFunds-C1 to C4): back, the centred title, Listen. */
+/* Back, the title, Listen: a long title wraps rather than run under Listen. */
+.listen-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+.listen-head h1 { line-height: 1.2; overflow-wrap: anywhere; }
+.listen-slot { justify-self: end; display: flex; }
+.listen-chip { min-height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--teal-line); background-color: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 600; line-height: 1; }
+
+/* Add money: the wallet cards (AddFunds-C1). The card area never scrolls: the cards take the height left. */
+.screen.wallet { flex: none; height: 100dvh; min-height: 0; overflow: hidden; gap: 10px; }
+.screen.wallet > * { flex: none; }
+.screen.wallet > .way-stage { flex: 1 1 auto; }
+.screen.wallet > .foot { margin-top: auto; }
+.way-bal { align-self: center; flex: none; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 8px; border-radius: 22px; background: var(--surface); border: 1px solid var(--gold-line); font-size: 15px; font-weight: 700; }
+.way-bal-ring { width: 24px; height: 24px; border-radius: 50%; border: 6px solid var(--gold); }
+.way-bal-ring.empty { border-color: var(--gold-track); }
+.way-stage { flex: 1 1 auto; min-height: 0; max-height: 456px; display: flex; margin: 0 -16px -24px; container-type: inline-size; }
+.way-track { --cw: min(300px, calc(100cqw - 90px)); flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px calc((100cqw - var(--cw)) / 2) 30px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.way-track::-webkit-scrollbar { display: none; }
+.way-card { --ink-c: #14161A; position: relative; flex: 0 0 var(--cw); height: 100%; max-height: 420px; display: flex; flex-direction: column; border-radius: 32px; overflow: hidden; color: var(--ink-c); scroll-snap-align: center; scroll-snap-stop: always; box-shadow: inset 0 -7px 0 rgba(0,0,0,0.14), inset 0 2px 0 rgba(255,255,255,0.35), 0 12px 22px rgba(20,22,26,0.18); transition: transform 300ms var(--ease), opacity 300ms var(--ease); }
+.way-card:not(.now) { transform: scale(.92); opacity: .9; }
+/* The cards' own colours, from the design: pictures, so the same in every look. */
+.way-card[data-way="start"], .stack-card[data-way="start"], .sf-hero { background: linear-gradient(160deg, #18A08A 0%, #0E7C6B 55%, #0A5F52 100%); --ink-c: #FFFFFF; }
+.way-card[data-way="note"], .stack-card[data-way="note"] { background: linear-gradient(160deg, #FFFDF6 0%, #F4ECD6 60%, #E9DCB8 100%); }
+.way-card[data-way="lightning"], .stack-card[data-way="lightning"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
+.way-card[data-way="card"], .stack-card[data-way="card"] { background: linear-gradient(160deg, #F2CF78 0%, #D4A544 55%, #B3802A 100%); }
+.way-card[data-way="ecash"], .stack-card[data-way="ecash"] { background: linear-gradient(160deg, #FBF1D6 0%, #F6E9C8 60%, #EBD9A8 100%); }
+.way-card, .stack-card { background: linear-gradient(160deg, #FFFFFF 0%, #F1EFE9 100%); }
+.way-art { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px 20px 0; border: 0; background: transparent; color: inherit; }
+.way-art-svg { width: 100%; height: 100%; max-height: 240px; }
+.way-art-disc { width: min(160px, 70%); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #FFFFFF, #F1EFE9 60%, #DAD6CB); box-shadow: 0 10px 20px rgba(20,22,26,0.12); display: flex; align-items: center; justify-content: center; color: #3F4348; }
+.way-info-btn { position: absolute; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 24px; border: 0; background: rgba(20,22,26,0.08); color: var(--ink-c, inherit); display: flex; align-items: center; justify-content: center; }
+.way-card[data-way="start"] .way-info-btn, .way-card[data-way="lightning"] .way-info-btn, .sf-hero .way-info-btn { background: rgba(255,255,255,0.18); }
+.way-foot { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 24px 22px; }
+.way-card.now .way-foot { animation: wayin 350ms ease-out both; }
+.way-word { font-size: 32px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; }
+.way-badge { align-self: flex-start; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 700; }
+.badge-unlinked { background: #E3F4F0; color: #0A5F52; }
+.badge-seen { background: rgba(212,165,68,0.2); color: #F2CF78; }
+.way-card[data-way="onchain"] .badge-seen { color: #8A6410; }
+.badge-free { background: rgba(255,255,255,0.18); color: #FFFFFF; }
+.badge-app { background: rgba(20,22,26,0.12); color: #14161A; }
+.way-info p { margin: 0; font-size: 15px; line-height: 1.35; opacity: .9; }
+.way-card[data-way="more"] .way-art { padding: 16px 16px 4px; }
+.way-tiles { width: 100%; height: 100%; max-height: 300px; align-self: center; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); gap: 10px; }
+.way-tile { min-height: 48px; min-width: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 10px 6px; border-radius: 20px; border: 1px solid #E3E0D8; background: #FFFFFF; color: #14161A; font-size: 15px; font-weight: 700; box-shadow: inset 0 -4px 0 rgba(20,22,26,0.08); }
+.way-tile .way-spot { flex: 0 1 56px; min-height: 0; height: 56px; width: auto; }
+.way-spot-disc { width: 56px; height: 56px; border-radius: 50%; background: #F1EFE9; display: flex; align-items: center; justify-content: center; }
+.way-tabs { flex: none; display: flex; justify-content: safe center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.way-tab { flex: 0 1 52px; min-width: 48px; height: 52px; border-radius: 26px; border: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; justify-content: center; padding: 0; color: var(--ink); }
+.way-tab[aria-selected="true"] { border: 3px solid var(--ink); }
+.tab-start, .tab-free { color: var(--teal); }
+.tab-note, .tab-ecash, .tab-onchain { color: var(--gold-ink); }
+.tab-card, .tab-fedimint { color: var(--blue); }
+.tab-othermint { color: var(--violet); }
+.tab-more { color: var(--text-body); }
+.way-hand { flex: none; align-self: center; height: 22px; color: var(--text-2); animation: wayhand 1.6s ease-in-out infinite; }
+.way-go { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }
+.way-go .ico { color: var(--gold); }
+.way-go.way-go-idle { visibility: hidden; }
+@keyframes wayin { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes wayhand { 0%, 100% { transform: translateX(6px); } 50% { transform: translateX(-6px); } }
+
+/* Start free (AddFunds-C2 and C3) */
+.screen.start-free-screen { flex: none; height: 100dvh; min-height: 0; overflow-y: auto; gap: 10px; }
+.screen.start-free-screen > * { flex: none; }
+.screen.start-free-screen > .sf-hero { flex: 1 1 190px; }
+.screen.start-free-screen > .foot { margin-top: auto; }
+.sf-hero { position: relative; flex: 1 1 190px; min-height: 72px; max-height: 190px; border-radius: 28px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 -6px 0 rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.25), 0 12px 28px rgba(14,124,107,0.25); color: #FFFFFF; }
+.sf-hero .way-art-svg { width: auto; height: 84%; max-width: 100%; }
+.sf-info { margin: 0; font-size: 15px; line-height: 1.4; color: var(--text-body); }
+.sf-field { display: flex; flex-direction: column; gap: 10px; }
+.sf-field .label { font-size: 15px; font-weight: 700; }
+.field-input.sf-code { min-height: 64px; border-radius: 18px; border: 2px solid var(--ink); padding: 0 18px; font-size: 20px; font-weight: 600; letter-spacing: 0.04em; }
+.sf-row { display: flex; gap: 10px; }
+.sf-row .btn { flex: 1; }
+.btn.sf-btn { min-height: 56px; border-radius: 16px; border: 0; background: var(--surface); box-shadow: var(--shadow-raised); font-size: 16px; font-weight: 700; }
+.sf-field .scanner video { max-height: 30vh; object-fit: cover; }
+.sf-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: none; }
+.sf-tile { min-height: 72px; height: clamp(72px, 10vh, 86px); border-radius: 20px; background: var(--teal-tint); color: var(--teal); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 700; }
+.start-free-screen .msg:empty { display: none; }
+.btn.sf-go { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }
+.sf-go .ico { color: var(--teal-bright); }
+.sf-ask { position: fixed; z-index: 30; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(520px, 100%); background: var(--backdrop); display: flex; flex-direction: column; justify-content: flex-end; }
+.sf-opened { position: absolute; top: max(24px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); margin: 0; min-height: 52px; padding: 0 20px; border-radius: 26px; background: var(--memory); color: var(--primary-ink); display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; white-space: nowrap; box-shadow: 0 8px 20px rgba(14,124,107,0.3); animation: sfdrop 400ms ease-out both; }
+.sf-sheet { max-height: calc(100% - 96px); overflow-y: auto; background: var(--bg); border-radius: 28px 28px 0 0; padding: 10px 20px max(24px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; box-shadow: 0 -8px 30px rgba(20,22,26,0.12); animation: rise 220ms var(--ease) both; }
+.sf-grabber { align-self: center; width: 44px; height: 5px; border-radius: 3px; background: var(--grabber); }
+.sf-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sf-choice { height: clamp(124px, 21vh, 176px); border-radius: 24px; background: var(--surface); border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.sf-choice b { font-size: 17px; font-weight: 800; }
+.sf-choice.private { opacity: .8; }
+.sf-choice.standard { border: 3px solid var(--ink); box-shadow: 0 8px 20px rgba(20,22,26,0.10); }
+.sf-choice-ico { width: clamp(52px, 9vh, 72px); aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.sf-choice.private .sf-choice-ico { background: var(--teal-tint); color: var(--teal); }
+.sf-choice.standard .sf-choice-ico { background: var(--gold-tint); color: var(--gold-ink); }
+.sf-tag { min-height: 26px; padding: 0 10px; border-radius: 13px; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; }
+.sf-tag.private { background: var(--gold-tint); color: var(--gold-ink); }
+.sf-tag.standard { background: var(--teal-tint); color: var(--teal); }
+.sf-callout { margin: 0; padding: 14px 16px; border-radius: 20px; background: var(--gold-tint); border: 1px solid var(--gold-callout); display: flex; gap: 12px; align-items: flex-start; font-size: 16px; line-height: 1.45; color: var(--ink); }
+.sf-callout .ico { color: var(--gold-ink); }
+.sf-sheet .btn.primary { min-height: 64px; border-radius: 20px; font-size: 18px; }
+.sf-sheet .btn.primary .ico { color: var(--teal-bright); }
+.sf-sheet .btn:not(.primary) { min-height: 56px; border-radius: 18px; font-size: 16px; }
+.sf-sheet .btn:not(.primary) .ico { color: var(--teal); }
+/* On Dark and Midnight the primary button is light: its teal and gold icons take the Light look's deeper
+   shades there, so they keep 3 to 1 on it. */
+:root:not([data-scheme="light"]) .sf-go .ico, :root:not([data-scheme="light"]) .sf-sheet .btn.primary .ico { color: #0D7A69; }
+:root:not([data-scheme="light"]) .way-go .ico { color: #8A6410; }
+@keyframes sfdrop { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Funds (AddFunds-C4): the ring in the middle, FREE in its centre on a free model at $0, Ask now, and
+   Add money as a fanned stack of cards. */
+.funds-said { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 20px; background: var(--teal-tint); border: 1px solid var(--teal-line); }
+.funds-said p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.funds-said-ico { flex: none; width: 28px; height: 28px; border-radius: 14px; background: var(--memory); color: var(--primary-ink); display: flex; align-items: center; justify-content: center; }
+.funds-top { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
+.funds-top .caps { margin: 0; }
+.funds-ring { position: relative; align-self: center; width: 180px; height: 180px; }
+.funds-ring-svg { width: 100%; height: 100%; display: block; }
+.funds-ring-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.funds-ring .big { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+/* The amount sits on the coin, a light picture in every look: dark ink on it, whatever the look's ink. */
+.funds-ring .big { color: #14161A; }
+.funds-free-tag { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: #0D7A69; }
+.funds-notes { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+.funds-notes .note { margin: 0; }
+.funds-ask { min-height: 104px; display: flex; align-items: center; gap: 18px; padding: 0 22px; border: 0; border-radius: 28px; background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary), 0 10px 24px rgba(20,22,26,0.18); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; text-align: left; }
+.funds-ask-ico { flex: none; width: 72px; height: 72px; border-radius: 36px; background: color-mix(in srgb, currentColor 10%, transparent); display: flex; align-items: center; justify-content: center; }
+.card-stack { position: relative; flex: none; height: 196px; display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; padding: 18px; border: 0; border-radius: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-raised); overflow: hidden; text-align: left; }
+.stack-head { position: relative; z-index: 2; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; }
+.stack-head .ico { color: var(--gold-ink); }
+.stack-fan { position: absolute; left: 50%; bottom: -58px; width: 0; height: 0; }
+.stack-card { position: absolute; bottom: 0; width: 120px; height: 150px; border-radius: 20px; display: flex; justify-content: center; padding-top: 22px; box-shadow: 0 6px 14px rgba(20,22,26,0.14); color: #14161A; }
+.stack-card { overflow: hidden; align-items: flex-start; padding: 14px 6px 0; }
+.stack-card .way-art-svg, .stack-card .way-art-disc { width: 108px; height: 88px; }
+.stack-shine { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(150deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 40%); box-shadow: inset 0 -4px 0 rgba(0,0,0,0.12), inset 0 1.5px 0 rgba(255,255,255,0.6); pointer-events: none; }
+.stack-left { left: -136px; transform: rotate(-14deg); transform-origin: bottom center; }
+.stack-right { left: 16px; transform: rotate(14deg); transform-origin: bottom center; }
+.stack-centre { left: -60px; bottom: 6px; height: 156px; box-shadow: 0 10px 20px rgba(20,22,26,0.22); }
+
+/* Home at no funds: Add money, and on a free model a chip with its name and FREE (AddFunds-C4). */
+.home-empty { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: 100%; }
+.chip-add { flex: none; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 20px; border: 0; border-radius: 24px; background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); font-size: 15px; font-weight: 700; }
+.chip-add.compact { width: 48px; padding: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-raised-sm); }
+.chip-free { min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; border-radius: 24px; border: 1px solid var(--teal-line); background: var(--teal-tint); color: var(--teal); font-size: 14px; font-weight: 700; }
+.chip-free-name { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-free-tag { flex: none; padding: 4px 8px; border-radius: 12px; background: var(--memory); color: var(--primary-ink); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
+
+/* Reading load (owner, 2026-11-15): a message shows its first sentence with an icon; the detail opens
+   under it from a round info button (core/ui.js say, infoToggle), and Listen and screen readers read it all. */
+.say { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+.say > .ico { flex: none; }
+.say > .say-head { flex: 1 1 0; min-width: 0; }
+.say.centre-text, .status-line.say { justify-content: center; }
+.status-line.say > .say-head, .centre-text.say > .say-head { flex: 0 1 auto; }
+.say > .info-btn { margin: -12px -10px -12px 0; }
+.say > .info-more { flex-basis: 100%; order: 5; }
+.info-btn { flex: none; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; opacity: .85; }
+.info-btn[aria-expanded="true"] { opacity: 1; background: var(--surface-2); }
+.info-more { display: block; margin: 0; font-size: 15px; font-weight: 400; line-height: 1.4; color: var(--text-body); text-align: left; }
+.info-more p { margin: 0 0 6px; }
+.info-more[hidden] { display: none; }
+.with-info { display: flex; align-items: center; gap: 4px; }
+.with-info > :first-child { flex: 1; min-width: 0; }
+.opt { display: flex; flex-direction: column; gap: 6px; }
+.opt-row { display: flex; align-items: stretch; gap: 6px; }
+.opt-row > .model-card { flex: 1; min-width: 0; }
+.opt-row > .info-btn { align-self: center; }
+.opt > .info-more { padding: 0 6px 6px; }
+.goes li { display: flex; align-items: center; gap: 10px; list-style: none; min-height: 32px; }
+.goes { padding-left: 0; }
+.seg button .ico { vertical-align: -3px; margin-right: 4px; }
+.ib { display: inline-flex; align-items: center; gap: 6px; }

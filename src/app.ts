@@ -9,7 +9,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
-import { audioModelList, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
+import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
@@ -17,25 +17,28 @@ import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
 import { type Config, isFreeModel, mintAliasList, type ModelConfig, type Unit } from './config.ts';
 import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
-import { apkSource, registerDownloadRoutes } from './download.ts';
+import { apkSource, PRIVATE_VOICE_APK_URL, registerAppLinks, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
+import { type FreeVoice, FreeVoiceError } from './free-voice.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
-import { type Account, type Invites, type Ledger, LedgerError } from './ledger.ts';
+import { type Account, type Invites, type Ledger, LedgerError, type Passes } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
 import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
-import { costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
+import { audioCostNanoUsd, costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
-import { serviceWorkerScript } from './sw.ts';
+import { serviceWorkerScript, v2WorkerScript } from './sw.ts';
 
 export interface Deps {
   config: Config;
   db: DB;
   ledger: Ledger;
   invites: Invites;
+  /** Event passes: accepted by POST /v1/wallet/open only (src/accounts.ts openAccount). */
+  passes: Passes;
   wallet: GatewayWallet;
   rates: RateOracle;
   suppliers: Map<string, Supplier>;
@@ -45,6 +48,8 @@ export interface Deps {
   free?: FreeRules;
   /** The daily faucet, when it is turned on. */
   faucet?: Faucet;
+  /** Free voice questions, when both their limits are above 0 (src/free-voice.ts). */
+  freeVoice?: FreeVoice;
   publicDir?: string;
 }
 
@@ -57,6 +62,8 @@ const EXPOSE = [
   'X-Forge-Balance-Msub',
   'X-Forge-Change-Url',
   'X-Forge-Privacy',
+  // Free voice questions this balance has left today, on a transcription served free.
+  'X-Forge-Free-Voice-Left',
   'Ehbp-Response-Nonce',
   'Retry-After',
   // A Bellows engine's proof of work challenge (public/v2/core/pow.js); the app reads it from a 428.
@@ -83,6 +90,21 @@ const ALLOW = [
 function apiError(c: Context, status: number, code: string, message: string, headers: Record<string, string> = {}, extra: object = {}) {
   for (const [k, v] of Object.entries(headers)) c.header(k, v);
   return c.json({ error: { message, type: code, code }, ...extra }, status as any);
+}
+
+/**
+ * The headers that make a page cross-origin isolated (`crossOriginIsolated`), which WebAssembly threads
+ * need. CORP same-origin also keeps other sites from embedding these files.
+ */
+export const ISOLATION_HEADERS = Object.freeze({
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+});
+
+async function isolated(c: Context, next: () => Promise<void>) {
+  await next();
+  for (const [k, v] of Object.entries(ISOLATION_HEADERS)) c.header(k, v);
 }
 
 /** The shape of a request id this gateway issues; a paid retry may echo one back (see the chat route). */
@@ -114,7 +136,7 @@ interface SettleResult {
 const OPEN_POSTS = /^\/v1\/(free|wallet\/fund\/card)\//i;
 
 export function createApp(d: Deps) {
-  const { config, db, ledger, invites, wallet, rates, suppliers } = d;
+  const { config, db, ledger, invites, passes, wallet, rates, suppliers } = d;
   const env = config.env;
   const app = new Hono();
   const limiter = new RateLimiter(env.FORGE_RATE_LIMIT_RPM);
@@ -171,6 +193,7 @@ export function createApp(d: Deps) {
       const retry = e.extra?.retry_after;
       return apiError(c, e.status, e.code, e.message, retry ? { 'Retry-After': String(retry) } : {}, e.extra ?? {});
     }
+    if (e instanceof FreeVoiceError) return apiError(c, e.status, e.code, e.message, { 'Retry-After': String(e.retryAfter) }, e.extra);
     if (e instanceof UpstreamError) return apiError(c, e.status, 'upstream_error', e.message);
     log.error('unhandled', { path: c.req.path, err: errText(e) });
     return apiError(c, 500, 'internal_error', 'internal error');
@@ -301,6 +324,16 @@ export function createApp(d: Deps) {
     }
   });
 
+  // The least a transcription costs the operator: the cheapest one, at the shortest recording taken.
+  const transcribers = config.catalog.audio.filter((m) => m.kind === 'transcription');
+  const minVoiceNano = transcribers.length ? Math.min(...transcribers.map((m) => audioCostNanoUsd(m, { seconds: MIN_SECONDS }, 1))) : 0;
+  const freeVoiceOn = !!d.freeVoice?.enabled && transcribers.length > 0;
+  const freeVoiceStatus = (a: Account) => {
+    const s = d.freeVoice?.status(a.id, minVoiceNano);
+    if (!s || !freeVoiceOn || a.free || ledger.isFrozen(a.id)) return { enabled: false, per_day: 0, left: 0, resets_at: s?.resets_at ?? null };
+    return s;
+  };
+
   const requireAccount = (c: Context): Account => {
     const key = bearer(c);
     const a = key ? ledger.findByKey(key) : undefined;
@@ -320,6 +353,9 @@ export function createApp(d: Deps) {
       available_msub: a.balance_msub - reserved,
       balance: a.balance_msub / MSUB_PER_UNIT,
       refundable: Math.floor((a.balance_msub - reserved) / MSUB_PER_UNIT),
+      // Free voice questions left today (docs/PAYMENTS.md), so the app knows before recording. A
+      // free-question (credit) balance takes no speech to text at all, and a frozen one takes nothing.
+      free_voice: freeVoiceStatus(a),
     });
   });
 
@@ -432,14 +468,15 @@ export function createApp(d: Deps) {
   // Opens a balance with an invite code and nothing on it (docs/PAYMENTS.md, Free models): its key uses
   // the free models at once and takes funds later like any balance. Always takes an invite, even when
   // FORGE_INVITE_ONLY is off, so a free model is never open to anyone without one. A key the gateway
-  // already knows is answered as it is, and its invite is not touched.
+  // already knows is answered as it is, and its invite is not touched. An event pass (src/ledger.ts
+  // Passes) works here and only here: each balance it opens counts one use, and a known key counts none.
   app.post('/v1/wallet/open', async (c) => {
     const body = await readJson(c).catch(() => ({}));
     const invite = typeof body?.invite === 'string' ? body.invite.trim() : c.req.header('x-forge-invite');
     const unit = unitOf(body?.unit);
     const known = bearer(c) ? ledger.findByKey(bearer(c)!) : undefined;
     if (known?.free) throw new LedgerError('wrong_balance', 'this is a free-question balance; open a balance without a key, with an invite code', 409);
-    const opened = known ? { account: known, created: false, generatedKey: undefined } : openAccount({ db, ledger, invites, inviteOnly: true }, { key: bearer(c), invite, unit });
+    const opened = known ? { account: known, created: false, generatedKey: undefined } : openAccount({ db, ledger, invites, passes, inviteOnly: true }, { key: bearer(c), invite, unit });
     // A balance opened here stays open at 0: the ledger line keeps releaseIfEmpty from deleting it when a
     // later funding of it expires (src/accounts.ts).
     if (opened.created) ledger.creditRaw(opened.account.id, 0, 'open', null);
@@ -452,6 +489,8 @@ export function createApp(d: Deps) {
     c.json({
       ...(await funding.methods()),
       invite_only: env.FORGE_INVITE_ONLY,
+      // Free voice questions: speech to text for a balance that cannot pay for it, per_day a day.
+      free_voice: { enabled: freeVoiceOn, per_day: freeVoiceOn ? d.freeVoice!.perDay : 0 },
       free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null },
       // Free models (pricing "free"): a balance opened with an invite code uses them with nothing on it.
       open: { enabled: freeModelIds.length > 0, free_models: freeModelIds },
@@ -1129,7 +1168,9 @@ export function createApp(d: Deps) {
   });
 
   // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
-  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH));
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL));
+  // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
+  registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 
   // ------------------------------------------------------------------ beta waitlist
   // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
@@ -1167,8 +1208,14 @@ export function createApp(d: Deps) {
       const { body, version } = sw();
       return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version });
     });
-    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js).
+    // The v2 app lives beside v1 at /v2/, with its own service worker scope (public/v2/sw.js), whose
+    // build id changes with every deploy of the app (src/sw.ts).
     app.get('/v2', (c) => c.redirect('/v2/', 301));
+    const sw2 = v2WorkerScript(d.publicDir);
+    app.get('/v2/sw.js', (c) => {
+      const { body, version } = sw2();
+      return c.body(body, 200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Forge-SW-Version': version, ...ISOLATION_HEADERS });
+    });
     // A photo shared into the v2 app is caught by its service worker (public/v2/sw.js) and never sent.
     // When that worker is not running, the phone posts it here instead: it is dropped unread and the
     // page opens saying the phone sent it to the server, which dropped it (photo/sent, not photo/missed:
@@ -1184,6 +1231,24 @@ export function createApp(d: Deps) {
     const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
+    // The event link (public/v2/join/), at /j: the QR code on a slide reads /j#<pass>. The pass stays in
+    // the fragment, so it never reaches this server or its logs; the page reads it on the phone.
+    const joinPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'join', 'index.html'), 'utf8'));
+    app.get('/j', joinPage);
+    app.get('/j/', joinPage);
+    // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
+    // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
+    // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same
+    // headers because a worker an isolated page starts must carry them (pdf.js reads PDFs in one); on
+    // a v1 page they change nothing, as v1 is not isolated and its workers fetch only this origin.
+    app.use('/v2/*', isolated);
+    app.use('/vendor/*', isolated);
+    // The voice files are pinned to a commit and the commit is in their path, so they never change
+    // under the same address: the phone may keep them for a year without asking again.
+    app.use('/v2/voice/phonon/*', async (c, next) => {
+      await next();
+      if (c.res.ok && !c.req.path.endsWith('/index.json')) c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    });
     app.use(
       '/*',
       serveStatic({

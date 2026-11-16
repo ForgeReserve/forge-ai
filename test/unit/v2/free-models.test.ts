@@ -64,7 +64,7 @@ describe('funds on a free model', () => {
   it('says plainly what the engine\'s refusal means, with Add funds as the next step', () => {
     const v = ERR.errorView('balance_key_required', 'x');
     expect(v).toEqual({ key: 'error.needKey', next: 'addFunds' });
-    for (const k of ['error.needKey', 'type.needKey', 'type.openBalance', 'funds.needKey', 'funds.modelFree', 'model.free', 'model.freeSub', 'home.openBalance']) expect(en[k], k).toBeTruthy();
+    for (const k of ['error.needKey', 'type.needKey', 'type.openBalance', 'funds.needKey', 'funds.modelFree', 'model.free', 'model.freeSub', 'home.free', 'home.freeChip']) expect(en[k], k).toBeTruthy();
   });
 });
 
@@ -87,6 +87,34 @@ describe('opening a balance with an invite', () => {
     expect(m.available(null)).toBe(false);
     key = 'sk-forge-x';
     expect(m.available({ open: { enabled: true, free_models: ['x'] } })).toBe(false);
-    for (const k of ['name', 'sub', 'what', 'open', 'opening', 'opened', 'used', 'bad', 'later']) expect(en[`fund.invite.${k}`], k).toBeTruthy();
+    for (const k of ['name', 'sub', 'what', 'open', 'opening', 'used', 'bad', 'later']) expect(en[`fund.invite.${k}`], k).toBeTruthy();
+  });
+});
+
+describe('Start free: which free model, and when the card shows', () => {
+  it('chooses glm-5.3-flash when listed, else the first free model, never an uncensored or paid one', () => {
+    const f = (id: string, extra: any = {}) => ({ ...free, id, ...extra });
+    expect(PRICE.PREFERRED_FREE).toBe('glm-5.3-flash');
+    expect(PRICE.freeModelChoice([paid, f('kimi-k3'), f('glm-5.3-flash')])?.id).toBe('glm-5.3-flash');
+    expect(PRICE.freeModelChoice([paid, f('glm-5.3-flash', { uncensored: true }), f('kimi-k3')])?.id).toBe('kimi-k3');
+    expect(PRICE.freeModelChoice([paid])).toBeNull();
+    expect(PRICE.freeModelChoice(null)).toBeNull();
+  });
+
+  it('shows the card with free models and no key, or a $0 balance on a paid model', async () => {
+    const SF: any = await import('../../../public/v2/screens/startfree.js' as string);
+    const v = (o: any) => ({ startFree: true, hasKey: false, balanceMsub: null, modelFree: false, ...o });
+    expect(SF.startFreeWanted(v({}))).toBe(true);
+    expect(SF.startFreeWanted(v({ modelFree: true }))).toBe(true); // a free model still needs a key
+    expect(SF.startFreeWanted(v({ hasKey: true, balanceMsub: 0 }))).toBe(true);
+    expect(SF.startFreeWanted(v({ hasKey: true, balanceMsub: 0, modelFree: true }))).toBe(false);
+    expect(SF.startFreeWanted(v({ hasKey: true, balanceMsub: 500 }))).toBe(false);
+    expect(SF.startFreeWanted(v({ startFree: false }))).toBe(false);
+  });
+
+  it('has the words, short and plain', () => {
+    for (const k of ['link', 'title', 'go', 'note', 'money', 'opened', 'ask', 'use', 'keep', 'using', 'ready', 'kept', 'noModel', 'useModel']) expect(en[`startFree.${k}`], k).toBeTruthy();
+    expect(en['startFree.ask']).toBe('Free models are Standard models: the company running them can read what you type. Use them?');
+    expect(en['startFree.note']).toBe('Free models answer at no cost. Add money later for private models.');
   });
 });

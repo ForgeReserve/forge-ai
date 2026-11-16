@@ -12,25 +12,28 @@ import { eraseEverything, isEmpty, leftovers } from './core/erase.js';
 import { SEEN_KEY, SEEN_VALUE, shouldShow, STEP_ROUTES, stepOfRoute } from './core/firstrun.js';
 import { createSweeper, lastUsed } from './core/history.js';
 import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/engine.js';
-import { createNative, defaultEngine } from './core/native.js';
+import { createNative, defaultEngine, followBars, reloadForIsolation } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
+import { isJoinHash, joinPlan, passFrom } from './core/join.js';
 import { readNote } from './core/note.js';
 import { createTillPays, createTillSettings } from './core/till.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { ehbpBytes, estimate, holdMsub, isFreeModel, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
+import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
-import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
+import { createUpdater } from './core/updates.js';
+import { createStore, DEFAULT_SETTINGS, hiddenCount, isPrivate, keyName, loadedSettings, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -38,7 +41,9 @@ import { engineScreen } from './screens/engine.js';
 import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
-import { addFundsScreen, fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { inviteError, startFreeScreen } from './screens/startfree.js';
+import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
 import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
@@ -106,6 +111,34 @@ const native = createNative();
 if (native) setAdapter('share', native.share);
 
 const engineBase = () => S.settings.engine || defaultEngine(native);
+
+// The natural voice made on the phone (core/phonon.js). Its files are on this app's own address, or in
+// the APK in the Android app, where there is nothing to download. It runs on the graphics chip or the
+// processor (core/phonon.js chooseVoiceDevice); a WebGPU failure is remembered in the settings
+// (voiceDevice), so the next start goes straight to the processor.
+// In the Android app, native code makes the voice where the phone runs it (core/native.js nativeVoice).
+// How fast this phone makes it is kept in the settings (voicePace), so a slow phone waits for sound in
+// hand, or reads with its own voice, from the first word of the next answer (core/voicepace.js).
+const phonon = createPhonon({
+  native: !!native,
+  nativeVoice: native?.voice ?? null,
+  pace: {
+    get: () => S.settings.voicePace || null,
+    set: (v) => {
+      S.settings.voicePace = v;
+      saveSettings();
+    },
+  },
+  prefs: () => ({ preferNatural: !!S.settings.preferNatural }),
+  voice: () => S.settings.naturalVoice || null,
+  memory: {
+    get: () => S.settings.voiceDevice || null,
+    set: (v) => {
+      S.settings.voiceDevice = v;
+      saveSettings();
+    },
+  },
+});
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
@@ -166,6 +199,9 @@ function view() {
     // model: only the balance key it needs ('needKey').
     fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use, freeModel: modelFree, hasKey }),
     modelFree,
+    // Start free (screens/startfree.js): this engine has free models, which a $0 balance opened with an
+    // invite code can use. Offered while there is no key or the balance is at 0 on a paid model.
+    startFree: !!S.methods?.open?.enabled,
     // No funds at all (no balance yet or a balance at zero, and no free questions): the home and Funds
     // show their empty state, and the gold ring invites a paper note scan.
     noFunds: paidNone && fr.left === 0,
@@ -196,6 +232,8 @@ function view() {
 /** The voice modules by id, for one direction. */
 const voiceMods = (kind) => Object.fromEntries((registry?.list(kind) ?? []).map((x) => [x.instance.id, x.instance]));
 const voiceIn = () => pickVoiceIn(voiceMods('voice-in'), S.settings);
+/** True for a voice-in that hears on the phone itself: the phone's recogniser or Forge Private Voice's own model. */
+const onPhone = (m) => m?.id === 'phone' || m?.id === 'bundled';
 const voiceOut = () => pickVoiceOut(voiceMods('voice-out'), S.settings);
 
 /**
@@ -252,21 +290,40 @@ const audio = {
  * it becomes (about CHARS_PER_SECOND characters a second) and, when the engine reads it aloud, the
  * longest part of the answer that is read. null when a part has no price.
  */
-function talkPrice(seconds, inMod) {
-  const toText = inMod.price(seconds);
+function talkPrice(seconds, inMod, freeVoice = false) {
+  // A free voice question: turning it into text costs nothing.
+  const toText = freeVoice ? 0 : inMod.price(seconds);
   const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND))).costMsub;
   const reading = readingPrice();
   if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
   return (toText ?? 0) + question + reading;
 }
 
+/**
+ * Free voice questions (docs/PAYMENTS.md): the engine turns a recording into text at no charge for a
+ * balance that cannot pay for it, while it has some left today. use: this recording goes free. out: the
+ * balance cannot pay and none are left today, so the engine would refuse it.
+ */
+function freeVoiceNow(inMod, seconds = 0) {
+  const fv = S.freeVoice;
+  if (!inMod || inMod.id !== 'engine' || !S.key || !fv?.enabled) return { use: false, out: false };
+  const price = inMod.price(Math.max(seconds, 0.5));
+  const funds = S.availableMsub ?? S.balanceMsub ?? 0;
+  if (price == null || funds >= price) return { use: false, out: false };
+  return { use: fv.left > 0, out: !(fv.left > 0) };
+}
+
 function talkView(model, unit) {
   const inMod = voiceIn();
   const tk = S.talk ?? { phase: 'idle' };
+  const fv = freeVoiceNow(inMod, tk.seconds ?? 0);
   return {
     available: !!inMod && !!model,
-    // The engine's speech to text is paid from the paid balance, so a voice question is never all free.
-    freeOk: inMod?.id === 'device',
+    // The engine's speech to text is paid from the paid balance unless it is a free voice question. The
+    // phone's own recogniser (or the browser's) costs nothing, so then the question can be all free.
+    freeOk: inMod?.id === 'device' || onPhone(inMod) || fv.use,
+    freeVoice: fv.use,
+    freeVoiceOut: fv.out,
     phase: tk.phase,
     seconds: tk.seconds ?? 0,
     level: tk.level ?? 0,
@@ -275,19 +332,23 @@ function talkView(model, unit) {
     error: tk.error ?? null,
     unit,
     maxSeconds: inMod?.maxSeconds() ?? 60,
-    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod) : null,
-    // Where the sound goes, for the line under the button: engine-private, engine-standard or device.
-    route: !inMod ? null : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
+    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod, fv.use) : null,
+    // Where the sound goes, for the line under the button: phone, engine-private, engine-standard or device.
+    // Forge Private Voice's own speech to text is On this phone too.
+    route: !inMod ? null : onPhone(inMod) ? 'phone' : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
   };
 }
 
 function speakView() {
   const out = voiceOut();
   const ex = lastExchange(S.conv.messages);
+  const progress = S.speaking?.progress;
   const answerMsg = S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
   return {
     available: !!out && !!ex?.answer?.content,
     state: S.speaking?.state ?? 'idle',
+    // How much of the natural voice's one-time download is here (0 to 99), while it downloads.
+    progress: Number.isInteger(progress) ? progress : null,
     current: !!answerMsg && S.speaking?.key === answerMsg.id,
     // The engine's voice reads the answer in plain form on its way to the model: the line says so.
     viaEngine: out?.id === 'engine',
@@ -315,10 +376,11 @@ function applyLook() {
   const looks = registry?.list('look') ?? [];
   let id = S.settings.look;
   if (S.settings.followSystem) id = darkQuery?.matches ? (S.settings.look === 'midnight' ? 'midnight' : 'dark') : 'light';
-  const look = looks.find((l) => l.instance.id === id) ?? looks[0];
+  const look = looks.find((l) => l.instance.id === id) ?? looks.find((l) => l.instance.id === DEFAULT_SETTINGS.look) ?? looks[0];
   if (!look) return;
   setTokens(look.instance.tokens, look.instance.scheme);
-  keep(LOOK_CACHE, JSON.stringify({ tokens: look.instance.tokens, scheme: look.instance.scheme }));
+  // index.html paints the first frame from this, before any script of the app has loaded.
+  keep(LOOK_CACHE, JSON.stringify({ look: look.instance.id, tokens: look.instance.tokens, scheme: look.instance.scheme }));
 }
 
 function setTokens(tokens, scheme) {
@@ -329,14 +391,17 @@ function setTokens(tokens, scheme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tokens.bg);
 }
 
-// The last look, before the modules load, so a dark look does not flash light.
+// The last look, before the modules load, so a dark look does not flash light. A light one saved before
+// Midnight became the default (no `look` in it) is Midnight now unless picked again (core/state.js).
 try {
   const c = JSON.parse(ui.load(LOOK_CACHE) ?? 'null');
-  if (c?.tokens) setTokens(c.tokens, c.scheme);
+  if (c?.tokens && (c.look || c.scheme === 'dark')) setTokens(c.tokens, c.scheme);
 } catch {
   /* first run */
 }
 darkQuery?.addEventListener?.('change', () => S.settings.followSystem && applyLook());
+// In the Android app the phone's bars follow the page's colour (core/native.js followBars).
+if (native) followBars(native.bars);
 
 // ------------------------------------------------------------------ balance
 
@@ -389,6 +454,8 @@ async function refreshBalance() {
     S.unit = w.unit;
     S.balanceMsub = w.balance_msub;
     S.availableMsub = w.available_msub;
+    // Free voice questions left today (docs/PAYMENTS.md): speech to text the operator pays for.
+    S.freeVoice = w.free_voice ?? null;
     S.peakMsub = nextPeak(S.peakMsub, w.balance_msub);
     await savePeak();
   } catch (e) {
@@ -460,6 +527,10 @@ const wallet = {
   mintAliases: () => S.mintAliases,
   units: () => S.units,
   lockKey: () => lockKey(),
+  /** Whether Private only is on: Start free asks before the free (Standard) models are used. */
+  privateOnly: () => !!S.settings.privateOnly,
+  /** Start free's choice, after a yes (actions.useFreeModels): Private only off, a free model chosen. */
+  useFreeModels: () => actions.useFreeModels(),
   /**
    * Adds eCash through the vault: stored on the phone first, removed only once credited. A voucher of
    * free questions (from the engine's credit mint) goes on the free balance; the result says free: true.
@@ -483,7 +554,8 @@ const wallet = {
   /**
    * Opens a balance with an invite code and nothing on it, for the free models (Start free: the first
    * run and the fund module invite). The new key is kept like any balance key; funds can be added to it
-   * later. When the chosen model is not free, the first free model Private only allows is chosen.
+   * later. When the chosen model is not free, the free model Private only allows (core/price.js
+   * freeModelChoice) is chosen; Private only itself is never changed here (Start free asks first).
    * Resolves {created, freeShown}: freeShown is false when Private only hides every free model.
    */
   open: async (invite) => {
@@ -495,7 +567,7 @@ const wallet = {
     }
     const shown = visibleModels(S.models, S.settings).filter(isFreeModel);
     if (shown.length && !isFreeModel(pickModel(S.models, S.settings))) {
-      S.settings.model = shown[0].id;
+      S.settings.model = freeModelChoice(shown).id;
       await saveSettings();
       store.set({});
     }
@@ -713,7 +785,7 @@ async function generate() {
   await refreshBalance();
   // A question asked by voice is answered by voice, unless reading aloud is off.
   const asked = history.at(-1);
-  if (asked?.meta?.voice && reply.content && !reply.meta.error && !reply.meta.stopped && S.conv === conv) talk.speak(reply);
+  if (asked?.meta?.voice && reply.content && !reply.meta.error && !reply.meta.stopped && S.conv === conv) talk.speak(reply, { auto: true });
 }
 
 /** The plain words for a failed answer, with what it cost when the engine charged for it. */
@@ -975,9 +1047,9 @@ async function resumeCards() {
   }
 }
 
-/** Where a person with no balance key goes to open one for a free model: the invite module, else Add funds. */
+/** Where a person with no balance key goes to open one for a free model: Start free, else Add money. */
 function openBalance() {
-  if (registry?.list('fund').some((x) => x.instance.id === 'invite' && x.instance.available(S.methods))) return nav('fund', { id: 'invite' });
+  if (S.methods?.open?.enabled) return nav('startFree');
   return nav('addFunds');
 }
 
@@ -988,7 +1060,8 @@ function blocker() {
   if (!S.key || S.balanceMsub === 0) {
     const v = view();
     // A voice question the phone turns into words can be a free question; the engine's speech to text
-    // is paid from the paid balance.
+    // is paid from the paid balance, or free while the balance has free voice questions left today.
+    if (v.fundsBlock === null && v.talk.freeVoiceOut) return { key: 'talk.freeVoiceOut' };
     if (!(v.talk.freeOk && v.fundsBlock === null)) {
       if (v.fundsBlock === 'needKey') return { key: 'type.needKey', go: openBalance };
       if (v.fundsBlock === 'freeOut') return { key: 'type.freeOut', go: () => nav('freeOut') };
@@ -1013,7 +1086,86 @@ const talk = createTalk({
   ask,
   refresh: () => refreshBalance(),
   errorText: (err) => errorText(err, S.unit),
+  askDownload: (bytes) => askVoiceDownload(bytes),
+  showDownload: (bytes) => showVoiceDownload(bytes),
+  unlockAudio: () => adapters.speaker.unlock?.(),
 });
+
+/**
+ * Asks once before the natural voice is downloaded, with its size. Resolves true for Download. While
+ * the question is open, nothing is fetched.
+ */
+function askVoiceDownload(bytes) {
+  return new Promise((resolve) => {
+    const size = Math.max(1, Math.round(bytes / 1e6));
+    const close = (ok) => {
+      dlg.close();
+      dlg.remove();
+      resolve(ok);
+    };
+    const dlg = ui.el(
+      'dialog',
+      { class: 'float-card voice-dl', id: 'voiceDownload', 'aria-labelledby': 'voiceDlTitle' },
+      ui.el('h2', { id: 'voiceDlTitle', text: t('voiceDl.title') }),
+      ui.el('p', { text: t('voiceDl.body', { size }) }),
+      ui.el('div', { class: 'row-btns' }, ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlNo', text: t('voiceDl.no'), onclick: () => close(false) }), ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlYes', text: t('voiceDl.yes'), onclick: () => (adapters.speaker.unlock?.(), close(true)) })),
+    );
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
+/**
+ * The natural voice's first download, once the person said Download: a bar with MB done of MB in all and
+ * the percent, then the phase in words, until the voice starts reading. A failed download says so here,
+ * with Try again. Hide leaves it downloading (Listen shows the percent).
+ */
+function showVoiceDownload(bytes = 0) {
+  let open = true;
+  const meter = ui.meterBar({ id: 'voiceMeter', label: t('voiceDl.label') });
+  const error = ui.el('p', { class: 'msg err', id: 'voiceDlError', role: 'alert', hidden: true });
+  const hide = ui.el('button', { type: 'button', class: 'btn', id: 'voiceDlHide', text: t('voiceDl.hide'), onclick: () => close() });
+  const retry = ui.el('button', { type: 'button', class: 'btn primary', id: 'voiceDlRetry', text: t('dl.retry'), hidden: true });
+  const dlg = ui.el('dialog', { class: 'float-card voice-dl', id: 'voiceProgress', 'aria-labelledby': 'voiceProgTitle' }, ui.el('h2', { id: 'voiceProgTitle', text: t('voiceDl.getting') }), meter, error, ui.el('div', { class: 'row-btns' }, hide, retry));
+  const close = () => {
+    if (!open) return;
+    open = false;
+    dlg.close();
+    dlg.remove();
+  };
+  dlg.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    close();
+  });
+  meter.set({ fraction: 0, text: t('dl.amount', phononMeter({ total: bytes })), phase: t('dl.downloading') });
+  document.body.append(dlg);
+  dlg.showModal();
+  return {
+    progress(p) {
+      if (!open) return;
+      const n = phononMeter(p);
+      meter.set({ fraction: p.fraction, text: t('dl.amount', n), phase: t(p.phase === 'ready' ? 'dl.ready' : 'dl.downloading') });
+    },
+    fail(message, again) {
+      if (!open) return false;
+      error.textContent = t('dl.failed', { message });
+      error.hidden = false;
+      meter.set({ phase: '' });
+      hide.textContent = t('voiceDl.close');
+      retry.hidden = false;
+      retry.onclick = () => {
+        close();
+        again();
+      };
+      return true;
+    },
+    close,
+  };
+}
 
 const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant' && m.content) ?? null;
 
@@ -1029,6 +1181,17 @@ const actions = {
   stopSpeaking: () => talk.stopSpeaking(),
   setVoiceIn: (id) => {
     S.settings.voiceIn = id;
+    S.settings.voiceInPicked = true;
+    saveSettings();
+    store.set({});
+  },
+  setNaturalVoice: (name) => {
+    S.settings.naturalVoice = name;
+    saveSettings();
+    store.set({});
+  },
+  setPreferNatural: (on) => {
+    S.settings.preferNatural = !!on;
     saveSettings();
     store.set({});
   },
@@ -1083,6 +1246,7 @@ const actions = {
   takeOut,
   setLook: (id) => {
     S.settings.look = id;
+    S.settings.lookPicked = true;
     applyLook();
     saveSettings();
     store.set({});
@@ -1097,6 +1261,28 @@ const actions = {
     S.settings.privateOnly = on;
     saveSettings();
     store.set({});
+  },
+  /**
+   * Start free's choice (screens/startfree.js): turns Private only off and chooses a free model (the
+   * chosen one if it is free, else core/price.js freeModelChoice). Called only after the person said yes to using Standard models,
+   * or with Private only off already. Returns the model, or null when the engine lists none.
+   */
+  useFreeModels: () => {
+    // A free model already chosen stays chosen.
+    const cur = pickModel(S.models, { ...S.settings, privateOnly: false });
+    const m = isFreeModel(cur) ? cur : freeModelChoice(S.models);
+    if (!m) return null;
+    S.settings.privateOnly = false;
+    S.settings.model = m.id;
+    saveSettings();
+    store.set({});
+    return m;
+  },
+  /** Keeps the way to add money used last on this phone, so Add money shows its card first ('' for none). */
+  setLastWay: (id) => {
+    if (S.settings.lastWay === id) return;
+    S.settings.lastWay = id;
+    saveSettings();
   },
   /** Chooses the first free model Private only allows (Funds and Type offer it when free questions are left). */
   useFreeModel: () => {
@@ -1194,6 +1380,13 @@ function leave(name) {
 }
 
 function onPop() {
+  // An event link opened while this page was open (only the address's #join=<pass> changed): the pass
+  // leaves the address and is used, as on a fresh open.
+  if (isJoinHash(location.hash)) {
+    const pass = passFrom(location.hash);
+    history.replaceState(history.state, '', location.pathname + location.search);
+    if (live) joinWith(pass);
+  }
   if (afterPop) {
     const name = afterPop;
     afterPop = null;
@@ -1202,16 +1395,71 @@ function onPop() {
   render();
 }
 
+// ------------------------------------------------------------------ event links (core/join.js)
+
+// Set by joinWith for the Start free screen it opens: that screen starts on the question.
+let joinAsk = false;
+
+/**
+ * An event pass (/j#<pass> on an event's slide; docs/ANDROID.md, Event links), from the address
+ * (#join=<pass>) or from the Android app (ForgeJoin). With no balance key yet, it opens a free balance
+ * the way Start free does (wallet.open), the first run is over, and the person is asked, in Start free's
+ * words, before Private only is turned off for the free models; then the home. A phone that holds a key
+ * already keeps it and spends nothing. A refused pass (used up, expired) is said in a toast, and the
+ * phone goes on as on any first open: the first run, with its own Start free.
+ *
+ * One at a time: a pass that comes while one is being used (the QR code scanned twice on slow wifi, so
+ * the app gets the link twice) is dropped, not queued. S.key is only set once wallet.open answers, so a
+ * second open would make a second balance, spend a second use of the pass and orphan the first key; and
+ * once the first open is done, joinPlan keeps that key anyway.
+ */
+let joinJob = null;
+function joinWith(pass) {
+  if (joinJob) return joinJob;
+  joinJob = joinOnce(pass).finally(() => {
+    joinJob = null;
+  });
+  return joinJob;
+}
+
+async function joinOnce(pass) {
+  if (erased) return;
+  const plan = joinPlan({ pass, hasKey: !!S.key });
+  if (plan !== 'open') return;
+  ui.toast(t('fund.invite.opening'), 8000);
+  try {
+    await wallet.open(pass);
+  } catch (e) {
+    ui.toast(inviteError(e, t), 5000);
+    if (ui.load(SEEN_KEY) !== SEEN_VALUE && currentName === 'home') nav(STEP_ROUTES.welcome, {}, { replace: true });
+    return;
+  }
+  keep(SEEN_KEY, SEEN_VALUE);
+  if (!S.settings.privateOnly) {
+    // Private only is off already: a free model is chosen, no question.
+    const m = actions.useFreeModels();
+    ui.toast(m ? t('startFree.ready', { name: m.name ?? m.id }) : t('startFree.opened'), 4000);
+    if (currentName !== 'home') leave('home');
+    else store.set({});
+    return;
+  }
+  // Start free's question says "Your balance is open." above itself.
+  ui.hideToast();
+  joinAsk = true;
+  if (currentName !== 'home') nav('home', {}, { replace: true });
+  nav('startFree');
+}
+
+/** The Android app was opened on an event link while it ran: the pass it holds is taken and used. */
+async function joinFromApp() {
+  const pass = await native?.join.take();
+  if (pass) await joinWith(pass);
+}
+
 /** First run: marks it seen (Skip or Start), then goes to the home. */
 function finishIntro() {
   keep(SEEN_KEY, SEEN_VALUE);
   leave('home');
-}
-
-/** First run, Back: the step before, by the phone's own history when that is where it came from. */
-function introBack(prev) {
-  if (depth() > 0 && trail[depth() - 1] === STEP_ROUTES[prev]) history.back();
-  else nav(STEP_ROUTES[prev], {}, { replace: true });
 }
 
 /** Goes back to the nearest earlier `name` on the stack, or replaces this screen with it. */
@@ -1220,9 +1468,24 @@ function backTo(name) {
   nav(name, {}, { replace: true });
 }
 
+let voiceLab = null; // screens/voicelab.js, once the voice lab was opened
+let voiceLabError = null; // why the voice lab could not load, shown on its page
+/** The voice lab's page when it cannot load or draw: the error in words, with the browser's own message. */
+function labErrorScreen(e) {
+  return {
+    node: ui.el(
+      'main',
+      { class: 'screen sub', 'data-screen': 'voiceLabError' },
+      ui.el('h1', { text: t('lab.title') }),
+      ui.el('p', { class: 'hint', id: 'labLoadError', text: t('lab.loadFailed') }),
+      ui.el('pre', { class: 'hint', id: 'labLoadErrorDetail', text: `${e?.name ?? 'Error'}: ${e?.message ?? String(e)}\n${navigator.userAgent}` }),
+    ),
+  };
+}
+
 function screenFor(name, params) {
   const mode = registry.list('mode')[0].instance;
-  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
+  const ctx = { t, ui, state, nav, back, backTo, actions, format, registry, vault, wallet, qr: QR, native, reader, scan: adapters.camera, engineBase: engine.base, cardJobs: cardJobCount, tillJobs: () => tillPays.waiting().length };
   switch (name) {
     case 'add':
       return mode.home({ sheet: addSheet(ctx), open: 'add' });
@@ -1235,7 +1498,13 @@ function screenFor(name, params) {
     case 'funds':
       return fundsScreen(ctx);
     case 'addFunds':
-      return addFundsScreen(ctx);
+      return walletScreen(ctx);
+    case 'startFree': {
+      // Opened by an event link (joinWith): on the question, then home.
+      const joined = joinAsk;
+      joinAsk = false;
+      return startFreeScreen({ ...ctx, joined });
+    }
     case 'fund':
       return fundScreen(ctx, params);
     case 'takeOut':
@@ -1247,16 +1516,39 @@ function screenFor(name, params) {
     case 'model':
       return modelScreen(ctx);
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), audio } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':
       return historyScreen(ctx);
+    case 'voiceLab':
+      // A developer page, linked from nowhere: measures the voices this phone can run. Loaded only
+      // when opened, so the app's first paint never waits for it.
+      if (voiceLabError) return labErrorScreen(voiceLabError);
+      if (!voiceLab) {
+        import('./screens/voicelab.js').then(
+          (m) => {
+            voiceLab = m.voiceLabScreen;
+            if (currentName === 'voiceLab') render();
+          },
+          (e) => {
+            // A developer page: say what failed instead of staying blank (an older Safari, say).
+            voiceLabError = e;
+            if (currentName === 'voiceLab') render();
+          },
+        );
+        return { node: ui.el('main', { class: 'screen sub', 'data-screen': 'voiceLabLoading' }, ui.el('p', { class: 'hint', text: t('lab.opening') })) };
+      }
+      try {
+        return voiceLab({ ...ctx, phonon, speaker: adapters.speaker, nativeVoice: native?.voice ?? null });
+      } catch (e) {
+        return labErrorScreen(e);
+      }
     case 'intro':
     case 'introPay':
     case 'introLimits':
     case 'introPrivate':
       // The recorded Listen clips: their manifest is read once, and Listen shows when it is in.
       clips.load().then((m) => m && store.set({}));
-      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, stepBack: introBack, reader });
+      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, reader });
     case 'erase':
       return eraseScreen(ctx);
     case 'engine':
@@ -1280,6 +1572,8 @@ function screenFor(name, params) {
 
 function render() {
   if (erased) return;
+  // A new build took over while the person was busy: it loads now, on the way to the next screen.
+  if (updater?.screenChanged()) return;
   // A balance key stored after this page read it (the Classic app in another tab, say) is picked up here.
   if (!S.key && registry) {
     const k = ui.load(keyStore());
@@ -1328,7 +1622,7 @@ async function eraseAll() {
   await workerSettled();
   // In the Android app: a photo shared in and not yet taken, the photo files the app wrote, the web
   // view's own cache, and the till a Fedimint card pays through (its address and token).
-  if (native) await Promise.all([native.shareIn.clear(), native.forget(), native.till.forget()]);
+  if (native) await Promise.all([native.shareIn.clear(), native.join.clear(), native.forget(), native.till.forget()]);
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
@@ -1396,6 +1690,7 @@ function stylesReady() {
 }
 
 async function start() {
+  if (reloadForIsolation({ native, isolated: globalThis.crossOriginIsolated === true, session: sessionStorage })) return location.reload();
   document.title = t('app.name');
   // The visible height above a phone keyboard, for Type (core/viewport.js).
   watchViewport();
@@ -1403,7 +1698,7 @@ async function start() {
   onErasedElsewhere(erasedElsewhere);
   addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
   const saved = await kv.get('settings').catch(() => null);
-  S.settings = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
+  S.settings = loadedSettings(saved);
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   S.key = ui.load(keyStore());
   S.freeKey = ui.load(freeKeyStore());
@@ -1416,19 +1711,35 @@ async function start() {
   // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
   // other way, an old one that was never read is removed.
   if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
+  // An event link (core/join.js): the pass leaves the address at once, so it stays out of the history
+  // and any bookmark, and is used once the models are in (joinWith). In the Android app it comes from
+  // the link that opened the app (ForgeJoin).
+  let joinPass = null;
+  if (isJoinHash(location.hash)) {
+    joinPass = passFrom(location.hash);
+    history.replaceState(history.state, '', location.pathname + location.search);
+  }
+  if (native) joinPass ??= await native.join.take();
   // In the Android app a photo shared in waits in the app (ForgeShareIn), and opens Share unseen.
   if (native && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
-  // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js).
-  if (shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
+  // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js). A
+  // pass that will open a balance decides instead (joinWith).
+  const joining = joinPlan({ pass: joinPass, hasKey: !!S.key }) === 'open';
+  if (!joining && shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
   // An answer that was streaming when the tab was killed is kept as stopped.
   for (const m of S.conv.messages) if (m.role === 'assistant' && !m.content && !m.meta?.error && !m.meta?.stopped) m.meta = { ...m.meta, stopped: true };
 
+  // Which natural-voice files this app has (a small index, read once); the voice is offered once it is in.
+  phonon.init().then((x) => x && store.set({}));
+  // The phone's own voices are often listed only a while after the page opens (iOS Safari): the Phone
+  // voice is offered once they are.
+  globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => store.set({}));
   const loader = bundledLoader();
   registry = createRegistry({
     ...loader,
-    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speaker: adapters.speaker, synth: adapters.synth, audio },
+    inputs: { t, ui, state, nav, actions, format, engine: engineProxy, wallet, vault, scan: adapters.camera, qr: QR, nfc, card: cards, till, mic: adapters.mic, recognizer: adapters.recognizer, speech: native?.speech ?? null, asr: native?.asr ?? null, speaker: adapters.speaker, synth: adapters.synth, audio, phonon },
   });
   // The looks and the mode are all a screen needs to be drawn. On the first run they are the only
   // modules waited for: its steps are drawn at once, and the rest (fund, voice, filter) load behind them
@@ -1444,6 +1755,7 @@ async function start() {
 
   addEventListener('popstate', onPop);
   native?.shareIn.onShared(() => !erased && nav('photoShared'));
+  native?.join.onJoin(() => !erased && live && joinFromApp());
   addEventListener('online', () => {
     store.set({ online: true });
     retryAll().then((n) => n && refreshBalance());
@@ -1463,11 +1775,14 @@ async function start() {
     await registry.loadAll(rest);
     store.set({});
   }
+  // The phone's own recogniser says whether it has the language a moment after the app opens: then Hold to talk uses it.
+  for (const m of ['bundled', 'phone']) voiceMods('voice-in')[m]?.checked?.then(() => store.set({}));
   if (registry.refused.length) console.warn('modules refused', registry.refused);
   document.documentElement.dataset.ready = '1';
 
   await loadModels();
   await refreshBalance();
+  await joinWith(joinPass);
   const n = await retryAll();
   if (n) await refreshBalance();
   await settleOtherMint();
@@ -1547,10 +1862,61 @@ async function resumeTillPays() {
 }
 
 let workerReg = null;
+let updater = null;
+
+/**
+ * Whether the person is mid-way, so a new build waits for the next screen (core/updates.js): Listen
+ * playing (the first run's or a screen's), words typed and not sent, a recording, a question being
+ * sent or answered, or an answer read aloud.
+ */
+function busyForUpdate() {
+  const v = state.view();
+  if (v.talk.phase === 'recording' || v.talk.phase === 'sending' || v.streaming) return true;
+  if (v.speak.current && v.speak.state !== 'idle') return true;
+  if (document.querySelector('.fr-listen[aria-pressed="true"], .listen-chip[aria-pressed="true"]')) return true;
+  return [...document.querySelectorAll('input:not([readonly]):not([type=file]), textarea:not([readonly])')].some((f) => f.value !== f.defaultValue);
+}
+
 function registerWorker() {
   // The Android app has its files in the APK, so it needs no offline copy and no worker.
   if (erased || native || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
-  workerReg = navigator.serviceWorker.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
+  const sw = navigator.serviceWorker;
+  let storage = null;
+  try {
+    storage = sessionStorage;
+  } catch {
+    /* no session storage: the updater never reloads on its own */
+  }
+  updater = createUpdater({ storage, hadController: !!sw.controller, busy: busyForUpdate, reload: () => location.reload() });
+  // A new worker (a new build: its script carries the build id) took over: reload once into its files.
+  sw.addEventListener('controllerchange', () => {
+    if (!erased) updater.controllerChanged();
+    showBuild();
+  });
+  workerReg = sw.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
+  // A tab brought back (from the background, or restored from the back-forward cache) asks for a newer
+  // build; one left waiting is told to take over, which fires controllerchange above.
+  const check = async () => {
+    const reg = await workerReg;
+    if (!reg || erased) return;
+    await reg.update().catch(() => {});
+    reg.waiting?.postMessage({ type: 'skipWaiting' });
+  };
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
+  addEventListener('pageshow', (e) => e.persisted && check());
+  showBuild();
+  check();
+}
+
+/** Puts the build id of the worker that serves this page on <html data-build>, so a stale page can be told apart. */
+function showBuild() {
+  const c = navigator.serviceWorker?.controller;
+  if (!c || typeof MessageChannel !== 'function') return;
+  const ch = new MessageChannel();
+  ch.port1.onmessage = (e) => {
+    if (e.data?.version) document.documentElement.dataset.build = e.data.version;
+  };
+  c.postMessage({ type: 'version' }, [ch.port2]);
 }
 
 /** Waits (a few seconds at most) for a worker that is still installing, so it cannot fill a cache after Erase. */

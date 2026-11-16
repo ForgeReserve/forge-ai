@@ -177,6 +177,8 @@ export async function startGateway(
     editCatalog?: (catalog: any) => void;
     /** The faucet's clock (free tier tests). */
     faucetNow?: () => number;
+    /** The clock free voice questions count days by. */
+    freeVoiceNow?: () => number;
   } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
@@ -202,6 +204,7 @@ export async function startGateway(
     faults: opts.faults,
     fundingFaults: opts.fundingFaults,
     faucet: opts.faucetNow ? { now: opts.faucetNow } : undefined,
+    freeVoice: opts.freeVoiceNow ? { now: opts.freeVoiceNow } : undefined,
   });
   if (opts.recover !== false) await startupRecovery(deps);
   const app = createApp(deps);

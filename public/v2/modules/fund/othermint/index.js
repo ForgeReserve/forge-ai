@@ -20,10 +20,10 @@ export function create(inputs) {
       const unit = wallet.unit() ?? units[0];
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
-      const check = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignCheck', text: t('fund.othermint.check') });
+      const check = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignCheck' }, ui.icon('swap', 20), ui.el('span', { text: t('fund.othermint.check') }));
       const box = tokenBox(inputs, { id: 'foreignToken', label: t('fund.othermint.label'), onScanned: () => check.click() });
       const unlisted = ui.el('div', { class: 'notice', hidden: true });
-      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.el('p', { text: t('fund.othermint.what') }), box.node, msg, unlisted);
+      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.sayEl('p', {}, t('fund.othermint.what')), box.node, msg, unlisted);
       const foot = ui.el('div', { class: 'foot' }, check);
       let poller = null;
 
@@ -36,7 +36,7 @@ export function create(inputs) {
           if (!r.ok) {
             const code = r.body?.error?.code;
             if (code === 'mint_unlisted') {
-              unlisted.replaceChildren(ui.el('p', { text: t('fund.othermint.unlisted') }), ui.el('p', { class: 'mono note', text: r.body?.unlisted?.mint ?? '' }), ui.el('button', { type: 'button', class: 'btn', id: 'foreignGoOn', text: t('fund.othermint.goOn'), onclick: () => quote(token, true) }));
+              unlisted.replaceChildren(ui.sayEl('p', {}, t('fund.othermint.unlisted')), ui.sayEl('p', { class: 'mono note' }, r.body?.unlisted?.mint ?? ''), ui.el('button', { type: 'button', class: 'btn', id: 'foreignGoOn', onclick: () => quote(token, true) }, ui.icon('next', 20), ui.el('span', { text: t('fund.othermint.goOn') })));
               unlisted.hidden = false;
               return msg.set('');
             }
@@ -57,7 +57,7 @@ export function create(inputs) {
         const st = ui.el('p', { class: 'status-line', id: 'foreignStatus', role: 'status' });
         const confirm = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignConfirm', text: t('fund.othermint.confirm', { amount: format.units(q.credit, f.unit) }) });
         const returned = ui.el('div', { class: 'returned' });
-        body.replaceChildren(ui.el('div', { class: 'amount-tag', text: format.units(q.credit, f.unit) }), ui.el('p', { class: 'note', text: t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) }) }), st, returned);
+        body.replaceChildren(ui.el('div', { class: 'amount-tag', text: format.units(q.credit, f.unit) }), ui.sayEl('p', { class: 'note' }, t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) })), st, returned);
         foot.replaceChildren(confirm);
         let held = null;
         let refreshed = false;
@@ -68,25 +68,25 @@ export function create(inputs) {
           // The vault first: the outcome is stored before anything is shown.
           const r = settleForeign(vault, held, x);
           if (x.state === 'done') {
-            st.textContent = t('fund.othermint.done', { amount: format.units(x.credited, x.unit) });
-            if (xf.change_token) returned.replaceChildren(ui.el('p', { class: 'note', text: t('fund.othermint.change') }));
+            ui.say(st, t('fund.othermint.done', { amount: format.units(x.credited, x.unit) }));
+            if (xf.change_token) returned.replaceChildren(ui.sayEl('p', { class: 'note' }, t('fund.othermint.change')));
             if (!refreshed) wallet.refresh();
             refreshed = true;
             finish();
             return r.final;
           }
           if (x.state === 'refunded') {
-            st.textContent = xf.refund_token || xf.payout_pending ? t('fund.othermint.refunded') : t('fund.failed', { message: x.error ?? '' });
+            ui.say(st, xf.refund_token || xf.payout_pending ? t('fund.othermint.refunded') : t('fund.failed', { message: x.error ?? '' }));
             if (xf.refund_token) returned.replaceChildren(ui.el('textarea', { class: 'field-input mono', readonly: true, rows: '3', text: xf.refund_token }));
             finish();
             return r.final;
           }
           if (x.state === 'failed' || x.state === 'expired') {
-            st.textContent = x.state === 'expired' ? t('fund.othermint.expired') : t('fund.failed', { message: x.error ?? '' });
+            ui.say(st, x.state === 'expired' ? t('fund.othermint.expired') : t('fund.failed', { message: x.error ?? '' }));
             finish();
             return true;
           }
-          if (steps[x.state]) st.textContent = t(steps[x.state]);
+          if (steps[x.state]) ui.say(st, t(steps[x.state]));
           return false;
         };
         const watch = (ms) =>
@@ -96,7 +96,7 @@ export function create(inputs) {
           }, ms));
         confirm.addEventListener('click', async () => {
           confirm.disabled = true;
-          st.textContent = t('fund.othermint.receiving');
+          ui.say(st, t('fund.othermint.receiving'));
           // Tied to this engine: only it is asked about the funding later (kit.js, settlePendingForeign).
           held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
           try {
@@ -106,14 +106,14 @@ export function create(inputs) {
               if (confirmOutcome(r.status, r.body) === 'refused') {
                 // Not taken: the eCash stays on the phone, listed under Funds as not added, so it can be copied.
                 vault.refused(held.id, r.body?.error?.code ?? `http_${r.status}`, message);
-                st.textContent = t('fund.failed', { message });
+                ui.say(st, t('fund.failed', { message }));
                 confirm.disabled = false;
                 return;
               }
               // The outcome is open (busy, a server error, or being processed now): keep the token pending
               // and watch the funding.
               vault.pending(held.id, r.body?.error?.code ?? `http_${r.status}`);
-              st.textContent = t('fund.othermint.receiving');
+              ui.say(st, t('fund.othermint.receiving'));
               return watch(2000);
             }
             if (!update(r.body)) watch(2000);

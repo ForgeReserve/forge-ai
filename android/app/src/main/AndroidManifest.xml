@@ -36,6 +36,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!--
+              Event links (JoinPlugin, docs/ANDROID.md): https://ai.forge-reserve.com/j#<pass>, the one QR
+              code on an event's slide, opens the app on that pass. autoVerify: Android checks the site's
+              /.well-known/assetlinks.json (FORGE_ANDROID_CERT_SHA256) and then opens these links here
+              without asking. Both apps (both flavours) carry it. Not ai.forgereserve.org: it only
+              redirects here, and a redirect cannot be verified.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="ai.forge-reserve.com" />
+                <data android:path="/j" />
+                <data android:path="/j/" />
+            </intent-filter>
+
             <!-- Share-in: a photo from another app opens Share unseen (ShareInPlugin). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -44,6 +61,15 @@
             </intent-filter>
 
         </activity>
+
+        <!--
+          The native natural voice (VoicePlugin, VoiceService) in a process of its own: its thread count
+          is fixed per process, and a crash in native code ends only that process. Not exported.
+        -->
+        <service
+            android:name=".VoiceService"
+            android:process=":voice"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

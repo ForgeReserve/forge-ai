@@ -11,6 +11,8 @@ export const ROUTES = {
   addFunds: 'funds/add',
   fund: 'funds/add/:id',
   takeOut: 'funds/out',
+  // Start free, from its wallet card on Add money (screens/startfree.js).
+  startFree: 'funds/start-free',
   // Free questions used up: the ways forward (screens/free.js).
   freeOut: 'funds/free-out',
   look: 'more/look',
@@ -19,6 +21,8 @@ export const ROUTES = {
   history: 'more/history',
   erase: 'more/erase',
   engine: 'more/engine',
+  // A developer page, not linked from any menu: measures the voices this phone can run (screens/voicelab.js).
+  voiceLab: 'voice-lab',
   photo: 'photo',
   // Share unseen, opened by a photo shared in from another app (public/v2/sw.js): it arrived, it did not
   // reach the app, or the share held no photo. photoSent: the worker was not running, so the phone posted
@@ -69,5 +73,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

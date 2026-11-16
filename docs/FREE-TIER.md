@@ -76,7 +76,7 @@ A page on the website, `ai.forge-reserve.com/free`, gives out free vouchers ever
 
 ## In the app
 
-- **Add funds** gains a first row: "Free questions", which opens the faucet in the app and adds the voucher in one step. Scanning or pasting a credit note or voucher works from the same sheet.
+- **Add money** has "Free questions" (the word Gift, a voucher picture) as a tile on its More card, which opens the faucet in the app and adds the voucher in one step. Scanning or pasting a credit note or voucher works from the Note and eCash cards.
 - **The gold ring** shows free questions as a lighter segment ahead of the paid balance. Free questions are used first.
 - **Before send**, the price line reads "Free, 2 of 3 left" instead of a dollar amount. If the chosen model is not on the free list, the app says so and offers the free model.
 - **When free questions run out**, the app shows the three ways forward with no pressure: wait for tomorrow's faucet, scan a note, or add money. Layer 1 features keep working.
@@ -104,7 +104,7 @@ Slice B1 of `docs/V2-BUILD.md` built steps 1 to 4 and a minimal issuing tool. Ev
 - **Credit mint:** `mint-credit` in `docker-compose.test.yml` for the tests (port 3341). `deploy/credit-mint/`: a compose file (127.0.0.1 only, FakeWallet), nginx blocks that make only info, keys, keysets, swap and checkstate public, and the steps. Not deployed.
 - **Gateway** (`src/credits.ts`, `src/accounts.ts`, `src/app.ts`): a balance funded with credits is a free balance. It pays only `FORGE_FREE_MODELS`, one credit per answered question, none for a failed one, within the caps (4,000 tokens in, 1,500 out by default). Change and refunds are credits. Money never goes on a free balance and credits never go on a paid one; credits per request and other-mint funding with credits are refused. A credit keyset is taken for 90 days after the gateway first saw it, or until its own `final_expiry`. Free balances and credits are left out of revenue.
 - **Faucet** (`src/faucet.ts`): `/free` and `/v1/free` (status, challenge, verify, claim). A daily budget in drips, proof of work rising with the claim rate, an in-memory per-address limit (never stored or logged), and "More at" when empty. A harder puzzle gets more time: the base `FORGE_FAUCET_CHALLENGE_SECONDS` doubles with each bit over the base, up to an hour. Claims still being minted count against the per-address limit, so claims sent all at once cannot pass it together. A challenge is not stored: it carries its bits and expiry, signed with a key made fresh at each start, so asking for challenges costs the server no memory; only a solved one is kept until it expires, so it cannot be used twice. The faucet and card relay routes are rate limited by address, whatever bearer comes with a request, since they need no balance.
-- **App:** Free questions first in Add funds; a free balance with its own key; the lighter ring segment; "Free, 2 of 3 left"; the three ways forward when they run out. See README, The v2 app.
+- **App:** Free questions on Add money's More card; a free balance with its own key; the lighter ring segment; "Free, 2 of 3 left"; the three ways forward when they run out. See README, The v2 app.
 - **Issuing tool:** `scripts/issue-credits.ts`, from a credit mint on the same computer only, writes a 0600 sheet in the paper note layout.
 
 Differences from the design above, and why:

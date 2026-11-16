@@ -3,7 +3,8 @@
  * OpenAI-compatible, behind the Supplier interface.
  *
  * Paid from a balance like chat: the price of the request is held first and charged only when the
- * supplier answers with a result; a failure is not charged. Priced per request from the catalog's
+ * supplier answers with a result; a failure is not charged. A transcription a balance cannot pay for
+ * may be a free voice question instead, paid by the operator (src/free-voice.ts). Priced per request from the catalog's
  * `audio` list: the supplier's cost per request plus per second of audio in, or per 1,000 characters out.
  *
  * Audio and text are held in memory only, for the length of the request. Nothing here logs or stores
@@ -14,6 +15,7 @@ import type { Context, Hono } from 'hono';
 import type { AudioModelConfig, Config, Unit } from './config.ts';
 import { now, type DB } from './db.ts';
 import { type Account, type Ledger, LedgerError } from './ledger.ts';
+import type { FreeVoice, FreeVoiceTicket } from './free-voice.ts';
 import { errText, log } from './log.ts';
 import { type AudioUsage, audioCostNanoUsd, nanoUsdToMsub } from './pricing.ts';
 import type { RateOracle } from './rates.ts';
@@ -108,6 +110,8 @@ export interface AudioDeps {
   ledger: Ledger;
   rates: RateOracle;
   suppliers: Map<string, Supplier>;
+  /** Free voice questions (src/free-voice.ts), when they are on. */
+  freeVoice?: FreeVoice;
 }
 
 type ApiError = (c: Context, status: number, code: string, message: string, headers?: Record<string, string>) => Response;
@@ -142,6 +146,10 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
   /**
    * Holds the price, calls the supplier, charges on success and releases on failure. `call` returns the
    * body to send back, or throws; a failure is never charged.
+   *
+   * A transcription the balance cannot pay for is a free voice question while today's allowance and
+   * budget last (src/free-voice.ts): nothing is held or charged, and the operator pays the supplier.
+   * Used up, it is refused with 402 free_voice_limit before the supplier is called.
    */
   async function paid<T>(
     c: Context,
@@ -156,25 +164,38 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
       if (!rate) throw new UpstreamError('BTC/USD rate unavailable; sat pricing is paused. Retry later.', 503);
     }
     const nano = audioCostNanoUsd(o.model, o.usage, env.FORGE_MARKUP);
+    const supplierNano = audioCostNanoUsd(o.model, o.usage, 1);
     const msub = Math.max(1, nanoUsdToMsub(nano, unit, rate));
-    const reservationId = ledger.reserve(o.a.id, msub);
+    let reservationId: string | undefined;
+    let free: FreeVoiceTicket | undefined;
+    try {
+      reservationId = ledger.reserve(o.a.id, msub);
+    } catch (e) {
+      // Funded balances that can pay keep paying; only a balance short of the price is served free.
+      const freeVoice = o.model.kind === 'transcription' && d.freeVoice?.enabled ? d.freeVoice : undefined;
+      if (!freeVoice || !(e instanceof LedgerError) || e.code !== 'insufficient_balance') throw e;
+      free = freeVoice.take(o.a.id, supplierNano);
+    }
     // The request owns its reservation until it settles (src/ledger.ts). However it ends, it then gives
     // the reservation up: after a settle this changes nothing, and after an error that escaped before
     // settling (the metering row could not be written, say) the abandoned-request sweep can release it.
+    let settled = false;
     try {
       db.prepare(
         "INSERT INTO requests (id, account_id, payment, unit, model, supplier, encrypted, status, reserved_msub, created_at) VALUES (?, ?, 'balance', ?, ?, ?, 0, 'running', ?, ?)",
-      ).run(o.requestId, o.a.id, unit, o.model.id, o.model.supplier, msub, now());
+      ).run(o.requestId, o.a.id, unit, o.model.id, o.model.supplier, free ? 0 : msub, now());
       const settle = (ok: boolean) => {
-        const s = ledger.settle(reservationId, ok ? msub : 0, o.requestId);
+        settled = true;
+        if (free && !ok) free.release();
+        const s = free ? { charged: 0, balance: ledger.get(o.a.id)?.balance_msub ?? 0 } : ledger.settle(reservationId!, ok ? msub : 0, o.requestId);
         db.prepare('UPDATE requests SET status = ?, usage_source = ?, charged_msub = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?').run(
           ok ? 'settled' : 'failed',
           'audio',
           s.charged,
           Date.now() - t0,
-          ok ? nano : 0,
-          ok ? audioCostNanoUsd(o.model, o.usage, 1) : null,
-          ok ? 'catalog' : null,
+          ok ? (free ? 0 : nano) : 0,
+          ok ? supplierNano : null,
+          ok ? (free ? 'operator' : 'catalog') : null,
           o.requestId,
         );
         log.info('audio', {
@@ -186,11 +207,19 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
           status: ok ? 'ok' : 'upstream_error',
           seconds: o.usage.seconds !== undefined ? Math.round(o.usage.seconds * 10) / 10 : undefined,
           chars: o.usage.chars,
-          reserved_msub: msub,
+          reserved_msub: free ? 0 : msub,
           charged_msub: s.charged,
+          free_voice: free ? true : undefined,
           latency_ms: Date.now() - t0,
         });
-        return { 'X-Forge-Request-Id': o.requestId, 'X-Forge-Unit': unit, 'X-Forge-Privacy': o.privacy, 'X-Forge-Charged-Msub': String(s.charged), 'X-Forge-Balance-Msub': String(s.balance) };
+        return {
+          'X-Forge-Request-Id': o.requestId,
+          'X-Forge-Unit': unit,
+          'X-Forge-Privacy': o.privacy,
+          'X-Forge-Charged-Msub': String(s.charged),
+          'X-Forge-Balance-Msub': String(s.balance),
+          ...(free ? { 'X-Forge-Free-Voice-Left': String(ok ? free.left : free.left + 1) } : {}),
+        };
       };
       const signal = c.req.raw.signal;
       try {
@@ -200,7 +229,9 @@ export function registerAudioRoutes(app: Hono, d: AudioDeps, apiError: ApiError,
         return { error: e, headers: settle(false) };
       }
     } finally {
-      ledger.disown(reservationId);
+      if (reservationId) ledger.disown(reservationId);
+      // A free voice question that ended before it settled is given back, as a failure would be.
+      else if (free && !settled) free.release();
     }
   }
 

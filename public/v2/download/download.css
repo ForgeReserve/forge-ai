@@ -4,3 +4,9 @@
 .download-page .apk-box { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); }
 .download-page .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.6; word-break: break-all; margin: 0; }
 .download-page ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.download-page .apk-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.download-page .apk-choice { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+.download-page .apk-kind { flex: 1; min-width: 0; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 15px; font-weight: 600; }
+.download-page .apk-kind[aria-checked="true"] { border-color: var(--teal); background: var(--teal-tint); color: var(--teal); }
+.download-page .apk-kind span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.download-page .apk-info { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 22px; background: transparent; color: var(--text-body); }

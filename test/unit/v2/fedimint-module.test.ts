@@ -42,8 +42,8 @@ describe('the Tap a Fedimint card module', () => {
   });
 
   it('says what the till refused in plain words, with the PIN tries left', () => {
-    expect(M.wordsFor({ kind: 'card', code: 'wrong_pin', triesLeft: 2 }, t)).toBe('Wrong PIN. 2 tries left.');
-    expect(M.wordsFor({ kind: 'card', code: 'wrong_pin', triesLeft: 1 }, t)).toBe('Wrong PIN. 1 try left.');
+    expect(M.wordsFor({ kind: 'card', code: 'wrong_pin', triesLeft: 2 }, t)).toBe('Wrong PIN, 2 tries left.');
+    expect(M.wordsFor({ kind: 'card', code: 'wrong_pin', triesLeft: 1 }, t)).toBe('Wrong PIN, 1 try left.');
     expect(M.wordsFor({ kind: 'card', code: 'wrong_pin', triesLeft: null }, t)).toBe('Wrong PIN.');
     expect(M.wordsFor({ kind: 'card', code: 'pin_blocked' }, t)).toMatch(/blocked\. Nothing was taken/);
     expect(M.wordsFor({ kind: 'card', code: 'insufficient' }, t)).toBe(en['fund.fedimint.insufficient']);
@@ -54,7 +54,7 @@ describe('the Tap a Fedimint card module', () => {
   });
 
   it('a fee the till asks again, above its own cap, is said as such, never as a new price', () => {
-    expect(M.wordsFor({ kind: 'before', code: 'fee_reserve_too_low' }, t)).toBe('This till cannot pay this invoice now. Its Lightning fee is above its limit. Try again later.');
+    expect(M.wordsFor({ kind: 'before', code: 'fee_reserve_too_low' }, t)).toBe('Till cannot pay now. This till cannot pay this invoice now. Its Lightning fee is above its limit. Try again later.');
   });
 
   it('says what an error while paying means, and never that nothing was sent once it was', () => {
@@ -62,7 +62,7 @@ describe('the Tap a Fedimint card module', () => {
     // The request reached the till: the card may have paid.
     expect(M.thrownWords('not_stored_after', t)).toBe(en['fund.fedimint.noAnswer']);
     expect(M.thrownWords('not_stored_after', t)).not.toMatch(/Nothing was sent/);
-    expect(M.thrownWords('other_till', t, { till: 'https://till.example.org' })).toBe("This payment went through the till till.example.org. Scan that till's pay code again to finish it.");
+    expect(M.thrownWords('other_till', t, { till: 'https://till.example.org' })).toBe("Another till. This payment went through the till till.example.org. Scan that till's pay code again to finish it.");
     expect(M.thrownWords('link', t)).toBe(en['fund.fedimint.unreachable']);
     for (const k of ['cardPaysPlusMargin', 'splitPlusMargin', 'feeTooHigh', 'tillBusy', 'otherTill']) expect(en[`fund.fedimint.${k}`], k).toBeTruthy();
   });

@@ -1,9 +1,12 @@
-// The Android app's project files (android/): what the APK may do and carry. The build itself is
-// checked by `cd android && ./gradlew assembleDebug testDebugUnitTest`.
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+// The Android app's project files (android/): what the APKs may do and carry. The build itself is
+// checked by `cd android && ./gradlew assembleUniversalDebug assemblePrivatevoiceDebug
+// testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest`.
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { type AsrLock, checkLock as checkAsrLock, LICENSES as ASR_LICENSES, placements as asrPlacements } from '../../scripts/asr-model.ts';
 import { bundleFiles, inBundle, readConfig, writeBundle } from '../../scripts/lib/android-web.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -73,7 +76,7 @@ describe('the web bundle in the APK', () => {
       expect(existsSync(join(PUBLIC, p)), p).toBe(true);
       expect(inBundle(p), p).toBe(true);
     }
-    for (const p of ['index.html', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'beta/index.html', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/sw.js']) {
+    for (const p of ['index.html', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'beta/index.html', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/join/index.html', 'v2/join/join.js', 'v2/sw.js']) {
       expect(inBundle(p), p).toBe(false);
     }
     const files = bundleFiles(PUBLIC);
@@ -112,8 +115,16 @@ describe('the web bundle in the APK', () => {
     expect(cfg.webDir).toBeUndefined();
     expect(readFileSync(join(dir, 'capacitor.plugins.json'), 'utf8').trim()).toBe('[]');
     expect(r.files).toBe(bundleFiles(PUBLIC).length + 1);
-    // Small enough to install over a slow connection.
-    expect(r.bytes).toBeLessThan(30 * 1024 * 1024);
+    // Small enough to install over a slow connection, apart from the natural voice (about 67 MB),
+    // which the app carries so it reads aloud offline from the first open.
+    expect(r.bytes - r.voiceBytes).toBeLessThan(30 * 1024 * 1024);
+    if (existsSync(join(PUBLIC, 'v2/voice/phonon/index.json'))) {
+      const index = JSON.parse(readFileSync(join(PUBLIC, 'v2/voice/phonon/index.json'), 'utf8'));
+      for (const f of index.files) expect(existsSync(join(dir, 'public/v2/voice/phonon', f.path)), f.path).toBe(true);
+      expect(r.voiceBytes).toBe(index.files.reduce((s: number, f: any) => s + f.size, 0) + statSync(join(PUBLIC, 'v2/voice/phonon/index.json')).size);
+    }
+    // The voice package, which the app imports from its own files.
+    expect(existsSync(join(dir, 'public/v2/vendor/phonon-tts/worker.js'))).toBe(true);
   });
 
   it('removes files that left public/ on the next bundle', () => {
@@ -131,5 +142,138 @@ describe('the web bundle in the APK', () => {
     const f = join(dir, 'c.json');
     writeFileSync(f, JSON.stringify({ appId: 'com.example.other', appName: 'X' }));
     expect(() => readConfig(f)).toThrow(/appId/);
+  });
+});
+
+describe("the native natural voice's libraries (scripts/android-ptts.sh)", () => {
+  const lock = JSON.parse(read('scripts/ptts/lock.json'));
+  const libs = join(ROOT, 'android/app/src/main/jniLibs');
+
+  it('are the ones built from the pinned xn-ptts commit, byte for byte', () => {
+    expect(lock).toMatchObject({ repo: 'https://github.com/gradium-ai/xn-ptts', tag: 'v0.7.0', commit: '32c1554a8ce442d672de90fc82700bbdcf08d918', license: 'MIT OR Apache-2.0' });
+    expect(read('scripts/android-ptts.sh')).toContain(`COMMIT=${lock.commit}`);
+    for (const f of lock.files) {
+      const b = readFileSync(join(libs, f.name));
+      expect(b.length, f.name).toBe(f.size);
+      expect(createHash('sha256').update(b).digest('hex'), f.name).toBe(f.sha256);
+    }
+    // Nothing else: every native file in the APK is in the lock.
+    const all = readdirSync(libs, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => `${d.parentPath.slice(libs.length + 1)}/${d.name}`).sort();
+    expect(all).toEqual(lock.files.map((f: any) => f.name).sort());
+  });
+
+  it('are 64-bit ARM with a placeholder for every other ABI, so the app still installs on 32-bit and x86 phones', () => {
+    const abis = readdirSync(libs).sort();
+    expect(abis).toEqual(['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']);
+    // ELF, and the machine each folder says (183 aarch64, 40 arm, 3 x86, 62 x86-64).
+    const machine = { 'arm64-v8a': 183, 'armeabi-v7a': 40, x86: 3, x86_64: 62 } as Record<string, number>;
+    for (const f of lock.files) {
+      const b = readFileSync(join(libs, f.name));
+      expect(b.subarray(0, 4).toString('latin1')).toBe('\x7fELF');
+      expect(b.readUInt16LE(18), f.name).toBe(machine[f.name.split('/')[0]]);
+    }
+  });
+
+  it('run in a voice process of their own, which no other app can reach', () => {
+    expect(manifest).toMatch(/<service\s+android:name="\.VoiceService"\s+android:process=":voice"\s+android:exported="false" \/>/);
+    expect(read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt')).toContain('registerPlugin(VoicePlugin::class.java)');
+    // The debug-only lab run from adb is refused by a release build.
+    expect(read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt')).toMatch(/FLAG_DEBUGGABLE == 0\) return/);
+  });
+
+  it('carry their licences', () => {
+    expect(read('public/vendor/licenses/xn-ptts.txt')).toContain(lock.commit);
+    expect(read('public/vendor/licenses/xn-ptts.txt')).toMatch(/Permission is hereby granted[\s\S]*Apache License/);
+    const third = read('public/vendor/licenses/xn-ptts-THIRD_PARTY_LICENSES.md');
+    for (const crate of ['tokenizers', 'serde_json', 'rayon']) expect(third, crate).toMatch(new RegExp(`^- ${crate} `, 'm'));
+  });
+});
+
+
+describe('Forge Private Voice (the privatevoice flavour)', () => {
+  const lock = JSON.parse(read('scripts/asr/lock.json')) as AsrLock;
+  const gradle = read('android/app/build.gradle');
+  const flavour = 'android/app/src/privatevoice';
+  const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+
+  it('is a second APK beside today\'s, with its own id and name, both installable side by side', () => {
+    expect(gradle).toMatch(/flavorDimensions 'voice'/);
+    expect(gradle).toMatch(/universal \{\s*dimension 'voice'\s*\}/);
+    expect(gradle).toMatch(/privatevoice \{\s*dimension 'voice'\s*applicationIdSuffix '\.privatevoice'\s*\}/);
+    expect(read(`${flavour}/res/values/strings.xml`)).toContain('<string name="app_name">Forge Private Voice</string>');
+    // The universal APK has no source set of its own beyond the stand-in that says it carries no model.
+    expect(readdirSync(join(ROOT, 'android/app/src/universal'), { recursive: true }).filter((f) => String(f).endsWith('.kt'))).toEqual(['java/com/forgereserve/ai/AsrBundle.kt']);
+    expect(read('android/app/src/universal/java/com/forgereserve/ai/AsrBundle.kt')).toMatch(/BUNDLED = false/);
+    // Fetched for privatevoice builds only, and the .ort model stored uncompressed (read from the APK in place).
+    expect(gradle).toMatch(/commandLine 'node', 'scripts\/asr-model\.ts'/);
+    expect(gradle).toContain("if (t.name ==~ /prePrivatevoice\\w*Build/) t.dependsOn asrFiles");
+    expect(gradle).toMatch(/noCompress 'gguf', 'safetensors', 'ort'/);
+  });
+
+  it('hears in a process of its own that no other app can reach, and asks for no new permission', () => {
+    const m = read(`${flavour}/AndroidManifest.xml`);
+    expect(m).toMatch(/<service\s+android:name="\.AsrService"\s+android:process=":asr"\s+android:exported="false" \/>/);
+    expect(m).not.toMatch(/uses-permission/);
+    expect(read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt')).toContain('registerPlugin(AsrPlugin::class.java)');
+    // The debug-only check from adb: a release build has neither the extra nor the service.
+    const debug = read('android/app/src/debug/AndroidManifest.xml');
+    expect(debug).toMatch(/android:name="\.AsrCheckService"[\s\S]*android:permission="android\.permission\.DUMP"/);
+    expect(existsSync(join(ROOT, 'android/app/src/release'))).toBe(false);
+  });
+
+  it('pins the runtime and the model: sherpa-onnx 2.x, MIT and Apache-2.0 only, every file by size and SHA-256', () => {
+    expect(checkAsrLock(lock)).toEqual([]);
+    expect(lock.runtime).toMatchObject({ tag: 'v2.0.1', commit: 'af2d8d81dbfa61c4cea4c568da78f3982edca005', license: 'Apache-2.0', lib: { size: 24177488 } });
+    expect(lock.runtime.onnxruntime).toMatchObject({ version: '1.28.2', license: 'MIT' });
+    expect(lock.model).toMatchObject({ id: 'moonshine-tiny-en', license: 'MIT', revision: 'd1e6c30921780b8508d04b492dfb3ce8a51605d4' });
+    expect(asrPlacements(lock).reduce((n, p) => n + p.pin.size, 0)).toBe(24177488 + 44243206);
+    // Refusals: GPL-era sherpa-onnx, a non-MIT model, an unpinned URL, a missing hash.
+    const bad = (f: (l: any) => void) => {
+      const l = JSON.parse(JSON.stringify(lock));
+      f(l);
+      return checkAsrLock(l);
+    };
+    expect(bad((l) => (l.runtime.tag = 'v1.12.0'))).not.toEqual([]);
+    expect(bad((l) => (l.model.license = 'Moonshine Community License'))).not.toEqual([]);
+    expect(bad((l) => (l.model.files[0].url = 'https://huggingface.co/x/y/resolve/main/encoder_model.ort'))).not.toEqual([]);
+    expect(bad((l) => (l.model.files[1].sha256 = ''))).not.toEqual([]);
+    expect(bad((l) => (l.model.files = l.model.files.filter((f: any) => f.role !== 'tokens')))).not.toEqual([]);
+  });
+
+  it('the app reads the files the lock pins, by the names the lock gives', () => {
+    const bundle = read(`${flavour}/java/com/forgereserve/ai/AsrBundle.kt`);
+    expect(bundle).toContain(`const val MODEL = "${lock.model.id}"`);
+    for (const f of lock.model.files.filter((x) => x.role !== 'license')) expect(bundle, f.name).toContain(`$DIR/${f.name}`);
+  });
+
+  it('carries sherpa-onnx\'s Kotlin API files byte for byte from the pinned commit', () => {
+    const dir = join(ROOT, flavour, 'java/com/k2fsa/sherpa/onnx');
+    expect(readdirSync(dir).sort()).toEqual(lock.runtime.kotlinApi.files.map((f) => f.name).sort());
+    for (const f of lock.runtime.kotlinApi.files) {
+      const b = readFileSync(join(dir, f.name));
+      expect(b.length, f.name).toBe(f.size);
+      expect(sha(b), f.name).toBe(f.sha256);
+    }
+  });
+
+  it('carries the licences, which the universal APK leaves out', () => {
+    expect(ASR_LICENSES).toEqual(['sherpa-onnx.txt', 'onnxruntime.txt', 'moonshine.txt']);
+    expect(read('public/vendor/licenses/sherpa-onnx.txt')).toMatch(new RegExp(`${lock.runtime.commit}[\\s\\S]*Apache License\\s+Version 2\\.0`));
+    const ort = read('public/vendor/licenses/onnxruntime.txt');
+    expect(ort).toContain(lock.runtime.onnxruntime.commit);
+    expect(ort).toMatch(/MIT License[\s\S]*Copyright \(c\) Microsoft Corporation[\s\S]*ThirdPartyNotices/);
+    const moon = read('public/vendor/licenses/moonshine.txt');
+    expect(moon).toContain(lock.model.revision);
+    // The model's own LICENSE file, unchanged after the header.
+    const license = lock.model.files.find((f) => f.role === 'license')!;
+    expect(sha(Buffer.from(moon.slice(moon.indexOf('The code in this repo')), 'utf8'))).toBe(license.sha256);
+    for (const f of ASR_LICENSES) expect(inBundle(`vendor/licenses/${f}`), f).toBe(false);
+    expect(inBundle('vendor/licenses/xn-ptts.txt')).toBe(true);
+  });
+
+  it('keeps the downloaded files out of git', () => {
+    const ignore = read('.gitignore');
+    expect(ignore).toContain('android/app/src/privatevoice/jniLibs/');
+    expect(ignore).toContain('android/app/src/privatevoice/assets/');
   });
 });

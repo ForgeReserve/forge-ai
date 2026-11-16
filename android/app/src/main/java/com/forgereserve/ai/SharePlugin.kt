@@ -102,6 +102,8 @@ class SharePlugin : Plugin() {
     fun forget(call: PluginCall) {
         toSave = null
         forgetFiles()
+        // The voice lab's results kept for adb (VoicePlugin.saveLab).
+        File(context.filesDir, "voice-lab").deleteRecursively()
         activity.runOnUiThread {
             bridge.webView.clearCache(true)
             call.resolve()

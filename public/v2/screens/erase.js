@@ -1,11 +1,15 @@
 // Erase everything (DErase), from More: what is lost, the offer to take funds out first, what is
 // removed, and a button that must be held for two seconds (a tap does nothing). Then the Erased screen,
 // drawn by the app once nothing is left, or saying what could not be removed.
-import { backHeader, el, icon, msgLine } from '../core/ui.js';
+import { el, icon, msgLine, sayEl } from '../core/ui.js';
+import { listenHeader, screenListen } from './parts.js';
 
 export const HOLD_MS = 2000;
 
-export function eraseScreen({ t, state, nav, back, actions, format, vault, native = null, cardJobs = () => 0, tillJobs = () => 0 }) {
+// What Erase removes, each with its picture.
+const GOES_ICON = { goesConversations: 'chat', goesSettings: 'sun', goesKey: 'lock', goesEcash: 'coins', goesClassic: 'grid', goesOffline: 'download', goesPhotos: 'image' };
+
+export function eraseScreen({ t, state, nav, back, actions, format, vault, reader, native = null, cardJobs = () => 0, tillJobs = () => 0 }) {
   const S = state.S;
   const money = el('section', { class: 'warn-box', id: 'eraseMoney', 'aria-labelledby': 'eraseMoneyHead' });
   const unsaved = el('section', { class: 'warn-box', id: 'eraseUnsaved', 'aria-labelledby': 'eraseUnsavedHead' });
@@ -26,7 +30,7 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, nativ
       const [head, sub] = zero ? [t('erase.moneyIncoming'), t('erase.moneyIncomingSub')] : known ? [t('erase.money', { amount: v.balanceText }), t('erase.moneySub')] : [t('erase.moneyUnknown'), t('erase.moneyUnknownSub')];
       money.replaceChildren(
         el('b', { id: 'eraseMoneyHead', text: head }),
-        el('p', { text: sub }),
+        sayEl('p', { id: 'eraseMoneySub' }, sub, '', 'alert'),
         el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav('takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })),
       );
       money.hidden = false;
@@ -42,10 +46,10 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, nativ
       unsaved.replaceChildren(
         ...[
           el('b', { id: 'eraseUnsavedHead', text: t('erase.unsaved') }),
-          outs || ins ? el('p', { text: t('erase.unsavedSub') }) : null,
-          cards ? el('p', { id: 'eraseCards', text: t('erase.cardsSub') }) : null,
-          tills ? el('p', { id: 'eraseTill', text: t('erase.tillSub') }) : null,
-          el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseSaveFirst', onclick: () => (outs ? nav('takeOut') : ins ? nav('funds') : cards ? nav('fund', { id: 'card' }) : nav('fund', { id: 'fedimint' })) }, el('span', { text: t('erase.unsavedBtn') })),
+          outs || ins ? sayEl('p', { id: 'eraseUnsavedSub' }, t('erase.unsavedSub'), '', 'alert') : null,
+          cards ? sayEl('p', { id: 'eraseCards' }, t('erase.cardsSub'), '', 'card') : null,
+          tills ? sayEl('p', { id: 'eraseTill' }, t('erase.tillSub'), '', 'card') : null,
+          el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseSaveFirst', onclick: () => (outs ? nav('takeOut') : ins ? nav('funds') : cards ? nav('fund', { id: 'card' }) : nav('fund', { id: 'fedimint' })) }, icon('takeout', 20), el('span', { text: t('erase.unsavedBtn') })),
         ].filter(Boolean),
       );
       unsaved.hidden = false;
@@ -115,14 +119,15 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, nativ
   hold.addEventListener('click', (e) => e.preventDefault());
 
   draw();
+  const listen = screenListen({ t, reader, id: 'eraseListen', root: () => main });
   const main = el(
     'main',
     { class: 'screen sub erase', 'data-screen': 'erase' },
-    backHeader(t('erase.title'), back, t('common.back')),
+    listenHeader(t('erase.title'), back, t('common.back'), listen.node),
     el(
       'div',
       { class: 'scroll' },
-      el('p', { class: 'lead', id: 'eraseLine', text: t('erase.line') }),
+      sayEl('p', { class: 'lead', id: 'eraseLine' }, t('erase.line'), '', 'alert'),
       money,
       unsaved,
       el('h2', { class: 'caps', text: t('erase.goes') }),
@@ -131,22 +136,23 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, nativ
         { class: 'goes', id: 'eraseGoes' },
         // The Android app has no Classic app and no offline copy (its files are in the app), but it does
         // keep photo files for sharing and from its camera.
-        ...(native ? ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesPhotos'] : ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesClassic', 'goesOffline']).map((k) => el('li', { text: t(`erase.${k}`) })),
+        ...(native ? ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesPhotos'] : ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesClassic', 'goesOffline']).map((k) => sayEl('li', { id: `erase-${k}` }, t(`erase.${k}`), '', GOES_ICON[k])),
       ),
       autoRow,
     ),
-    el('div', { class: 'foot' }, msg, el('p', { class: 'note', id: 'eraseHoldHint', text: t('erase.holdHint') }), hold),
+    el('div', { class: 'foot' }, msg, sayEl('p', { class: 'note', id: 'eraseHoldHint' }, t('erase.holdHint'), '', 'hand'), hold),
   );
-  return { node: main, update: draw, destroy: reset, focus: main.querySelector('h1') };
+  listen.update();
+  return { node: main, update: draw, destroy: () => (reset(), listen.destroy()), focus: main.querySelector('h1') };
 }
 
 /** The screen after Erase everything. ok: nothing was left. Its one button opens the app afresh. */
 export function erasedScreen({ t, ok }) {
-  const again = el('button', { type: 'button', class: 'btn primary block', id: 'erasedAgain', onclick: () => location.replace('/v2/') }, el('span', { text: t('erased.again') }));
+  const again = el('button', { type: 'button', class: 'btn primary block', id: 'erasedAgain', onclick: () => location.replace('/v2/') }, icon('again', 20), el('span', { text: t('erased.again') }));
   const main = el(
     'main',
     { class: 'screen sub erased', 'data-screen': 'erased', 'data-ok': String(ok) },
-    el('div', { class: 'scroll centre' }, el('span', { class: 'tile-ico big-ico tint-teal' }, icon(ok ? 'check' : 'trash', 30)), el('h1', { tabindex: '-1', text: ok ? t('erased.title') : t('erased.notAll') }), el('p', { id: 'erasedBody', role: 'status', text: ok ? t('erased.body') : t('erased.left') })),
+    el('div', { class: 'scroll centre' }, el('span', { class: 'tile-ico big-ico tint-teal' }, icon(ok ? 'check' : 'trash', 30)), el('h1', { tabindex: '-1', text: ok ? t('erased.title') : t('erased.notAll') }), sayEl('p', { id: 'erasedBody', role: 'status' }, ok ? t('erased.body') : t('erased.left'), ok ? 'ok' : 'err')),
     el('div', { class: 'foot' }, again),
   );
   return { node: main, focus: main.querySelector('h1') };

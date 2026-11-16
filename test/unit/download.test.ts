@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
-import { APK_TYPE, apkSource } from '../../src/download.ts';
+import { APK_TYPE, apkSource, PRIVATE_VOICE_APK_URL } from '../../src/download.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { fixedRateSource } from '../../src/rates.ts';
 import { testCatalog } from '../e2e/helpers.ts';
@@ -73,6 +73,33 @@ describe('GET /download', () => {
     expect((await call('/download/forge.apk')).status).toBe(404);
   });
 
+  it('offers Forge Private Voice beside it when FORGE_APK_PRIVATE_VOICE_PATH is set, and only then', async () => {
+    const bytes = Buffer.from('PK\u0003\u0004'.padEnd(3000, 'u'));
+    const pv = Buffer.from('PK\u0003\u0004'.padEnd(7000, 'p'));
+    const call = gateway({ FORGE_APK_PATH: apkFile(bytes), FORGE_APK_PRIVATE_VOICE_PATH: apkFile(pv) });
+    expect(await (await call('/download/info')).json()).toEqual({
+      available: true,
+      url: '/download/forge.apk',
+      size: bytes.length,
+      sha256: sha(bytes),
+      privateVoice: { available: true, url: PRIVATE_VOICE_APK_URL, size: pv.length, sha256: sha(pv) },
+    });
+    const r = await call(PRIVATE_VOICE_APK_URL);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe(APK_TYPE);
+    expect(r.headers.get('content-disposition')).toBe('attachment; filename="forge-private-voice.apk"');
+    expect(r.headers.get('x-forge-apk-sha256')).toBe(sha(pv));
+    expect(Buffer.from(await r.arrayBuffer()).equals(pv)).toBe(true);
+    expect(Buffer.from(await (await call('/download/forge.apk')).arrayBuffer()).equals(bytes)).toBe(true);
+    // Unset, or no file there: no choice offered, and nothing at its address.
+    const envs: Record<string, string>[] = [{ FORGE_APK_PATH: apkFile(bytes) }, { FORGE_APK_PATH: apkFile(bytes), FORGE_APK_PRIVATE_VOICE_PATH: '/nonexistent/pv.apk' }];
+    for (const env of envs) {
+      const c = gateway(env);
+      expect(await (await c('/download/info')).json()).not.toHaveProperty('privateVoice');
+      expect((await c(PRIVATE_VOICE_APK_URL)).status).toBe(404);
+    }
+  });
+
   it('serves the page at /download and /download/', async () => {
     const call = gateway();
     for (const p of ['/download', '/download/']) {
@@ -86,6 +113,19 @@ describe('GET /download', () => {
 });
 
 describe('the download page', () => {
+  it('offers Android first, and GrapheneOS only when the site has Forge Private Voice', () => {
+    const h = 'b'.repeat(64);
+    const one = V.apkChoices({ available: true, url: '/download/forge.apk', size: 92_000_000, sha256: h });
+    expect(one.map((c: any) => [c.id, c.icon, c.file, c.url])).toEqual([['android', 'phone', 'forge.apk', '/download/forge.apk']]);
+    const both = V.apkChoices({ available: true, url: '/download/forge.apk', size: 92_000_000, sha256: h, privateVoice: { available: true, size: 160_000_000, sha256: 'c'.repeat(64) } });
+    expect(both.map((c: any) => [c.id, c.icon, c.file, c.url, c.mb])).toEqual([
+      ['android', 'phone', 'forge.apk', '/download/forge.apk', '87.7'],
+      ['graphene', 'shield', 'forge-private-voice.apk', '/download/forge-private-voice.apk', '152.6'],
+    ]);
+    expect(V.apkChoices(null)).toEqual([]);
+    expect(V.apkChoices({ available: false, privateVoice: { available: false } })).toEqual([]);
+  });
+
   it('shows the size and the hash in groups, only for a complete answer', () => {
     const h = 'a'.repeat(56) + '0123abcd';
     expect(V.apkView({ available: true, url: '/download/forge.apk', size: 12_345_678, sha256: h })).toEqual({

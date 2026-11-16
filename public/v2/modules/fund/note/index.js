@@ -44,14 +44,14 @@ export function create(inputs) {
         const progress = ui.el('p', { class: 'note', id: 'noteProgress', role: 'status' });
         const paste = btn({ class: 'btn block', id: 'notePaste', onclick: () => pasting() }, 'copy', t('fund.note.paste'));
         if (!scan?.available()) {
-          body.replaceChildren(ui.el('p', { id: 'noteNoCamera', text: t('fund.note.noCamera') }));
+          body.replaceChildren(ui.sayEl('p', { id: 'noteNoCamera' }, t('fund.note.noCamera')));
           return pasting();
         }
-        body.replaceChildren(ui.el('div', { class: 'scanner' }, video), ui.el('p', { class: 'note-hint', text: t('fund.note.point') }), progress, msg);
+        body.replaceChildren(ui.el('div', { class: 'scanner' }, video), ui.sayEl('p', { class: 'note-hint' }, t('fund.note.point')), progress, msg);
         foot.replaceChildren(paste);
         try {
           const started = await scan.open(video, (p) => {
-            if (p > 0 && p < 1) progress.textContent = t('fund.note.reading', { percent: Math.round(p * 100) });
+            if (p > 0 && p < 1) ui.say(progress, t('fund.note.reading', { percent: Math.round(p * 100) }));
           });
           // Left or chose Paste while the camera was starting: turn it off again.
           if (mine !== runs) return started.stop();
@@ -72,7 +72,7 @@ export function create(inputs) {
       const pasting = () => {
         stop();
         const ta = ui.el('textarea', { id: 'noteText', rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
-        const read = btn({ class: 'btn primary block', id: 'noteRead', onclick: () => show(ta.value) }, null, t('fund.note.read'));
+        const read = btn({ class: 'btn primary block', id: 'noteRead', onclick: () => show(ta.value) }, 'check', t('fund.note.read'));
         const keep = msg.textContent ? [msg] : [];
         body.replaceChildren(...[...body.children].filter((n) => n.id === 'noteNoCamera'), ...keep, ui.el('div', { class: 'field' }, ui.el('label', { for: 'noteText', class: 'label', text: t('fund.note.pasteLabel') }), ta));
         foot.replaceChildren(...[read, scan?.available() ? btn({ class: 'btn block', id: 'noteScanAgain', onclick: scanning }, 'qr', t('fund.note.again')) : null].filter(Boolean));
@@ -86,7 +86,7 @@ export function create(inputs) {
         const camera = !!scan?.available();
         const again = btn({ class: 'btn block', id: 'noteScanAgain', onclick: () => (camera ? scanning() : pasting()) }, camera ? 'qr' : 'copy', camera ? t('fund.note.again') : t('fund.note.pasteAgain'));
         if (!note.ok) {
-          body.replaceChildren(ui.el('p', { class: 'msg err', id: 'noteResult', role: 'status', text: t(REASON[note.reason]) }));
+          body.replaceChildren(ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, t(REASON[note.reason]), 'err'));
           foot.replaceChildren(again);
           return;
         }
@@ -96,13 +96,13 @@ export function create(inputs) {
         const credit = !!wallet.isCredit?.(note.mint);
         const known = isNoteUnit(note.unit);
         const amount = credit ? t(note.amount === 1 ? 'fund.note.freeOne' : 'fund.note.free', { count: note.amount }) : known ? format.units(note.amount, note.unit) : '';
-        const mintLine = ui.el('p', { class: 'note note-mint', id: 'noteMint', text: credit ? t('fund.note.freeFrom') : t('fund.note.from', { mint: mintLabel(note.mint) }) });
+        const mintLine = ui.sayEl('p', { class: 'note note-mint', id: 'noteMint' }, credit ? t('fund.note.freeFrom') : t('fund.note.from', { mint: mintLabel(note.mint) }));
         const head = known ? [ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }), mintLine] : [mintLine];
         const methods = wallet.methods();
         const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('othermint', { token: note.token }) }, 'swap', t('fund.note.useOtherMint'));
         const refused = (kind) => {
           const words = { spent: t('fund.note.spent'), other_mint: t('fund.note.otherMint'), wrong_mint: t('fund.note.wrongMint'), wrong_unit: t('fund.note.wrongUnit', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }) }[kind];
-          body.replaceChildren(...head, ui.el('p', { class: 'msg err', id: 'noteResult', role: 'status', text: words }));
+          body.replaceChildren(...head, ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, words, 'err'));
           foot.replaceChildren(...[kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again].filter(Boolean));
         };
         if (!known) return refused('wrong_unit');

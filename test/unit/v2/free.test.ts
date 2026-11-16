@@ -236,7 +236,7 @@ describe('free question words', () => {
     expect(ERR.errorView('not_free_model')).toEqual({ key: 'error.freeModel', next: 'chooseModel' });
     expect(ERR.errorView('free_too_long')).toEqual({ key: 'error.freeLong', next: 'startFresh' });
     expect(ERR.errorView('credits_expired')).toEqual({ key: 'error.freeExpired', next: 'freeOut' });
-    expect(en['next.freeOut']).toBe('See the ways forward');
+    expect(en['next.freeOut']).toBe('Get more');
   });
 
   it('has a route for the ways forward that goes back to Funds', () => {

@@ -27,39 +27,79 @@ export function pickModel(models, settings) {
 export const hiddenCount = (models, settings) => visibleModels(models, { privateOnly: false }).length - visibleModels(models, settings).length;
 
 /**
- * voiceIn: 'engine' (default; the engine's speech to text) or 'device' (the browser's recogniser, never
- * with Private only on). voiceOut: 'auto' (the phone's own voice when it has one, else the engine's),
- * 'engine', 'device' or 'off'. Voice questions are read aloud unless voiceOut is 'off'.
+ * voiceIn: 'auto' (default; Forge Private Voice's own speech to text, else the phone's own on-device
+ * recogniser in the Android app where it has the language, else the engine's speech to text), 'phone'
+ * (the same On this phone order), 'engine' or 'device' (the browser's recogniser,
+ * never with Private only on). voiceOut: 'auto' (the natural voice made on the phone where it runs, else the
+ * phone's own voice, else the engine's), 'phonon', 'engine', 'device' or 'off'. Voice questions are read
+ * aloud unless voiceOut is 'off'.
+ */
+/**
+ * naturalVoice: the natural voice's speaker ('' for the default, Maeve; the app offers Maeve and Freya).
+ * voiceDevice: '' until the natural voice failed on the graphics chip (WebGPU) on this phone, then 'cpu'
+ * (core/phonon.js GPU_FAILED): it starts on the processor from then on.
  */
 /**
  * autoDelete: when conversations are removed from this phone ('off', 'close', 'hour', 'day', 'week';
  * core/history.js). One day by default, as the canvas shows it (DProtect, DErase).
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'light', followSystem: false, privateOnly: true, model: '', voiceIn: 'engine', voiceOut: 'auto', autoDelete: 'day' });
+/**
+ * preferNatural: keep the natural voice even where this phone makes it too slowly (otherwise such an
+ * answer is read by the phone's own voice, core/voicepace.js). voicePace: how fast this phone makes the
+ * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
+ */
+/**
+ * look: 'midnight' by default (the owner, 2026-11-15), 'light' or 'dark'. lookPicked: true once the
+ * person picked a look in More, Mode and look.
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '' });
 
 /**
- * The voice-in module to use: the chosen one when it can be used, else the engine's. The browser's
- * recogniser is never used with Private only on, since the browser may send the sound to its maker.
- * mods: {engine, device}, each a module instance or undefined.
+ * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the
+ * default) or 'phone', On this phone: Forge Private Voice's own speech to text (its APK only), else the
+ * phone's own on-device recogniser (Android app only) when it has the language; else the engine's. With
+ * 'engine' chosen, the engine's first. The browser's recogniser is never used with Private only on,
+ * since the browser may send the sound to its maker, and never unless chosen.
+ * mods: {bundled, phone, engine, device}, each a module instance or undefined.
  */
 export function pickVoiceIn(mods, settings) {
   const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
   if (settings.voiceIn === 'device' && ok(mods.device)) return mods.device;
-  return ok(mods.engine) ? mods.engine : null;
+  const order = settings.voiceIn === 'engine' ? [mods.engine, mods.bundled, mods.phone] : [mods.bundled, mods.phone, mods.engine];
+  return order.find(ok) ?? null;
 }
 
-/** The voice-out module to use, or null when answers are not read aloud. */
+/**
+ * The settings from what was saved. Until 'auto' came (with the phone's own recogniser), 'engine' was
+ * the default and was saved with any other setting, so a saved 'engine' is 'auto' unless the person
+ * picked it in More, Voice since then (voiceInPicked). In the same way Light was the default look until
+ * Midnight, so a saved 'light' is Midnight unless the person picked a look since then (lookPicked).
+ */
+export function loadedSettings(saved) {
+  const s = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
+  if (s.voiceIn === 'engine' && !s.voiceInPicked) s.voiceIn = 'auto';
+  if (s.look === 'light' && !s.lookPicked) s.look = DEFAULT_SETTINGS.look;
+  return s;
+}
+
+/**
+ * The voice-out module to use, or null when answers are not read aloud. 'auto' (the default) is the
+ * natural voice made on the phone (phonon) where the phone can run it, else the phone's own voice,
+ * else the engine's.
+ */
 export function pickVoiceOut(mods, settings) {
   const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
   switch (settings.voiceOut) {
     case 'off':
       return null;
+    case 'phonon':
+      return ok(mods.phonon) ? mods.phonon : null;
     case 'engine':
       return ok(mods.engine) ? mods.engine : null;
     case 'device':
       return ok(mods.device) ? mods.device : null;
     default:
-      return ok(mods.device) ? mods.device : ok(mods.engine) ? mods.engine : null;
+      return [mods.phonon, mods.device, mods.engine].find(ok) ?? null;
   }
 }
 

@@ -45,3 +45,26 @@ describe('service worker script', () => {
     expect(c.body).not.toBe(b.body); // but the vendor version did, so the script differs
   });
 });
+
+describe('the v2 worker script', () => {
+  it('carries a build id that changes when an app file changes, and not for the voice files', async () => {
+    const { v2WorkerScript } = await import('../../src/sw.ts');
+    const dir = mkdtempSync(join(tmpdir(), 'forge-sw2-'));
+    mkdirSync(join(dir, 'v2', 'core'), { recursive: true });
+    mkdirSync(join(dir, 'v2', 'voice', 'phonon'), { recursive: true });
+    cpSync(join(PUBLIC, 'v2', 'sw.js'), join(dir, 'v2', 'sw.js'));
+    writeFileSync(join(dir, 'v2', 'app.js'), 'console.log(1)');
+    writeFileSync(join(dir, 'v2', 'core', 'ui.js'), 'export {}');
+    writeFileSync(join(dir, 'v2', 'voice', 'phonon', 'model.bin'), 'x');
+    const sw = v2WorkerScript(dir);
+    const a = sw();
+    expect(a.version).toMatch(/^[0-9a-f]{16}$/);
+    expect(a.body).toContain(`const VERSION = "${a.version}"`);
+    expect(a.body).not.toContain('__FORGE_');
+    writeFileSync(join(dir, 'v2', 'voice', 'phonon', 'model.bin'), 'changed');
+    expect(sw().version).toBe(a.version);
+    writeFileSync(join(dir, 'v2', 'core', 'ui.js'), 'export const changed = 1');
+    utimesSync(join(dir, 'v2', 'core', 'ui.js'), new Date(), new Date(Date.now() + 5000));
+    expect(sw().version).not.toBe(a.version);
+  });
+});

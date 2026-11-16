@@ -5,24 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Forge AI</title>
   <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#F6F5F1">
+  <meta name="theme-color" content="#0B0D10">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/v2/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Forge AI">
-  <!-- First paint: the Light look's background and the two rings come with the page, so the phone shows
-       them at once while the app loads. The stylesheet comes after them in the body, so it does not hold
-       them up; the app draws its first screen once the stylesheet is in (app.js stylesReady). -->
+  <!-- First paint: the look's background and the two rings come with the page, so the phone shows them
+       at once while the app loads. Midnight, the default look, unless this phone keeps another look
+       (app.js LOOK_CACHE). The stylesheet comes after them in the body, so it does not hold them up; the
+       app draws its first screen once the stylesheet is in (app.js stylesReady). -->
   <style>
-    :root { --bg: #F6F5F1; --gold-track: #F3E3BC; --memory-track: #D5F2EA; }
+    :root { --bg: #0B0D10; --gold-track: #3A3320; --memory-track: #16302C; color-scheme: dark; }
     html, body { margin: 0; height: 100%; background: var(--bg); }
     .boot { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
     .boot svg { width: min(336px, 82vw); height: auto; }
     @media (prefers-reduced-motion: no-preference) { .boot svg { animation: boot-breathe 2.4s ease-in-out infinite; } }
     @keyframes boot-breathe { 50% { opacity: .55; } }
+    /* A phone that has not seen the first run opens on it (core/firstrun.js shouldShow): its dark ground at once. */
+    :root.fr-boot { --bg: #0B0D10; color-scheme: dark; }
+    .fr-boot .boot svg { visibility: hidden; }
   </style>
+  <script>
+    (function () { try {
+      var root = document.documentElement, bar = document.querySelector('meta[name="theme-color"]');
+      if (localStorage.getItem('forge2.firstRun') !== 'done' && /^(#\/?)?$/.test(location.hash)) {
+        root.classList.add('fr-boot');
+      } else {
+        // The look this phone keeps. A light one saved before Midnight became the default (no `look` in
+        // it) is not used: that look is Midnight now unless the person picks Light (core/state.js).
+        var c = JSON.parse(localStorage.getItem('forge2.look') || 'null'), hex = /^#[0-9a-f]{3,8}$/i;
+        if (c && c.tokens && (c.look || c.scheme === 'dark') && hex.test(c.tokens.bg)) {
+          root.style.setProperty('--bg', c.tokens.bg);
+          if (hex.test(c.tokens['gold-track'])) root.style.setProperty('--gold-track', c.tokens['gold-track']);
+          if (hex.test(c.tokens['memory-track'])) root.style.setProperty('--memory-track', c.tokens['memory-track']);
+          root.style.colorScheme = c.scheme === 'light' ? 'light' : 'dark';
+          bar.setAttribute('content', c.tokens.bg);
+        }
+      }
+    } catch (e) {} })();
+  </script>
   <!-- Every module the first screen needs, asked for at once (test/unit/v2/preload.test.ts keeps this
        list exactly in step with the imports). -->
   <link rel="modulepreload" href="/v2/app.js">
@@ -43,6 +66,7 @@
   <link rel="modulepreload" href="/v2/core/engine.js">
   <link rel="modulepreload" href="/v2/core/native.js">
   <link rel="modulepreload" href="/v2/core/free.js">
+  <link rel="modulepreload" href="/v2/core/join.js">
   <link rel="modulepreload" href="/v2/core/note.js">
   <link rel="modulepreload" href="/v2/core/till.js">
   <link rel="modulepreload" href="/v2/core/errors.js">
@@ -53,20 +77,28 @@
   <link rel="modulepreload" href="/v2/core/speech.js">
   <link rel="modulepreload" href="/v2/core/viewport.js">
   <link rel="modulepreload" href="/v2/core/clips.js">
+  <link rel="modulepreload" href="/v2/core/phonon.js">
   <link rel="modulepreload" href="/v2/core/talkctl.js">
   <link rel="modulepreload" href="/v2/core/voice.js">
+  <link rel="modulepreload" href="/v2/core/voicepace.js">
   <link rel="modulepreload" href="/v2/core/refunds.js">
   <link rel="modulepreload" href="/v2/core/registry.js">
   <link rel="modulepreload" href="/v2/core/router.js">
   <link rel="modulepreload" href="/v2/core/state.js">
   <link rel="modulepreload" href="/v2/core/ui.js">
+  <link rel="modulepreload" href="/v2/core/updates.js">
   <link rel="modulepreload" href="/v2/core/vault.js">
   <link rel="modulepreload" href="/v2/modules/fund/kit.js">
   <link rel="modulepreload" href="/v2/screens/engine.js">
   <link rel="modulepreload" href="/v2/screens/erase.js">
   <link rel="modulepreload" href="/v2/screens/firstrun.js">
+  <link rel="modulepreload" href="/v2/screens/firstrun-art.js">
   <link rel="modulepreload" href="/v2/screens/free.js">
   <link rel="modulepreload" href="/v2/screens/funds.js">
+  <link rel="modulepreload" href="/v2/screens/startfree.js">
+  <link rel="modulepreload" href="/v2/screens/wallet.js">
+  <link rel="modulepreload" href="/v2/screens/wallet-art.js">
+  <link rel="modulepreload" href="/v2/core/ways.js">
   <link rel="modulepreload" href="/v2/screens/history.js">
   <link rel="modulepreload" href="/v2/screens/photo.js">
   <link rel="modulepreload" href="/v2/screens/settings.js">
@@ -90,7 +122,7 @@
 <body>
   <div id="app" class="app" aria-live="off">
     <div class="boot" aria-hidden="true">
-      <svg viewBox="0 0 336 336" width="336" height="336"><circle cx="168" cy="168" r="150" fill="none" stroke="var(--gold-track)" stroke-width="26"/><circle cx="168" cy="168" r="121" fill="none" stroke="var(--memory-track)" stroke-width="26"/></svg>
+      <svg viewBox="0 0 336 336" width="336" height="336"><circle cx="168" cy="168" r="150" fill="none" stroke="var(--gold-track)" stroke-width="12.7"/><circle cx="168" cy="168" r="121" fill="none" stroke="var(--memory-track)" stroke-width="12.7"/></svg>
     </div>
   </div>
   <link rel="stylesheet" href="/v2/style.css">

@@ -3,9 +3,10 @@
 // Share unseen, History and Erase keep working without funds. The canvas draws no such screen
 // (Decision 5): it is built from Add funds' rows.
 import { faucetLine, faucetStatus } from '../core/faucet.js';
-import { backHeader, el, listRow } from '../core/ui.js';
+import { el, listRow, sayEl } from '../core/ui.js';
+import { listenHeader, screenListen } from './parts.js';
 
-export function freeOutScreen({ t, state, nav, back, registry, engine }) {
+export function freeOutScreen({ t, state, nav, back, registry, engine, reader }) {
   const S = state.S;
   const faucetOn = () => !!S.methods?.free?.enabled && registry.list('fund').some((x) => x.instance.id === 'free');
   // When more free questions come, once the engine's faucet says (the row keeps its plain words until then).
@@ -32,11 +33,13 @@ export function freeOutScreen({ t, state, nav, back, registry, engine }) {
       })
       .catch(() => {});
   }
+  const listen = screenListen({ t, reader, id: 'freeOutListen', root: () => main });
   const main = el(
     'main',
     { class: 'screen sub free-out', 'data-screen': 'freeOut' },
-    backHeader(t('freeOut.title'), back, t('common.back')),
-    el('div', { class: 'scroll' }, el('p', { id: 'freeOutSub', text: t('freeOut.sub') }), el('p', { class: 'note', text: t('freeOut.stillFree') }), rows),
+    listenHeader(t('freeOut.title'), back, t('common.back'), listen.node),
+    el('div', { class: 'scroll' }, sayEl('p', { id: 'freeOutSub' }, t('freeOut.sub')), sayEl('p', { class: 'note', id: 'freeOutStill' }, t('freeOut.stillFree'), '', 'gift'), rows),
   );
-  return { node: main, update: draw, focus: main.querySelector('h1') };
+  listen.update();
+  return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };
 }

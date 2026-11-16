@@ -13,7 +13,7 @@ export function create(inputs) {
     view({ done }) {
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
-      const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd', text: t('fund.ecash.add') });
+      const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd' }, ui.icon('plus', 20), ui.el('span', { text: t('fund.ecash.add') }));
       const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click() });
       const mints = wallet.mints();
       add.addEventListener('click', async () => {
@@ -40,7 +40,7 @@ export function create(inputs) {
           add.disabled = false;
         }
       });
-      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, box.node, msg, mints.length ? ui.el('p', { class: 'note', text: t('fund.ecash.mints', { mints: mints.join(', ') }) }) : null);
+      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, box.node, msg, mints.length ? ui.sayEl('p', { class: 'note' }, t('fund.ecash.mints', { mints: mints.join(', ') })) : null);
       const node = ui.el('div', { class: 'fund-view' }, body, ui.el('div', { class: 'foot' }, add));
       return { node, destroy: box.stop };
     },

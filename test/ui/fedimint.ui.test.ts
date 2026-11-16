@@ -173,14 +173,15 @@ const tillPays = (page: Page) => page.evaluate(() => JSON.parse(localStorage.get
 /** Opens Tap a Fedimint card, pairs with the mock till by pasting its pay code, and sees the price. */
 async function pairAndPrice(page: Page) {
   await page.goto(`${app}/#/funds/add`);
-  await page.waitForSelector('[data-screen=addFunds]');
-  expect(await page.textContent('#fund-fedimint')).toContain('Needs a till. Scan the pay code the till shows.');
-  await page.click('#fund-fedimint');
+  await page.waitForSelector('#tab-more');
+  await page.click('#tab-more');
+  expect(await page.textContent('#more-fedimint')).toBe('Fedimint');
+  await page.click('#more-fedimint');
   await page.waitForSelector('#fedNeedTill');
   // A till's own POS code is refused.
   await page.fill('#fedPairText', `fedimintcard-till:${till.url}?t=${till.posToken}`);
   await page.click('#fedUseTill');
-  await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('This code is for the phones that run the till. Ask for its pay code.');
+  await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('Wrong code. This code is for the phones that run the till. Ask for its pay code.');
   await page.fill('#fedPairText', till.pairText());
   await page.click('#fedUseTill');
   await page.waitForSelector('#fedGetPrice');
@@ -194,18 +195,17 @@ async function pairAndPrice(page: Page) {
 }
 
 describe('Tap a Fedimint card', () => {
-  it('on the website: listed after Tap a card, and says only the app can do it', async () => {
+  it('on the website: a tile on the More card, and its screen says only the app can do it', async () => {
     const ctx = await browser.newContext(PHONE);
     await pastFirstRun(ctx);
     const page = await ctx.newPage();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    const ids = await page.locator('.fund-groups .row').evaluateAll((rows) => rows.map((r) => r.id));
-    expect(ids.indexOf('fund-fedimint')).toBe(ids.indexOf('fund-card') + 1);
-    expect(await page.textContent('#fund-fedimint')).toContain('Tap a Fedimint card');
-    await page.click('#fund-fedimint');
+    await page.waitForSelector('#tab-more');
+    await page.click('#tab-more');
+    expect(await page.getAttribute('#more-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
+    await page.click('#more-fedimint');
     await page.waitForSelector('#fedAppOnly');
-    expect(await page.textContent('#fedAppOnly')).toBe('Fedimint cards work in the Forge app for Android. A web page cannot talk to a card.');
+    expect(await page.textContent('#fedAppOnly')).toBe('Android app only. Fedimint cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#fedGetApp', 'href')).toBe('/download');
     await ctx.close();
   }, 60_000);
@@ -218,7 +218,7 @@ describe('Tap a Fedimint card', () => {
     expect(await page.textContent('#fedYouGet')).toBe('You get $5.00.');
     const most = Math.ceil(rec.mostMsat / 1000).toLocaleString('en-US');
     // A fresh pairing: the till's margin is not known yet, so the price says it may come on top.
-    expect(await page.textContent('#fedCardPays')).toBe(`The card pays ${most} sat, plus the till's margin if its owner set one.`);
+    expect(await page.textContent('#fedCardPays')).toBe(`Card pays ${most} sat, plus margin. The card pays ${most} sat, plus the till's margin if its owner set one.`);
     expect(await page.textContent('#fedSplit')).toBe(`${Math.ceil(rec.invoiceMsat / 1000).toLocaleString('en-US')} sat pays your funds. Up to ${Math.ceil(rec.tillMsat / 1000).toLocaleString('en-US')} sat goes to the till for Lightning fees. Its margin is added if it has one.`);
     expect(await page.textContent('#fedPay')).toBe(`Pay ${most} sat with the card`);
     expect(await page.textContent('.fedimint-view')).not.toMatch(/null|undefined|NaN/);
@@ -226,9 +226,9 @@ describe('Tap a Fedimint card', () => {
     await page.fill('#fedPin', '1111');
     await page.click('#fedPay');
     await page.waitForSelector('#fedHold');
-    expect(await page.textContent('#fedHold')).toBe('Hold the card to the back of your phone');
+    expect(await page.textContent('#fedHold')).toBe('Hold the card to the phone. Hold it to the back of your phone.');
     await tap(page);
-    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('Wrong PIN. 2 tries left.');
+    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('Wrong PIN, 2 tries left.');
     expect(card.balanceMsat).toBe(50_000_000);
     // The card is still on the phone: the next PIN goes with the same payment.
     await page.fill('#fedPin', '1234');
@@ -311,7 +311,7 @@ describe('Tap a Fedimint card', () => {
     await page.waitForSelector('#fedHold');
     await tap(page);
     await page.waitForSelector('#fedTillBusy', { timeout: 20_000 });
-    expect(await page.textContent('#fedTillBusy')).toBe('A card payment through this till is not finished. Finish it first.');
+    expect(await page.textContent('#fedTillBusy')).toBe('Finish the last payment. A card payment through this till is not finished. Finish it first.');
     expect(await page.isDisabled('#fedChangeTill')).toBe(true);
     expect(await page.isDisabled('#fedForgetTill')).toBe(true);
     expect((await tillPays(page))[0]).toMatchObject({ state: 'sent', till: till.url });
@@ -341,7 +341,7 @@ describe('Tap a Fedimint card', () => {
     till.invoiceExpired = true;
     await page.click(`[data-finish="${rec.id}"]`);
     await payWithCard();
-    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('The till may still be working on the last try. Wait two minutes, then hold the card to the phone again.');
+    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('Wait two minutes. The till may still be working on the last try. Wait two minutes, then hold the card to the phone again.');
     expect((await tillPays(page))[0]).toMatchObject({ state: 'sent', clientRef: rec.clientRef });
     expect(await page.isDisabled('#fedChangeTill')).toBe(true);
     // Two minutes on (the first request was sent that long ago): the refusal now proves the till holds
@@ -353,7 +353,7 @@ describe('Tap a Fedimint card', () => {
     });
     await page.click(`[data-finish="${rec.id}"]`);
     await payWithCard();
-    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('The price ran out of time. See the price again.');
+    await expect.poll(() => page.textContent('.fedimint-view .msg'), { timeout: 20_000 }).toBe('Price expired. The price ran out of time. See the price again.');
     expect(await tillPays(page)).toEqual([]);
     expect(await page.$('#fedTillBusy')).toBeNull();
     expect(await page.isDisabled('#fedChangeTill')).toBe(false);
@@ -395,7 +395,7 @@ describe('Tap a Fedimint card', () => {
     await page.waitForSelector('#fedFailed', { timeout: 20_000 });
     const paid = rec.invoiceMsat + rec.maxFeeMsat;
     expect(card.balanceMsat).toBe(50_000_000 - paid);
-    expect(await page.textContent('#fedFailedLine')).toBe(`The till holds ${Math.ceil(paid / 1000).toLocaleString('en-US')} sat for the card that paid. Hold that card to the phone to get it back.`);
+    expect(await page.textContent('#fedFailedLine')).toBe(`The till holds ${Math.ceil(paid / 1000).toLocaleString('en-US')} sat. It holds it for the card that paid. Hold that card to the phone to get it back.`);
     expect((await tillPays(page))[0].state).toBe('pay_failed');
 
     // Erase everything says a Fedimint card payment is not finished, and leads back to it.

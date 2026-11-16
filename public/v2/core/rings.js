@@ -3,9 +3,11 @@
 // money came in (the "peak"), so a full ring means "as much as you added" and it shrinks as questions
 // are paid. Green (inner) is memory: the fill is how much of the model's context is still free.
 
+// The home and answer rings are as thin as the first run's (owner, 2026-11-15): there a 10 wide stroke on
+// a 236 wide ring, so the stroke is 0.0424 of the outer ring's diameter. Radii are the design's.
 export const GEOMETRY = {
-  home: { box: 336, outer: { r: 150, w: 26 }, inner: { r: 121, w: 26 }, button: 204 },
-  answer: { box: 200, outer: { r: 87.5, w: 15 }, inner: { r: 69.5, w: 15 }, button: 112 },
+  home: { box: 336, outer: { r: 150, w: 12.7 }, inner: { r: 121, w: 12.7 }, button: 204 },
+  answer: { box: 200, outer: { r: 87.5, w: 7.4 }, inner: { r: 69.5, w: 7.4 }, button: 112 },
   card: { box: 92, r: 37, w: 16 },
 };
 

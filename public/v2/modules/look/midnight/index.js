@@ -1,4 +1,6 @@
-// The Midnight look: design tokens only. A look module is handed no inputs (core/registry.js).
+// The Midnight look, the default look: design tokens only. A look module is handed no inputs
+// (core/registry.js). Raised surfaces carry a faint light edge, so a card or button on the black ground
+// shows where it ends.
 export const tokens = Object.freeze({
   "bg": "#0B0D10",
   "backdrop": "#050608",
@@ -42,8 +44,8 @@ export const tokens = Object.freeze({
   "primary-ink": "#0B0D10",
   "talk": "#F1EFE9",
   "talk-ink": "#0B0D10",
-  "shadow-raised": "inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)",
-  "shadow-raised-sm": "inset 0 -4px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
+  "shadow-raised": "inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07)",
+  "shadow-raised-sm": "inset 0 -4px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07)",
   "shadow-primary": "inset 0 -5px 0 rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5)",
   "shadow-talk": "inset 0 -9px 0 rgba(0,0,0,0.22), inset 0 3px 0 rgba(255,255,255,0.5)",
   "shadow-float": "0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)",

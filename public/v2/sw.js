@@ -4,15 +4,23 @@
 // key or eCash are never cached or touched. The cache name does not start with "forge-", which v1's
 // worker treats as its own and clears.
 const CACHE = 'forge2-runtime-v1';
+// The build id: a hash of the v2 app's files, filled in when the gateway serves this script (src/sw.ts),
+// so every deploy makes this file new and the browser installs the new worker, which takes over at once.
+// The page asks for it (a 'version' message) and keeps it on <html data-build>.
+const VERSION = '__FORGE_V2_VERSION__';
 // A photo shared in waits in its own cache (see the share target below). A new worker activating must
 // not delete it before the page has taken it.
 const SHARE = 'forge2-share';
 const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/manifest.webmanifest'];
 // The first run's recorded Listen clips (public/v2/voice/en/, scripts/record-voice), kept so Listen works
 // offline. A missing one does not stop the worker installing.
-const VOICE = ['/v2/voice/en/manifest.json', '/v2/voice/en/welcome.ogg', '/v2/voice/en/pay.ogg', '/v2/voice/en/limits.ogg', '/v2/voice/en/private.ogg'];
+const VOICE = ['/v2/voice/en/manifest.json', '/v2/voice/en/welcome.ogg', '/v2/voice/en/pay.ogg', '/v2/voice/en/limits.ogg', '/v2/voice/en/private.ogg', '/v2/voice/en/private-off.ogg'];
 const MINE = /^\/(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
 const NEVER = /^\/(v1\/|v1$|admin|beta|attestation|\.well-known\/|healthz|__dev)/;
+// The natural voice's model and voices (about 67 MB): the voice package keeps its own copy in its own
+// cache (phonon-tts-v1) and reads it from there first, so this worker leaves them alone rather than
+// keep them twice. Their small index stays in this worker's cache, so the voice is offered offline.
+const VOICE_FILES = /^\/v2\/voice\/phonon\/(?!index\.json$)/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -23,6 +31,12 @@ self.addEventListener('install', (event) => {
       await self.skipWaiting();
     })(),
   );
+});
+
+// The page asks for the build id, or (a worker left waiting) asks it to take over now.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'version') event.ports?.[0]?.postMessage({ version: VERSION });
+  if (event.data?.type === 'skipWaiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -68,7 +82,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   if (req.headers.has('authorization') || req.headers.has('x-cashu')) return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin || NEVER.test(url.pathname)) return;
+  if (url.origin !== self.location.origin || NEVER.test(url.pathname) || VOICE_FILES.test(url.pathname)) return;
   if (req.mode === 'navigate') {
     if (url.pathname.startsWith('/v2/')) event.respondWith(networkFirst(req, '/v2/'));
     return;

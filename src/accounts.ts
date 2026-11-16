@@ -1,6 +1,6 @@
 import type { Unit } from './config.ts';
 import { type DB, tx } from './db.ts';
-import { type Account, type Invites, isApiKeyShape, type Ledger, LedgerError, newApiKey } from './ledger.ts';
+import { type Account, type Invites, isApiKeyShape, type Ledger, LedgerError, newApiKey, type Pass, type Passes } from './ledger.ts';
 
 /** Funding states that may still credit the balance. */
 export const OPEN_FUNDING_STATES = ['quoted', 'receiving', 'melting', 'pending', 'minting'] as const;
@@ -21,9 +21,13 @@ export interface OpenedAccount {
  * free: the funding is credits (docs/FREE-TIER.md). A balance is free or paid for life: credits never
  * go onto a paid balance and money never goes onto a free one, so neither can turn into the other.
  * A free balance needs no invite: it can only ever hold free questions.
+ *
+ * passes: given only by POST /v1/wallet/open (a balance at 0 for the free models). There, a code that is
+ * not an invite may be an event pass, which counts one use instead of being redeemed. Every other caller
+ * leaves it out, so a pass never opens a balance for a funded top-up.
  */
 export function openAccount(
-  d: { db: DB; ledger: Ledger; invites: Invites; inviteOnly: boolean },
+  d: { db: DB; ledger: Ledger; invites: Invites; inviteOnly: boolean; passes?: Passes },
   p: { key?: string; invite?: string; unit: Unit; free?: boolean },
 ): OpenedAccount {
   const { db, ledger, invites } = d;
@@ -43,16 +47,27 @@ export function openAccount(
     }
     if (!isApiKeyShape(p.key)) throw new LedgerError('invalid_key', 'unknown balance key', 401);
   }
+  let pass: Pass | undefined;
   if (d.inviteOnly && !free) {
     const inv = p.invite ? invites.lookup(p.invite) : undefined;
-    if (!inv) throw new LedgerError('invite_required', 'an invite code is required to open a balance', 403);
-    if (inv.status === 'redeemed') throw new LedgerError('invite_used', 'invite code was already redeemed', 403);
-    if (inv.status !== 'open') throw new LedgerError('invite_invalid', 'invite code is not valid', 403);
+    pass = !inv && p.invite && d.passes ? d.passes.lookup(p.invite) : undefined;
+    if (pass) {
+      const refused = d.passes!.refusal(pass);
+      if (refused) throw refused;
+    } else {
+      if (!inv) throw new LedgerError('invite_required', 'an invite code is required to open a balance', 403);
+      if (inv.status === 'redeemed') throw new LedgerError('invite_used', 'invite code was already redeemed', 403);
+      if (inv.status !== 'open') throw new LedgerError('invite_invalid', 'invite code is not valid', 403);
+    }
   }
   const key = p.key ?? newApiKey();
   const account = tx(db, () => {
     const a = ledger.createAccountRaw(key, p.unit, null, free);
-    if (d.inviteOnly && !free) {
+    if (pass) {
+      // Counted in the same transaction: at the cap, the balance is not created either.
+      d.passes!.useRaw(pass.id);
+      db.prepare('UPDATE accounts SET pass_id = ? WHERE id = ?').run(pass.id, a.id);
+    } else if (d.inviteOnly && !free) {
       const inviteId = invites.redeemRaw(p.invite!, a.id);
       db.prepare('UPDATE accounts SET invite_id = ? WHERE id = ?').run(inviteId, a.id);
     }
@@ -63,7 +78,8 @@ export function openAccount(
 
 /**
  * Deletes a balance that never received anything, was never used, and has nothing in flight, and reopens
- * its invite. Used when the first funding of a new balance fails or expires.
+ * its invite, or gives its event pass its use back. Used when the first funding of a new balance fails or
+ * expires.
  */
 export function releaseIfEmpty(db: DB, accountId: string): boolean {
   return tx(db, () => {
@@ -86,6 +102,8 @@ export function releaseIfEmpty(db: DB, accountId: string): boolean {
     ).n;
     if (pendingIn > 0) return false;
     db.prepare("UPDATE invites SET status = 'open', account_id = NULL, redeemed_at = NULL WHERE account_id = ?").run(accountId);
+    // A pass is never bound to one balance: the use this balance took is given back, never below 0.
+    db.prepare('UPDATE passes SET uses = uses - 1 WHERE uses > 0 AND id = (SELECT pass_id FROM accounts WHERE id = ?)').run(accountId);
     db.prepare('DELETE FROM accounts WHERE id = ?').run(accountId);
     return true;
   });

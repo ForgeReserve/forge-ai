@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Night: what it hides</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#F5F5F7}a:hover{color:#FFFFFF}
+a:focus-visible,button:focus-visible{outline:2px solid #3FCFB4;outline-offset:3px}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; box-sizing: border-box; background: #0B0D10; font-family: Inter, system-ui, sans-serif; color: #F5F5F7">
+  <div style="position: absolute; top: 20px; left: 24px; right: 24px; height: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center">
+    <button aria-label="Listen" style="justify-self: start; height: 44px; border-radius: 22px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: flex; gap: 8px; align-items: center; padding: 0 16px 0 14px; font-family: Inter, system-ui, sans-serif; font-size: 15px; font-weight: 500; color: #3FCFB4; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3FCFB4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>
+      Listen
+    </button>
+    <div style="justify-self: center; display: flex; gap: 6px; align-items: center" role="img" aria-label="Step 3 of 4">
+      <div style="width: 6px; height: 6px; border-radius: 3px; background: #F5F5F7"></div>
+      <div style="width: 6px; height: 6px; border-radius: 3px; background: #F5F5F7"></div>
+      <div style="width: 22px; height: 6px; border-radius: 3px; background: #F5F5F7"></div>
+      <div style="width: 6px; height: 6px; border-radius: 3px; background: #3A3D44"></div>
+    </div>
+    <a href="#" style="justify-self: end; height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; padding: 0 6px; font-size: 15px; font-weight: 500; text-decoration: none; color: #A1A4AB">Skip</a>
+  </div>
+
+  <div style="position: absolute; top: 92px; left: 45px; width: 300px; height: 300px">
+    <svg width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="An eye with a line through it, inside two rings. Three quarters of each ring is lit.">
+      <defs>
+        <radialGradient id="c3-aura" cx="50%" cy="50%" r="50%"><stop offset="0.5" stop-color="#3FCFB4" stop-opacity="0.20"></stop><stop offset="0.78" stop-color="#3FCFB4" stop-opacity="0.05"></stop><stop offset="1" stop-color="#3FCFB4" stop-opacity="0"></stop></radialGradient>
+        <linearGradient id="c3-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7DC95"></stop><stop offset="0.5" stop-color="#E2B552"></stop><stop offset="1" stop-color="#C08A2A"></stop></linearGradient>
+        <linearGradient id="c3-teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8EF3DE"></stop><stop offset="0.5" stop-color="#3FCFB4"></stop><stop offset="1" stop-color="#1F9E87"></stop></linearGradient>
+        <radialGradient id="c3-disc" cx="50%" cy="50%" r="50%" fx="34%" fy="28%"><stop offset="0" stop-color="#1E242C"></stop><stop offset="0.55" stop-color="#13171C"></stop><stop offset="1" stop-color="#090B0E"></stop></radialGradient>
+        <radialGradient id="c3-discglow" cx="78%" cy="82%" r="60%"><stop offset="0" stop-color="#3FCFB4" stop-opacity="0.20"></stop><stop offset="1" stop-color="#3FCFB4" stop-opacity="0"></stop></radialGradient>
+        <linearGradient id="c3-discrim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.20"></stop><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.03"></stop><stop offset="1" stop-color="#3FCFB4" stop-opacity="0.40"></stop></linearGradient>
+        <linearGradient id="c3-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4E8EE"></stop><stop offset="0.5" stop-color="#8F97A3"></stop><stop offset="1" stop-color="#454C57"></stop></linearGradient>
+        <linearGradient id="c3-white" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#F7F9FB"></stop><stop offset="0.4" stop-color="#DCE0E6"></stop><stop offset="0.8" stop-color="#A9B0BB"></stop><stop offset="1" stop-color="#8A929E"></stop></linearGradient>
+        <radialGradient id="c3-ball" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="#0A0C10" stop-opacity="0"></stop><stop offset="1" stop-color="#0A0C10" stop-opacity="0.42"></stop></radialGradient>
+        <radialGradient id="c3-iris" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0E2A27"></stop><stop offset="0.4" stop-color="#17675A"></stop><stop offset="0.74" stop-color="#34BFA5"></stop><stop offset="0.9" stop-color="#2A9C87"></stop><stop offset="1" stop-color="#0C3530"></stop></radialGradient>
+        <radialGradient id="c3-pupil" cx="50%" cy="50%" r="50%" fx="40%" fy="36%"><stop offset="0" stop-color="#262C35"></stop><stop offset="0.7" stop-color="#0B0D11"></stop><stop offset="1" stop-color="#050608"></stop></radialGradient>
+        <linearGradient id="c3-bar" gradientUnits="userSpaceOnUse" x1="154.5" y1="144" x2="145.5" y2="152"><stop offset="0" stop-color="#F4F6F9"></stop><stop offset="0.28" stop-color="#D5DAE1"></stop><stop offset="0.65" stop-color="#9EA6B1"></stop><stop offset="1" stop-color="#5E6672"></stop></linearGradient>
+        <linearGradient id="c3-barlen" gradientUnits="userSpaceOnUse" x1="106" y1="98" x2="194" y2="198"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"></stop><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"></stop><stop offset="0.7" stop-color="#0A0C10" stop-opacity="0"></stop><stop offset="1" stop-color="#0A0C10" stop-opacity="0.35"></stop></linearGradient>
+        <linearGradient id="c3-spec" gradientUnits="userSpaceOnUse" x1="106" y1="98" x2="194" y2="198"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"></stop><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.4"></stop><stop offset="0.8" stop-color="#FFFFFF" stop-opacity="0"></stop></linearGradient>
+        <linearGradient id="c3-vign" x1="0" y1="0" x2="0" y2="1"><stop offset="0.66" stop-color="#090B0E" stop-opacity="0"></stop><stop offset="1" stop-color="#090B0E" stop-opacity="0.75"></stop></linearGradient>
+        <clipPath id="c3-clip"><circle cx="150" cy="150" r="81"></circle></clipPath>
+        <clipPath id="c3-sclera"><path d="M95 148C117 112 183 112 205 148C183 184 117 184 95 148Z"></path></clipPath>
+        <mask id="c3-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="300" height="300"><rect x="0" y="0" width="300" height="300" fill="#FFFFFF"></rect><path d="M106 98L194 198" stroke="#000000" stroke-width="20" stroke-linecap="round"></path></mask>
+        <filter id="c3-b05" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter>
+        <filter id="c3-b1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2"></feGaussianBlur></filter>
+        <filter id="c3-b2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"></feGaussianBlur></filter>
+        <filter id="c3-b4" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter>
+        <filter id="c3-b6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"></feGaussianBlur></filter>
+      </defs>
+
+      <circle cx="150" cy="150" r="150" fill="url(#c3-aura)"></circle>
+      <circle cx="150" cy="150" r="118" fill="none" stroke="#E2B552" stroke-opacity="0.14" stroke-width="10"></circle>
+      <circle cx="150" cy="150" r="94" fill="none" stroke="#3FCFB4" stroke-opacity="0.13" stroke-width="10"></circle>
+      <g transform="rotate(-90 150 150)" fill="none" stroke-linecap="round">
+        <circle cx="150" cy="150" r="118" stroke="#E2B552" stroke-width="14" stroke-dasharray="556.1 741.4" opacity="0.35" filter="url(#c3-b4)"></circle>
+        <circle cx="150" cy="150" r="118" stroke="url(#c3-gold)" stroke-width="10" stroke-dasharray="556.1 741.4"></circle>
+        <circle cx="150" cy="150" r="94" stroke="#3FCFB4" stroke-width="14" stroke-dasharray="443 590.6" opacity="0.35" filter="url(#c3-b4)"></circle>
+        <circle cx="150" cy="150" r="94" stroke="url(#c3-teal)" stroke-width="10" stroke-dasharray="443 590.6"></circle>
+      </g>
+      <circle cx="32" cy="150" r="7" fill="#E2B552" opacity="0.6" filter="url(#c3-b2)"></circle>
+      <circle cx="32" cy="150" r="2.6" fill="#FFF6DC"></circle>
+      <circle cx="56" cy="150" r="7" fill="#3FCFB4" opacity="0.6" filter="url(#c3-b2)"></circle>
+      <circle cx="56" cy="150" r="2.6" fill="#E6FFF9"></circle>
+
+      <circle cx="150" cy="150" r="82" fill="url(#c3-disc)"></circle>
+      <circle cx="150" cy="150" r="82" fill="url(#c3-discglow)"></circle>
+
+      <g clip-path="url(#c3-clip)">
+        <ellipse cx="150" cy="148" rx="66" ry="50" fill="#3FCFB4" opacity="0.09" filter="url(#c3-b6)"></ellipse>
+        <ellipse cx="156" cy="196" rx="46" ry="11" fill="#3FCFB4" opacity="0.18" filter="url(#c3-b6)"></ellipse>
+        <path d="M88 148C112 106 188 106 212 148C188 190 112 190 88 148Z" fill="#000000" opacity="0.55" transform="translate(3 8)" filter="url(#c3-b4)"></path>
+
+        <g mask="url(#c3-cut)">
+          <path d="M88 148C112 106 188 106 212 148C188 190 112 190 88 148Z" fill="url(#c3-edge)"></path>
+          <path d="M95 148C117 112 183 112 205 148C183 184 117 184 95 148Z" fill="url(#c3-white)"></path>
+          <g clip-path="url(#c3-sclera)">
+            <path d="M95 148C117 112 183 112 205 148C183 184 117 184 95 148Z" fill="url(#c3-ball)"></path>
+            <ellipse cx="128" cy="130" rx="26" ry="8" fill="#FFFFFF" opacity="0.55" transform="rotate(-16 128 130)" filter="url(#c3-b4)"></ellipse>
+            <circle cx="159.5" cy="144.5" r="25" fill="#000000" opacity="0.35" filter="url(#c3-b2)"></circle>
+            <circle cx="158" cy="142" r="24" fill="url(#c3-iris)"></circle>
+            <circle cx="158" cy="142" r="16.5" fill="none" stroke="#8EF3DE" stroke-opacity="0.22" stroke-width="11" stroke-dasharray="0.9 2.2"></circle>
+            <ellipse cx="166" cy="152" rx="13" ry="9" fill="#8EF3DE" opacity="0.35" transform="rotate(-35 166 152)" filter="url(#c3-b4)"></ellipse>
+            <circle cx="158" cy="142" r="23.2" fill="none" stroke="#0A1F1C" stroke-opacity="0.8" stroke-width="1.6"></circle>
+            <circle cx="158" cy="142" r="10" fill="url(#c3-pupil)"></circle>
+            <path d="M95 148C117 112 183 112 205 148" fill="none" stroke="#0A0C10" stroke-opacity="0.55" stroke-width="9" filter="url(#c3-b2)"></path>
+            <path d="M95 148C117 184 183 184 205 148" fill="none" stroke="#0A0C10" stroke-opacity="0.25" stroke-width="5" filter="url(#c3-b2)"></path>
+            <ellipse cx="152" cy="133" rx="14" ry="8" fill="#FFFFFF" opacity="0.18" transform="rotate(-25 152 133)" filter="url(#c3-b2)"></ellipse>
+            <ellipse cx="154" cy="130.5" rx="4.6" ry="3.4" fill="#FFFFFF" opacity="0.95" transform="rotate(-30 154 130.5)"></ellipse>
+            <circle cx="167" cy="148" r="1.4" fill="#FFFFFF" opacity="0.55"></circle>
+          </g>
+          <path d="M93.5 141C110 119.5 146 113.5 172 121" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="1.2" stroke-linecap="round"></path>
+          <path d="M207 154C198 166 184 175 166 178.5" fill="none" stroke="#3FCFB4" stroke-opacity="0.65" stroke-width="1.4" stroke-linecap="round" filter="url(#c3-b05)"></path>
+        </g>
+
+        <path d="M106 98L194 198" fill="none" stroke="#000000" stroke-opacity="0.5" stroke-width="12" stroke-linecap="round" transform="translate(3 5)" filter="url(#c3-b2)"></path>
+        <path d="M106 98L194 198" fill="none" stroke="#2E333B" stroke-width="13.6" stroke-linecap="round"></path>
+        <path d="M106 98L194 198" fill="none" stroke="url(#c3-bar)" stroke-width="12" stroke-linecap="round"></path>
+        <path d="M106 98L194 198" fill="none" stroke="url(#c3-barlen)" stroke-width="12" stroke-linecap="round"></path>
+        <path d="M113.4 100.4L170.6 165.4" fill="none" stroke="url(#c3-spec)" stroke-width="1.8" stroke-linecap="round"></path>
+        <path d="M164.2 171L190.6 201" fill="none" stroke="#3FCFB4" stroke-opacity="0.6" stroke-width="1.4" stroke-linecap="round" filter="url(#c3-b05)"></path>
+
+        <rect x="60" y="60" width="180" height="180" fill="url(#c3-vign)"></rect>
+      </g>
+      <circle cx="150" cy="150" r="81.5" fill="none" stroke="url(#c3-discrim)" stroke-width="1"></circle>
+    </svg>
+  </div>
+
+  <div style="position: absolute; top: 416px; left: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center">
+    <h1 style="margin: 0; font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em">Know what it hides.</h1>
+    <p style="margin: 0; max-width: 330px; font-size: 17px; line-height: 1.45; color: #A1A4AB">Only the AI can read what you type. Your connection shows, unless you use Tor.</p>
+  </div>
+
+  <a href="C-Private.dc.html" aria-label="Next" style="position: absolute; top: 664px; left: 157px; width: 76px; height: 76px; border-radius: 38px; background: #F5F5F7; display: flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10)">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+  </a>
+
+  <div style="position: absolute; top: 756px; left: 24px; right: 24px; display: flex; justify-content: center">
+    <a href="#" style="height: 44px; min-width: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 15px; font-weight: 500; text-decoration: none; color: #A1A4AB">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A1A4AB" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><circle cx="4.5" cy="6" r="0.9" fill="#A1A4AB"></circle><circle cx="4.5" cy="12" r="0.9" fill="#A1A4AB"></circle><circle cx="4.5" cy="18" r="0.9" fill="#A1A4AB"></circle></svg>
+      See the full list
+    </a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

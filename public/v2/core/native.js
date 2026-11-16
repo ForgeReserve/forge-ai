@@ -2,9 +2,14 @@
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
-// the bytes of each card command and the card's answer) and ForgeTill (the till a Fedimint card pays
-// through: its pay requests and card link, with its token kept by the app). The balance key and chats
-// never pass through it; a card's answers carry its pieces, which only the page reads.
+// the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
+// through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
+// voice made by native code: the answer's text goes to the app, which plays the sound itself),
+// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back),
+// ForgeJoin (an event pass from the link that opened the app, /j#<pass>),
+// ForgeAsr (Hold to talk heard by Forge Private Voice's own model, the same way) and ForgeBars (the phone's status and navigation bars in the page's colour). The
+// balance key and chats never pass through it; a card's answers carry its pieces, which only the page
+// reads.
 
 /** The engine the app talks to until the person sets another one in More. */
 export const DEFAULT_ENGINE = 'https://ai.forge-reserve.com';
@@ -82,8 +87,198 @@ export function createNative(win = globalThis) {
       clear: () => call('ForgeShareIn', 'clear').catch(() => {}),
     },
     forget: () => call('ForgeShare', 'forget').catch(() => {}),
+    /**
+     * An event pass the app was opened on (https://ai.forge-reserve.com/j#<pass>, ForgeJoin), kept in
+     * the app's memory only. take() hands it over once (the pass, or null); onJoin(fn) calls fn when a
+     * link opens the app while it runs; clear() drops it (Erase everything).
+     */
+    join: {
+      take: async () => {
+        const r = await call('ForgeJoin', 'take').catch(() => null);
+        return typeof r?.pass === 'string' && r.pass ? r.pass : null;
+      },
+      onJoin: (fn) => on('ForgeJoin', 'join', () => fn()),
+      clear: () => call('ForgeJoin', 'clear').catch(() => {}),
+    },
     nfc: nativeNfc(call, on),
     till: nativeTill(call, on),
+    voice: nativeVoice(call, on),
+    speech: nativeSpeech(call, on),
+    asr: nativeAsr(call, on),
+    /**
+     * The phone's status and navigation bars in this colour (a plain hex colour), with light icons on a
+     * dark one and dark icons on a light one (BarsPlugin.kt).
+     */
+    bars: (color) => call('ForgeBars', 'set', { color }).catch(() => {}),
+  };
+}
+
+/**
+ * Keeps the phone's bars the colour of the page, as a browser keeps them the theme-color: the look's
+ * ground, and the first run's dark one while it shows (screens/firstrun.js). Calls bars(color) now and
+ * whenever the colour changes. Returns a function that stops it.
+ */
+export function followBars(bars, doc = globalThis.document) {
+  const meta = doc?.querySelector?.('meta[name="theme-color"]');
+  if (!meta || typeof MutationObserver !== 'function') return () => {};
+  let last = null;
+  const send = () => {
+    const c = meta.getAttribute('content');
+    if (c && c !== last) bars((last = c));
+  };
+  const watch = new MutationObserver(send);
+  watch.observe(meta, { attributes: true, attributeFilter: ['content'] });
+  send();
+  return () => watch.disconnect();
+}
+
+/**
+ * Hold to talk heard by the phone's own on-device speech recogniser through ForgeSpeech (docs/VOICE.md,
+ * Speech input). The sound stays on the phone: only the words come over the bridge. available({locale})
+ * resolves {onDevice, reason, locale}: onDevice only when the on-device recogniser has the language now,
+ * and locale is the one to listen with. start({locale, onEvent}) resolves {id, stop(), cancel()} once
+ * it listens, or rejects with {code} permission, busy or unavailable; onEvent gets {type}: started,
+ * level {level}, partial {text}, final {text}, error {code}, and end, always last.
+ */
+export function nativeSpeech(call, on) {
+  const sessions = new Map(); // id -> onEvent
+  let wired = null;
+  const wire = () => (wired ??= Promise.resolve(on('ForgeSpeech', 'speech', (ev) => sessions.get(ev?.id)?.(ev))));
+  let next = 0;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failure' });
+  return {
+    supported: () => true,
+    async available({ locale } = {}) {
+      const r = await call('ForgeSpeech', 'available', { locale }).catch((e) => ({ onDevice: false, reason: e?.message ?? 'no on-device speech in this app' }));
+      return { onDevice: r?.onDevice === true, reason: r?.reason ?? null, locale: typeof r?.locale === 'string' ? r.locale : (locale ?? null) };
+    },
+    async start({ locale, onEvent = () => {} } = {}) {
+      await wire();
+      next += 1;
+      const id = `ask-${Date.now().toString(36)}-${next}`;
+      // Before the call: the first events can come before it resolves.
+      sessions.set(id, (ev) => {
+        if (ev.type === 'end') sessions.delete(id);
+        onEvent(ev);
+      });
+      try {
+        await call('ForgeSpeech', 'start', { id, locale });
+      } catch (e) {
+        sessions.delete(id);
+        throw fail(e);
+      }
+      return {
+        id,
+        stop: () => call('ForgeSpeech', 'stop', { id }).catch(() => {}),
+        cancel() {
+          sessions.delete(id);
+          call('ForgeSpeech', 'cancel', { id }).catch(() => {});
+        },
+      };
+    },
+  };
+}
+
+/**
+ * Hold to talk heard by Forge Private Voice's own speech to text through ForgeAsr (docs/VOICE.md,
+ * Bundled speech to text): Moonshine tiny in the app's own process, so the sound stays on the phone and
+ * only the words come over the bridge. Only the privatevoice APK carries the model; in the universal one
+ * available() says no. available() resolves {available, reason, language}; start({onEvent}) is
+ * nativeSpeech's, with the same events (started, level, partial, final, error, end).
+ */
+export function nativeAsr(call, on) {
+  const sessions = new Map(); // id -> onEvent
+  let wired = null;
+  const wire = () => (wired ??= Promise.resolve(on('ForgeAsr', 'asr', (ev) => sessions.get(ev?.id)?.(ev))));
+  let next = 0;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failure' });
+  return {
+    async available() {
+      const r = await call('ForgeAsr', 'available').catch((e) => ({ available: false, reason: e?.message ?? 'no speech to text in this app' }));
+      return { available: r?.available === true, reason: r?.reason ?? null, language: typeof r?.language === 'string' ? r.language : 'en' };
+    },
+    async start({ onEvent = () => {} } = {}) {
+      await wire();
+      next += 1;
+      const id = `asr-${Date.now().toString(36)}-${next}`;
+      // Before the call: the first events can come before it resolves.
+      sessions.set(id, (ev) => {
+        if (ev.type === 'end') sessions.delete(id);
+        onEvent(ev);
+      });
+      try {
+        await call('ForgeAsr', 'start', { id });
+      } catch (e) {
+        sessions.delete(id);
+        throw fail(e);
+      }
+      return {
+        id,
+        stop: () => call('ForgeAsr', 'stop', { id }).catch(() => {}),
+        cancel() {
+          sessions.delete(id);
+          call('ForgeAsr', 'cancel', { id }).catch(() => {});
+        },
+      };
+    },
+  };
+}
+
+/**
+ * The natural voice made by native code through ForgeVoice (docs/VOICE.md, Native voice in the Android
+ * app): the same model as the browser's build, run by Gradium's native runtime in a process of its own,
+ * which plays the sound through the phone's speaker itself. status() says whether this phone runs it
+ * ({available, reason, cores, bigCores, threads, defaultThreads}); speak() resolves with the answer's
+ * numbers once it was read ({firstMs, audioS, totalMs, rtf, spc, gaps, underruns, threads, stopped}) and
+ * rejects with {code}: too-slow (the phone's own voice should read it, data.rtf says how slow), crashed
+ * (the voice process ended), unavailable, load or failed. bench() makes the sound without playing it.
+ */
+export function nativeVoice(call, on) {
+  const handlers = new Map(); // id -> {started, buffering}
+  let wired = null;
+  const wire = () =>
+    (wired ??= Promise.all(['started', 'buffering'].map((type) => on('ForgeVoice', type, (ev) => handlers.get(ev?.id)?.[type]?.(ev)))));
+  let status = null;
+  let next = 0;
+  const newId = (p) => `${p}-${Date.now().toString(36)}-${++next}`;
+  const fail = (e) => Object.assign(new Error(e?.message ?? String(e)), { code: e?.code ?? 'failed', data: e?.data ?? null });
+  return {
+    supported: () => true,
+    status() {
+      status ??= call('ForgeVoice', 'status')
+        .then((r) => ({ available: r?.available === true, reason: r?.reason ?? null, cores: r?.cores ?? null, bigCores: r?.bigCores ?? [], threads: r?.threads ?? null, chosenThreads: r?.chosenThreads ?? 0, defaultThreads: r?.defaultThreads ?? null }))
+        .catch(() => ({ available: false, reason: 'no native voice in this app' }));
+      return status;
+    },
+    /**
+     * Reads pieces aloud. rtf, spc: this phone's kept speed (core/voicepace.js), for when to start;
+     * preferNatural, phoneVoice: whether too slow may give up (rejects too-slow). onStarted when the
+     * sound starts, onBuffering({fraction}) while it waits for sound in hand.
+     */
+    async speak({ pieces, voice = null, rtf = null, spc = null, preferNatural = false, phoneVoice = false, threads = 0, onStarted, onBuffering } = {}) {
+      await wire();
+      const id = newId('say');
+      handlers.set(id, { started: () => onStarted?.(), buffering: (ev) => onBuffering?.({ fraction: Number(ev?.fraction) || 0 }) });
+      const p = call('ForgeVoice', 'speak', { id, pieces, voice, rtf, spc, preferNatural, phoneVoice, threads })
+        .catch((e) => {
+          throw fail(e);
+        })
+        .finally(() => handlers.delete(id));
+      return { id, done: p, stop: () => call('ForgeVoice', 'stop', { id }).catch(() => {}) };
+    },
+    bench: ({ text, voice = null, threads = 0 }) =>
+      call('ForgeVoice', 'bench', { id: newId('bench'), text, voice, threads }).catch((e) => {
+        throw fail(e);
+      }),
+    /** The threads the app reads with from now on (0: the phone's default). */
+    async config(threads) {
+      status = null;
+      return call('ForgeVoice', 'config', { threads });
+    },
+    /** Ends the voice process, freeing its memory. */
+    release: () => call('ForgeVoice', 'release').catch(() => {}),
+    /** Keeps the voice lab's results in the app's own files (files/voice-lab/name), for adb to read. */
+    saveLab: async (name, json) => (await call('ForgeVoice', 'saveLab', { name, json }))?.saved === true,
   };
 }
 
@@ -194,4 +389,22 @@ export function nativeNfc(call, on) {
       };
     },
   };
+}
+
+/**
+ * Inside the Android app, the page is served cross-origin isolated (MainActivity adds the headers, so
+ * the natural voice can run on several threads). The very first load can start before those headers
+ * are in place; then the page reloads once. True when this page should reload now. `session` is
+ * sessionStorage: the flag in it makes sure that happens once, also where the web view cannot isolate
+ * a page at all (the voice then runs on one thread).
+ */
+export function reloadForIsolation({ native, isolated, session }) {
+  if (!native || isolated) return false;
+  try {
+    if (session.getItem('forge2.isolationReload')) return false;
+    session.setItem('forge2.isolationReload', '1');
+    return true;
+  } catch {
+    return false;
+  }
 }

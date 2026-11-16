@@ -74,24 +74,24 @@ async function ask(page: Page, text: string) {
 }
 
 describe('free questions in a phone-sized browser', () => {
-  it('Free questions comes first in Add funds; the puzzle gives 3 free questions, used first, then the ways forward', async () => {
+  it('Free questions is a tile on the More card of Add money; the puzzle gives 3 free questions, used first, then the ways forward', async () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
     await chooseFreeModel(page);
 
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('[data-screen=addFunds]');
-    await page.waitForSelector('#fund-free');
-    expect(await page.locator('.fund-groups .row').first().getAttribute('id')).toBe('fund-free');
-    expect(await page.textContent('#fund-free')).toContain('Free questions');
+    await page.waitForSelector('#more-free', { state: 'attached' });
+    await page.click('#tab-more');
+    expect(await page.locator('#way-more .way-tile').first().getAttribute('id')).toBe('more-free');
+    expect(await page.getAttribute('#more-free', 'aria-label')).toBe('Free questions');
 
     let vaultInFlight: any = null;
     await page.route('**/v1/wallet/topup', async (route) => {
       vaultInFlight = await vault(page);
       await route.continue();
     });
-    await page.click('#fund-free');
+    await page.click('#more-free');
     await page.waitForSelector('[data-fund=free]');
     await expect.poll(() => page.textContent('#freeToday')).toMatch(/^Free questions today: [\d,]+ left\.$/);
     expect(await page.textContent('#freeGet')).toBe('Get 3 free questions');
@@ -129,11 +129,11 @@ describe('free questions in a phone-sized browser', () => {
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
     await page.waitForSelector('#otherWays:not([hidden])');
-    expect(await page.textContent('#otherWays')).toBe('Free questions used up. See the ways forward');
+    expect(await page.textContent('#otherWays')).toBe('Free questions used up');
     expect(await ring(page, 'data-free')).toBe(0);
     await page.goto(`${g.url}/v2/#/type`);
     await page.waitForSelector('#typeNotice:not([hidden])');
-    expect(await page.textContent('#typeNotice')).toContain('Your free questions are used up.');
+    expect(await page.textContent('#typeNotice')).toContain('Free questions used up.');
     expect(await page.isDisabled('#sendBtn')).toBe(true);
     await page.click('#noticeBtn');
     await page.waitForSelector('[data-screen=freeOut]');

@@ -1,5 +1,5 @@
-// Listen on the first run: clips recorded once, offline, with a natural voice (Kokoro, voice Emma;
-// scripts/record-voice), one per step, in public/v2/voice/en/. They play on the phone, cost nothing and
+// Listen on the first run: clips recorded once, offline, in the app's natural voice (Phonon 31m English,
+// voice Maeve; scripts/record-voice), one per step, in public/v2/voice/en/. They play on the phone, cost nothing and
 // send nothing anywhere; the service worker keeps them for offline use. A clip plays only when it was
 // recorded from exactly the words the step shows now (its manifest keeps them); otherwise, or when it
 // cannot play, Listen falls back to the phone's own voice.

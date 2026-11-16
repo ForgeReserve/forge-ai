@@ -3,6 +3,9 @@
  *   pnpm admin invites:create [--count N] [--label TEXT]
  *   pnpm admin invites:list
  *   pnpm admin invites:revoke <invite-id|code>
+ *   pnpm admin passes:create --uses N --expires YYYY-MM-DD[THH:MMZ] [--label TEXT] [--site URL]
+ *   pnpm admin passes:list
+ *   pnpm admin passes:revoke <pass-id|code>
  *   pnpm admin balances:list
  *   pnpm admin revenue:show
  *   pnpm admin revenue:export --unit usd|sat [--mint URL] [--amount N]
@@ -13,6 +16,7 @@ import { loadConfig, type Unit } from './config.ts';
 import { BetaWaitlist } from './beta.ts';
 import { buildDeps } from './deps.ts';
 import { setLogSilent } from './log.ts';
+import { passExpiry } from './ledger.ts';
 import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
 import { ExportError, issueExport, oweExport, planExport, revenue } from './revenue.ts';
 
@@ -21,8 +25,21 @@ const [cmd, ...rest] = process.argv.slice(2);
 const { values, positionals } = parseArgs({
   args: rest,
   allowPositionals: true,
-  options: { count: { type: 'string' }, label: { type: 'string' }, unit: { type: 'string' }, mint: { type: 'string' }, amount: { type: 'string' }, json: { type: 'boolean' } },
+  options: {
+    count: { type: 'string' },
+    label: { type: 'string' },
+    unit: { type: 'string' },
+    mint: { type: 'string' },
+    amount: { type: 'string' },
+    json: { type: 'boolean' },
+    uses: { type: 'string' },
+    expires: { type: 'string' },
+    site: { type: 'string' },
+  },
 });
+
+/** The site an event link points to (passes:create --site), without a trailing slash. */
+const SITE = 'https://ai.forge-reserve.com';
 
 const config = loadConfig();
 const d = buildDeps(config);
@@ -46,6 +63,33 @@ switch (cmd) {
   case 'beta:invited': {
     const ok = new BetaWaitlist(d.db).markInvited(positionals[0] ?? '');
     console.log(ok ? 'marked invited' : 'not found or already invited');
+    break;
+  }
+  case 'passes:create': {
+    const uses = Number(values.uses);
+    const expiresAt = passExpiry(values.expires);
+    if (!Number.isInteger(uses) || uses < 1 || !Number.isFinite(expiresAt)) {
+      console.error('usage: passes:create --uses N --expires YYYY-MM-DD[THH:MMZ] [--label TEXT] [--site URL]');
+      process.exit(1);
+    }
+    let p;
+    try {
+      p = d.passes.create({ maxUses: uses, expiresAt, label: values.label });
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+    const site = (values.site ?? SITE).replace(/\/+$/, '');
+    table([{ id: p.id, code: p.code, uses, expires: new Date(p.expires_at).toISOString(), link: `${site}/j#${p.code}` }]);
+    console.error('The code and link are shown once; only a hash of the code is stored. Put the link in the QR code.');
+    break;
+  }
+  case 'passes:list':
+    table(d.passes.list().map((p) => ({ ...p, expires_at: new Date(p.expires_at).toISOString(), created_at: new Date(p.created_at).toISOString() })));
+    break;
+  case 'passes:revoke': {
+    const ok = d.passes.revoke(positionals[0] ?? '');
+    console.log(ok ? 'revoked' : 'not found');
     break;
   }
   case 'invites:list':
@@ -110,7 +154,7 @@ switch (cmd) {
     break;
   }
   default:
-    console.error('commands: beta:list beta:invited invites:create invites:list invites:revoke balances:list revenue:show revenue:export prices:show');
+    console.error('commands: beta:list beta:invited invites:create invites:list invites:revoke passes:create passes:list passes:revoke balances:list revenue:show revenue:export prices:show');
     process.exit(cmd ? 1 : 0);
 }
 d.db.close();

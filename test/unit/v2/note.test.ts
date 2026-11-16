@@ -127,7 +127,7 @@ describe('what the phone says about a note', () => {
   });
 
   it('has words for every outcome the note screen shows', () => {
-    for (const k of ['fund.note.unreadable', 'fund.note.notEcash', 'fund.note.oldFormat', 'fund.note.spent', 'fund.note.otherMint', 'fund.note.wrongMint', 'fund.note.wrongUnit', 'fund.note.kept', 'unit.usd', 'unit.sat', 'unit.other', 'home.scanNote', 'funds.scanNote'])
+    for (const k of ['fund.note.unreadable', 'fund.note.notEcash', 'fund.note.oldFormat', 'fund.note.spent', 'fund.note.otherMint', 'fund.note.wrongMint', 'fund.note.wrongUnit', 'fund.note.kept', 'unit.usd', 'unit.sat', 'unit.other', 'ways.note.word', 'ways.note.go'])
       expect(en[k], k).toBeTruthy();
   });
 });

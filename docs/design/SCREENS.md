@@ -16,6 +16,8 @@ Rows below follow the canvas layout, top to bottom, left to right. Section headi
 
 Canvas note: "Default mode: Walkie Kit". All screens use the Light look.
 
+As built, the default look is **Midnight** (owner, 2026-11-15: "let's make the home screen midnight by default", after comparing the home rings on Light and Midnight with the dark first run). A phone where nobody picked a look opens on Midnight from its first paint; Light and Dark stay in Mode and look, and a look picked there is kept. The screens are drawn from the Light canvas with Midnight's tokens (section 4); where a part sits on fixed art (the Funds coin, the wallet cards) it keeps its own fixed colours.
+
 | Row (canvas note) | File | Canvas label |
 |---|---|---|
 | Core | `ZHome1.dc.html` | 1. Home: the rings |
@@ -28,13 +30,21 @@ Canvas note: "Default mode: Walkie Kit". All screens use the Light look.
 | Core | `XThemes.dc.html` | 6. Mode and look |
 | Core | `ZMore.dc.html` | 7. More |
 | Core | `ZAdd.dc.html` | 8. Add |
-| Money and protection | `DAddFunds.dc.html` | Add funds, ranked by privacy |
+| Money (built, chosen 2026-11-15: direction C) | `AddFunds-C1.dc.html` | Add money: the wallet cards |
+| Money (built, chosen 2026-11-15) | `AddFunds-C2.dc.html` | Start free: the code |
+| Money (built, chosen 2026-11-15) | `AddFunds-C3.dc.html` | Start free: the one question |
+| Money (built, chosen 2026-11-15) | `AddFunds-C4.dc.html` | Funds at $0 on a free model |
+| Money and protection (superseded by the AddFunds-C boards) | `DAddFunds.dc.html` | Add funds, ranked by privacy |
 | Money and protection | `DCard.dc.html` | Tap your card |
 | Money and protection | `DFunded.dc.html` | After the tap |
 | Money and protection | `DPrivateOnly.dc.html` | Private only |
 | Money and protection | `DLock.dc.html` | Passphrase lock |
 | Money and protection | `DErase.dc.html` | Erase |
-| First run | `DWelcome.dc.html` | Welcome |
+| First run (built, approved 2026-11-14) | `C-Welcome.dc.html` | Welcome |
+| First run (built, approved 2026-11-14) | `C-Pay.dc.html` | How you pay |
+| First run (built, approved 2026-11-14) | `C-Limits.dc.html` | What it hides |
+| First run (built, approved 2026-11-14) | `C-Private.dc.html` | Private only |
+| First run (earlier, superseded by the C boards) | `DWelcome.dc.html` | Welcome |
 | First run | `DHowPay.dc.html` | The two rings |
 | First run | `DFirstFunds.dc.html` | First funds |
 | First run | `DProtect.dc.html` | Protect this phone |
@@ -133,6 +143,8 @@ Do not build these. Listed for completeness.
 
 **Hold-to-talk button.** A 204 px circle in the centre of the rings. Fill `#14161A`. Shadow `inset 0 -9px 0 rgba(0,0,0,0.4), inset 0 3px 0 rgba(255,255,255,0.14)`. White microphone icon 69 px, stroke 1.6. Label under it, 16 px bold white: "Hold to talk". Press and hold to record. Release to send. See `XListenLight` for the held state.
 
+As built (2026-11-15, owner: the same quality as the first run and the wallet cards; then, the same day, "the first run's rings still look better"), the rings keep the radii, colours and meaning above and are drawn exactly as the first run draws its rings (`screens/parts.js`, `screens/firstrun-art.js`): thin, the stroke the same share of the diameter as there (12.7 here, 7.4 on the answer screen's rings, instead of 26 and 15), on the faint track, with one soft glow under the lit arc, the arc shaded light to deep along the first run's diagonal, and a small bright dot with a soft halo where it ends; they fill and empty smoothly (at once with reduced motion). On the Light look the glow is a little stronger and the light on the arc softer, so both read on the pale ground. The button is a glossy body in the talk colour with a top-left highlight, a teal rim light, a bevel and a soft contact shadow; the microphone is drawn (capsule, grille, stand) with the same light. Held, it lifts with a teal halo; slid off, it turns red; sending, the halo breathes.
+
 **Bottom row.** Three equal buttons, gap 8, min height 60, radius 20, white fill, raised shadow (token `shadow-raised` below), 15 px bold.
 - "Type", keyboard icon. Opens text entry. No Default mode screen shows the typing state.
 - "Add", plus icon. Opens the Add sheet (`ZAdd`).
@@ -189,7 +201,9 @@ Top to bottom:
      - "This conversation", speech bubble icon on `#E8E0FF` (violet `#5B3FC4`), bar 12 percent.
    - Two buttons: "Add" (plus icon, light) and "Clear memory" (trash icon, dark primary).
 
-Navigation: funds Add goes to Add funds (`DAddFunds`). Spending goes to `XSpendingLight`. Take out exports the balance as eCash. Memory Add opens the Add sheet (`ZAdd`). Each "x" removes one item. Clear memory empties memory.
+As built (2026-11-15), the funds card follows `AddFunds-C4`: the ring sits in the middle, 180 px, drawn as the first run draws its rings (a gold arc with its glow and lit tip over the track), with the amount inside it; on a free model at $0 the centre turns teal and says FREE, and a big dark "Ask now" button (mic icon) goes to the home. Take out is a 48 px icon button at the card's top right, shown only when there is something to take out. The add area is one button, "Add money": a fanned stack of the first three wallet cards (their pictures), opening Add money. After Start free, a teal line at the top says what it chose. Listen in the header reads the amount and its lines.
+
+Navigation: funds Add goes to Add money (`AddFunds-C1`). Spending goes to `XSpendingLight`. Take out exports the balance as eCash. Memory Add opens the Add sheet (`ZAdd`). Each "x" removes one item. Clear memory empties memory.
 
 ### Listening (`XListenLight.dc.html`)
 
@@ -264,7 +278,7 @@ Top to bottom:
 6. Three look cards (white, radius 20). Each has a 60 x 84 thumbnail with mini rings, a name, a line and a radio dot.
    - "Light", "Calm and ordinary." Selected: 2 px border `#14161A`, filled radio.
    - "Dark", "Softer on the eyes at night."
-   - "Midnight", "Black, for dark rooms."
+   - "Midnight", "Black, for dark rooms." As built, Midnight is selected until the person picks another look.
 7. Row "Follow the phone setting" with value "Off".
 8. Primary button "Done".
 
@@ -294,7 +308,38 @@ Same overlay as More. Rows:
 
 Bottom row: Type, then a dark "Close" in the Add slot, then More.
 
-### Add funds (`DAddFunds.dc.html`)
+### Add money: the wallet cards (`AddFunds-C1.dc.html`, built)
+
+Chosen by the owner on 2026-11-15 ("the less words and more icons the better"; the app is made for someone who has difficulty reading). Replaces `DAddFunds` as the Add funds screen (`#/funds/add`, `public/v2/screens/wallet.js`).
+
+Top to bottom, with nothing that scrolls at 360 x 640 or 412 x 915:
+1. Header: 48 px back, title "Add money", and Listen (teal chip) on the right. Listen reads the card on show: its word and its info line, with the phone's own voice.
+2. The balance chip: a small gold ring (empty at $0) and the amount.
+3. The cards, one per way, 300 x 420 at most (the card takes the height left), with the neighbours peeking at the sides, smaller. Each card is one picture, a privacy badge (an icon: a shield for "Cannot be linked to you", an eye for "Others can see this payment", a phone for "Android app"), and one word. A 48 px info button at the top right shows the way's one honest line under the word. Pictures are drawn to the first run's standard (`screens/wallet-art.js`): a gift box (Start free), a printed paper note in the camera frame (Note), the Lightning bolt as a lit gold object (Lightning), a Cashu card at a phone (Card), the C-Pay coin stack (eCash). Card colours: teal, cream, near black, gold, light gold, white (More).
+4. Icon tabs, 52 px (48 at least), one per card, the one on show ringed in ink (3 px). Arrow keys move between them.
+5. A hand that moves side to side: swipe for the other cards (still with reduced motion).
+6. The one big button, 64 px, dark, with the card's word for what it does: Start, Scan, Pay, Tap, Paste. Tapping the picture does the same.
+
+Card words: Free (Start free), Note, Lightning, Card, eCash, More; a way from More used last gets its own card: Mint, Bitcoin, Gift (free questions), Fedimint. The More card is a grid of tiles, one per other way, each a small picture and one word; the big button waits (hidden) on it.
+
+Order: Start free first while it is wanted (free models, and no key or a $0 balance on a paid model), then the way used last on this phone (a setting), then Note, Lightning, Card, eCash, then More. Ways the engine turns off get no card. Each card opens the way's own screen, unchanged.
+
+### Start free (`AddFunds-C2.dc.html` and `AddFunds-C3.dc.html`, built)
+
+`#/funds/start-free`, `public/v2/screens/startfree.js` `startFreeScreen`.
+1. Header: back, "Start free", Listen.
+2. The teal card with the gift box, and its info button: "Free models answer at no cost. Add money later for private models."
+3. "Invite code", a 64 px field (2 px ink border), and Paste and Scan (56 px). With a balance key already the field is not shown.
+4. Three icon tiles: No name, No email, No money.
+5. The one button, "Start free".
+
+The question (C3) comes over the screen while Private only is on: "Your balance is open." drops in at the top when a balance was just opened; the sheet shows two tiles, Private (Needs money) and Standard (Free, ringed), then the question in the same words as the first run's (`startFree.ask`), then "Use free models" (64 px) and "Keep Private only" (56 px). Use goes to Funds (C4) with what it chose; Keep goes back with a toast.
+
+### Home at no funds (built 2026-11-15, after `AddFunds-C4`)
+
+On a paid model at $0, one dark "Add money" button under the rings, opening Add money. On a free model at $0, a teal chip with a gift icon, the model's name and a FREE tag (it opens Start free without a key, else Choose a model) and beside it Add money as a 48 px icon button. Free questions used up keeps its own chip ("Free questions used up. See the ways forward").
+
+### Add funds (`DAddFunds.dc.html`, superseded by `AddFunds-C1`)
 
 Bottom sheet. Title "Add funds" with a close "x" button (44 px).
 
@@ -361,6 +406,16 @@ Bottom sheet titled "Erase". Line "This cannot be undone. Nothing is kept on For
 Reached from the trash button on Protection (`PProtect`).
 
 ### First run
+
+**As built (`C-Welcome`, `C-Pay`, `C-Limits`, `C-Private`, approved by the owner 2026-11-14).** Four steps on the dark Night ground (`#0B0D10`, text `#F5F5F7`, body `#A1A4AB`, gold `#E2B552`, teal `#3FCFB4`) in every look, then the home. One frame on every step (390 by 844): a top row with the teal "Listen" pill left, the step dots centred (the current one 22 px wide) and "Skip" right (no Skip on step 4); a 300 px hero at the same place on every step, two rings (gold outer, teal inner) lit a quarter, a half, three quarters and fully, around a picture in a dark disc; a 32 px heading and a 17 px lead; a 76 px round white Next button with an arrow (a check named "Start" on step 4); at most one icon-and-text link below it (none on step 1; its 48 px row is kept on every step, so the hero, the text and Next stay in place).
+1. Welcome: a hooded person with no face. "AI that doesn't know who you are." / "No account. No name. You pay like cash." No link: the round Next button only. (Until 2026-11-15 the invite code and Start free were this step's link; the owner, after trying it on a phone: "when I added the invite code I expected the first run screens to go away", so they moved to the last step.)
+2. How you pay: a stack of gold coins. "Pay a little, per question." / "You see the price before you send." Link: info icon, "Learn more" (the ways to pay, the two rings, funds work like cash).
+3. What it hides: an eye with a line through it (a slashed eye). "Know what it hides." / "Only the AI can read what you type. Your connection shows, unless you use Tor." Link: list icon, "See the full list" (what Forge hides and cannot hide).
+4. Private only: a padlock. "Private by default." A "Private only" switch card, On by default (teal, closed padlock): "Only private models. Forge cannot read what you type." Off (warm red, the padlock opens): "Standard models are shown too. They can read what you type." Learn more is a small info ("i") icon button at the card's right end, after the switch (48 px, "Learn more about Private only"), opening the same sheet; the C-Private board's "Learn more" link is replaced by it. Link: while the engine has free models and the phone has no balance key, gift icon, "Start free with an invite": a "Start free" sheet with the invite field, a primary "Start free", "Free models answer at no cost. Add money later for private models." and a small "I'll add money instead" (keeps the code for funding and closes the sheet; the step stays). Once the balance is open, the Private only question (docs/PAYMENTS.md, Free models); either answer is applied (Use free models turns Private only off and chooses the free model; Keep Private only leaves it on), the switch shows it, and the first run ends on the home, as the check button does, the answer's words in a toast. Else, while the engine asks for an invite code, ticket icon, "I have an invite code" (the field in a sheet, kept for funding). With a balance key already, no link.
+
+The phone's Back goes to the step before. On a shorter phone the gaps, then the hero, shrink alike on every step so nothing scrolls. The rings fill between steps unless reduced motion is on.
+
+The earlier boards below are kept for reference; the C boards replace them.
 
 Four numbered steps, then the limits screen. Every step has a "Listen" chip top right. Steps 2 to 4 have a plain "Back" text button top left.
 
@@ -652,6 +707,8 @@ The canvas does not draw any final screen in Dark. Values found:
 
 ### Midnight (from `XThemes.dc.html` thumbnail and the Classic mode screens, for example `Home.dc.html`, `AddFunds.dc.html`)
 
+The default look as built (2026-11-15). Raised cards and buttons carry a faint light edge (`inset 0 0 0 1px rgba(255,255,255,0.07)` in `shadow-raised`), so they show where they end on the black ground. On Dark and Midnight the primary button is light, so the teal and gold icons on it take the Light look's deeper `#0D7A69` and `#8A6410`. Text and icons on a teal fill (the FREE tag, the Start free banner, the Funds check) take `primary-ink`.
+
 | Token | Value | Use |
 |---|---|---|
 | bg | `#0B0D10` | Page background |
@@ -740,3 +797,91 @@ Each item names the version on the Default mode page.
 16. **Share unseen (photo protection with before and after)** is not in the canvas. The nearest is Photo check (`DPhoto`), which shows cover boxes on one image, not a before and after pair.
 17. **Dark and Midnight** exist only as thumbnails in `XThemes` and as the Classic and experiment screens. No Default mode screen is drawn in Dark or Midnight.
 18. **Duplicate screens across pages.** Most `D*` files in Default mode are Light copies of Classic files (for example `DAddFunds` and `AddFunds`). Build from the `D*` version.
+
+## 6. Reading load
+
+The owner's rule (2026-11-15): the app is made end to end for people who read with difficulty or whose English is weak. Fewer words, more icons. Icons and pictures carry the meaning. One short word or label per element. No paragraphs on screen. Explanations sit behind an info button or are spoken by Listen. Targets are 48 px.
+
+How the screens keep it:
+
+- **Headline first.** Every message is written so its first sentence says what happened in a few words ("No answer, not charged.", "Code does not work.", "It cannot be recovered."). `say()` in `core/ui.js` shows that sentence with an icon (alert for an error, check for done, an hourglass for a step under way, or the message's own picture) and puts the rest behind a round info button, which opens it under the line. Screen readers read the whole message in place, and the element's text is the message as written, so nothing honest is lost: it moved behind info.
+- **Choices read at a glance.** A model or a voice is a card with its name and small picture tags (Private or Standard, Free, Paid, Stays here, Engine hears, Maker may hear). What it costs and who can read or hear it is behind the info button beside the card.
+- **Every button has a picture**, or is one word. A next step after an error is one button with its icon: Try again, Add money, Models, Start fresh, Take out, Get more.
+- **Listen on every sub screen.** Funds, Add money and Start free had Listen; History, Erase, Engine, Choose a model, Voice, Take funds out, the ways to add money, Free questions used up and Share unseen have it now. It reads the title and every message in full, the detail behind info included, and each choice with its info.
+- **Kept exactly as approved:** the first run's titles and lines (`data-approved`), the Private-only question with Use free models and Keep Private only. The first run's sheets (Learn more, See the full list) are detail behind a button already.
+- **48 px targets:** small round buttons, chips' remove buttons, segment buttons and small buttons are 48 px; a block over a photo keeps its size and reaches 48 px with its hit area.
+
+`test/ui/literacy.ui.test.ts` opens every state below in Midnight at 412 by 915, photographs it under `.tmp/literacy/after/` (`LITERACY_PHASE=before` for the old screens), and fails when a run of text over 8 words shows outside an info panel, a first run sheet, the answer, the question asked or the approved words; when a button has neither an icon nor a one-word label; or when a target is under 48 px. Words are counted as a person sees them: a word has a letter in it, so amounts and times are not counted.
+
+| Screen | Words before | Words after | What changed |
+| --- | ---: | ---: | --- |
+| home-no-funds | 11 | 11 | Balance pill: plus icon and "Add money" (was a text-only "Add funds") |
+| home-money | 10 | 10 | No change needed |
+| sheet-add | 29 | 19 | Row lines cut to 3 words ("Cleaned on this phone", "Its text only") |
+| sheet-more | 56 | 49 | Row lines cut ("Talk and Listen", "Remove all from this phone", "Paying, limits, Private only") |
+| home-talking | 39 | 21 | Time line 4 words; where the voice goes is one line with an ear, phone or globe icon, detail behind info |
+| type | 10 | 6 | No change needed |
+| answer | 38 | 38 | Cost line with a coin or gift icon |
+| home-memory-low | 15 | 12 | "Memory nearly full" chip |
+| funds | 28 | 28 | Notes headline first; Use free model has an icon |
+| answer-error | 35 | 25 | Error: alert icon, "No answer, not charged.", icon on Try again, detail behind info; toast shows the headline |
+| take-out | 35 | 20 | "You get eCash." with a coin icon; how to save it behind info |
+| take-out-token | 69 | 38 | "Kept here until saved." and "Moving code in N parts." headlines; I saved it has a check icon |
+| funds-ecash-kept | 44 | 37 | Waiting eCash rows headline first; Copy, Remove and Take out have icons |
+| erase-money | 136 | 71 | "This cannot be undone." and "It cannot be recovered." headlines with icons; what is removed is an icon list; the rest behind info |
+| home-free-model | 15 | 15 | Balance pill plus icon |
+| funds-free-model | 31 | 23 | "Needs a balance." headline |
+| type-need-balance | 28 | 13 | Notice: alert icon and "Needs a balance."; button with a gift icon |
+| type-no-funds | 18 | 13 | Notice "No funds."; Add money and Use a free model with icons |
+| type-private-question | 27 | 27 | The owner's question kept as it is; the two answers have check and lock icons |
+| funds-zero | 22 | 21 | Notes headline first |
+| add-money | 13 | 13 | Already pictures and one word (wallet cards) |
+| add-money-info | 25 | 25 | Unchanged (the info panel is the allowed place) |
+| add-money-more | 24 | 24 | Unchanged |
+| start-free | 15 | 15 | Unchanged |
+| start-free-wrong-code | 26 | 19 | "Code does not work." with an alert icon, the rest behind info |
+| start-free-question | 46 | 46 | The owner's question kept as it is |
+| funds-start-free | 38 | 28 | The note Start free leaves is headline first ("Private only is off now.") |
+| fund-note | 14 | 12 | Camera line "Point the camera at the code."; errors headline first |
+| fund-ecash | 14 | 11 | "Paste eCash"; Add button with a plus |
+| fund-lightning | 5 | 6 | Unchanged |
+| fund-othermint | 31 | 16 | "Converted to your funds." headline; Check eCash with an icon |
+| fund-free | 46 | 18 | "Free every day." headline; the puzzle and "not money" behind info |
+| fund-card | 40 | 17 | "Android app only." headline (website) |
+| fund-fedimint | 57 | 18 | "Android app only." and "A till pays from the card." headlines (website) |
+| fund-ecash-error | 20 | 13 | "Not eCash." with an alert icon |
+| fund-lightning-invoice | 9 | 10 | Unchanged |
+| free-out | 52 | 40 | Lines cut ("Ways to keep asking.", "Still free: Share unseen, History, Erase.") |
+| model | 45 | 16 | Each model: name and picture tags; price and who can read it behind its info button; Private only line "Nobody else can read." |
+| look | 36 | 34 | "Phone setting" with a phone icon |
+| voice | 160 | 43 | Each way: name and tags (Free or Paid, Stays here, Engine hears, Maker may hear); the full line behind info |
+| history-empty | 77 | 30 | Lines headline first with icons; Never, On close and timed choices have icons |
+| erase | 81 | 47 | As erase-money |
+| engine | 43 | 21 | "Where questions go." and "Balances stay behind." headlines; Use this and Default with icons |
+| photo | 53 | 15 | "Take or pick a photo." and "Free." headlines; the rest behind info |
+| photo-missed | 67 | 19 | "Photo did not arrive." with an alert icon |
+| photo-none | 66 | 20 | "No photo in that share." with an alert icon |
+| photo-sent | 68 | 17 | "Photo not kept." with an alert icon; what the server did behind info |
+| engine-error | 50 | 23 | "Needs https." headline |
+| erase-tapped | 91 | 52 | "Hold it down to erase." with an alert icon |
+| photo-review | 99 | 62 | Headlines with icons; After and Before have icons; blocks reach 48 px |
+| history | 92 | 51 | As history-empty; "Burn removes it from this phone." with the rest behind info |
+| history-burn-all | 103 | 57 | Question with a flame; Keep with an icon |
+| intro-welcome | 17 | 17 | Owner-approved words kept |
+| intro-pay | 16 | 16 | Owner-approved words kept |
+| intro-pay-sheet | 84 | 84 | Sheet behind Learn more (allowed) |
+| intro-limits | 25 | 25 | Owner-approved words kept |
+| intro-limits-sheet | 234 | 234 | Sheet behind See the full list (allowed) |
+| intro-private | 21 | 21 | Owner-approved words kept |
+| intro-private-sheet | 103 | 103 | Sheet behind the info button (allowed) |
+| intro-invite | 41 | 41 | Answer buttons and "I'll add money instead" have icons |
+| free-page | 26 | 14 | Lines headline first |
+| download-page | 45 | 16 | Lead "For Android 9 and up."; install steps cut |
+| erased | 16 | 9 | "All gone from this browser." with a check; Open Forge again with an icon |
+| **All 63 states** | **2930** | **1915** | |
+
+Breaks of the rule the check finds: 161 before (88 runs of text over 8 words, 30 buttons with no icon and several words, 43 targets under 48 px), 0 after.
+
+Words are what a person sees on that state, sheets and the screen under them together; the detail behind info buttons is not counted, since it shows only when asked for. Before: `addfunds-c` (ebbd51d). The pictures: `.tmp/literacy/before/` and `.tmp/literacy/after/`, same names.
+
+Not made shorter, and why: the first run's titles and lines and the Private-only question (the owner's approved words); the answer and the question asked (the person's own content); a model's name (data from the engine, shown as it is); a mint or till address and a file's SHA-256 (shown where a person must compare them); the first run's sheets (detail already behind Learn more and See the full list). The Tap a card and Tap a Fedimint card flows work only in the Android app, so their states were rewritten headline first and checked in the unit and card tests, not photographed here; on the website they show Android app only.

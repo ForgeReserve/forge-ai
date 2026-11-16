@@ -2,7 +2,7 @@
  * The web app as the Android app bundles it (docs/ANDROID.md). The APK carries these files and loads
  * nothing else as code: the v2 app (public/v2), the shared modules it imports (public/js), the vendored
  * libraries with their licences (public/vendor) and the icons. Never v1, the admin page, the beta page,
- * the /free page or the /download page: those are the website's.
+ * the /free page, the /download page or the /j page: those are the website's.
  *
  * Capacitor serves the bundle at https://localhost/. Its index.html is the v2 page (every path in it is
  * absolute, so /v2/app.js and the rest load as they do on the website), and an address the bundle does
@@ -13,8 +13,12 @@ import { dirname, join, relative, sep } from 'node:path';
 
 /** Paths (relative to public/, with /) that go in the app. */
 const KEEP = /^(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
-/** Inside those, what stays on the website: its own pages, and the v2 service worker (the app's files are on the phone already). */
-const SKIP = /^v2\/(free\/|download\/|sw\.js$)/;
+/**
+ * Inside those, what stays on the website: its own pages, the v2 service worker (the app's files are on
+ * the phone already), and the licences of the speech to text only Forge Private Voice carries (the
+ * privatevoice flavour adds them itself, scripts/asr-model.ts).
+ */
+const SKIP = /^(v2\/(free\/|download\/|join\/|sw\.js$)|vendor\/licenses\/(sherpa-onnx|onnxruntime|moonshine)\.txt$)/;
 
 export function inBundle(rel: string): boolean {
   const p = rel.split(sep).join('/');
@@ -48,17 +52,23 @@ export interface CapacitorConfig {
  * its index.html), <assets>/capacitor.config.json and <assets>/capacitor.plugins.json. What was in
  * <assets>/public before is removed first, so a file deleted from public/ leaves the app too.
  */
-export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig): { files: number; bytes: number } {
+/** The natural voice's files (public/v2/voice/phonon), which the APK carries uncompressed (build.gradle noCompress). */
+export const isVoiceFile = (rel: string) => rel.split(sep).join('/').startsWith('v2/voice/phonon/');
+
+export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig): { files: number; bytes: number; voiceBytes: number } {
   const out = join(assetsDir, 'public');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   let bytes = 0;
+  let voiceBytes = 0;
   const files = bundleFiles(publicDir);
   for (const rel of files) {
     const to = join(out, rel);
     mkdirSync(dirname(to), { recursive: true });
     cpSync(join(publicDir, rel), to);
-    bytes += statSync(to).size;
+    const n = statSync(to).size;
+    bytes += n;
+    if (isVoiceFile(rel)) voiceBytes += n;
   }
   const page = readFileSync(join(publicDir, 'v2', 'index.html'));
   writeFileSync(join(out, 'index.html'), page);
@@ -68,7 +78,7 @@ export function writeBundle(publicDir: string, assetsDir: string, config: Capaci
   writeFileSync(join(assetsDir, 'capacitor.config.json'), JSON.stringify(runtime, null, 2) + '\n');
   // The app's own plugins (ForgeShare, ForgeShareIn) are registered in MainActivity, none from npm.
   writeFileSync(join(assetsDir, 'capacitor.plugins.json'), '[]\n');
-  return { files: files.length + 1, bytes };
+  return { files: files.length + 1, bytes, voiceBytes };
 }
 
 export function readConfig(file: string): CapacitorConfig {

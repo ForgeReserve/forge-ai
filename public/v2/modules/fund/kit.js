@@ -6,7 +6,7 @@ export function inviteField({ t, ui, wallet }) {
   if (wallet.key() || !wallet.inviteOnly()) return { node: null, missing: () => false, value: () => undefined };
   const input = ui.el('input', { id: 'invite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
   input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-  const node = ui.el('div', { class: 'field' }, ui.el('label', { for: 'invite', class: 'label', text: t('invite.label') }), input, ui.el('p', { class: 'note', text: t('invite.hint') }));
+  const node = ui.el('div', { class: 'field' }, ui.el('label', { for: 'invite', class: 'label', text: t('invite.label') }), input, ui.sayEl('p', { class: 'note' }, t('invite.hint')));
   return {
     node,
     value: () => (wallet.key() ? undefined : wallet.invite() || undefined),
@@ -133,7 +133,7 @@ export function poll(fn, ms) {
 export function tokenBox({ t, ui, scan }, { id, label, onScanned }) {
   const ta = ui.el('textarea', { id, rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
   const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
-  const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.el('p', { class: 'note', text: t('fund.scanHint') }));
+  const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
   let job = null;
   const stop = () => {
     job?.stop();

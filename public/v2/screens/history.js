@@ -2,11 +2,12 @@
 // time and, when auto-delete is timed, the time left. Tap a card to open it (and ask a follow-up to
 // continue it), the flame to burn it, Burn all now to burn every one. The auto-delete choice sits on top.
 import { agoText, AUTO_DELETE_IDS, leftText, listHistory } from '../core/history.js';
-import { backHeader, el, icon } from '../core/ui.js';
+import { el, icon, say, sayEl } from '../core/ui.js';
+import { listenHeader, screenListen } from './parts.js';
 
 const KIND_ICON = { image: ['camera', 'gold'], file: ['file', 'blue'], voice: ['mic', 'violet'], text: ['bulb', 'teal'] };
 
-export function historyScreen({ t, state, back, backTo, actions }) {
+export function historyScreen({ t, state, back, backTo, actions, reader }) {
   const S = state.S;
   const intro = el('p', { class: 'note', id: 'historyIntro' });
   const seg = el('div', { class: 'seg wrap', role: 'radiogroup', 'aria-labelledby': 'autoHead', id: 'autoDelete' });
@@ -59,7 +60,7 @@ export function historyScreen({ t, state, back, backTo, actions }) {
       { class: 'empty-state', id: 'historyEmpty' },
       el('span', { class: 'tile-ico big tint-gold', 'aria-hidden': 'true' }, icon('clock', 28)),
       el('b', { text: t('history.emptyTitle') }),
-      el('p', { class: 'note', text: t('history.empty') }),
+      sayEl('p', { class: 'note' }, t('history.empty')),
       el('button', { type: 'button', class: 'btn', id: 'historyAsk', onclick: () => backTo('home') }, icon('mic', 18), el('span', { text: t('history.emptyAsk') })),
     );
 
@@ -69,10 +70,10 @@ export function historyScreen({ t, state, back, backTo, actions }) {
   const draw = () => {
     drawnFor = shown();
     const setting = S.settings.autoDelete;
-    intro.textContent = t(setting === 'off' ? 'history.introOff' : setting === 'close' ? 'history.introClose' : 'history.intro');
+    say(intro, t(setting === 'off' ? 'history.introOff' : setting === 'close' ? 'history.introClose' : 'history.intro'), '', 'clock');
     seg.replaceChildren(
       ...AUTO_DELETE_IDS.map((id) =>
-        el('button', { type: 'button', role: 'radio', 'aria-checked': String(setting === id), id: `auto-${id}`, onclick: () => actions.setAutoDelete(id), text: t(`auto.${id}`) }),
+        el('button', { type: 'button', role: 'radio', 'aria-checked': String(setting === id), id: `auto-${id}`, onclick: () => actions.setAutoDelete(id) }, icon(id === 'off' ? 'x' : id === 'close' ? 'flame' : 'clock', 16), el('span', { text: t(`auto.${id}`) })),
       ),
     );
     const items = listHistory(convs, setting, Date.now());
@@ -92,11 +93,11 @@ export function historyScreen({ t, state, back, backTo, actions }) {
   };
   burnAll.addEventListener('click', () => {
     confirmBox.replaceChildren(
-      el('p', { text: t('history.burnAllAsk') }),
+      sayEl('p', {}, t('history.burnAllAsk'), '', 'flame'),
       el(
         'div',
         { class: 'row-btns' },
-        el('button', { type: 'button', class: 'btn', id: 'burnAllNo', onclick: () => ((confirmBox.hidden = true), burnAll.focus()), text: t('history.keep') }),
+        el('button', { type: 'button', class: 'btn', id: 'burnAllNo', onclick: () => ((confirmBox.hidden = true), burnAll.focus()) }, icon('x', 18), el('span', { text: t('history.keep') })),
         el(
           'button',
           {
@@ -133,10 +134,11 @@ export function historyScreen({ t, state, back, backTo, actions }) {
   };
   draw();
   reload();
+  const listen = screenListen({ t, reader, id: 'historyListen', root: () => main });
   const main = el(
     'main',
     { class: 'screen sub history', 'data-screen': 'history' },
-    backHeader(t('history.title'), back, t('common.back')),
+    listenHeader(t('history.title'), back, t('common.back'), listen.node),
     el(
       'div',
       { class: 'scroll' },
@@ -144,9 +146,10 @@ export function historyScreen({ t, state, back, backTo, actions }) {
       el('h2', { class: 'caps', id: 'autoHead', text: t('history.auto') }),
       seg,
       list,
-      el('p', { class: 'note', id: 'burnWhat', text: t('history.what') }),
+      sayEl('p', { class: 'note', id: 'burnWhat' }, t('history.what'), '', 'flame'),
     ),
     el('div', { class: 'foot' }, confirmBox, burnAll),
   );
-  return { node: main, update, destroy: () => clearInterval(tick), focus: main.querySelector('h1') };
+  listen.update();
+  return { node: main, update, destroy: () => (clearInterval(tick), listen.destroy()), focus: main.querySelector('h1') };
 }

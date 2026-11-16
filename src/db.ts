@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   unit TEXT NOT NULL,
   balance_msub INTEGER NOT NULL DEFAULT 0 CHECK (balance_msub >= 0),
   invite_id TEXT,
+  pass_id TEXT,                     -- the event pass that opened it (passes), if any
   created_at INTEGER NOT NULL,
   frozen_at INTEGER,                -- set by the operator: spending blocked, refunds allowed
   free INTEGER NOT NULL DEFAULT 0   -- 1: a free balance, funded with credits (docs/FREE-TIER.md); never money
@@ -112,6 +113,21 @@ CREATE TABLE IF NOT EXISTS invites (
   redeemed_at INTEGER
 );
 
+-- Event passes (docs/ADMIN.md, Event passes): one code, shown as one QR code, that opens up to max_uses
+-- balances at 0 for the free models (POST /v1/wallet/open only) until expires_at. Unlike an invite it is
+-- never bound to one balance: each balance it opened carries its id in accounts.pass_id, and giving a
+-- balance back (releaseIfEmpty) gives its use back. Only a SHA-256 of the code is stored.
+CREATE TABLE IF NOT EXISTS passes (
+  id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL UNIQUE,
+  label TEXT,
+  status TEXT NOT NULL,             -- open | revoked
+  max_uses INTEGER NOT NULL CHECK (max_uses >= 1),
+  uses INTEGER NOT NULL DEFAULT 0 CHECK (uses >= 0),
+  expires_at INTEGER NOT NULL,      -- ms: refused from then on
+  created_at INTEGER NOT NULL
+);
+
 -- Funding a balance through the Forge mint: Lightning (NUT-04 bolt11), on-chain (NUT-30) or eCash
 -- from another mint (received there, melted to pay a Forge bolt11 quote). Keys never appear here.
 -- Beta waitlist: one contact (email or Nostr npub) and an optional note. No IP or other metadata.
@@ -200,6 +216,22 @@ CREATE TABLE IF NOT EXISTS faucet_days (
   claimed INTEGER NOT NULL DEFAULT 0
 );
 
+-- Free voice questions (src/free-voice.ts): per UTC day, how many were served free and their summed
+-- supplier cost, and the day's random HMAC key, forgotten (NULL) once the day is over.
+CREATE TABLE IF NOT EXISTS free_voice_days (
+  day TEXT PRIMARY KEY,
+  hash_key TEXT,
+  used INTEGER NOT NULL DEFAULT 0,
+  spent_nusd INTEGER NOT NULL DEFAULT 0
+);
+-- Today's count per balance, keyed by HMAC(day key, balance id). Rows of a past day are deleted.
+CREATE TABLE IF NOT EXISTS free_voice_uses (
+  day TEXT NOT NULL,
+  balance TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, balance)
+);
+
 -- Metering log. No prompt or completion content, ever.
 CREATE TABLE IF NOT EXISTS requests (
   id TEXT PRIMARY KEY,
@@ -221,7 +253,7 @@ CREATE TABLE IF NOT EXISTS requests (
   lock_pubkey TEXT,                 -- nut24: X-Cashu-Pubkey, change is locked to it
   price_nusd INTEGER,               -- what the request was priced at, nano-USD (before unit conversion)
   supplier_cost_nusd INTEGER,       -- what it cost us, nano-USD
-  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost) | free (a free model: 0)
+  cost_source TEXT,                 -- supplier (reported by the supplier) | catalog (usage x our catalog cost) | free (a free model: 0) | operator (a free voice question: the operator pays)
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS requests_created ON requests(created_at);
@@ -241,6 +273,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['fundings', 'f_unlisted', 'INTEGER NOT NULL DEFAULT 0'],
   ['accounts', 'free', 'INTEGER NOT NULL DEFAULT 0'],
   ['reservations', 'shortfall_msub', 'INTEGER'],
+  ['accounts', 'pass_id', 'TEXT'],
 ];
 
 export type DB = DatabaseSync;

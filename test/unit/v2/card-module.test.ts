@@ -49,8 +49,8 @@ describe('the Tap a card module', () => {
   });
 
   it('says what went wrong in plain words, with the PIN tries left', () => {
-    expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 2 }, t)).toBe('Wrong PIN. 2 tries left.');
-    expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 1 }, t)).toBe('Wrong PIN. 1 try left.');
+    expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 2 }, t)).toBe('Wrong PIN, 2 tries left.');
+    expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 1 }, t)).toBe('Wrong PIN, 1 try left.');
     expect(M.wordsFor({ code: 'pin_blocked' }, t)).toMatch(/blocked\. Nothing was taken/);
     // Only true while the card has not paid anywhere else since: the words say so.
     expect(M.wordsFor({ code: 'unfinished', kept: true }, t)).toBe('The card left before it finished. Hold the same card to the phone again before you use it anywhere else.');

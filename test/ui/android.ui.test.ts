@@ -9,6 +9,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from 'playwrig
 import { readConfig, writeBundle } from '../../scripts/lib/android-web.ts';
 import { type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // The web app as the Android app carries it: the bundle the Gradle build writes into the APK
 // (scripts/android-web.ts), served from its own origin the way Capacitor serves it at https://localhost
@@ -34,7 +35,8 @@ function serveBundle(dir: string): Promise<Server> {
     const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     let file = normalize(join(dir, path));
     if (!file.startsWith(dir) || !existsSync(file) || statSync(file).isDirectory()) file = join(dir, 'index.html');
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+    // With the isolation headers MainActivity adds to the app's own files (IsolationRules.kt).
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' });
     createReadStream(file).pipe(res);
   });
   return new Promise((r) => s.listen(0, '127.0.0.1', () => r(s)));
@@ -82,6 +84,13 @@ async function appPhone(): Promise<AppPhone> {
           w.__native.shared = null;
           return s ?? {};
         }
+        // ForgeJoin (JoinPlugin.kt): the event pass of the link that opened the app, handed over once.
+        if (plugin === 'ForgeJoin' && method === 'take') {
+          const pass = w.__native.joinPass ?? sessionStorage.getItem('test.joinPass');
+          w.__native.joinPass = null;
+          sessionStorage.removeItem('test.joinPass');
+          return pass ? { pass } : {};
+        }
         if (plugin === 'ForgeShare' && method === 'share') return { opened: true };
         if (plugin === 'ForgeShare' && method === 'save') return { saved: true };
         return undefined;
@@ -90,6 +99,11 @@ async function appPhone(): Promise<AppPhone> {
         w.__native.listeners.push({ plugin, event, fn });
         return { remove: async () => {} };
       },
+    };
+    // What ForgeJoin does when an event link opens Forge while it runs.
+    w.__join = (pass: string) => {
+      w.__native.joinPass = pass;
+      for (const l of w.__native.listeners) if (l.plugin === 'ForgeJoin' && l.event === 'join') l.fn();
     };
     // What ForgeShareIn does when another app shares a photo while Forge is open.
     w.__shareIn = (data: string) => {
@@ -138,13 +152,13 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.isVisible('#engineDefault')).toBe(false);
     await page.fill('#engineAddress', 'http://ai.example.org');
     await page.click('#engineUse');
-    expect(await page.textContent('#engineMsg')).toBe('Use an address that starts with https.');
+    expect(await page.textContent('#engineMsg')).toBe('Needs https. Use an address that starts with https.');
     await page.fill('#engineAddress', 'https://ai.forge-reserve.com/');
     await page.click('#engineUse');
     expect(await page.textContent('#engineMsg')).toBe('Forge already uses this engine.');
     await page.fill('#engineAddress', 'https://ai.example.org');
     await page.click('#engineUse');
-    await expect.poll(() => page.textContent('#engineMsg')).toBe('That engine did not answer. Check the address and try again.');
+    await expect.poll(() => page.textContent('#engineMsg')).toBe('No answer from it. That engine did not answer. Check the address and try again.');
     await page.fill('#engineAddress', `${g.url}/`);
     await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
     await page.waitForSelector('[data-screen=home]');
@@ -156,7 +170,7 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await page.click('#balanceText');
     await page.waitForSelector('[data-screen=funds]');
     await page.click('#addFundsBtn');
-    await page.click('#fund-ecash');
+    await openWay(page, 'ecash');
     await page.fill('#ecashToken', await mintToken(MINT_A, 'usd', 500));
     await page.click('#ecashAdd');
     await page.waitForSelector('[data-screen=funds]');
@@ -190,11 +204,37 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await Promise.all([page.waitForEvent('load'), page.click('#engineDefault')]);
     await page.waitForSelector('[data-screen=home]');
     await page.unroute(`${PROD}/v1/models`);
-    await expect.poll(() => page.textContent('#balanceText')).toBe('Add funds');
+    await expect.poll(() => page.textContent('#balanceText')).toBe('Add money');
     expect(outside.slice(before).every((u) => u.startsWith(`${PROD}/`))).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);
+
+  it('carries the natural voice: isolated, nothing to download, and it reads from the bundle with nothing kept twice', async () => {
+    const { ctx, page, errors, outside } = await appPhone();
+    await page.goto(`${app}/#/more/voice`);
+    await page.waitForSelector('[data-screen=voice]');
+    expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+    await page.waitForSelector('#voiceOut-phonon');
+    expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeStays here');
+    expect(await page.getAttribute('#voiceOut-phonon', 'aria-description')).toBe('Free. Made on this phone, so the answer is not sent anywhere.');
+    // The voice lab, one way only: the model loads from the bundle on several threads.
+    await page.goto(`${app}/#/voice-lab`);
+    await page.waitForSelector('[data-screen=voiceLab]');
+    await expect.poll(() => page.textContent('#labEnv')).toContain('Threads allowed: yes');
+    for (const id of ['phonon-cpu-single', 'phonon-webgpu', 'phone-voice']) await page.uncheck(`#lab-${id}`);
+    await page.selectOption('#labLines', '3');
+    await page.click('#labRun');
+    await page.waitForSelector('#labRun:not([hidden])', { timeout: 120_000 });
+    expect(await page.textContent('#labResults')).toMatch(/several threads/);
+    expect(await page.textContent('#labStatus')).toMatch(/^Done\./);
+    // Read straight from the bundle: no copy in Cache Storage, and nothing fetched from elsewhere.
+    expect(await page.evaluate(() => caches.has('phonon-tts-v1'))).toBe(false);
+    expect(outside.filter((u) => !u.startsWith('https://ai.forge-reserve.com/'))).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
 
   it('opens Share unseen with a photo shared in, and shares only the protected copy out', async () => {
     const { ctx, page, errors, outside } = await appPhone();
@@ -246,7 +286,104 @@ describe('the Android app\'s web bundle, from its own origin', () => {
       for (const l of w.__native.listeners) if (l.event === 'shared') l.fn();
     });
     await page.waitForSelector('#photoAlert');
-    expect(await page.textContent('#photoAlert')).toContain('No photo came with that share.');
+    expect(await page.textContent('#photoAlert')).toContain('No photo in that share.');
+    await ctx.close();
+  }, 60_000);
+
+  it('opens a free balance with the event pass the app was opened on, cold or while it runs (ForgeJoin)', async () => {
+    const DAY = 24 * 3600 * 1000;
+    const pass = () => g.deps.passes.create({ maxUses: 5, expiresAt: Date.now() + DAY, label: 'app' });
+    const uses = (id: string) => (g.deps.db.prepare('SELECT uses FROM passes WHERE id = ?').get(id) as { uses: number }).uses;
+    /** A phone on the local engine (More, Engine), with no balance key there yet. */
+    const onLocalEngine = async () => {
+      const p = await appPhone();
+      await p.page.goto(`${app}/#/more/engine`);
+      await p.page.waitForSelector('[data-screen=engine]');
+      await p.page.fill('#engineAddress', `${g.url}/`);
+      await Promise.all([p.page.waitForEvent('load'), p.page.click('#engineUse')]);
+      await p.page.waitForSelector('[data-screen=home]');
+      return p;
+    };
+    const key = (page: Page) => page.evaluate((u) => localStorage.getItem(`forge.balanceKey@${u}`), g.url);
+
+    // Cold start on the link: the pass is taken at start and the balance opened.
+    const cold = await onLocalEngine();
+    const a = pass();
+    await cold.page.evaluate((code) => sessionStorage.setItem('test.joinPass', code), a.code);
+    await cold.page.reload();
+    await cold.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    expect(await key(cold.page)).toMatch(/^sk-forge-/);
+    expect(uses(a.id)).toBe(1);
+    await cold.page.click('#startFreeKeep');
+    await cold.page.waitForSelector('[data-screen=home]');
+    // A second link while it runs, with a balance already: nothing is spent and the key stays.
+    const had = await key(cold.page);
+    const b = pass();
+    await cold.page.evaluate((code) => (window as any).__join(code), b.code);
+    await cold.page.waitForTimeout(500);
+    expect(await key(cold.page)).toBe(had);
+    expect(uses(b.id)).toBe(0);
+    expect(cold.errors).toEqual([]);
+    await cold.ctx.close();
+
+    // The link opens the app while it runs, on a phone with no balance: opened as on a cold start.
+    const warm = await onLocalEngine();
+    const c = pass();
+    await warm.page.evaluate((code) => (window as any).__join(code), c.code);
+    await warm.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    expect(await key(warm.page)).toMatch(/^sk-forge-/);
+    expect(uses(c.id)).toBe(1);
+    expect(warm.errors).toEqual([]);
+    await warm.ctx.close();
+
+    // The QR code scanned twice on slow wifi: the link reaches the app again while the first open is
+    // still on its way. One balance is opened, one use spent, and the key it gave is the one kept.
+    const twice = await onLocalEngine();
+    const d = pass();
+    const opens: string[] = [];
+    const answered: string[] = [];
+    await twice.page.route(`${g.url}/v1/wallet/open`, async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      opens.push(route.request().url());
+      await new Promise((r) => setTimeout(r, 1500));
+      const res = await route.fetch();
+      const body = await res.text();
+      const k = JSON.parse(body).key;
+      if (typeof k === 'string') answered.push(k);
+      return route.fulfill({ response: res, body });
+    });
+    await twice.page.evaluate((code) => {
+      (window as any).__join(code);
+      (window as any).__join(code);
+    }, d.code);
+    await twice.page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    await twice.page.waitForTimeout(2000);
+    expect(opens).toHaveLength(1);
+    expect(uses(d.id)).toBe(1);
+    expect(answered).toHaveLength(1);
+    expect(await key(twice.page)).toBe(answered[0]);
+    expect(twice.errors).toEqual([]);
+    await twice.ctx.close();
+  }, 120_000);
+
+  it('keeps the phone\'s bars the colour of the look: Midnight by default, light on the Light look', async () => {
+    const { ctx, page, errors } = await appPhone();
+    const bars = () => page.evaluate(() => (window as any).__native.calls.filter((c: any) => c.plugin === 'ForgeBars').map((c: any) => `${c.method} ${c.opts.color}`));
+    await page.goto(`${app}/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(bars).toEqual(['set #0B0D10']);
+    await page.goto(`${app}/#/more/look`);
+    await page.waitForSelector('[data-screen=look]');
+    await page.click('#look-light');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1']);
+    // The first run is dark on every look: the bars go dark while it shows, and back after.
+    await page.goto(`${app}/#/start`);
+    await page.waitForSelector('[data-screen=intro]');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1', 'set #0B0D10']);
+    await page.click('#introSkip');
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(bars).toEqual(['set #0B0D10', 'set #F6F5F1', 'set #0B0D10', 'set #F6F5F1']);
+    expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
 });
@@ -274,6 +411,8 @@ describe('the /download page', () => {
         return { type: r.headers.get('content-type'), size: (await r.arrayBuffer()).byteLength };
       });
       expect(got).toEqual({ type: 'application/vnd.android.package-archive', size: bytes.length });
+      // One APK: no choice to make.
+      expect(await page.locator('.apk-pick').count()).toBe(0);
 
       // This gateway has no APK set.
       await page.goto(`${g.url}/download`);
@@ -285,6 +424,53 @@ describe('the /download page', () => {
     } finally {
       await ctx.close();
       await withApk.close();
+    }
+  }, 60_000);
+
+  it('with Forge Private Voice too, offers Android or GrapheneOS: an icon and a word each, the rest behind the info button', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'forge-apk-'));
+    const bytes = Buffer.from('PK\u0003\u0004'.padEnd(300_000, 'x'));
+    const pv = Buffer.from('PK\u0003\u0004'.padEnd(700_000, 'p'));
+    writeFileSync(join(dir, 'forge.apk'), bytes);
+    writeFileSync(join(dir, 'pv.apk'), pv);
+    const both = await startGateway({ env: { FORGE_APK_PATH: join(dir, 'forge.apk'), FORGE_APK_PRIVATE_VOICE_PATH: join(dir, 'pv.apk') } });
+    const ctx = await browser.newContext(PHONE);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    const hex = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+    try {
+      await page.goto(`${both.url}/download`);
+      await page.waitForSelector('.apk-pick');
+      expect(await page.textContent('#apk-android')).toBe('Android');
+      expect(await page.textContent('#apk-graphene')).toBe('GrapheneOS');
+      expect(await page.locator('#apk-android svg, #apk-graphene svg').count()).toBe(2);
+      // Android first and picked.
+      expect(await page.getAttribute('#apk-android', 'aria-checked')).toBe('true');
+      expect(await page.getAttribute('#downloadApk', 'href')).toBe('/download/forge.apk');
+      expect((await page.textContent('#downloadHash'))!.replaceAll(' ', '')).toBe(hex(bytes));
+      // The info stays hidden until asked for.
+      expect(await page.isVisible('#downloadAbout')).toBe(false);
+      await page.click('#apk-graphene-info');
+      expect(await page.textContent('#downloadAbout')).toBe('Forge Private Voice. For GrapheneOS: it turns your voice into words on the phone. A bigger file.');
+      await page.click('#apk-graphene-info');
+      expect(await page.isVisible('#downloadAbout')).toBe(false);
+      // GrapheneOS picked: its file, size and fingerprint.
+      await page.click('#apk-graphene');
+      expect(await page.getAttribute('#apk-graphene', 'aria-checked')).toBe('true');
+      expect(await page.getAttribute('#apk-android', 'aria-checked')).toBe('false');
+      expect(await page.getAttribute('#downloadApk', 'href')).toBe('/download/forge-private-voice.apk');
+      expect(await page.getAttribute('#downloadApk', 'download')).toBe('forge-private-voice.apk');
+      expect(await page.textContent('#downloadApk')).toBe('Download the app, 0.7 MB');
+      expect((await page.textContent('#downloadHash'))!.replaceAll(' ', '')).toBe(hex(pv));
+      const got = await page.evaluate(async () => (await (await fetch('/download/forge-private-voice.apk')).arrayBuffer()).byteLength);
+      expect(got).toBe(pv.length);
+      // Fits a phone's width: no sideways scrolling.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await ctx.close();
+      await both.close();
     }
   }, 60_000);
 });

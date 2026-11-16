@@ -5,3 +5,9 @@ data/
 .env
 dist
 .tmp/
+# The on-device voice files (scripts/phonon-model.ts fetches them at build time, pinned in scripts/phonon/lock.json).
+public/v2/voice/phonon/*/
+public/v2/voice/phonon/index.json
+# Forge Private Voice's speech to text (scripts/asr-model.ts puts it in place at build time, pinned in scripts/asr/lock.json).
+android/app/src/privatevoice/jniLibs/
+android/app/src/privatevoice/assets/

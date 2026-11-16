@@ -169,3 +169,170 @@ describe('the engine address', () => {
     expect(R.parentOf('engine')).toBe('more');
   });
 });
+
+describe('cross-origin isolation in the app', () => {
+  const session = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('reloads once when the app page came up without isolation, never on the website or when isolated', () => {
+    const s = session();
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(true);
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(false);
+    expect(N.reloadForIsolation({ native: {}, isolated: true, session: session() })).toBe(false);
+    expect(N.reloadForIsolation({ native: null, isolated: false, session: session() })).toBe(false);
+    const blocked = { getItem: () => { throw new Error('blocked'); }, setItem() {} };
+    expect(N.reloadForIsolation({ native: {}, isolated: false, session: blocked })).toBe(false);
+  });
+});
+
+describe("Hold to talk through ForgeSpeech, the phone's on-device recogniser", () => {
+  it('asks whether the recogniser has the language, and reads a broken bridge as no', async () => {
+    const ok = fakeCapacitor({ 'ForgeSpeech.available': () => ({ onDevice: true, reason: null, locale: 'en-US' }) });
+    expect(await N.createNative(ok.win).speech.available({ locale: 'en-GB' })).toEqual({ onDevice: true, reason: null, locale: 'en-US' });
+    expect(ok.calls).toEqual([['ForgeSpeech', 'available', { locale: 'en-GB' }]]);
+    const no = fakeCapacitor({ 'ForgeSpeech.available': () => ({ onDevice: false, reason: 'no-on-device-recognizer', locale: 'en-US' }) });
+    expect((await N.createNative(no.win).speech.available({ locale: 'en-US' })).onDevice).toBe(false);
+    const broken = fakeCapacitor({
+      'ForgeSpeech.available': () => {
+        throw new Error('"ForgeSpeech" plugin is not implemented on android');
+      },
+    });
+    expect(await N.createNative(broken.win).speech.available({ locale: 'en-US' })).toMatchObject({ onDevice: false, locale: 'en-US' });
+  });
+
+  it('hands each press its own events, and none after it was cancelled', async () => {
+    const f = fakeCapacitor();
+    const speech = N.createNative(f.win).speech;
+    const a: any[] = [];
+    const b: any[] = [];
+    const sa = await speech.start({ locale: 'en-US', onEvent: (ev: any) => a.push(ev.type) });
+    const sb = await speech.start({ locale: 'en-US', onEvent: (ev: any) => b.push(ev.type) });
+    expect(sa.id).not.toBe(sb.id);
+    const fire = f.listeners.find(([p, e]) => p === 'ForgeSpeech' && e === 'speech')![2] as (ev: any) => void;
+    fire({ id: sa.id, type: 'partial', text: 'hi' });
+    fire({ id: sb.id, type: 'final', text: 'there' });
+    sa.cancel();
+    fire({ id: sa.id, type: 'end' });
+    expect(a).toEqual(['partial']);
+    expect(b).toEqual(['final']);
+    expect(f.calls.map(([p, m, o]) => `${p}.${m}:${o.id === sa.id ? 'a' : 'b'}`)).toEqual(['ForgeSpeech.start:a', 'ForgeSpeech.start:b', 'ForgeSpeech.cancel:a']);
+  });
+
+  it('a refused start keeps its code', async () => {
+    const f = fakeCapacitor({
+      'ForgeSpeech.start': () => {
+        throw Object.assign(new Error('Already listening.'), { code: 'busy' });
+      },
+    });
+    await expect(N.createNative(f.win).speech.start({ locale: 'en-US' })).rejects.toMatchObject({ code: 'busy' });
+  });
+});
+
+describe("Hold to talk through ForgeAsr, Forge Private Voice's own speech to text", () => {
+  it('says whether this app carries the model, and reads a broken bridge as no', async () => {
+    const ok = fakeCapacitor({ 'ForgeAsr.available': () => ({ available: true, reason: null, model: 'moonshine-tiny-en', language: 'en' }) });
+    expect(await N.createNative(ok.win).asr.available()).toEqual({ available: true, reason: null, language: 'en' });
+    expect(ok.calls).toEqual([['ForgeAsr', 'available', {}]]);
+    const universal = fakeCapacitor({ 'ForgeAsr.available': () => ({ available: false, reason: 'no speech to text in this app', model: null, language: 'en' }) });
+    expect(await N.createNative(universal.win).asr.available()).toEqual({ available: false, reason: 'no speech to text in this app', language: 'en' });
+    const broken = fakeCapacitor({
+      'ForgeAsr.available': () => {
+        throw new Error('"ForgeAsr" plugin is not implemented on android');
+      },
+    });
+    expect((await N.createNative(broken.win).asr.available()).available).toBe(false);
+  });
+
+  it('hands each press its own events, and a refused start keeps its code', async () => {
+    const f = fakeCapacitor();
+    const asr = N.createNative(f.win).asr;
+    const a: any[] = [];
+    const sa = await asr.start({ onEvent: (ev: any) => a.push(ev.type) });
+    const fire = f.listeners.find(([p, e]) => p === 'ForgeAsr' && e === 'asr')![2] as (ev: any) => void;
+    fire({ id: sa.id, type: 'partial', text: 'Is it' });
+    fire({ id: 'another', type: 'final', text: 'no' });
+    await sa.stop();
+    fire({ id: sa.id, type: 'final', text: 'Is it safe?' });
+    fire({ id: sa.id, type: 'end' });
+    fire({ id: sa.id, type: 'partial', text: 'late' });
+    expect(a).toEqual(['partial', 'final', 'end']);
+    expect(f.calls.map(([p, m]) => `${p}.${m}`)).toEqual(['ForgeAsr.start', 'ForgeAsr.stop']);
+    const busy = fakeCapacitor({
+      'ForgeAsr.start': () => {
+        throw Object.assign(new Error('Already listening.'), { code: 'busy' });
+      },
+    });
+    await expect(N.createNative(busy.win).asr.start({})).rejects.toMatchObject({ code: 'busy' });
+  });
+});
+
+describe('the native natural voice through ForgeVoice', () => {
+  it('says whether this phone runs it, once, and asks again after the thread count changes', async () => {
+    let asked = 0;
+    const { win, calls } = fakeCapacitor({ 'ForgeVoice.status': () => (asked++, { available: true, reason: null, cores: 8, bigCores: [6, 7], threads: 2, chosenThreads: 0, defaultThreads: 2 }), 'ForgeVoice.config': () => ({}) });
+    const v = N.createNative(win).voice;
+    expect(await v.status()).toEqual({ available: true, reason: null, cores: 8, bigCores: [6, 7], threads: 2, chosenThreads: 0, defaultThreads: 2 });
+    await v.status();
+    expect(asked).toBe(1);
+    await v.config(4);
+    expect(calls.at(-1)).toEqual(['ForgeVoice', 'config', { threads: 4 }]);
+    await v.status();
+    expect(asked).toBe(2);
+  });
+
+  it('is unavailable when the app has no such plugin', async () => {
+    const { win } = fakeCapacitor({
+      'ForgeVoice.status': () => {
+        throw Object.assign(new Error('not implemented'), { code: 'UNIMPLEMENTED' });
+      },
+    });
+    expect((await N.createNative(win).voice.status()).available).toBe(false);
+  });
+
+  it("speaks the pieces with this phone's speed, hands each answer's own events to it, and stops it by id", async () => {
+    let finish: (v: any) => void = () => {};
+    const { win, calls, listeners } = fakeCapacitor({ 'ForgeVoice.speak': () => new Promise((r) => (finish = r)) });
+    const v = N.createNative(win).voice;
+    const seen: any[] = [];
+    const h = await v.speak({ pieces: ['One.', 'Two.'], voice: 'Maeve', rtf: 1.1, spc: 0.07, phoneVoice: true, onStarted: () => seen.push('started'), onBuffering: (b: any) => seen.push(b) });
+    const [, , opts] = calls.find((c) => c[1] === 'speak')!;
+    expect(opts).toEqual({ id: h.id, pieces: ['One.', 'Two.'], voice: 'Maeve', rtf: 1.1, spc: 0.07, preferNatural: false, phoneVoice: true, threads: 0 });
+    const fire = (event: string, ev: any) => listeners.filter(([p, e]) => p === 'ForgeVoice' && e === event).forEach(([, , fn]) => (fn as any)(ev));
+    fire('buffering', { id: 'someone-else', fraction: 0.9 });
+    fire('buffering', { id: h.id, fraction: 0.4 });
+    fire('started', { id: h.id });
+    expect(seen).toEqual([{ fraction: 0.4 }, 'started']);
+    await h.stop();
+    expect(calls.at(-1)).toEqual(['ForgeVoice', 'stop', { id: h.id }]);
+    finish({ rtf: 1.2, stopped: true });
+    expect(await h.done).toEqual({ rtf: 1.2, stopped: true });
+    // Its handlers are gone once it ended.
+    fire('started', { id: h.id });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('gives a failure its code: too-slow (with how slow), crashed and the rest', async () => {
+    const { win } = fakeCapacitor({
+      'ForgeVoice.speak': () => {
+        throw Object.assign(new Error('too slow'), { code: 'too-slow', data: { rtf: 2.1 } });
+      },
+      'ForgeVoice.bench': () => {
+        throw Object.assign(new Error('The voice stopped working.'), { code: 'crashed' });
+      },
+    });
+    const v = N.createNative(win).voice;
+    await expect((await v.speak({ pieces: ['x'] })).done).rejects.toMatchObject({ code: 'too-slow', data: { rtf: 2.1 } });
+    await expect(v.bench({ text: 'Yes.', threads: 4 })).rejects.toMatchObject({ code: 'crashed' });
+  });
+
+  it('measures a line at a thread count, and keeps the lab results in the app', async () => {
+    const { win, calls } = fakeCapacitor({ 'ForgeVoice.bench': () => ({ firstMs: 40, audioS: 1, genMs: 300 }), 'ForgeVoice.saveLab': () => ({ saved: true }) });
+    const v = N.createNative(win).voice;
+    expect(await v.bench({ text: 'Yes.', voice: 'Maeve', threads: 6 })).toEqual({ firstMs: 40, audioS: 1, genMs: 300 });
+    expect(calls[0]![2]).toMatchObject({ text: 'Yes.', voice: 'Maeve', threads: 6 });
+    expect(calls[0]![2].id).toMatch(/^bench-/);
+    expect(await v.saveLab('forge-voice-lab-1.json', '{}')).toBe(true);
+    expect(calls[1]).toEqual(['ForgeVoice', 'saveLab', { name: 'forge-voice-lab-1.json', json: '{}' }]);
+  });
+});

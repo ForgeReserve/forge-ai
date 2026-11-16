@@ -1,0 +1,236 @@
+{
+  "note": "Pinned files for the on-device voice (Phonon 31m English and its en-GB female voices). scripts/phonon-model.ts downloads them at build time into public/v2/voice/phonon and checks each against size and sha256. The app never fetches them from Hugging Face. voices are the ones the app offers (Maeve, the default, and Freya). labVoices are for the voice lab only (#/voice-lab): use lab-only, the other en-GB voices, to compare by ear; use accent-test, speakers from other locales read by the English model, to hear the accent it gives. The app never offers them; their files still ship with the build and the APK.",
+  "model": {
+    "name": "Phonon 31m (English)",
+    "repo": "gradium/phonon-31m-en",
+    "revision": "92741c5b07d085ff840e26fea8ce43110b87852f",
+    "license": "Apache-2.0",
+    "dir": "31m-en-92741c5",
+    "weights": "31m-en-92741c5/model.q8.gguf",
+    "tokenizer": "31m-en-92741c5/tokenizer.json",
+    "config": "31m-en-92741c5/config.json"
+  },
+  "voiceRepo": {
+    "repo": "gradium/phonon-voices",
+    "revision": "0ee17205f254b5abc43b266c8a0f215565c352f7",
+    "license": "Apache-2.0",
+    "dir": "voices-0ee1720",
+    "list": "voices.jsonl",
+    "listSha256": "874f34998ce581b94f2b8912aa015639f52b5fd62eba3ba11e1b64dcaed7d802"
+  },
+  "defaultVoice": "Maeve",
+  "voices": [
+    {
+      "name": "Maeve",
+      "id": "6PWnV0Nq4wu7RVBT",
+      "file": "voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A sparky, attentive British English adult voice that gets to the point with a smile. Ideal for fast, efficient customer support and helpful voice assistants."
+    },
+    {
+      "name": "Freya",
+      "id": "GgfEkEJtxZR7gnpy",
+      "file": "voices-0ee1720/GgfEkEJtxZR7gnpy.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Young",
+      "description": "A young British voice, glossy and confident with fast, girly chatter and bubbly sparkle, perfect for a friendly receptionist or assistant."
+    }
+  ],
+  "labVoices": [
+    {
+      "name": "Pippa",
+      "id": "uem82D50GRv2Dwma",
+      "file": "voices-0ee1720/uem82D50GRv2Dwma.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A confident, upbeat British English adult voice with infectious energy. Perfect for proactive assistants and motivating customer success calls.",
+      "use": "lab-only"
+    },
+    {
+      "name": "Elodie-Rose",
+      "id": "y9bQqIDnyxwqK01t",
+      "file": "voices-0ee1720/y9bQqIDnyxwqK01t.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Young",
+      "description": "A young British voice with sharp, enthusiastic energy and crisp articulation, sparky and to the point for customer support and care.",
+      "use": "lab-only"
+    },
+    {
+      "name": "Imogen",
+      "id": "gDT1nz7Ie36ZhL-C",
+      "file": "voices-0ee1720/gDT1nz7Ie36ZhL-C.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A bubbly, friendly British English adult voice that puts callers instantly at ease. Great for onboarding assistants and warm concierge interactions.",
+      "use": "lab-only"
+    },
+    {
+      "name": "Lottie",
+      "id": "m9MxpY6IUGXtWp76",
+      "file": "voices-0ee1720/m9MxpY6IUGXtWp76.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Young Adult",
+      "description": "Sparky and to the point, high forward energy with clean edges on the consonants and the range to drop low for one line then climb back.",
+      "use": "lab-only"
+    },
+    {
+      "name": "Bryony",
+      "id": "gfP44RlHwr2kEwk7",
+      "file": "voices-0ee1720/gfP44RlHwr2kEwk7.safetensors",
+      "locale": "en-gb",
+      "gender": "female",
+      "age": "Middle-age",
+      "description": "Full, rich mid-range tones, softly relaxed and spoken close to the mic, moving briskly with light pitch play.",
+      "use": "lab-only"
+    },
+    {
+      "name": "Regina",
+      "id": "s58clrg2fe0MO7Y-",
+      "file": "voices-0ee1720/s58clrg2fe0MO7Y-.safetensors",
+      "locale": "es-mx",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A confident, upbeat Mexican Spanish adult voice with the natural assurance of a closer. Ideal for proactive assistants and sales-led customer interactions.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Ximena",
+      "id": "VDwnGxAo68C8U8vC",
+      "file": "voices-0ee1720/VDwnGxAo68C8U8vC.safetensors",
+      "locale": "es-mx",
+      "gender": "female",
+      "age": "Adult",
+      "description": "A playful, expressive Mexican Spanish adult voice that turns everyday moments into stories. Great for engaging assistants and personable conversational AI.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Alba",
+      "id": "u2UscyAnHilpiwmf",
+      "file": "voices-0ee1720/u2UscyAnHilpiwmf.safetensors",
+      "locale": "es-es",
+      "gender": "female",
+      "age": "Young",
+      "description": "A sweet, expressive young Castilian Spanish voice, soft and girly with lively emphasis, sparky and to the point for efficient support.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Isadora",
+      "id": "CtNvKUUMrx1h56ih",
+      "file": "voices-0ee1720/CtNvKUUMrx1h56ih.safetensors",
+      "locale": "pt-br",
+      "gender": "female",
+      "age": "Young",
+      "description": "An upbeat young voice with a light girlish tone and warm bounce, quick and to the point, ideal for efficient, caring customer service.",
+      "use": "accent-test"
+    },
+    {
+      "name": "Maëlys",
+      "id": "s048cR1l2Jmu4k3B",
+      "file": "voices-0ee1720/s048cR1l2Jmu4k3B.safetensors",
+      "locale": "fr-fr",
+      "gender": "female",
+      "age": "Young",
+      "description": "A young French voice, energetic and enthusiastic with a welcoming, upbeat delivery, sparky and to the point for responsive support.",
+      "use": "accent-test"
+    }
+  ],
+  "files": [
+    {
+      "path": "31m-en-92741c5/config.json",
+      "url": "https://huggingface.co/gradium/phonon-31m-en/resolve/92741c5b07d085ff840e26fea8ce43110b87852f/config.json",
+      "size": 4634,
+      "sha256": "b5d0f88353638370d94035b7d73d7d6577c0554d78f8d7ecfd40490aae39ae85"
+    },
+    {
+      "path": "31m-en-92741c5/tokenizer.json",
+      "url": "https://huggingface.co/gradium/phonon-31m-en/resolve/92741c5b07d085ff840e26fea8ce43110b87852f/tokenizer.json",
+      "size": 277967,
+      "sha256": "691a00068fa7b989f2f3e5ae5daa2d1a5bb319f2d5360deafcfb19a8bb6e7936"
+    },
+    {
+      "path": "31m-en-92741c5/model.q8.gguf",
+      "url": "https://huggingface.co/gradium/phonon-31m-en/resolve/92741c5b07d085ff840e26fea8ce43110b87852f/model.q8.gguf",
+      "size": 64512352,
+      "sha256": "a7d9aad2cd6dc66473f24a08bc6d2939030ef4d751ef82349361fbef3272dbae"
+    },
+    {
+      "path": "voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/6PWnV0Nq4wu7RVBT.safetensors",
+      "size": 256136,
+      "sha256": "56494ee67d533ad227ff0dfd0b1c13ff5aa91f1ad6e596e66c2986ba3005e844"
+    },
+    {
+      "path": "voices-0ee1720/GgfEkEJtxZR7gnpy.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/GgfEkEJtxZR7gnpy.safetensors",
+      "size": 256136,
+      "sha256": "eb3cd47418349e618408c16bea7153988b3ad04b41a6033039dd474a9a4dcd23"
+    },
+    {
+      "path": "voices-0ee1720/uem82D50GRv2Dwma.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/uem82D50GRv2Dwma.safetensors",
+      "size": 256136,
+      "sha256": "d41a8f01d6e33450f1ce062d332914da10beee99e585dab531750706f187c48a"
+    },
+    {
+      "path": "voices-0ee1720/y9bQqIDnyxwqK01t.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/y9bQqIDnyxwqK01t.safetensors",
+      "size": 256136,
+      "sha256": "21eade9d83b2e66b9364e1b6cd999a3a6704c000a71f27f34e05ace5cdfd58bb"
+    },
+    {
+      "path": "voices-0ee1720/gDT1nz7Ie36ZhL-C.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/gDT1nz7Ie36ZhL-C.safetensors",
+      "size": 256136,
+      "sha256": "1980ab3c35fa98a25b5f3b5e643fd852e14ca8a12a4a26b06aaf1abf2a8c68b1"
+    },
+    {
+      "path": "voices-0ee1720/m9MxpY6IUGXtWp76.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/m9MxpY6IUGXtWp76.safetensors",
+      "size": 256136,
+      "sha256": "a906ebf17e43fded12b3d6bd077abb2df33bc86eff51c1beeb82e5d416527db3"
+    },
+    {
+      "path": "voices-0ee1720/gfP44RlHwr2kEwk7.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/gfP44RlHwr2kEwk7.safetensors",
+      "size": 256136,
+      "sha256": "bcc207a73b7885e45b49ab633d3377a10158292e3a7cef9cd6764ad107f1cb9b"
+    },
+    {
+      "path": "voices-0ee1720/s58clrg2fe0MO7Y-.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/s58clrg2fe0MO7Y-.safetensors",
+      "size": 256136,
+      "sha256": "ab923d4fd9ed09954e3a91c61780bcd536f5bb5787e1d0541cb6ff56dd7ff531"
+    },
+    {
+      "path": "voices-0ee1720/VDwnGxAo68C8U8vC.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/VDwnGxAo68C8U8vC.safetensors",
+      "size": 256136,
+      "sha256": "ccb1b88e3899db1cb7ba71007d08ed56dd743882214f0495b67feab89850ffe0"
+    },
+    {
+      "path": "voices-0ee1720/u2UscyAnHilpiwmf.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/u2UscyAnHilpiwmf.safetensors",
+      "size": 256136,
+      "sha256": "edd14cc89944ec7a9b1a87cc6be6f371f1a56791d344d921f850e2106e6dee9e"
+    },
+    {
+      "path": "voices-0ee1720/CtNvKUUMrx1h56ih.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/CtNvKUUMrx1h56ih.safetensors",
+      "size": 256136,
+      "sha256": "ad6f5ca7df38abbb15b85a09613b14ebd76d70108d5420e6f21486a6a10154c9"
+    },
+    {
+      "path": "voices-0ee1720/s048cR1l2Jmu4k3B.safetensors",
+      "url": "https://huggingface.co/gradium/phonon-voices/resolve/0ee17205f254b5abc43b266c8a0f215565c352f7/voices/s048cR1l2Jmu4k3B.safetensors",
+      "size": 256136,
+      "sha256": "f7b80c03210e3fd736de6596586305e9b7eb0e615047dd1cbb1b58fc3f92985f"
+    }
+  ]
+}

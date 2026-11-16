@@ -1,0 +1,102 @@
+{
+  "about": "Forge Private Voice (the privatevoice APK): its speech to text, Moonshine tiny (English) through sherpa-onnx, chosen with the ASR lab (docs/VOICE.md, Bundled speech to text). scripts/asr-model.ts puts these files in place at build time for the privatevoice flavour only, checking each size and SHA-256; nothing here is committed but the Kotlin API files and the licences.",
+  "runtime": {
+    "name": "sherpa-onnx",
+    "repo": "https://github.com/k2-fsa/sherpa-onnx",
+    "tag": "v2.0.1",
+    "commit": "af2d8d81dbfa61c4cea4c568da78f3982edca005",
+    "published": "2026-10-26",
+    "license": "Apache-2.0",
+    "note": "The release's static build: ONNX Runtime linked into the one JNI library. 2.x carries no eSpeak NG (GPL).",
+    "archive": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android-static-link-onnxruntime.tar.bz2",
+      "size": 34937656,
+      "sha256": "fe1c9ceffd86770218a1d4bba6b410d6f726b2b8dda6a5488499b05250b53aea"
+    },
+    "lib": {
+      "member": "jniLibs/arm64-v8a/libsherpa-onnx-jni.so",
+      "name": "libsherpa-onnx-jni.so",
+      "size": 24177488,
+      "sha256": "491b1b6e287fdfe5e0e1ffa918f5e5556299cb14bea7b7b8a0c19468f4156193"
+    },
+    "onnxruntime": {
+      "repo": "https://github.com/microsoft/onnxruntime",
+      "version": "1.28.2",
+      "commit": "33ca9628233dc8f002435e868d4c2e9f82766ca1",
+      "license": "MIT",
+      "note": "Linked into libsherpa-onnx-jni.so; the version is the one the library reports."
+    },
+    "kotlinApi": {
+      "base": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/af2d8d81dbfa61c4cea4c568da78f3982edca005/sherpa-onnx/kotlin-api/",
+      "files": [
+        {
+          "name": "FeatureConfig.kt",
+          "size": 301,
+          "sha256": "829c7adc4db1324f21b9a9cbf5bf10eacf759714fe50956f48317c1ffef044f6"
+        },
+        {
+          "name": "HomophoneReplacerConfig.kt",
+          "size": 170,
+          "sha256": "fe926b6413f4d87e67c41feb21b8363923a67cbd3a5eb687b76390a5f1f7db60"
+        },
+        {
+          "name": "OfflineRecognizer.kt",
+          "size": 56760,
+          "sha256": "8103b67ec65910a71e6b8d4bca7934f77c1af47b68a5c18cdca0ce3f956247a7"
+        },
+        {
+          "name": "OfflineStream.kt",
+          "size": 1080,
+          "sha256": "5c90b7c060cdd0a2222cc935b54f69465a4a7544de29240bafe4d3a8d86dbb6e"
+        },
+        {
+          "name": "QnnConfig.kt",
+          "size": 156,
+          "sha256": "86c963f27677f690eb0d6639735052eba5e60d9f81ccd4c1df0aa831fd680d6f"
+        }
+      ]
+    }
+  },
+  "model": {
+    "id": "moonshine-tiny-en",
+    "name": "Moonshine tiny (English)",
+    "license": "MIT",
+    "licenseNote": "English models MIT (LICENSE, section 1); other languages are under the non-commercial Moonshine Community License and are not used",
+    "upstream": "https://github.com/moonshine-ai/moonshine",
+    "repo": "csukuangfj2/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27",
+    "revision": "d1e6c30921780b8508d04b492dfb3ce8a51605d4",
+    "languages": [
+      "en"
+    ],
+    "files": [
+      {
+        "role": "encoder",
+        "name": "encoder_model.ort",
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/resolve/d1e6c30921780b8508d04b492dfb3ce8a51605d4/encoder_model.ort",
+        "size": 13281600,
+        "sha256": "94e90a4654fc45cdfedb77c4c08e1739f48862998e58fada384b25118134f221"
+      },
+      {
+        "role": "mergedDecoder",
+        "name": "decoder_model_merged.ort",
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/resolve/d1e6c30921780b8508d04b492dfb3ce8a51605d4/decoder_model_merged.ort",
+        "size": 30412256,
+        "sha256": "cf524c4862d36e9e5ab032eddc73637efd822d70e868ac575cf1a46e1e4708a0"
+      },
+      {
+        "role": "tokens",
+        "name": "tokens.txt",
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/resolve/d1e6c30921780b8508d04b492dfb3ce8a51605d4/tokens.txt",
+        "size": 549350,
+        "sha256": "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049"
+      },
+      {
+        "role": "license",
+        "name": "LICENSE",
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/resolve/d1e6c30921780b8508d04b492dfb3ce8a51605d4/LICENSE",
+        "size": 13344,
+        "sha256": "6148d7574a6554b7379b633cfd4c4fe5840c3f548d13bc83e00b52dc6fa00abd"
+      }
+    ]
+  }
+}
