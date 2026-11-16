@@ -2011,7 +2011,10 @@ function registerWorker() {
   } catch {
     /* no session storage: the updater never reloads on its own */
   }
-  updater = createUpdater({ storage, hadController: !!sw.controller, busy: busyForUpdate, reload: () => location.reload() });
+  // Only v2's own worker counts as an older build of this app. v1's worker has the whole origin until
+  // v2's takes /v2/ over, and that first takeover must not reload the page under the person's finger.
+  const ours = (w) => !!w && new URL(w.scriptURL).pathname === '/v2/sw.js';
+  updater = createUpdater({ storage, hadController: ours(sw.controller), busy: busyForUpdate, reload: () => location.reload() });
   // A new worker (a new build: its script carries the build id) took over: reload once into its files.
   sw.addEventListener('controllerchange', () => {
     if (!erased) updater.controllerChanged();
