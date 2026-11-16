@@ -100,7 +100,7 @@ export function answer({ t, state, nav, actions, format }) {
   const burnTile = () => {
     const b = el('button', { type: 'button', class: 'action-tile danger', id: 'burnBtn', 'aria-label': t('answer.burnLabel') }, icon('flame', 22), el('span', { text: t('answer.burn') }), el('small', { class: 'tile-sub hold-sub', text: t('burn.hold') }));
     burner?.destroy();
-    burner = holdToBurn(b, { target: () => card, below: () => dock, onBurn: () => actions.burn(), onTap: () => toast(t('burn.tap'), 2600) });
+    burner = holdToBurn(b, { target: () => card, below: () => dock, onBurn: () => actions.burn(), onTap: (again) => toast(t(again ? 'burn.again' : 'burn.tap'), again ? 6000 : 2600) });
     return b;
   };
 

@@ -274,6 +274,37 @@ describe('Burn, held', () => {
     await ctx.close();
   }, 60_000);
 
+  it("a screen reader's activation cannot hold: the first says to press again, the second burns, and a late second starts over", async () => {
+    const { ctx, page, errors } = await phone();
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    await ask(page, 'Burn me by voice?');
+    await page.waitForSelector('#burnBtn', { timeout: 20_000 });
+    await expect.poll(() => conversations(page)).toBe(1);
+    // A click with no press before it, as TalkBack and VoiceOver send it.
+    const activate = () => page.$eval('#burnBtn', (b) => (b as HTMLElement).click());
+    await activate();
+    await expect.poll(() => page.textContent('#toast')).toBe('Press it again now to burn.');
+    expect(await conversations(page)).toBe(1);
+    // Too late (after 6 s) it only says so again.
+    await page.waitForTimeout(6300);
+    await activate();
+    await page.waitForTimeout(400);
+    expect(await page.isVisible('[data-screen=answer]')).toBe(true);
+    expect(await conversations(page)).toBe(1);
+    // A real press in between starts over as well.
+    await page.click('#burnBtn');
+    await page.waitForTimeout(800); // the short press dies back
+    await activate();
+    await page.waitForTimeout(400);
+    expect(await conversations(page)).toBe(1);
+    await activate();
+    await page.waitForSelector('[data-screen=home]', { timeout: 6000 });
+    await expect.poll(() => conversations(page)).toBe(0);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('with reduced motion, fills the button like a bar and draws no fire', async () => {
     const { ctx, page } = await phone({ context: { reducedMotion: 'reduce' } });
     await zeroBalance(page);
