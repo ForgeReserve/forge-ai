@@ -39,7 +39,10 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   // Search the web for the next question, asked by voice or typed (screens/parts.js).
   const search = searchSwitch({ t, state, actions, id: 'searchHome' });
   const ringBox = el('div', { class: 'rings home-rings' }, r.node, ringBtn, talk);
-  const stage = el('div', { class: `stage${sheet ? ' faded' : ''}` }, ringBox, hold.info, empty, waysChip, search.node, chip, held, hint);
+  // What shows under the rings comes and goes (the chips, the recording line): it has its own box, so the
+  // talk button stays where it is under the finger.
+  const under = el('div', { class: 'stage-under' }, hold.info, empty, waysChip, search.node, chip, held, hint);
+  const stage = el('div', { class: `stage home-stage${sheet ? ' faded' : ''}` }, ringBox, under);
   const main = el('main', { class: `screen home${sheet ? ' with-sheet' : ''}`, 'data-screen': 'home' }, bar.node, stage);
   // The sheet is a layer over the whole home (the talk button included), with the bottom row above it so
   // Close is always in view. A tap on the layer outside the card closes it, as Close does.

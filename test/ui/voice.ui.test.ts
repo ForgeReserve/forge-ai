@@ -197,6 +197,44 @@ describe('hold to talk', () => {
     await ctx.close();
   }, 90_000);
 
+  it('the talk button keeps its place while the recording line shows, in Default and in Playful', async () => {
+    const { ctx, page, errors } = await phone();
+    for (const mode of ['default', 'playful']) {
+      if (mode === 'playful') {
+        await page.goto(`${g.url}/v2/#/more/look`);
+        await page.waitForSelector('#mode-playful');
+        await page.click('#mode-playful');
+        await expect.poll(() => page.textContent('#mode-playful')).toContain('On now.');
+        await page.goto(`${g.url}/v2/#/`);
+        await page.reload();
+        await page.waitForSelector('[data-screen=home][data-mode=playful]');
+      }
+      await page.waitForSelector('#talkBtn');
+      await page.evaluate(() => document.fonts.ready);
+      // The rings' box is what must stay put; the button inside it only sinks a little when pressed.
+      const at = async () => (await page.locator('.rings').first().boundingBox())!;
+      const before = await at();
+      await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+      await page.mouse.down();
+      await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
+      // The recording line (time, where the sound goes, the price) is on show: the button has not moved.
+      await expect.poll(() => page.isVisible('#talkTime')).toBe(true);
+      await page.waitForTimeout(400);
+      const held = await at();
+      expect(Math.abs(held.y - before.y), `${mode}: moved down or up`).toBeLessThanOrEqual(1);
+      expect(Math.abs(held.x - before.x), `${mode}: moved sideways`).toBeLessThanOrEqual(1);
+      // Slide off and let go: nothing is asked, and the button is where it was.
+      await page.mouse.move(before.x + before.width / 2, before.y - 150, { steps: 4 });
+      await page.mouse.up();
+      await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('idle');
+      await page.waitForTimeout(300);
+      const after = await at();
+      expect(Math.abs(after.y - before.y), `${mode}: did not come back`).toBeLessThanOrEqual(1);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
   it('a tap explains the button, sliding off cancels, and neither sends anything', async () => {
     const { ctx, page, errors, calls } = await phone();
     await hold(page, '#talkBtn', 80);
