@@ -53,13 +53,15 @@ function waitArt() {
 export function answer({ t, state, nav, actions, format }) {
   const bar = statusBar({ t, state, nav });
   const asked = el('p', { class: 'asked' });
-  const modelLine = el('p', { class: 'answer-model', id: 'answerModel', hidden: true });
+  // role note: a plain paragraph's aria-label is never read, and the label says what the name is.
+  const modelLine = el('p', { class: 'answer-model', id: 'answerModel', role: 'note', hidden: true });
   const body = el('div', { class: 'answer-body md', id: 'answerText', 'aria-live': 'off' });
   // Waiting for the first words: the turning rings, Thinking and the seconds; then the Slow model note.
-  const secs = el('span', { class: 'wait-secs', id: 'waitSecs' });
+  // The seconds change every second: kept out of the live region, or a screen reader says each one.
+  const secs = el('span', { class: 'wait-secs', id: 'waitSecs', 'aria-hidden': 'true' });
   const waitWord = el('b', { text: t('answer.thinking') });
   const wait = el('div', { class: 'wait', id: 'answerWait', role: 'status', hidden: true }, waitArt(), el('span', { class: 'wait-text' }, waitWord, secs));
-  const slowText = el('p', { class: 'slow-text', id: 'slowText' });
+  const slowText = el('p', { class: 'slow-text', id: 'slowText', role: 'status' });
   const fastBtn = el('button', { type: 'button', class: 'btn primary slow-go', id: 'useFast', onclick: () => actions.useFastModel() });
   const slow = el('div', { class: 'slow-note', id: 'slowNote', hidden: true }, slowText, fastBtn);
   const note = el('p', { class: 'answer-note', id: 'answerNote', role: 'status' });

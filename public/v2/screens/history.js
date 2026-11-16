@@ -18,12 +18,11 @@ export function historyScreen({ t, state, back, backTo, actions, reader }) {
   let convs = [];
   let loaded = false;
   // Burn is held, never one tap (screens/burn.js): the card burns away under the finger.
+  // The cards' holds go with the cards when the list is drawn again; Burn all's lives with its own
+  // question, so a redraw of the list never leaves it running unowned.
   const holders = new Set();
-  const holdBurn = (btn, target, onBurn) => {
-    const h = holdToBurn(btn, { target, onBurn, onTap: () => toast(t('burn.tap'), 2600) });
-    holders.add(h);
-    return btn;
-  };
+  let allHolder = null;
+  const holdBurn = (btn, target, onBurn) => holdToBurn(btn, { target, onBurn, onTap: () => toast(t('burn.tap'), 2600) });
 
   const card = (h) => {
     const [ico, tint] = KIND_ICON[h.kind] ?? KIND_ICON.text;
@@ -60,7 +59,7 @@ export function historyScreen({ t, state, back, backTo, actions, reader }) {
       ),
       timer,
     );
-    holdBurn(burnBtn, () => node, () => burnOne(h.id));
+    holders.add(holdBurn(burnBtn, () => node, () => burnOne(h.id)));
     return node;
   };
 
@@ -105,21 +104,24 @@ export function historyScreen({ t, state, back, backTo, actions, reader }) {
     await reload();
   };
   burnAll.addEventListener('click', () => {
+    const yes = el('button', { type: 'button', class: 'btn danger-fill', id: 'burnAllYes', 'aria-label': t('history.burnAllLabel') }, icon('flame', 18), el('span', { text: t('history.burnAllYes') }));
+    allHolder?.destroy();
+    allHolder = holdBurn(
+      yes,
+      () => list,
+      async () => {
+        confirmBox.hidden = true;
+        await actions.burnAll();
+        await reload();
+      },
+    );
     confirmBox.replaceChildren(
       sayEl('p', {}, t('history.burnAllAsk'), '', 'flame'),
       el(
         'div',
         { class: 'row-btns' },
         el('button', { type: 'button', class: 'btn', id: 'burnAllNo', onclick: () => ((confirmBox.hidden = true), burnAll.focus()) }, icon('x', 18), el('span', { text: t('history.keep') })),
-        holdBurn(
-          el('button', { type: 'button', class: 'btn danger-fill', id: 'burnAllYes', 'aria-label': t('history.burnAllLabel') }, icon('flame', 18), el('span', { text: t('history.burnAllYes') })),
-          () => list,
-          async () => {
-            confirmBox.hidden = true;
-            await actions.burnAll();
-            await reload();
-          },
-        ),
+        yes,
       ),
     );
     confirmBox.hidden = false;
@@ -158,5 +160,5 @@ export function historyScreen({ t, state, back, backTo, actions, reader }) {
     el('div', { class: 'foot' }, confirmBox, burnAll),
   );
   listen.update();
-  return { node: main, update, destroy: () => (clearInterval(tick), listen.destroy(), [...holders].forEach((h) => h.destroy())), focus: main.querySelector('h1') };
+  return { node: main, update, destroy: () => (clearInterval(tick), listen.destroy(), [...holders].forEach((h) => h.destroy()), allHolder?.destroy()), focus: main.querySelector('h1') };
 }

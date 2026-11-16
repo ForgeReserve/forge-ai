@@ -36,7 +36,7 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
   btn.prepend(fill);
 
   let p = 0; // 0 to 1: how far the fire has climbed
-  let phase = 'idle'; // idle, holding, recover, finale, done
+  let phase = 'idle'; // idle, holding, recover, finale, done; dead once destroyed
   let last = 0;
   let downAt = 0;
   let raf = 0;
@@ -54,7 +54,7 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
   };
 
   const start = () => {
-    if (phase === 'finale' || phase === 'done') return;
+    if (phase === 'finale' || phase === 'done' || phase === 'dead') return;
     downAt = performance.now();
     if (phase === 'idle') {
       card = target?.() ?? null;
@@ -121,6 +121,12 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
     raf = 0;
     const dt = Math.min(64, now - last);
     last = now;
+    // The button left the page while held (its screen was drawn again or closed): no pointerup or
+    // keyup can reach it any more, so the hold ends here and never runs on to a burn.
+    if (phase === 'holding' && !btn.isConnected) {
+      btn.classList.remove('holding');
+      phase = 'recover';
+    }
     if (phase === 'holding') {
       setP(p + dt / ms);
       // A light tick every quarter of the hold.
@@ -168,19 +174,37 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
   const onClick = (e) => {
     if (e.detail === 0 && phase === 'idle') onTap();
   };
-  btn.addEventListener('pointerdown', onDown);
-  btn.addEventListener('pointerup', release);
-  btn.addEventListener('pointercancel', release);
-  btn.addEventListener('lostpointercapture', release);
-  btn.addEventListener('keydown', onKey);
-  btn.addEventListener('keyup', onKey);
-  btn.addEventListener('click', onClick);
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  const off = new AbortController();
+  const on = (type, fn) => btn.addEventListener(type, fn, { signal: off.signal });
+  on('pointerdown', onDown);
+  on('pointerup', release);
+  on('pointercancel', release);
+  on('lostpointercapture', release);
+  on('keydown', onKey);
+  on('keyup', onKey);
+  // Focus taken away while Space or Enter is held: its keyup goes elsewhere, so the hold ends now.
+  on('blur', release);
+  on('click', onClick);
+  on('contextmenu', (e) => e.preventDefault());
   return {
+    /**
+     * Final: the button no longer answers, and a hold under way stops where it is, with the card and
+     * the button put back as they were. A hold already completed (the ash falling) still burns.
+     */
     destroy() {
+      off.abort();
       cancelAnimationFrame(raf);
       raf = 0;
-      if (phase !== 'done') fx?.remove();
+      if (phase === 'done') return;
+      fx?.remove();
+      if (phase === 'finale') return;
+      fx = null;
+      phase = 'dead';
+      btn.classList.remove('holding');
+      btn.style.removeProperty('--hold');
+      card?.classList.remove('burning');
+      card?.style.removeProperty('--burn');
+      card = null;
     },
   };
 }

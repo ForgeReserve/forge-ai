@@ -166,6 +166,21 @@ async function strictAudio(ctx: BrowserContext) {
 
 const heard = (page: Page) => page.evaluate(() => (window as any).__audio.heard as number);
 
+/** The settings stored on the phone (IndexedDB forge2, kv "settings"). */
+const storedSettings = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<any>((resolve) => {
+        const open = indexedDB.open('forge2');
+        open.onsuccess = () => {
+          const db = open.result;
+          if (![...db.objectStoreNames].includes('kv')) return resolve(null);
+          const r = db.transaction('kv').objectStore('kv').get('settings');
+          r.onsuccess = () => resolve(r.result ?? null);
+        };
+      }),
+  );
+
 describe('the natural voice', () => {
   it('runs on a cross-origin isolated page, and is the voice answers are read with by default', async () => {
     const { ctx, page, errors } = await phone();
@@ -320,16 +335,17 @@ describe('the natural voice', () => {
     const before = await page.evaluate(() => (window as any).__spoken.length);
     await page.click('#speakBtn');
     await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(before);
-    await page.waitForTimeout(400);
+    // The offer would be set before the reading starts: once the reading is over, it would be drawn.
+    await page.waitForSelector('#speakBtn', { timeout: 10_000 });
     expect(await page.isVisible('#voiceOffer')).toBe(false);
     expect(await page.isVisible('#voiceDownload')).toBe(false);
-    // Kept on the phone: after a reload, still no offer.
-    await page.waitForTimeout(300);
+    // Kept on the phone: once Not now is stored, after a reload, still no offer.
+    await expect.poll(() => storedSettings(page).then((x) => x?.naturalNotNow)).toBe(true);
     await page.reload();
     await page.waitForSelector('#speakBtn', { timeout: 20_000 });
     await page.click('#speakBtn');
     await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(0);
-    await page.waitForTimeout(400);
+    await page.waitForSelector('#speakBtn', { timeout: 10_000 });
     expect(await page.isVisible('#voiceOffer')).toBe(false);
     expect(errors).toEqual([]);
     await ctx.close();

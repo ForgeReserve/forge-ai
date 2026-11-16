@@ -614,6 +614,8 @@ const newId = (p) => p + '_' + (crypto.randomUUID?.() ?? Math.random().toString(
 let gen = null; // {controller, quiet}
 // Resolves once the answer being made is settled and saved (actions.useFastModel waits for it).
 let genIdle = Promise.resolve();
+// True while actions.useFastModel moves the question to a fast model.
+let switching = false;
 
 /** Saves a conversation (the open one by default). A burned one is never written back. */
 async function saveConv(conv = S.conv) {
@@ -1237,6 +1239,9 @@ const lastAnswer = () => S.conv.messages.findLast?.((m) => m.role === 'assistant
 function modelChanged(before) {
   const now = pickModel(S.models, S.settings);
   if (!S.conv.messages.length || before?.id === now?.id) return false;
+  // An answer still coming is stopped with the conversation it belongs to (it stays in History): the
+  // toast says a new conversation began, and a "Stopped." a moment later must not cover it.
+  if (gen) gen.quiet = true;
   forgetConversation();
   return true;
 }
@@ -1401,24 +1406,32 @@ const actions = {
    * one stays in History. With no fast model to use, Choose a model opens.
    */
   useFastModel: async () => {
+    // One switch at a time: a second tap while the slow answer is being settled would ask twice, and the
+    // later switch would stop the earlier one's answer.
+    if (switching) return;
     const v = view();
     const m = v.fastModel && S.models.find((x) => x.id === v.fastModel.id);
     if (!m) return nav('model');
-    const question = S.conv.messages.findLast?.((x) => x.role === 'user');
-    if (gen) {
-      gen.quiet = true;
-      gen.controller.abort();
-      await genIdle;
+    switching = true;
+    try {
+      const question = S.conv.messages.findLast?.((x) => x.role === 'user');
+      if (gen) {
+        gen.quiet = true;
+        gen.controller.abort();
+        await genIdle;
+      }
+      S.settings.model = m.id;
+      saveSettings();
+      await forgetConversation();
+      ui.toast(t('answer.fastChosen', { name: m.name ?? m.id }), 3000);
+      if (!question) return store.set({});
+      S.conv = { id: newId('c'), messages: [{ ...question, id: newId('m') }], createdAt: Date.now() };
+      await saveConv();
+      nav('answer');
+      generate();
+    } finally {
+      switching = false;
     }
-    S.settings.model = m.id;
-    saveSettings();
-    await forgetConversation();
-    ui.toast(t('answer.fastChosen', { name: m.name ?? m.id }), 3000);
-    if (!question) return store.set({});
-    S.conv = { id: newId('c'), messages: [{ ...question, id: newId('m') }], createdAt: Date.now() };
-    await saveConv();
-    nav('answer');
-    generate();
   },
   /** The natural voice, asked for from the offer under Listen: it downloads now, then reads the answer. */
   getNaturalVoice: () => talk.getNatural(lastAnswer()),
@@ -1623,8 +1636,9 @@ function screenFor(name, params) {
       return lookScreen(ctx);
     case 'model':
       // A model chosen closes the list: home when it was opened from the More menu (or by its address),
-      // else back where it was opened (an error's Choose a model, say).
-      return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? nav('home', {}, { replace: true }) : back()) });
+      // else back where it was opened (an error's Choose a model, say). Home is gone back to, not pushed
+      // over the list, so the phone's Back does not open the More menu again.
+      return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? backTo('home') : back()) });
     case 'voice':
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':

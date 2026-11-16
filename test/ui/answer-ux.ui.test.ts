@@ -90,6 +90,21 @@ const conversations = (page: Page) =>
       }),
   );
 
+/** How many stored conversations end on a stopped answer. */
+const stoppedAnswers = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const open = indexedDB.open('forge2');
+        open.onsuccess = () => {
+          const db = open.result;
+          if (![...db.objectStoreNames].includes('chats')) return resolve(0);
+          const r = db.transaction('chats').objectStore('chats').getAll();
+          r.onsuccess = () => resolve(r.result.filter((c: any) => c?.messages?.at(-1)?.meta?.stopped).length);
+        };
+      }),
+  );
+
 describe('waiting for the first words', () => {
   it('shows turning rings and the seconds, then after 20 s a Slow model note that asks a fast model in one tap', async () => {
     const { ctx, page, errors } = await phone();
@@ -121,13 +136,20 @@ describe('waiting for the first words', () => {
     expect(await page.textContent('#useFast')).toBe('Ask Rabbit Model');
     expect(await page.locator('#useFast svg').count()).toBe(1);
     // One tap: stopped quietly, the fast model chosen, the same question asked there in a new conversation.
-    await page.click('#useFast');
+    // A double tap (easy to do on a big button) still asks once.
+    await page.dblclick('#useFast');
     await page.waitForSelector('#copyBtn', { timeout: 20_000 });
     expect(await page.textContent('.asked')).toBe('Is it slow?');
     expect(await page.textContent('#answerModel')).toBe('Rabbit Model');
     expect(await page.isVisible('#answerWait')).toBe(false);
     release();
     await expect.poll(() => conversations(page)).toBe(2);
+    // A second switch would only start once the slow answer is settled and saved (stopped): wait for that,
+    // then give it a moment it would need to ask again. This is a window for something NOT to happen.
+    await expect.poll(() => stoppedAnswers(page), { timeout: 10_000 }).toBe(1);
+    await page.waitForTimeout(1500);
+    expect(await conversations(page)).toBe(2);
+    expect(await stoppedAnswers(page)).toBe(1);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
@@ -177,23 +199,30 @@ describe('Choose a model by speed', () => {
     await page.waitForSelector('[data-screen=home]');
     expect(await page.isVisible('#moreSheet')).toBe(false);
     expect(await page.textContent('#freeModelName')).toBe('Hare Model');
+    // The home is gone back to, not pushed over the list: the phone's Back does not reopen More.
+    expect(await page.evaluate(() => history.state?.forge2 ?? 0)).toBe(0);
     expect(errors.filter((e) => !/status of 40[13]/.test(e))).toEqual([]);
     await ctx.close();
   }, 60_000);
 });
 
 describe('a long answer', () => {
-  it('keeps Listen and the bottom row in view, and the toast off the words', async () => {
-    const { ctx, page, errors } = await phone();
+  it.each([
+    [390, 844],
+    [360, 640],
+  ])('keeps Listen and the bottom row in view at %ix%i, and the toast off the words', async (vw, vh) => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: vw, height: vh } } });
     await zeroBalance(page);
     await useModel(page, 'fast-two'); // mock-slow: 200 words
     await ask(page, 'Tell me a lot.');
     await page.waitForSelector('#speakBtn', { timeout: 30_000 });
-    const vh = 844;
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(vh + 200);
+    // Nothing runs off the side, and the dock leaves most of the screen to the words.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vw);
+    expect((await page.locator('#answerDock').boundingBox())!.height).toBeLessThan(vh * 0.4);
     for (const top of [0, 400, 100_000]) {
+      // Scrolling is synchronous, and so is the layout the boxes are read from.
       await page.evaluate((y) => window.scrollTo(0, y), top);
-      await page.waitForTimeout(150);
       for (const sel of ['#speakBtn', '#btn-type', '#btn-add', '#btn-more']) {
         const b = (await page.locator(sel).boundingBox())!;
         expect(b.y, `${sel} at ${top}`).toBeGreaterThanOrEqual(0);
@@ -225,12 +254,11 @@ describe('Burn, held', () => {
     // Held for part of the way: the fire is drawn over the card, the card warms; let go and it recovers.
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(700);
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#burnBtn')!).getPropertyValue('--hold')) > 0.3);
     expect(await page.locator('canvas.burn-fx').count()).toBe(1);
     expect(await page.$eval('.answer-card', (n) => n.classList.contains('burning'))).toBe(true);
     const mid = Number(await page.$eval('#burnBtn', (n) => getComputedStyle(n).getPropertyValue('--hold')));
-    expect(mid).toBeGreaterThan(0.2);
-    expect(mid).toBeLessThan(0.8);
+    expect(mid).toBeLessThan(0.9);
     await page.mouse.up();
     await page.waitForFunction(() => !document.querySelector('.answer-card.burning'), null, { timeout: 3000 });
     await page.waitForFunction(() => !document.querySelector('canvas.burn-fx'), null, { timeout: 4000 });
@@ -255,12 +283,90 @@ describe('Burn, held', () => {
     const box = (await page.locator('#burnBtn').boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(600);
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#burnBtn')!).getPropertyValue('--hold')) > 0.2);
     expect(await page.locator('canvas.burn-fx').count()).toBe(0);
     expect(await page.$eval('.hold-fill', (n) => getComputedStyle(n).transform)).not.toBe('none');
     await page.waitForSelector('[data-screen=home]', { timeout: 5000 });
     await page.mouse.up();
     await expect.poll(() => conversations(page)).toBe(0);
+    await ctx.close();
+  }, 60_000);
+
+  // Only a full hold burns: a cancelled touch, a short key press, focus taken away mid-hold, or the screen
+  // left mid-hold all keep the conversation.
+  it('a cancelled touch, a short key press or focus taken away never burns; a held key does', async () => {
+    const { ctx, page, errors } = await phone();
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    await ask(page, 'Keep me?');
+    await page.waitForSelector('#burnBtn', { timeout: 20_000 });
+    await expect.poll(() => conversations(page)).toBe(1);
+    const hold = () => page.$eval('#burnBtn', (n) => Number(getComputedStyle(n).getPropertyValue('--hold') || 0));
+    const atRest = () => page.waitForFunction(() => !document.querySelector('.answer-card.burning') && Number(getComputedStyle(document.querySelector('#burnBtn')!).getPropertyValue('--hold') || 0) === 0, null, { timeout: 4000 });
+    // The browser takes the touch over (a scroll, a call): pointercancel ends the hold.
+    const box = (await page.locator('#burnBtn').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#burnBtn')!).getPropertyValue('--hold')) > 0.2);
+    await page.$eval('#burnBtn', (n) => n.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 })));
+    await atRest();
+    await page.mouse.up();
+    expect(await conversations(page)).toBe(1);
+    // A short press of Space: it says to hold.
+    await page.focus('#burnBtn');
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.textContent('#toast')).toMatch(/^Hold to burn\./);
+    await atRest();
+    // Space held, then focus moved away: its keyup goes elsewhere, so the hold ends with the focus.
+    await page.focus('#burnBtn');
+    await page.keyboard.down('Space');
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#burnBtn')!).getPropertyValue('--hold')) > 0.2);
+    await page.$eval('#burnBtn', (n) => (n as HTMLElement).blur());
+    await atRest();
+    await page.keyboard.up('Space');
+    expect(await hold()).toBe(0);
+    expect(await conversations(page)).toBe(1);
+    // Enter held to the end burns it.
+    await page.focus('#burnBtn');
+    await page.keyboard.down('Enter');
+    await page.waitForSelector('[data-screen=home]', { timeout: 6000 });
+    await page.keyboard.up('Enter');
+    await expect.poll(() => conversations(page)).toBe(0);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('leaving History mid-hold on Burn all burns nothing, even after the list was drawn again', async () => {
+    const { ctx, page, errors } = await phone();
+    await page.clock.install();
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    await ask(page, 'One');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await page.click('#btn-more');
+    await page.click('#moreHistory');
+    await page.waitForSelector('[data-screen=history]');
+    await expect.poll(() => page.locator('.hist-card').count()).toBe(1);
+    await page.click('#burnAll');
+    // The list is drawn again under the open question (another auto-delete time).
+    await page.click('#auto-week');
+    await page.waitForSelector('#auto-week[aria-checked=true]');
+    const box = (await page.locator('#burnAllYes').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#burnAllYes')!).getPropertyValue('--hold')) > 0.1);
+    // Back, with the finger still down: the button leaves the page, and no pointerup can reach it.
+    await page.goBack();
+    await page.waitForSelector('[data-screen=history]', { state: 'detached' });
+    // Run the page's frames well past a full hold.
+    await page.clock.runFor(4000);
+    // No fire left running: a hold still going would be in its last burst by now, its canvas still up.
+    expect(await page.locator('canvas.burn-fx').count()).toBe(0);
+    await page.mouse.up();
+    expect(await conversations(page)).toBe(1);
+    expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
 });
@@ -285,6 +391,33 @@ describe('changing the model', () => {
     await page.waitForSelector('#copyBtn', { timeout: 20_000 });
     expect(await page.textContent('#answerModel')).toBe('Rabbit Model');
     expect(await page.locator('#answerModel svg').count()).toBe(2); // the open lock and the rabbit
+    await expect.poll(() => conversations(page)).toBe(2);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+});
+
+describe('changing the model mid-answer', () => {
+  it('stops the answer quietly in its own conversation; the toast says the new conversation', async () => {
+    const { ctx, page, errors } = await phone();
+    await zeroBalance(page);
+    await useModel(page, 'slow-free');
+    let release = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    await page.route('**/v1/chat/completions', async (route) => (await gate, route.continue().catch(() => {})));
+    await ask(page, 'Still waiting?');
+    await page.waitForSelector('#answerWait:not([hidden])');
+    await useModel(page, 'plain-free');
+    await expect.poll(() => page.textContent('#toast')).toBe('New conversation with Plain Model.');
+    // The stopped answer is settled and saved (its toast, if any, was said before the save).
+    await expect.poll(() => stoppedAnswers(page), { timeout: 10_000 }).toBe(1);
+    expect(await page.textContent('#toast')).toBe('New conversation with Plain Model.');
+    expect(await conversations(page)).toBe(1);
+    // The next question goes to the new model, in a new conversation.
+    release();
+    await ask(page, 'Now?');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    expect(await page.textContent('#answerModel')).toBe('Plain Model');
     await expect.poll(() => conversations(page)).toBe(2);
     expect(errors).toEqual([]);
     await ctx.close();

@@ -73,7 +73,6 @@ export function agoText(ms) {
   return { key: n === 1 ? 'ago.dayOne' : 'ago.day', n };
 }
 
-/** The first words of a text, cut at a word near `max` characters. */
 /**
  * Markdown as plain words, for a preview (History): no stars, hashes, backticks, list marks, link
  * targets or table bars, so "**Here is**" reads "Here is".
@@ -93,6 +92,7 @@ export function plainText(md) {
     .replace(/[*_`]{2,}/g, '');
 }
 
+/** The first words of a text, cut at a word near `max` characters. */
 export function firstWords(text, max = 80) {
   const s = String(text ?? '')
     .replace(/\s+/g, ' ')
