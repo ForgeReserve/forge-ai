@@ -95,8 +95,9 @@ export default {
   'type.freeOut': 'Free questions used up.',
   'type.freeOutBtn': 'Get more',
   'type.freeModel': 'Needs the free model. Free questions work with another model.',
-  'type.needKey': 'Needs a balance. This model is free, but it needs a balance. Open one with your invite code. No money needed.',
-  'type.openBalance': 'Open a balance',
+  'type.needKey': 'This model is free. Start free with your invite code. No money needed.',
+  'type.needKeyFunds': 'This model is free, but it needs a balance. Add money to open one.',
+  'type.openBalance': 'Start free',
   'type.useFreeModel': 'Use free model',
   'type.freeTooLong': 'Too long for free. This is too long for a free question. Start fresh, or ask it in a shorter way.',
   // Price line
@@ -132,7 +133,7 @@ export default {
   // Errors: plain words, one next step
   'error.funds': 'Not enough funds. This question costs more than your funds can hold for it.',
   'error.key': 'Balance not found. The engine does not know this balance.',
-  'error.needKey': 'Needs a balance. This model is free, but it needs a balance. Open one with your invite code.',
+  'error.needKey': 'This model is free. Start free with your invite code.',
   'error.offline': 'No connection. Forge cannot reach the engine.',
   'error.busy': 'Too busy. Too many questions at once. Wait a moment.',
   'error.model': 'No answer, not charged. The model did not answer, so you were not charged.',
@@ -430,7 +431,7 @@ export default {
   'funds.enough': 'Enough for about {count} questions.',
   'funds.notEnough': 'Not enough for a question.',
   'funds.modelFree': 'This model is free.',
-  'funds.needKey': 'Needs a balance. Free models need a balance. Open one with your invite code.',
+  'funds.needKey': 'Free models are free to use. Start free with your invite code.',
   'funds.refundable': 'You can take out {amount}.',
   'funds.add': 'Add',
   'funds.addMoney': 'Add money',
@@ -1104,7 +1105,6 @@ export default {
   'model.fastSub': 'Fast. The first words come in a few seconds.',
   'model.chosenMark': 'Chosen',
   // The first run's last step: Start free as a choice beside Start, and Scan for the code.
-  'intro.startFreeSub': 'With an invite code',
   'startFree.scanLabel': 'Scan the invite code with the camera',
   'home.modelChip': '{name} is chosen. Change the model',
   'funds.freeState': 'Free questions on free models. Free models answer at no cost. The model chosen now needs money.',

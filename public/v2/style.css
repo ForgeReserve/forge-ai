@@ -473,6 +473,8 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .fr-toggle.off .fr-track { background: #3A3D44; justify-content: flex-start; }
 .fr-next { flex: none; align-self: center; width: 76px; height: 76px; border-radius: 38px; border: 0; background: #F5F5F7; color: #0B0D10; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10); transition: transform 120ms var(--ease); }
 .fr-next:active { transform: scale(.96); }
+/* Start free: the last step's round button, green. */
+.fr-next.free { background: #3FCFB4; box-shadow: 0 0 0 7px rgba(63,207,180,0.10), 0 0 0 8px rgba(63,207,180,0.22), 0 12px 34px rgba(63,207,180,0.36), inset 0 -2px 0 rgba(11,13,16,0.10); }
 .fr-links { flex: none; min-height: clamp(48px, calc(48px + (100dvh - 640px) * 0.04), 56px); margin-top: clamp(6px, calc(6px + (100dvh - 640px) * 0.0393), 14px); display: flex; justify-content: center; }
 .fr-money { align-self: center; }
 .fr-link { height: 48px; min-width: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
@@ -783,11 +785,9 @@ body:has(> #app[data-route="answer"]) .toast.show { transform: translate(-50%, 0
 /* The first run's last step: Start free is a clear choice under the round Start, a gift on teal with its
    word and what it needs (owner, 2026-11-15), not a grey link. Without free models it is the invite code. */
 .fr-choice { height: clamp(48px, calc(48px + (100dvh - 640px) * 0.04), 56px); max-width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 20px 0 6px; border-radius: 28px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); color: #F5F5F7; text-align: left; }
-.fr-choice-ico { flex: none; width: clamp(38px, calc(38px + (100dvh - 640px) * 0.03), 44px); aspect-ratio: 1; border-radius: 50%; background: #3FCFB4; color: #0B0D10; display: flex; align-items: center; justify-content: center; }
-.fr-choice:not(.free) .fr-choice-ico { background: rgba(255,255,255,0.08); color: #F5F5F7; }
+.fr-choice-ico { flex: none; width: clamp(38px, calc(38px + (100dvh - 640px) * 0.03), 44px); aspect-ratio: 1; border-radius: 50%; background: rgba(255,255,255,0.08); color: #F5F5F7; display: flex; align-items: center; justify-content: center; }
 .fr-choice-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .fr-choice-word { font-size: 16px; font-weight: 700; white-space: nowrap; }
-.fr-choice-sub { font-size: 13px; font-weight: 500; color: #A1A4AB; white-space: nowrap; }
 .fr-code-row { display: flex; gap: 8px; align-items: stretch; }
 .fr-code-row .field-input { flex: 1; min-width: 0; }
 .btn.fr-scan { flex: none; min-height: 56px; padding: 0 14px; }

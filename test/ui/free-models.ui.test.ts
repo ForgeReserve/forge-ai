@@ -63,10 +63,11 @@ describe('free models in the v2 app', () => {
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
 
-    // No balance key yet: Type says the model is free and needs a balance, not "add funds".
+    // No balance key yet: Type says the model is free and offers Start free, with no word of a balance.
     await page.click('#btn-type');
     await page.waitForSelector('[data-screen=type]');
-    await expect.poll(() => page.textContent('#typeNotice')).toContain('This model is free, but it needs a balance.');
+    await expect.poll(() => page.textContent('#typeNoticeText')).toBe('This model is free. Start free with your invite code. No money needed.');
+    expect(await page.textContent('#noticeBtn')).toBe('Start free');
     expect(await page.textContent('#priceLine')).toBe('PriceFree');
     await page.click('#noticeBtn');
     await page.waitForSelector('[data-screen=startFree]');
@@ -146,7 +147,7 @@ describe('Start free on the first run', () => {
     }
   };
 
-  it("is the last step's link; the invite opens a $0 balance, asks, and Use free models opens the home on a free model", async () => {
+  it("is the last step's round button, green, the only one; the invite opens a $0 balance, asks, and Use free models opens the home on a free model", async () => {
     const { ctx, page, errors } = await phone();
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(`${g.url}/v2/`);
@@ -158,16 +159,17 @@ describe('Start free on the first run', () => {
     await shot(page, '1-step1.png', SHOTS_LAST);
 
     await toLastStep(page);
-    // The last step's one link reads Start free once the engine says it has free models; Learn more is
-    // the info button on the Private only card.
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
-    expect(await page.locator('#introInviteLink svg').count()).toBe(1);
-    expect(await page.locator('.fr-links button:visible').count()).toBe(1);
+    // The last step has one button once the engine says it has free models: the round one, green, which
+    // opens Start free. Learn more is the info button on the Private only card.
+    await page.waitForSelector('#introNext.free');
+    expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Start free with an invite');
+    expect(await page.locator('#introNext').evaluate((b) => getComputedStyle(b).backgroundColor)).toBe('rgb(63, 207, 180)');
+    expect(await page.locator('.fr-links button:visible').count()).toBe(0);
     expect(await page.getAttribute('#privateInfo', 'aria-label')).toBe('Learn more about Private only');
     await page.waitForSelector('#introListen:not([hidden])');
     await shot(page, '2-step4-link.png', SHOTS_LAST);
 
-    await page.click('#introInviteLink');
+    await page.click('#introNext');
     await page.waitForSelector('dialog#inviteSheet[open]');
     expect(await page.textContent('#inviteSheetTitle')).toBe('Start free');
     expect(await page.textContent('#introStartFree')).toBe('Start free');
@@ -228,33 +230,41 @@ describe('Start free on the first run', () => {
     expect(g.deps.db.prepare("SELECT charged_msub FROM requests WHERE model = 'glm-5.3-flash'").all()).toEqual([{ charged_msub: 0 }]);
     expect(await privateOnly(page)).toBe('false');
 
-    // Opened again from More with the key: the switch shows Off, and there is no Start free link.
+    // Opened again from More with the key: the switch shows Off, and the round button is Start again.
     await page.goto(`${g.url}/v2/#/start/private`);
     await page.waitForSelector('[data-screen=intro][data-step=private]');
     expect(await page.getAttribute('#privateToggle', 'aria-checked')).toBe('false');
     await page.waitForTimeout(500);
     expect(await page.isVisible('#introInviteLink')).toBe(false);
     expect(await page.locator('.fr-links button:visible').count()).toBe(0);
+    expect(await page.getAttribute('#introNext', 'class')).toBe('fr-next');
+    expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Start');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
 
-  it("I'll add money instead keeps the code and stays on the step; Keep Private only opens the home with it on", async () => {
+  it("I'll add money instead keeps the code, ends the first run and opens Add money on the paper note; Keep Private only opens the home with it on", async () => {
     const { ctx, page, errors } = await phone();
     const code = createInvite(g);
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=intro][data-step=welcome]');
     await toLastStep(page);
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
-    await page.click('#introInviteLink');
+    await page.waitForSelector('#introNext.free');
+    await page.click('#introNext');
     await page.waitForSelector('dialog#inviteSheet[open]');
     await page.fill('#introInvite', code);
     await page.click('#introAddMoney');
-    await page.waitForSelector('dialog#inviteSheet:not([open])', { state: 'attached' });
-    // Still the last step: the first run is not over.
-    expect(await page.getAttribute('[data-screen=intro]', 'data-step')).toBe('private');
-    expect(await page.evaluate(() => localStorage.getItem('forge2.firstRun'))).toBeNull();
+    // The first run is over: Add money is open on the paper note's card, though Start free's comes first.
+    await page.waitForSelector('[data-screen=addFunds]');
+    await page.waitForSelector('#wayGo[data-way=note]');
+    expect(await page.getAttribute('#tab-note', 'aria-selected')).toBe('true');
+    expect(await page.locator('#wayTabs [role=tab]').first().getAttribute('id')).toBe('tab-start');
+    await expect.poll(() => page.locator('#way-note').evaluate((c) => Math.round(c.getBoundingClientRect().left + c.getBoundingClientRect().width / 2 - innerWidth / 2))).toBe(0);
+    expect(await page.evaluate(() => localStorage.getItem('forge2.firstRun'))).toBe('done');
     expect(await page.evaluate(() => localStorage.getItem('forge.balanceKey'))).toBeNull();
+    // Back is the home, not the first run.
+    await page.goBack();
+    await page.waitForSelector('[data-screen=home]');
     // The code is the one the funding screens use, and Start free on Add money has it too.
     await page.goto(`${g.url}/v2/#/funds/add/ecash`);
     await page.waitForSelector('[data-fund=ecash]');
@@ -266,8 +276,8 @@ describe('Start free on the first run', () => {
     // Back on the first run, the sheet still has it: Start free, then Keep Private only.
     await page.goto(`${g.url}/v2/#/start/private`);
     await page.waitForSelector('[data-screen=intro][data-step=private]');
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
-    await page.click('#introInviteLink');
+    await page.waitForSelector('#introNext.free');
+    await page.click('#introNext');
     await page.waitForSelector('dialog#inviteSheet[open]');
     expect(await page.inputValue('#introInvite')).toBe(code);
     await page.click('#introStartFree');
@@ -286,10 +296,10 @@ describe('Start free on the first run', () => {
     { width: 360, height: 640 },
     { width: 412, height: 915 },
   ])
-    it(`fits ${size.width} by ${size.height} with the Start free link on the last step: no scrolling, 48 px touch targets`, async () => {
+    it(`fits ${size.width} by ${size.height} with Start free on the last step: no scrolling, 48 px touch targets`, async () => {
       const { ctx, page } = await phone({ seen: true, viewport: size });
       await page.goto(`${g.url}/v2/#/start/private`);
-      await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
+      await page.waitForSelector('#introNext.free');
       const m = await page.evaluate(() => {
         const main = document.querySelector('main')!;
         return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, mainScroll: main.scrollHeight - main.clientHeight, bottom: document.querySelector('.fr-links')!.getBoundingClientRect().bottom };
@@ -307,7 +317,7 @@ describe('Start free on the first run', () => {
       // The label is on one line.
       expect((await page.locator('#privateLabel').boundingBox())!.height).toBeLessThan(30);
       // The sheet's buttons too, the question's included.
-      await page.click('#introInviteLink');
+      await page.click('#introNext');
       await page.waitForSelector('dialog#inviteSheet[open]');
       expect(await small('dialog#inviteSheet button:visible')).toBe(0);
       await page.fill('#introInvite', createInvite(g));
