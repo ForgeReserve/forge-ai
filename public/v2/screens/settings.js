@@ -1,6 +1,6 @@
 // Mode and look (XThemes) and Choose a model (DPrivateOnly), both reached from More.
 import { isFreeModel } from '../core/price.js';
-import { isPrivate, visibleModels } from '../core/state.js';
+import { isPrivate, modelGroups } from '../core/state.js';
 import { backHeader, el, icon, infoToggle, sayEl } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
 
@@ -71,7 +71,7 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
 
-export function modelScreen({ t, state, back, actions, format, reader }) {
+export function modelScreen({ t, state, back, actions, format, reader, done = back }) {
   const S = state.S;
   const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id: 'privateOnly', 'aria-label': t('model.privateOnly') }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
   sw.addEventListener('click', () => actions.setPrivateOnly(!S.settings.privateOnly));
@@ -79,35 +79,48 @@ export function modelScreen({ t, state, back, actions, format, reader }) {
   const hiddenMore = el('p', { text: t('model.hiddenSub') });
   const hidden = el('div', { class: 'dashed-box', id: 'hiddenNote' }, el('div', { class: 'with-info' }, el('b', { class: 'ib' }, icon('eye', 18), el('span', { text: t('model.hidden') })), infoToggle(hiddenMore, t('model.info', { name: t('model.hidden') }), 'hiddenInfo')), hiddenMore);
   const tag = (ico, text, cls = '') => el('span', { class: `tag ${cls}`.trim() }, icon(ico, 14), el('span', { text }));
+  // Each group under its heading, with its picture: the rabbit, the lock, the open lock, the turtle.
+  const GROUP_ICON = { fast: 'rabbit', private: 'lock', standard: 'unlock', slow: 'turtle' };
+  /** One model: a radio card with the name and small picture tags; the chosen one carries a check. */
+  const modelCard = (m, v) => {
+    const on = v.model?.id === m.id;
+    const priv = isPrivate(m);
+    // A free model (core/price.js isFreeModel) shows Free in place of a price.
+    const free = isFreeModel(m);
+    const p = free ? null : format.modelPrice(m);
+    // The card: the name and its tags. What it costs, who can read it and how fast it is: behind its info
+    // button. Choosing a model closes the list.
+    const card = el(
+      'button',
+      { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', onclick: () => (actions.chooseModel(m.id), done()) },
+      el('span', { class: 'model-name' }, el('b', { text: m.name ?? m.id }), on ? el('span', { class: 'model-on', role: 'img', 'aria-label': t('model.chosenMark') }, icon('check', 18, 3)) : null),
+      el(
+        'span',
+        { class: 'tags' },
+        m.speed === 'fast' ? tag('rabbit', t('model.fast'), 'speed') : m.speed === 'slow' ? tag('turtle', t('model.slow'), 'slow') : null,
+        priv ? tag('lock', t('model.private'), 'teal') : tag('unlock', t('model.standard'), 'warn'),
+        free ? tag('gift', t('model.free'), 'free') : null,
+        m.capabilities?.vision ? tag('image', t('model.images')) : null,
+        m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
+      ),
+    );
+    const speed = m.speed === 'fast' ? t('model.fastSub') : m.speed === 'slow' ? t('model.slowSub') : null;
+    return option(card, [speed, free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
+  };
   const draw = () => {
     sw.setAttribute('aria-checked', String(!!S.settings.privateOnly));
     const v = state.view();
-    const models = visibleModels(S.models, S.settings);
+    const groups = modelGroups(S.models, S.settings);
     list.replaceChildren(
-      ...(models.length
-        ? models.map((m) => {
-            const on = v.model?.id === m.id;
-            const priv = isPrivate(m);
-            // A free model (core/price.js isFreeModel) shows Free in place of a price.
-            const free = isFreeModel(m);
-            const p = free ? null : format.modelPrice(m);
-            // The card: the name and its tags. What it costs and who can read it: behind its info button.
-            const card = el(
-              'button',
-              { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, onclick: () => actions.chooseModel(m.id) },
-              el('b', { text: m.name ?? m.id }),
-              el(
-                'span',
-                { class: 'tags' },
-                priv ? tag('lock', t('model.private'), 'teal') : tag('unlock', t('model.standard'), 'warn'),
-                free ? tag('gift', t('model.free'), 'free') : null,
-                m.speed === 'fast' ? tag('gauge', t('model.fast')) : null,
-                m.capabilities?.vision ? tag('image', t('model.images')) : null,
-                m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
-              ),
-            );
-            return option(card, [free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
-          })
+      ...(groups.length
+        ? groups.map((g) =>
+            el(
+              'section',
+              { class: `model-group group-${g.id}`, id: `group-${g.id}`, 'aria-labelledby': `groupHead-${g.id}` },
+              el('h2', { class: 'caps group-head', id: `groupHead-${g.id}` }, icon(GROUP_ICON[g.id], 20), el('span', { text: t(`model.group.${g.id}`) })),
+              ...g.models.map((m) => modelCard(m, v)),
+            ),
+          )
         : [el('p', { class: 'hint', text: t('model.none') })]),
     );
     hidden.hidden = !(S.settings.privateOnly && v.hiddenCount > 0);
@@ -138,7 +151,7 @@ export function modelScreen({ t, state, back, actions, format, reader }) {
 export function voiceScreen({ t, state, back, actions, voice, reader, native = null }) {
   const S = state.S;
   // Each way's tags: what it costs and who can hear it, as pictures with one or two words.
-  const TAG = { free: ['gift', 'voice.tag.free', ''], paid: ['coins', 'voice.tag.paid', ''], phone: ['phone', 'voice.tag.phone', 'teal'], engine: ['ear', 'voice.tag.engine', 'warn'], provider: ['ear', 'voice.tag.provider', 'warn'], maker: ['globe', 'voice.tag.maker', 'warn'], blocked: ['lock', 'voice.tag.blocked', ''] };
+  const TAG = { free: ['gift', 'voice.tag.free', ''], paid: ['coins', 'voice.tag.paid', ''], phone: ['phone', 'voice.tag.phone', 'teal'], engine: ['server', 'voice.tag.engine', 'warn'], provider: ['eye', 'voice.tag.provider', 'warn'], maker: ['eye', 'voice.tag.maker', 'warn'], blocked: ['lock', 'voice.tag.blocked', ''] };
   const tagsOf = (keys) => el('span', { class: 'tags' }, ...keys.map((k) => el('span', { class: `tag ${TAG[k][2]}`.trim() }, icon(TAG[k][0], 14), el('span', { text: t(TAG[k][1]) }))));
   const choice = (group, id, title, sub, { on, disabled = false, tags = [] } = {}) =>
     option(

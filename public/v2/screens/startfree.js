@@ -4,6 +4,7 @@
 // without that question. startFree() is the first run's invite sheet; startFreeScreen() is the Start
 // free card's own screen on Add money (AddFunds-C2 and C3 in docs/design/canvas). With a balance key
 // already (at $0) there is no invite field: the one button chooses a free model.
+import { codeFrom } from '../core/join.js';
 import { el, icon, say, toast } from '../core/ui.js';
 import { listenButton, listenHeader } from './parts.js';
 import { cardArt } from './wallet-art.js';
@@ -26,6 +27,44 @@ export function inviteError(e, t) {
 }
 
 /**
+ * Scan for an invite (owner, 2026-11-15): the camera reads a printed code or an event's QR code (its
+ * link gives the pass, core/join.js codeFrom), and onCode gets the code. Returns {button, scanner,
+ * stop()}; button is null where there is no camera.
+ */
+export function codeScanner({ t, scan, id, onCode, cls = 'btn sf-btn' }) {
+  const video = el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
+  const scanner = el('div', { class: 'scanner', id: `${id}Scanner`, hidden: true }, video);
+  let job = null;
+  const stop = () => {
+    job?.stop();
+    job = null;
+    scanner.hidden = true;
+  };
+  const button = scan?.available() ? el('button', { type: 'button', class: cls, id: `${id}Scan`, 'aria-label': t('startFree.scanLabel') }, icon('scan', 22), el('span', { text: t('startFree.scan') })) : null;
+  button?.addEventListener('click', async () => {
+    if (job) return stop();
+    scanner.hidden = false;
+    try {
+      job = await scan.open(video);
+      const text = await job.promise;
+      stop();
+      onCode(codeFrom(text));
+    } catch {
+      stop();
+    }
+  });
+  return { button, scanner, stop };
+}
+
+/** The two answers to the Private-only question, as big picture tiles: the gift (free models) and the lock. */
+function askChoices(t, useBtn, keepBtn) {
+  const fill = (b, ico, key, kind) => b.replaceChildren(el('span', { class: `ask-ico ${kind}`, 'aria-hidden': 'true' }, icon(ico, 30)), el('span', { class: 'ask-word', text: t(key) }));
+  fill(useBtn, 'gift', 'startFree.use', 'free');
+  fill(keepBtn, 'lock', 'startFree.keep', 'private');
+  return el('div', { class: 'ask-choices' }, useBtn, keepBtn);
+}
+
+/**
  * ctx: t, state, actions, wallet. id: the prefix of the element ids ('intro', 'funds', 'addFunds').
  * field: {input, box}, the invite field the caller already lays out (the first run's sheet shares its
  * own) and the box shown and hidden with it; else one is made, inside the returned node.
@@ -33,7 +72,7 @@ export function inviteError(e, t) {
  * Returns {node, update, busy()}: busy() is true while a result or the question is on show, so a card
  * that would hide once the model is free stays until the person moves on.
  */
-export function startFree({ t, state, actions, wallet }, { id, field: given = null, after = () => {} }) {
+export function startFree({ t, state, actions, wallet, reader = null }, { id, field: given = null, after = () => {} }) {
   const S = state.S;
   const field = given?.input ?? el('input', { id: `${id}FreeInvite`, class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
   if (!given) field.addEventListener('input', () => wallet.setInvite(field.value.trim()));
@@ -41,10 +80,17 @@ export function startFree({ t, state, actions, wallet }, { id, field: given = nu
   const msg = el('p', { class: 'msg', id: `${id}FreeMsg`, role: 'status' });
   const go = el('button', { type: 'button', class: 'btn primary block', id: `${id}StartFree` }, icon('gift', 20), el('span', { text: t('startFree.go') }));
   const useModel = el('button', { type: 'button', class: 'btn primary block', id: `${id}UseFreeModel`, hidden: true }, icon('gift', 20), el('span', { text: t('startFree.useModel') }));
-  const useBtn = el('button', { type: 'button', class: 'btn primary', id: `${id}UseFree` }, icon('check', 20), el('span', { text: t('startFree.use') }));
-  const keepBtn = el('button', { type: 'button', class: 'btn', id: `${id}KeepPrivate` }, icon('lock', 20), el('span', { text: t('startFree.keep') }));
-  // The Private-only question, in the owner's words as they are (data-approved).
-  const ask = el('div', { class: 'free-ask', id: `${id}FreeAsk`, role: 'group', 'aria-labelledby': `${id}FreeAskText`, hidden: true }, el('p', { id: `${id}FreeAskText`, 'data-approved': '', text: t('startFree.ask') }), el('div', { class: 'row-btns' }, useBtn, keepBtn));
+  const useBtn = el('button', { type: 'button', class: 'ask-choice use', id: `${id}UseFree` });
+  const keepBtn = el('button', { type: 'button', class: 'ask-choice keep', id: `${id}KeepPrivate` });
+  // The Private-only question, in the owner's words as they are (data-approved), with Listen, and its two
+  // answers as picture tiles.
+  const askListen = listenButton({ t, reader, id: `${id}AskListen`, pieces: () => [t('startFree.ask'), t('startFree.use'), t('startFree.keep')] });
+  const ask = el(
+    'div',
+    { class: 'free-ask', id: `${id}FreeAsk`, role: 'group', 'aria-labelledby': `${id}FreeAskText`, hidden: true },
+    el('div', { class: 'free-ask-head' }, el('p', { id: `${id}FreeAskText`, 'data-approved': '', text: t('startFree.ask') }), askListen.node),
+    askChoices(t, useBtn, keepBtn),
+  );
   const invite = given?.box ?? el('div', { class: 'field' }, el('label', { for: field.id, class: 'sr-only', text: t('invite.label') }), field);
   const node = el('div', { class: 'start-free', id: `${id}StartFreeBox` }, given ? null : invite, note, go, useModel, ask, msg);
 
@@ -117,9 +163,10 @@ export function startFree({ t, state, actions, wallet }, { id, field: given = nu
     note.hidden = !form;
     ask.hidden = phase !== 'ask';
     if (!field.value && wallet.invite()) field.value = wallet.invite();
+    askListen.update();
   };
   draw();
-  return { node, update: draw, busy: () => phase !== 'form' };
+  return { node, update: draw, busy: () => phase !== 'form', destroy: () => askListen.destroy() };
 }
 
 /** Whether Add money shows the Start free card first (state.view()): free models, and no key or $0 on a paid model. */
@@ -146,7 +193,6 @@ export function takeSaid() {
 export function startFreeScreen({ t, state, back, backTo, actions, wallet, reader, scan, joined = false }) {
   const S = state.S;
   let phase = joined ? 'ask' : 'form'; // 'form', 'opening', 'ask'
-  let job = null;
   const msg = el('p', { class: 'msg', id: 'startFreeMsg', role: 'status' });
   const tell = (text, kind = '') => {
     msg.className = `msg ${kind}`.trim();
@@ -180,28 +226,8 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     }
     input.focus();
   });
-  const video = el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
-  const scanner = el('div', { class: 'scanner', id: 'startFreeScanner', hidden: true }, video);
-  const stopScan = () => {
-    job?.stop();
-    job = null;
-    scanner.hidden = true;
-  };
-  const scanBtn = scan?.available()
-    ? el('button', { type: 'button', class: 'btn sf-btn', id: 'startFreeScan' }, icon('camera', 22), el('span', { text: t('startFree.scan') }))
-    : null;
-  scanBtn?.addEventListener('click', async () => {
-    if (job) return stopScan();
-    scanner.hidden = false;
-    try {
-      job = await scan.open(video);
-      const text = await job.promise;
-      stopScan();
-      setCode(text);
-    } catch {
-      stopScan();
-    }
-  });
+  // Scan: a printed code, or an event's QR code (its link gives the pass).
+  const { button: scanBtn, scanner, stop: stopScan } = codeScanner({ t, scan, id: 'startFree', onCode: setCode });
   const field = el(
     'div',
     { class: 'sf-field', id: 'startFreeField' },
@@ -216,18 +242,20 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
 
   // The question (AddFunds-C3): over the screen, in the same words as the first run's.
   const opened = el('p', { class: 'sf-opened', id: 'startFreeOpened', role: 'status', hidden: true }, icon('check', 20, 2.8), el('span', { text: t('startFree.opened') }));
+  const askListen = listenButton({ t, reader, id: 'startFreeAskListen', pieces: () => [t('startFree.ask'), t('startFree.use'), t('startFree.keep')] });
   const choice = (ico, word, tag, kind) => el('div', { class: `sf-choice ${kind}` }, el('span', { class: 'sf-choice-ico' }, icon(ico, 34)), el('b', { text: t(word) }), el('span', { class: `sf-tag ${kind}` }, icon(kind === 'standard' ? 'check' : 'coins', 13), el('span', { text: t(tag) })));
-  const useBtn = el('button', { type: 'button', class: 'btn primary block', id: 'startFreeUse' }, icon('check', 22, 2.8), el('span', { text: t('startFree.use') }));
+  const useBtn = el('button', { type: 'button', class: 'btn primary block', id: 'startFreeUse' }, icon('gift', 22), el('span', { text: t('startFree.use') }));
   const keepBtn = el('button', { type: 'button', class: 'btn block', id: 'startFreeKeep' }, icon('lock', 20), el('span', { text: t('startFree.keep') }));
   const sheet = el(
     'div',
     { class: 'sf-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'startFreeAskText' },
     el('span', { class: 'sf-grabber', 'aria-hidden': 'true' }),
     el('div', { class: 'sf-choices' }, choice('lock', 'startFree.private', 'startFree.needsMoney', 'private'), choice('eye', 'startFree.standard', 'startFree.free', 'standard')),
-    el('p', { class: 'sf-callout', id: 'startFreeAskText', 'data-approved': '' }, icon('eye', 24), el('span', { text: t('startFree.ask') })),
+    el('div', { class: 'sf-ask-head' }, el('p', { class: 'sf-callout', id: 'startFreeAskText', 'data-approved': '' }, icon('eye', 24), el('span', { text: t('startFree.ask') })), askListen.node),
     el('div', { class: 'foot' }, useBtn, keepBtn),
   );
   const ask = el('div', { class: 'sf-ask', id: 'startFreeAsk', hidden: true }, opened, sheet);
+  // The question covers the screen's own Listen: it has its own, which reads it and both answers.
   opened.hidden = !joined;
 
   const listen = listenButton({ t, reader, id: 'startFreeListen', pieces: () => (phase === 'ask' ? [t('startFree.ask')] : [t('startFree.title'), t('startFree.note')]) });
@@ -308,6 +336,7 @@ export function startFreeScreen({ t, state, back, backTo, actions, wallet, reade
     destroy: () => {
       stopScan();
       listen.destroy();
+      askListen.destroy();
     },
     focus: main.querySelector('h1'),
   };

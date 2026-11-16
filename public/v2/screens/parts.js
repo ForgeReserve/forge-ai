@@ -159,7 +159,7 @@ export function statusBar({ t, state, nav }) {
     const freeText = !v.balanceText && v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'status.freeOne' : 'status.free', { count: v.freeLeft }) : null;
     const text = v.balanceText ?? freeText ?? (v.online ? t('status.noBalance') : t('status.offline'));
     // With nothing to show, the pill is Add money: its plus in place of the dot.
-    bal.replaceChildren(v.balanceText || freeText ? el('span', { class: 'dot', 'aria-hidden': 'true' }) : icon(v.online ? 'plus' : 'alert', 16), el('span', { text, id: 'balanceText' }));
+    bal.replaceChildren(v.balanceText || freeText ? el('span', { class: 'dot', 'aria-hidden': 'true' }) : icon(v.online ? 'addMoney' : 'alert', 18), el('span', { text, id: 'balanceText' }));
     bal.setAttribute('aria-label', v.balanceText ? t('status.balance', { amount: v.balanceText }) : freeText ? t('status.freeLabel', { free: freeText }) : t('status.noBalanceLabel'));
   };
   update();
@@ -183,7 +183,7 @@ export function bottomRow({ t, nav, open = null }) {
       el('span', { text: isOpen ? t('home.close') : label }),
     );
   };
-  return el('nav', { class: 'bottom-row', 'aria-label': t('app.name') }, b('type', 'keyboard', t('home.type')), b('add', 'plus', t('home.add')), b('more', 'dots', t('home.more')));
+  return el('nav', { class: 'bottom-row', 'aria-label': t('app.name') }, b('type', 'keyboard', t('home.type')), b('add', 'clip', t('home.add')), b('more', 'dots', t('home.more')));
 }
 
 /**

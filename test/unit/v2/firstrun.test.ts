@@ -175,3 +175,14 @@ describe('first run: one idea a step', () => {
     expect(FR.spokenFor('nope').clip).toBe('welcome');
   });
 });
+
+// Scan on the invite field (owner, 2026-11-15): an event's QR link gives its pass; a printed code is itself.
+describe('a scanned invite', () => {
+  it('takes the pass from an event link, and anything else as the code', async () => {
+    const J: any = await import('../../../public/v2/core/join.js' as string);
+    expect(J.codeFrom('https://ai.forge-reserve.com/j#pass-AbCdEf123')).toBe('pass-AbCdEf123');
+    expect(J.codeFrom('https://ai.forge-reserve.com/v2/#join=pass-zzzzzzzz12')).toBe('pass-zzzzzzzz12');
+    expect(J.codeFrom('/j#pass-QQQQQQQQ')).toBe('pass-QQQQQQQQ');
+    expect(J.codeFrom('  inv-abc12345 ')).toBe('inv-abc12345');
+  });
+});

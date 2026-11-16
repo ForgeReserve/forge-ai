@@ -297,7 +297,8 @@ describe('Share unseen', () => {
     await page.waitForSelector('[data-screen=model]');
     await page.click('#privateOnly');
     await page.click('[data-model="mock-see"]');
-    expect(await page.getAttribute('[data-model="mock-see"]', 'aria-checked')).toBe('true');
+    // The list closes on the choice.
+    await page.waitForSelector('[data-screen=home]');
     // The choice is saved before the page is opened again.
     await expect.poll(() => page.evaluate(async (src) => (await new Function('s', 'return import(s)')(src)).kv.get('settings').then((x: any) => x?.model), '/v2/core/db.js')).toBe('mock-see');
     await pick(page, 'sign.jpg', SIGN);
@@ -326,7 +327,8 @@ describe('Share unseen', () => {
     expect(await page.textContent('#photoStatus')).toBe('A check did not run. Tap again to share anyway.');
     expect(await page.evaluate(() => (window as any).__shared.length)).toBe(0);
     await page.click('#photoShare');
-    await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    // The photo is drawn again before it is shared: over a second on a slow machine.
+    await expect.poll(() => page.evaluate(() => (window as any).__shared.length), { timeout: 15_000 }).toBe(1);
     const out = new Uint8Array((await page.evaluate(() => (window as any).__shared[0])).bytes);
     expect(META.readDetails(out).found).toEqual([]);
     // A new photo is checked afresh and warns again.

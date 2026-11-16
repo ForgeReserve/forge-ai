@@ -23,6 +23,37 @@ export function pickModel(models, settings) {
   return vis.find((m) => m.id === settings.model) ?? vis[0] ?? null;
 }
 
+/**
+ * Choose a model's groups (owner, 2026-11-15), in this order: the fast free models first (a rabbit), then
+ * the private ones, then the other Standard ones, then the slow ones under their own heading (a turtle),
+ * below Standard. A model is slow or fast by its speed mark from the engine (config/models.json); one
+ * not measured has none. Empty groups are left out. Returns [{id, models}].
+ */
+export function modelGroups(models, settings, isFree = (m) => !!m?.pricing?.free) {
+  const vis = visibleModels(models, settings);
+  const fast = vis.filter((m) => m.speed === 'fast' && isFree(m) && !isPrivate(m));
+  const slow = vis.filter((m) => m.speed === 'slow');
+  const rest = vis.filter((m) => !fast.includes(m) && !slow.includes(m));
+  const groups = [
+    { id: 'fast', models: fast },
+    { id: 'private', models: rest.filter(isPrivate) },
+    // Within Standard, the fast ones first.
+    { id: 'standard', models: rest.filter((m) => !isPrivate(m)).sort((a, b) => (b.speed === 'fast') - (a.speed === 'fast')) },
+    { id: 'slow', models: slow },
+  ];
+  return groups.filter((g) => g.models.length);
+}
+
+/**
+ * The model the slow-answer note switches to (screens/answer.js): a fast one this phone can use now,
+ * the free ones first (they cost nothing), never the one in use. null when Private only (or the list)
+ * leaves none.
+ */
+export function fastPick(models, settings, { current = null, isFree = (m) => !!m?.pricing?.free, paid = false, prefer = 'glm-5.3-flash' } = {}) {
+  const fast = visibleModels(models, settings).filter((m) => m.speed === 'fast' && m.id !== current?.id);
+  return fast.find((m) => m.id === prefer && isFree(m)) ?? fast.find(isFree) ?? (paid ? fast[0] : null) ?? null;
+}
+
 /** How many models Private only hides. */
 export const hiddenCount = (models, settings) => visibleModels(models, { privateOnly: false }).length - visibleModels(models, settings).length;
 

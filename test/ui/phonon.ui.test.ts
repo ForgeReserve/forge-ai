@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { fakePhoneVoice } from './phonevoice.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 
 // The natural voice made on the phone (Phonon 31m through the vendored phonon-tts), in a phone-sized
@@ -51,8 +52,11 @@ async function fundedKey(): Promise<string> {
  * A phone with a funded balance and the microphone allowed; Private only off, the mock-echo model.
  * context: more context options; before: runs on the context before its first page opens.
  */
-async function phone({ context = {}, before }: { context?: object; before?: (ctx: BrowserContext) => Promise<void> } = {}): Promise<Phone> {
+async function phone({ context = {}, before, phoneVoice = false }: { context?: object; before?: (ctx: BrowserContext) => Promise<void>; phoneVoice?: boolean } = {}): Promise<Phone> {
   const ctx = await browser.newContext({ ...PHONE, ...context });
+  // Whether the phone has a voice of its own (it reads at once while the natural voice is not here yet):
+  // none by default, so the one-time question before the download is what these tests see.
+  await fakePhoneVoice(ctx, phoneVoice);
   await before?.(ctx);
   await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
@@ -89,6 +93,9 @@ async function hold(page: Page, sel: string, ms: number) {
   const box = (await page.locator(sel).boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
+  // The hold counts from the moment the app is recording: on a slow machine the microphone can take
+  // longer to open than the hold itself, and a release before then is a cancel.
+  await page.waitForSelector(`${sel}[data-phase=recording]`, { timeout: 15_000 });
   await page.waitForTimeout(ms);
   await page.mouse.up();
 }
@@ -162,6 +169,21 @@ async function strictAudio(ctx: BrowserContext) {
 
 const heard = (page: Page) => page.evaluate(() => (window as any).__audio.heard as number);
 
+/** The settings stored on the phone (IndexedDB forge2, kv "settings"). */
+const storedSettings = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<any>((resolve) => {
+        const open = indexedDB.open('forge2');
+        open.onsuccess = () => {
+          const db = open.result;
+          if (![...db.objectStoreNames].includes('kv')) return resolve(null);
+          const r = db.transaction('kv').objectStore('kv').get('settings');
+          r.onsuccess = () => resolve(r.result ?? null);
+        };
+      }),
+  );
+
 describe('the natural voice', () => {
   it('runs on a cross-origin isolated page, and is the voice answers are read with by default', async () => {
     const { ctx, page, errors } = await phone();
@@ -170,7 +192,7 @@ describe('the natural voice', () => {
     await page.waitForSelector('[data-screen=voice]');
     await page.waitForSelector('#voiceOut-phonon');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-checked')).toBe('true');
-    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeStays here');
+    expect(await page.textContent('#voiceOut-phonon')).toBe('Natural voiceFreeOn phone');
     expect(await page.getAttribute('#voiceOut-phonon', 'aria-description')).toBe('Free. Made on this phone, so the answer is not sent anywhere. Downloads once, the first time.');
     // The other ways are still there.
     expect(await page.isVisible('#voiceOut-engine')).toBe(true);
@@ -277,6 +299,70 @@ describe('the natural voice', () => {
     expect(errors.filter((e) => !/Failed to fetch|ERR_INTERNET_DISCONNECTED|net::/.test(e))).toEqual([]);
     await ctx.close();
   }, 180_000);
+
+  // Listen speaks at once (owner, 2026-11-15): on a phone with a voice of its own, the answer is read by it
+  // straight away, nothing is asked first, and the natural voice is offered after it, with its size.
+  it("reads with the phone's own voice at once, then offers the natural voice; Not now is kept, Get downloads it", async () => {
+    const { ctx, page, errors } = await phone({ phoneVoice: true });
+    await page.click('#btn-type');
+    await page.fill('#question', 'Read this to me');
+    await page.click('#sendBtn');
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    await page.click('#speakBtn');
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 5000 }).toBeGreaterThan(0);
+    expect(await page.isVisible('#voiceDownload')).toBe(false);
+    expect(await played(page)).toBe(0); // not the natural voice: nothing downloaded or made
+    await page.waitForSelector('#voiceOffer:not([hidden])');
+    expect(await page.textContent('#voiceOffer')).toMatch(/^Better voice6\d MB, onceGet$/);
+    expect(await page.locator('#voiceOffer svg').count()).toBeGreaterThanOrEqual(3);
+    // Get: the natural voice downloads now (its progress shows), then reads the answer.
+    const spokenBefore = await page.evaluate(() => (window as any).__spoken.length);
+    await page.click('#voiceOfferGet');
+    await page.waitForSelector('#voiceProgress', { timeout: 20_000 });
+    expect(await page.isVisible('#voiceOffer')).toBe(false);
+    // Once downloaded, the natural voice reads the answer, unless this machine makes it slower than the
+    // fallback allows (core/voicepace.js): then this phone has a voice of its own, which reads it and says
+    // why. The CI runner is that slow and this Mac is not, so either way is right; which one is logged.
+    const slow = () => page.getByText('The natural voice is slow on this phone').count();
+    await expect.poll(async () => (await played(page)) > 5 || (await slow()) > 0, { timeout: 60_000 }).toBe(true);
+    if ((await played(page)) > 5) console.log('natural voice read the answer');
+    else {
+      console.log('the natural voice was too slow here: the phone voice read the answer');
+      await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(spokenBefore);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
+
+  it('Not now on the offer is kept: the next Listen reads at once with no offer', async () => {
+    const { ctx, page, errors } = await phone({ phoneVoice: true });
+    await page.click('#btn-type');
+    await page.fill('#question', 'And this one');
+    await page.click('#sendBtn');
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    await page.click('#speakBtn');
+    await page.waitForSelector('#voiceOffer:not([hidden])');
+    await page.click('#voiceOfferNo');
+    expect(await page.isVisible('#voiceOffer')).toBe(false);
+    await page.waitForSelector('#speakBtn', { timeout: 10_000 });
+    const before = await page.evaluate(() => (window as any).__spoken.length);
+    await page.click('#speakBtn');
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(before);
+    // The offer would be set before the reading starts: once the reading is over, it would be drawn.
+    await page.waitForSelector('#speakBtn', { timeout: 10_000 });
+    expect(await page.isVisible('#voiceOffer')).toBe(false);
+    expect(await page.isVisible('#voiceDownload')).toBe(false);
+    // Kept on the phone: once Not now is stored, after a reload, still no offer.
+    await expect.poll(() => storedSettings(page).then((x) => x?.naturalNotNow)).toBe(true);
+    await page.reload();
+    await page.waitForSelector('#speakBtn', { timeout: 20_000 });
+    await page.click('#speakBtn');
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length)).toBeGreaterThan(0);
+    await page.waitForSelector('#speakBtn', { timeout: 10_000 });
+    expect(await page.isVisible('#voiceOffer')).toBe(false);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
 
   it('Not now reads nothing and is not asked again for the next spoken answer', async () => {
     const { ctx, page, errors } = await phone();

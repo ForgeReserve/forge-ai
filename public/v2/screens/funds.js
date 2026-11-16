@@ -15,15 +15,24 @@ export function fundsScreen(ctx) {
   const done = el('div', { class: 'funds-said', id: 'fundsSaid', role: 'status', hidden: !said }, el('span', { class: 'funds-said-ico' }, icon('check', 16, 3)), sayEl('p', { id: 'fundsSaidText' }, said ?? ''));
   const fr = fundsRing();
   const mr = cardRing('memory-track', 'memory');
-  const amount = el('div', { class: 'big', id: 'fundsAmount' });
+  const amount = el('span', { class: 'big', id: 'fundsAmount' });
   // On a free model at $0, the ring's centre is teal and says FREE (AddFunds-C4).
   const freeTag = el('span', { class: 'funds-free-tag', id: 'fundsFreeTag', hidden: true, text: t('funds.freeTag') });
-  const ringBox = el('div', { class: 'funds-ring' }, fr.node, el('div', { class: 'funds-ring-mid' }, amount, freeTag));
+  // The whole ring is one button (owner, 2026-11-15): Add money, or on a free model at $0, ask.
+  const ringBox = el('button', { type: 'button', class: 'funds-ring', id: 'fundsRing', onclick: () => nav(ringBox.classList.contains('free') && state.view().hasKey ? 'home' : 'addFunds') }, fr.node, el('span', { class: 'funds-ring-mid' }, amount, freeTag));
   const fundsNote = el('p', { class: 'note', id: 'fundsNote' });
   const refundable = el('p', { class: 'note', id: 'refundable' });
   // Free questions (credits): counted apart from the money, and never taken out as money.
   const freeNote = el('p', { class: 'note free-note', id: 'fundsFree', hidden: true });
   const freeModel = el('button', { type: 'button', class: 'btn small', id: 'fundsUseFree', hidden: true, onclick: () => actions.useFreeModel() }, icon('gift', 18), el('span', { text: t('funds.useFreeModel') }));
+  // Free models listed while a paid model is chosen at $0: questions still work there, so Funds says so
+  // with the gift, and one tap uses a free model (through Start free's question while Private only is on).
+  const freeState = el('p', { class: 'funds-free-state', id: 'fundsFreeState', hidden: true });
+  const freeModels = el('button', { type: 'button', class: 'btn funds-free-go', id: 'fundsFreeModels', hidden: true, onclick: () => {
+        if (S.settings.privateOnly) return nav('startFree');
+        const m = actions.useFreeModels();
+        if (m) toast(t('startFree.ready', { name: m.name ?? m.id }), 3000);
+      } }, icon('gift', 20), el('span', { text: t('funds.useFreeModels') }));
   const memFree = el('div', { class: 'big', id: 'memoryFree' });
   const memNote = el('p', { class: 'note', id: 'memoryNote' });
   const items = el('ul', { class: 'held', id: 'heldItems' });
@@ -39,7 +48,7 @@ export function fundsScreen(ctx) {
     { class: 'card big-card funds-card', 'aria-labelledby': 'fundsCap' },
     el('div', { class: 'funds-top' }, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), outBtn),
     ringBox,
-    el('div', { class: 'funds-notes' }, fundsNote, refundable, freeNote, freeModel),
+    el('div', { class: 'funds-notes' }, fundsNote, freeState, freeModels, refundable, freeNote, freeModel),
   );
   const memCard = el(
     'section',
@@ -49,7 +58,7 @@ export function fundsScreen(ctx) {
     el(
       'div',
       { class: 'card-btns' },
-      el('button', { type: 'button', class: 'btn soft', id: 'memAddBtn', onclick: () => nav('add') }, icon('plus', 20), el('span', { text: t('funds.add') })),
+      el('button', { type: 'button', class: 'btn soft', id: 'memAddBtn', onclick: () => nav('add') }, icon('clip', 20), el('span', { text: t('funds.add') })),
       el('button', { type: 'button', class: 'btn primary', id: 'startFresh', onclick: () => (actions.startFresh(), toast(t('funds.started'))) }, icon('trash', 20), el('span', { text: t('funds.startFresh') })),
     ),
   );
@@ -124,10 +133,15 @@ export function fundsScreen(ctx) {
     fr.set(v.fundsFraction, v.freeFraction, freeZero);
     freeTag.hidden = !freeZero;
     ringBox.classList.toggle('free', freeZero);
+    ringBox.setAttribute('aria-label', `${amount.textContent}. ${freeZero && v.hasKey ? t('funds.ask') : t('funds.addMoney')}`);
     askBtn.hidden = !(freeZero && v.hasKey);
     // A free model costs nothing: never "not enough" for it.
-    say(fundsNote, !v.hasKey ? (v.freeLeft > 0 ? '' : v.modelFree ? t('funds.needKey') : t('funds.empty')) : v.modelFree ? t('funds.modelFree') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough'));
+    // A paid model at $0 with free models listed: not "not enough", but the free questions there.
+    const freeHere = v.hasKey && !v.modelFree && !(v.balanceMsub > 0) && v.freeModels && !(v.freeLeft > 0);
+    say(fundsNote, freeHere ? '' : !v.hasKey ? (v.freeLeft > 0 ? '' : v.modelFree ? t('funds.needKey') : t('funds.empty')) : v.modelFree ? t('funds.modelFree') : v.questionsLeft > 0 ? t('funds.enough', { count: format.int(v.questionsLeft) }) : t('funds.notEnough'));
     fundsNote.hidden = !fundsNote.textContent;
+    say(freeState, freeHere ? t('funds.freeState') : '', '', 'gift');
+    freeState.hidden = freeModels.hidden = !freeHere;
     freeNote.hidden = !(v.freeLeft > 0) && v.fundsBlock !== 'freeOut';
     freeNote.textContent = v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'funds.freeLeftOne' : 'funds.freeLeft', { count: v.freeLeft }) : v.fundsBlock === 'freeOut' ? t('funds.freeUsed') : '';
     freeModel.hidden = v.fundsBlock !== 'freeModel';

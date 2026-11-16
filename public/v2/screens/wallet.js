@@ -66,8 +66,6 @@ export function walletScreen(ctx) {
   const track = el('div', { class: 'way-track', id: 'wayTrack' });
   const stage = el('div', { class: 'way-stage' }, track);
   const tabs = el('div', { class: 'way-tabs', role: 'tablist', id: 'wayTabs', 'aria-label': t('ways.tabs') });
-  // The swipe hint: a hand moving side to side (still when reduced motion is on).
-  const hand = el('span', { class: 'way-hand', 'aria-hidden': 'true' }, icon('hand', 22, 1.8));
   const goWord = el('span');
   const go = el('button', { type: 'button', class: 'btn primary block way-go', id: 'wayGo' }, goWord, icon('next', 22, 2.6));
   const cards = []; // {id, node, words, info (its button), lines}
@@ -76,7 +74,7 @@ export function walletScreen(ctx) {
     return c ? [c.words.word, ...c.words.info] : [];
   };
   const listen = listenButton({ t, reader, id: 'waysListen', pieces: () => spoken() });
-  const main = el('main', { class: 'screen sub wallet', 'data-screen': 'addFunds' }, listenHeader(t('ways.title'), back, t('common.back'), listen.node), bal, stage, tabs, hand, el('div', { class: 'foot' }, go));
+  const main = el('main', { class: 'screen sub wallet', 'data-screen': 'addFunds' }, listenHeader(t('ways.title'), back, t('common.back'), listen.node), bal, stage, tabs, el('div', { class: 'foot' }, go));
 
   /** One card: picture, badge, word, and the info line behind its button. */
   const makeCard = (id, i) => {
@@ -213,7 +211,7 @@ export function walletScreen(ctx) {
 export function cardStack(ctx) {
   const { t, nav } = ctx;
   const fan = el('span', { class: 'stack-fan', 'aria-hidden': 'true' });
-  const node = el('button', { type: 'button', class: 'card-stack', id: 'addFundsBtn', onclick: () => nav('addFunds') }, el('span', { class: 'stack-head' }, icon('plus', 22), el('span', { text: t('funds.addMoney') })), fan);
+  const node = el('button', { type: 'button', class: 'card-stack', id: 'addFundsBtn', onclick: () => nav('addFunds') }, el('span', { class: 'stack-head' }, icon('addMoney', 24), el('span', { text: t('funds.addMoney') })), fan);
   let shown = null;
   const update = () => {
     const w = waysNow(ctx);

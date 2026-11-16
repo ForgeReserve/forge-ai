@@ -160,7 +160,7 @@ describe('Start free on the first run', () => {
     await toLastStep(page);
     // The last step's one link reads Start free once the engine says it has free models; Learn more is
     // the info button on the Private only card.
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
     expect(await page.locator('#introInviteLink svg').count()).toBe(1);
     expect(await page.locator('.fr-links button:visible').count()).toBe(1);
     expect(await page.getAttribute('#privateInfo', 'aria-label')).toBe('Learn more about Private only');
@@ -245,7 +245,7 @@ describe('Start free on the first run', () => {
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=intro][data-step=welcome]');
     await toLastStep(page);
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
     await page.click('#introInviteLink');
     await page.waitForSelector('dialog#inviteSheet[open]');
     await page.fill('#introInvite', code);
@@ -266,7 +266,7 @@ describe('Start free on the first run', () => {
     // Back on the first run, the sheet still has it: Start free, then Keep Private only.
     await page.goto(`${g.url}/v2/#/start/private`);
     await page.waitForSelector('[data-screen=intro][data-step=private]');
-    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+    await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
     await page.click('#introInviteLink');
     await page.waitForSelector('dialog#inviteSheet[open]');
     expect(await page.inputValue('#introInvite')).toBe(code);
@@ -289,7 +289,7 @@ describe('Start free on the first run', () => {
     it(`fits ${size.width} by ${size.height} with the Start free link on the last step: no scrolling, 48 px touch targets`, async () => {
       const { ctx, page } = await phone({ seen: true, viewport: size });
       await page.goto(`${g.url}/v2/#/start/private`);
-      await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start free with an invite');
+      await expect.poll(() => page.textContent('#introInviteLink')).toBe('Start freeWith an invite code');
       const m = await page.evaluate(() => {
         const main = document.querySelector('main')!;
         return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight, mainScroll: main.scrollHeight - main.clientHeight, bottom: document.querySelector('.fr-links')!.getBoundingClientRect().bottom };

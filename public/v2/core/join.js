@@ -20,6 +20,20 @@ export function passFrom(hash) {
   return PASS.test(v) ? v : null;
 }
 
+/**
+ * The code in what a camera read from an invite (owner, 2026-11-15): an event link (https://.../j#pass-...
+ * or .../v2/#join=pass-...) gives its pass, which opens a balance as an invite code does; anything else
+ * is the code itself, trimmed.
+ */
+export function codeFrom(text) {
+  const s = String(text ?? '').trim();
+  if (/^(https?:\/\/|\/)/i.test(s) && s.includes('#')) {
+    const pass = passFrom(s.slice(s.indexOf('#')));
+    if (pass) return pass;
+  }
+  return s;
+}
+
 /** Whether the web app's address carries an event pass (#join=...), valid or not: it is removed either way. */
 export const isJoinHash = (hash) => /^#join=/.test(String(hash ?? ''));
 

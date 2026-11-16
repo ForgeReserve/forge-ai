@@ -75,6 +75,9 @@ describe('v2 in a phone-sized browser', () => {
     expect(await page.isVisible('#hiddenNote')).toBe(true);
     await page.click('#privateOnly');
     await page.click('[data-model="mock-slow"]');
+    // The list closes on the choice (it was opened from More: the home); the choice shows checked there.
+    await page.waitForSelector('[data-screen=home]');
+    await page.goto(`${g.url}/v2/#/more/model`);
     expect(await page.getAttribute('[data-model="mock-slow"]', 'aria-checked')).toBe('true');
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
@@ -213,8 +216,16 @@ describe('v2 in a phone-sized browser', () => {
     // v1 stores the key; v2 on the same origin reads the same one.
     await page.goto(`${g.url}/`);
     await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
+    // v1's worker has the whole origin until v2's own takes /v2/ over. That first takeover is not a new
+    // build of v2, so the page must not reload under the person's finger (it once did, when v1's worker
+    // was ready in time: a tap on Add was lost on a slow machine).
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => null));
     await page.goto(`${g.url}/v2/`);
     await page.waitForSelector('[data-screen=home]');
+    await page.evaluate(() => ((window as any).__sameLoad = true));
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? '').catch(() => ''), { timeout: 15_000 }).toMatch(/\/v2\/sw\.js$/);
+    await page.waitForTimeout(500); // a window for a reload not to happen
+    expect(await page.evaluate(() => (window as any).__sameLoad === true)).toBe(true);
     await expect.poll(() => page.textContent('#balanceText')).toBe('$2.00');
 
     await page.click('#btn-add');

@@ -147,6 +147,15 @@ async function holdErase(page: Page) {
   await page.waitForSelector('[data-screen=erased]');
 }
 
+/** Burn is held, never one tap (screens/burn.js): presses `sel` until the burn is done. */
+async function holdBurn(page: Page, sel: string, ms = 2600) {
+  const box = (await page.locator(sel).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(ms);
+  await page.mouse.up();
+}
+
 /** What the site still keeps: counts and names only (opening a cache or database would create it). */
 const leftovers = (page: Page) =>
   page.evaluate(async () => ({
@@ -164,14 +173,14 @@ describe('History and burn', () => {
     await ask(page, 'Where is the clinic? marker-alpha-71');
     await startFresh(page);
     await ask(page, 'What should I bring? marker-bravo-72');
-    expect(await page.getAttribute('#burnBtn', 'aria-label')).toBe('Burn this conversation. It is removed from this phone at once.');
+    expect(await page.getAttribute('#burnBtn', 'aria-label')).toBe('Burn this conversation. Press and hold until it burns away. It is removed from this phone.');
     // Both are on the phone before burning (this also proves the dump sees them).
     let all = await dump(page);
     expect(all).toContain('marker-alpha-71');
     expect(all).toContain('marker-bravo-72');
 
     // Burn on the answer screen: this conversation is gone at once, the other stays.
-    await page.click('#burnBtn');
+    await holdBurn(page, '#burnBtn');
     await page.waitForSelector('[data-screen=home]');
     await expect.poll(() => page.textContent('#toast')).toBe('Burned. It is gone from this phone.');
     all = await dump(page);
@@ -201,7 +210,7 @@ describe('History and burn', () => {
     await openHistory(page);
     await expect.poll(() => page.locator('.hist-card').count()).toBe(1);
     expect(await page.textContent('.hist-card .tag')).toBe('Open now');
-    await page.click('[data-burn]');
+    await holdBurn(page, '[data-burn]');
     await page.waitForSelector('#historyEmpty');
     all = await dump(page);
     for (const m of ['marker-alpha-71', 'marker-bravo-72', 'marker-charlie-73']) expect(all).not.toContain(m);
@@ -241,7 +250,7 @@ describe('History and burn', () => {
     await page.click('#burnAllNo');
     expect(await page.locator('.hist-card').count()).toBe(2);
     await page.click('#burnAll');
-    await page.click('#burnAllYes');
+    await holdBurn(page, '#burnAllYes');
     await page.waitForSelector('#historyEmpty');
     expect(await page.isVisible('#burnAll')).toBe(false);
     all = await dump(page);
@@ -291,7 +300,7 @@ describe('Burn while the answer streams', () => {
       new MutationObserver(() => seen.push(box.textContent ?? '')).observe(box, { childList: true, characterData: true, subtree: true });
     });
     const balanceRead = page.waitForResponse((r) => new URL(r.url()).pathname === '/v1/wallet' && r.request().method() === 'GET', { timeout: 10_000 });
-    await page.click('[data-burn]');
+    await holdBurn(page, '[data-burn]');
     await page.waitForSelector('#historyEmpty');
     // The balance is read again once the stopped answer is settled, and the stopped answer says nothing.
     expect((await balanceRead).status()).toBe(200);
@@ -448,7 +457,7 @@ describe('Erase everything', () => {
     await page.waitForSelector('[data-screen=erase]');
     expect(await page.textContent('#eraseLine')).toBe('This cannot be undone. Forge keeps no copy of your conversations, so nothing can be restored.');
     await expect.poll(() => page.textContent('#eraseMoney b')).toMatch(/^Your \$\d\.\d+ balance is lost$/);
-    expect(await page.textContent('#eraseGoes')).toContain('The balance key. Without it the balance cannot be used.');
+    expect(await page.textContent('#eraseGoes')).toContain('The key to your money. Without it, the money on this phone cannot be used.');
     expect(await page.textContent('#eraseAuto')).toContain('1 day');
     // Take funds out first: the offer goes to the Take funds out screen.
     expect(await page.textContent('#eraseTakeOut')).toMatch(/^Take out \$\d\.\d\d first$/);

@@ -238,3 +238,39 @@ describe('the visible height above a keyboard', () => {
     expect(VP.viewportVars(undefined)).toBeNull();
   });
 });
+
+// Speed marks (owner, 2026-11-15): Choose a model in groups, the fast free models first and the slow ones
+// under their own heading below Standard; and the one tap from a slow answer to a fast model.
+describe('model groups and the fast model', () => {
+  const free = { free: true };
+  const M = [
+    { id: 'p-fast', tier: 'enclave', encrypted_passthrough: true, speed: 'fast' },
+    { id: 'p-none', tier: 'enclave', encrypted_passthrough: true },
+    { id: 'kimi', tier: 'standard', speed: 'slow', pricing: free },
+    { id: 'qwen', tier: 'standard', speed: 'slow', pricing: free },
+    { id: 'glm', tier: 'standard', speed: 'fast', pricing: free },
+    { id: 'glm-5.3-flash', tier: 'standard', speed: 'fast', pricing: free },
+    { id: 'lightning', tier: 'standard', pricing: free },
+    { id: 'paid-std', tier: 'standard', speed: 'fast' },
+    { id: 'unc', tier: 'standard', speed: 'fast', pricing: free, uncensored: true },
+  ];
+  const ids = (gs: any[]) => gs.map((g) => [g.id, g.models.map((m: any) => m.id)]);
+  it('puts fast free models first, then Private, Standard (fast first), then Slow', () => {
+    expect(ids(STATE.modelGroups(M, { privateOnly: false }))).toEqual([
+      ['fast', ['glm', 'glm-5.3-flash']],
+      ['private', ['p-fast', 'p-none']],
+      ['standard', ['paid-std', 'lightning']],
+      ['slow', ['kimi', 'qwen']],
+    ]);
+    // Private only: the private group alone, nothing empty.
+    expect(ids(STATE.modelGroups(M, { privateOnly: true }))).toEqual([['private', ['p-fast', 'p-none']]]);
+  });
+  it('picks GLM 5.3 Flash (free and fast), never the one in use, and a paid fast one only with money', () => {
+    const s = { privateOnly: false };
+    expect(STATE.fastPick(M, s, { current: M[2] }).id).toBe('glm-5.3-flash');
+    expect(STATE.fastPick(M, s, { current: M[5] }).id).toBe('glm');
+    // Private only at $0: no free fast model to switch to; with money, the fast private one.
+    expect(STATE.fastPick(M, { privateOnly: true }, { current: M[1] })).toBeNull();
+    expect(STATE.fastPick(M, { privateOnly: true }, { current: M[1], paid: true }).id).toBe('p-fast');
+  });
+});

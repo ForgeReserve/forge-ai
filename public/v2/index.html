@@ -48,24 +48,25 @@
   </script>
   <!-- The app's font (style.css @font-face), asked for with the modules so the first screen has it. -->
   <link rel="preload" href="/v2/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
-  <!-- Every module the first screen needs, asked for at once (test/unit/v2/preload.test.ts keeps this
-       list exactly in step with the imports). -->
+  <!-- Every module the app loads as it opens, asked for at once instead of one import level at a time:
+       the first screen's at the normal priority, the modules loaded right after it at low priority.
+       Written by scripts/v2-preload.ts; test/unit/v2/preload.test.ts keeps it in step with the imports. -->
+  <!-- preload:start (scripts/v2-preload.ts writes this list) -->
   <link rel="modulepreload" href="/v2/app.js">
-  <link rel="modulepreload" href="/v2/modules/look/light/index.js">
-  <link rel="modulepreload" href="/v2/modules/look/dark/index.js">
-  <link rel="modulepreload" href="/v2/modules/look/midnight/index.js">
-  <link rel="modulepreload" href="/v2/modules/mode/default/index.js">
   <link rel="modulepreload" href="/js/ui.js">
   <link rel="modulepreload" href="/js/files.js">
   <link rel="modulepreload" href="/js/lockkey.js">
   <link rel="modulepreload" href="/js/qr.js">
   <link rel="modulepreload" href="/v2/core/adapters.js">
   <link rel="modulepreload" href="/v2/core/conversation.js">
+  <link rel="modulepreload" href="/v2/core/rings.js">
   <link rel="modulepreload" href="/v2/core/db.js">
   <link rel="modulepreload" href="/v2/core/erase.js">
   <link rel="modulepreload" href="/v2/core/firstrun.js">
   <link rel="modulepreload" href="/v2/core/history.js">
   <link rel="modulepreload" href="/v2/core/engine.js">
+  <link rel="modulepreload" href="/v2/core/pow.js">
+  <link rel="modulepreload" href="/v2/core/sse.js">
   <link rel="modulepreload" href="/v2/core/native.js">
   <link rel="modulepreload" href="/v2/core/free.js">
   <link rel="modulepreload" href="/v2/core/join.js">
@@ -73,53 +74,78 @@
   <link rel="modulepreload" href="/v2/core/till.js">
   <link rel="modulepreload" href="/v2/core/errors.js">
   <link rel="modulepreload" href="/v2/core/i18n.js">
+  <link rel="modulepreload" href="/v2/strings/en.js">
   <link rel="modulepreload" href="/v2/core/image.js">
   <link rel="modulepreload" href="/v2/core/photo.js">
+  <link rel="modulepreload" href="/v2/core/covers.js">
+  <link rel="modulepreload" href="/v2/core/filters.js">
+  <link rel="modulepreload" href="/v2/core/photometa.js">
   <link rel="modulepreload" href="/v2/core/price.js">
   <link rel="modulepreload" href="/v2/core/speech.js">
   <link rel="modulepreload" href="/v2/core/viewport.js">
+  <link rel="modulepreload" href="/v2/core/talkctl.js">
+  <link rel="modulepreload" href="/v2/core/talk.js">
   <link rel="modulepreload" href="/v2/core/clips.js">
   <link rel="modulepreload" href="/v2/core/phonon.js">
-  <link rel="modulepreload" href="/v2/core/talkctl.js">
-  <link rel="modulepreload" href="/v2/core/voice.js">
   <link rel="modulepreload" href="/v2/core/voicepace.js">
+  <link rel="modulepreload" href="/v2/core/voice.js">
   <link rel="modulepreload" href="/v2/core/refunds.js">
   <link rel="modulepreload" href="/v2/core/registry.js">
   <link rel="modulepreload" href="/v2/core/router.js">
+  <link rel="modulepreload" href="/v2/core/updates.js">
   <link rel="modulepreload" href="/v2/core/state.js">
   <link rel="modulepreload" href="/v2/core/ui.js">
-  <link rel="modulepreload" href="/v2/core/updates.js">
   <link rel="modulepreload" href="/v2/core/vault.js">
   <link rel="modulepreload" href="/v2/modules/fund/kit.js">
   <link rel="modulepreload" href="/v2/screens/engine.js">
+  <link rel="modulepreload" href="/v2/core/engineaddr.js">
+  <link rel="modulepreload" href="/v2/screens/parts.js">
   <link rel="modulepreload" href="/v2/screens/erase.js">
   <link rel="modulepreload" href="/v2/screens/firstrun.js">
   <link rel="modulepreload" href="/v2/screens/firstrun-art.js">
-  <link rel="modulepreload" href="/v2/screens/free.js">
-  <link rel="modulepreload" href="/v2/screens/funds.js">
   <link rel="modulepreload" href="/v2/screens/startfree.js">
-  <link rel="modulepreload" href="/v2/screens/wallet.js">
   <link rel="modulepreload" href="/v2/screens/wallet-art.js">
+  <link rel="modulepreload" href="/v2/screens/free.js">
+  <link rel="modulepreload" href="/v2/core/faucet.js">
+  <link rel="modulepreload" href="/v2/screens/funds.js">
+  <link rel="modulepreload" href="/v2/screens/wallet.js">
   <link rel="modulepreload" href="/v2/core/ways.js">
   <link rel="modulepreload" href="/v2/screens/history.js">
+  <link rel="modulepreload" href="/v2/screens/burn.js">
   <link rel="modulepreload" href="/v2/screens/photo.js">
   <link rel="modulepreload" href="/v2/screens/settings.js">
   <link rel="modulepreload" href="/v2/screens/sheets.js">
   <link rel="modulepreload" href="/v2/screens/type.js">
+  <link rel="modulepreload" href="/v2/modules/look/light/index.js">
+  <link rel="modulepreload" href="/v2/modules/look/dark/index.js">
+  <link rel="modulepreload" href="/v2/modules/look/midnight/index.js">
+  <link rel="modulepreload" href="/v2/modules/mode/default/index.js">
   <link rel="modulepreload" href="/v2/screens/answer.js">
-  <link rel="modulepreload" href="/v2/screens/home.js">
-  <link rel="modulepreload" href="/v2/core/rings.js">
-  <link rel="modulepreload" href="/v2/core/pow.js">
-  <link rel="modulepreload" href="/v2/core/sse.js">
-  <link rel="modulepreload" href="/v2/strings/en.js">
-  <link rel="modulepreload" href="/v2/core/covers.js">
-  <link rel="modulepreload" href="/v2/core/filters.js">
-  <link rel="modulepreload" href="/v2/core/photometa.js">
-  <link rel="modulepreload" href="/v2/core/talk.js">
-  <link rel="modulepreload" href="/v2/core/engineaddr.js">
-  <link rel="modulepreload" href="/v2/core/faucet.js">
-  <link rel="modulepreload" href="/v2/screens/parts.js">
   <link rel="modulepreload" href="/v2/screens/talk.js">
+  <link rel="modulepreload" href="/v2/screens/home.js">
+  <link rel="modulepreload" href="/v2/modules/fund/free/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/invite/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/note/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/card/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/fedimint/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/ecash/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/lightning/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/onchain/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/fund/othermint/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-in/bundled/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-in/phone/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-in/engine/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/core/wav.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-in/device/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-out/phonon/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-out/device/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/voice-out/engine/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/filter/strip-details/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/filter/cover-faces/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/filter/cover-faces/boxes.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/filter/cover-numbers/index.js" fetchpriority="low">
+  <link rel="modulepreload" href="/v2/modules/filter/cover-numbers/textfind.js" fetchpriority="low">
+  <!-- preload:end -->
 </head>
 <body>
   <div id="app" class="app" aria-live="off">

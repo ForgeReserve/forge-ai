@@ -73,6 +73,25 @@ export function agoText(ms) {
   return { key: n === 1 ? 'ago.dayOne' : 'ago.day', n };
 }
 
+/**
+ * Markdown as plain words, for a preview (History): no stars, hashes, backticks, list marks, link
+ * targets or table bars, so "**Here is**" reads "Here is".
+ */
+export function plainText(md) {
+  return String(md ?? '')
+    .replace(/```[^\n]*\n?/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}|>+|[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/^\s*([-*_]\s*){3,}$/gm, ' ')
+    .replace(/^\s*\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*$/gm, ' ')
+    .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')
+    .replace(/(^|[^\w*])[*_](?=\S)([^*_\n]*?\S)[*_](?!\w)/g, '$1$2')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\|/g, ' ')
+    .replace(/[*_`]{2,}/g, '');
+}
+
 /** The first words of a text, cut at a word near `max` characters. */
 export function firstWords(text, max = 80) {
   const s = String(text ?? '')
@@ -98,7 +117,7 @@ export function summarize(conv, setting, now) {
     words: firstWords(q?.content ?? ''),
     // With no words, the card names the first file (a photo has no name worth showing).
     fileName: !q?.content?.trim() && q?.files?.length ? String(q.files[0].name ?? '') : '',
-    answer: firstWords(a?.content ?? '', 90),
+    answer: firstWords(plainText(a?.content ?? ''), 90),
     kind,
     at: lastUsed(conv),
     left: timeLeft(conv, setting, now),

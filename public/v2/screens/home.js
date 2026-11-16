@@ -22,14 +22,19 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
   const chip = el('button', { type: 'button', class: 'chip-low', id: 'memoryLow', hidden: true, onclick: () => nav('funds') }, icon('layers', 18), el('span', { text: t('home.memoryLow') }));
   // No funds: Add money (the wallet cards). On a free model it is a small icon button beside the chip.
   const addWord = el('span', { text: t('home.addMoney') });
-  const addMoney = el('button', { type: 'button', class: 'chip-add', id: 'addMoney', hidden: true, 'aria-label': t('home.addMoney'), onclick: () => nav('addFunds') }, icon('plus', 20), addWord);
+  const addMoney = el('button', { type: 'button', class: 'chip-add', id: 'addMoney', hidden: true, 'aria-label': t('home.addMoney'), onclick: () => nav('addFunds') }, icon('addMoney', 22), addWord);
   // The free model in use at $0: its name and FREE. Without a balance key it opens Start free, which
   // gives one; else Choose a model.
   const freeName = el('span', { class: 'chip-free-name', id: 'freeModelName' });
   const freeChip = el('button', { type: 'button', class: 'chip-free', id: 'freeModelChip', hidden: true, onclick: () => nav(state.view().fundsBlock === 'needKey' ? 'startFree' : 'model') }, icon('gift', 18), freeName, el('span', { class: 'chip-free-tag', text: t('home.free') }));
-  const empty = el('div', { class: 'home-empty', id: 'homeEmpty' }, freeChip, addMoney);
+  // A paid model at $0 (a private one, say): which model is chosen still shows, with its lock, and opens
+  // Choose a model (owner, 2026-11-15).
+  const paidName = el('span', { class: 'chip-free-name', id: 'paidModelName' });
+  const paidIco = el('span', { class: 'chip-model-ico' });
+  const paidChip = el('button', { type: 'button', class: 'chip-model', id: 'modelChip', hidden: true, onclick: () => nav('model') }, paidIco, paidName);
+  const empty = el('div', { class: 'home-empty', id: 'homeEmpty' }, freeChip, paidChip, addMoney);
   // Free questions used up: the ways forward (screens/free.js).
-  const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav('freeOut') }, icon('plus', 18), el('span', { text: t('home.freeOut') }));
+  const waysChip = el('button', { type: 'button', class: 'chip-ways', id: 'otherWays', hidden: true, onclick: () => nav('freeOut') }, icon('gift', 18), el('span', { text: t('home.freeOut') }));
   const held = el('p', { class: 'held-line', id: 'heldLine', hidden: true });
   // Search the web for the next question, asked by voice or typed (screens/parts.js).
   const search = searchSwitch({ t, state, actions, id: 'searchHome' });
@@ -57,6 +62,14 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
     freeName.textContent = v.model?.name ?? v.model?.id ?? '';
     freeChip.setAttribute('aria-label', t('home.freeChip', { name: freeName.textContent }));
     addMoney.hidden = !showEmpty;
+    paidChip.hidden = !(showEmpty && !v.modelFree && v.model);
+    if (!paidChip.hidden) {
+      paidName.textContent = v.model.name ?? v.model.id;
+      paidChip.dataset.kind = v.private ? 'private' : 'standard';
+      paidIco.replaceChildren(icon(v.private ? 'lock' : 'unlock', 18));
+      paidChip.setAttribute('aria-label', t('home.modelChip', { name: paidName.textContent }));
+    }
+    empty.classList.toggle('stacked', !paidChip.hidden);
     // Beside the free chip, Add money is its icon only.
     addMoney.classList.toggle('compact', !!v.modelFree);
     addWord.hidden = !!v.modelFree;

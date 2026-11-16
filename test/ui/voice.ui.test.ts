@@ -360,7 +360,7 @@ describe('hold to talk on this phone (the Android app)', () => {
     await page.waitForSelector('#voiceIn-phone');
     expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
     // The choice reads at a glance (its tags); the full line is behind its info button and read to screen readers.
-    expect(await page.textContent('#voiceIn-phone')).toBe('On this phoneFreeStays here');
+    expect(await page.textContent('#voiceIn-phone')).toBe('On this phoneFreeOn phone');
     expect(await page.getAttribute('#voiceIn-phone', 'aria-description')).toBe('Free and private. This phone turns your voice into words. Your voice does not leave the phone.');
     // The engine is still there to pick.
     expect(await page.getAttribute('#voiceIn-engine', 'aria-checked')).toBe('false');
