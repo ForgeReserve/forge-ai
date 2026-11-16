@@ -11,7 +11,8 @@ const VERSION = '__FORGE_V2_VERSION__';
 // A photo shared in waits in its own cache (see the share target below). A new worker activating must
 // not delete it before the page has taken it.
 const SHARE = 'forge2-share';
-const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/manifest.webmanifest'];
+// The font (style.css @font-face) is kept with the shell, so text looks the same offline from the first open.
+const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/vendor/inter/InterVariable.woff2', '/v2/manifest.webmanifest'];
 // The first run's recorded Listen clips (public/v2/voice/en/, scripts/record-voice), kept so Listen works
 // offline. A missing one does not stop the worker installing.
 const VOICE = ['/v2/voice/en/manifest.json', '/v2/voice/en/welcome.ogg', '/v2/voice/en/pay.ogg', '/v2/voice/en/limits.ogg', '/v2/voice/en/private.ogg', '/v2/voice/en/private-off.ogg'];

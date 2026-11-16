@@ -17,6 +17,7 @@ permissions: {}
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -42,8 +43,46 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Local mints
+        # Docker Hub now and then answers a pull with a 5xx: try again before calling the run failed.
+        run: for i in 1 2 3; do pnpm mint:up && exit 0; sleep $((i * 15)); done; exit 1
+
+      - name: End-to-end tests against local mints
+        run: pnpm test:e2e
+
+  # The UI suite runs in three parallel parts of about five minutes each: the natural voice's tests
+  # (test/ui/phonon.ui.test.ts, which measure real speech on the runner's processor) on their own, and
+  # the other files split in two by Vitest's --shard. `pnpm test:ui:linux` runs the same suite in Linux
+  # on a Mac before a push.
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [voice, 1/2, 2/2]
+    name: ui (${{ matrix.part }})
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,15 +103,23 @@ jobs:
         # Not in git: fetched pinned by commit and SHA-256 (scripts/phonon/lock.json), as the Dockerfile does.
         run: node scripts/phonon-model.ts
 
-      - name: End-to-end and UI tests against local mints
+      - name: Local mints
+        run: for i in 1 2 3; do pnpm mint:up && exit 0; sleep $((i * 15)); done; exit 1
+
+      - name: UI tests against local mints
         # The UI tests drive the runner's installed Chrome (channel: 'chrome'), so no browser is downloaded.
+        env:
+          PART: ${{ matrix.part }}
         run: |
-          pnpm mint:up
-          pnpm test:e2e
-          pnpm test:ui
+          if [ "$PART" = voice ]; then
+            pnpm test:ui:voice
+          else
+            pnpm test:ui --exclude test/ui/phonon.ui.test.ts --shard="$PART"
+          fi
 
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:

@@ -15,6 +15,8 @@
     "test": "vitest run test/unit",
     "test:e2e": "vitest run test/e2e",
     "test:ui": "vitest run test/ui",
+    "test:ui:voice": "vitest run test/ui/phonon.ui.test.ts",
+    "test:ui:linux": "scripts/ui-linux.sh",
     "test:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run test/live",
     "mint:up": "docker compose -f docker-compose.test.yml up -d --wait",
     "mint:down": "docker compose -f docker-compose.test.yml down",

@@ -20,6 +20,8 @@ function references(): { file: string; ref: string }[] {
       if (m) out.push({ file, ref: m[1]!.replace(/^["']|["']$/g, '') });
     }
   }
+  // The Linux image the UI tests run in on a Mac (pnpm test:ui:linux).
+  for (const m of read('scripts/ui-linux.sh').matchAll(/^IMAGE=(\S+)$/gm)) out.push({ file: 'scripts/ui-linux.sh', ref: m[1]! });
   for (const file of ['docs/ADMIN.md', '.env.example']) {
     for (const m of read(file).matchAll(/docker run (?:--?\S+ )*(\S+:\S+)/g)) out.push({ file, ref: m[1]! });
   }
@@ -29,7 +31,7 @@ function references(): { file: string; ref: string }[] {
 describe('container images (report section 9)', () => {
   it('finds the image references it guards', () => {
     const files = new Set(references().map((r) => r.file));
-    expect(files).toEqual(new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml', 'docs/ADMIN.md', '.env.example']));
+    expect(files).toEqual(new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml', 'docs/ADMIN.md', '.env.example', 'scripts/ui-linux.sh']));
   });
 
   it('pins every image to a version and a digest, never a moving tag alone', () => {
@@ -51,7 +53,7 @@ describe('CI workflow', () => {
     expect(uses.length).toBeGreaterThan(0);
     for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
     expect(ci).toMatch(/^permissions: \{\}$/m);
-    expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(['      contents: read', '      contents: read', '      contents: read']);
+    expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(['      contents: read', '      contents: read', '      contents: read', '      contents: read']);
   });
 
   it('runs read-only, without credentials, and covers every suite', () => {
@@ -63,5 +65,16 @@ describe('CI workflow', () => {
     // Both APKs are checked for 16 KB pages, and the universal one for carrying no speech to text model.
     expect(ci).toContain('app/build/outputs/apk/universal/debug/app-universal-debug.apk app/build/outputs/apk/privatevoice/debug/app-privatevoice-debug.apk');
     expect(ci).toMatch(/zipalign[\s\S]*-c -P 16/);
+  });
+
+  it('runs the UI suite in parallel parts that together cover every file', () => {
+    // The natural voice's file on its own, and every other file in one of the --shard parts.
+    expect(ci).toMatch(/^ {8}part: \[voice, 1\/2, 2\/2\]$/m);
+    expect(ci).toContain('pnpm test:ui --exclude test/ui/phonon.ui.test.ts --shard="$PART"');
+    const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(pkg.scripts['test:ui:voice']).toBe('vitest run test/ui/phonon.ui.test.ts');
+    expect(ci).toContain('pnpm test:ui:voice');
+    // Every job has a time limit, so a hung browser fails in minutes rather than hours.
+    expect(ci.match(/^ {2}\w+:\n {4}runs-on:/gm)?.length).toBe(ci.match(/^ {4}timeout-minutes: \d+$/gm)?.length);
   });
 });
