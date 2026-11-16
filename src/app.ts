@@ -83,6 +83,8 @@ const ALLOW = [
   'X-Tinfoil-Model',
   'X-Tinfoil-Max-Output-Tokens',
   'X-Tinfoil-Completion-Count',
+  // Web search on a private model: the body is encrypted, so the app says it in a header.
+  'X-Forge-Web-Search',
   // The app's answer to a Bellows proof of work challenge, sent again with the same request.
   'X-Bellows-Pow',
 ];
@@ -1236,6 +1238,9 @@ export function createApp(d: Deps) {
     const joinPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'join', 'index.html'), 'utf8'));
     app.get('/j', joinPage);
     app.get('/j/', joinPage);
+    // The public API guide (public/docs/, generated from docs/API.md by scripts/build-docs.ts). /docs/
+    // and its files are plain static files below; /docs moves to /docs/ so the page's links resolve.
+    app.get('/docs', (c) => c.redirect('/docs/', 301));
     // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
     // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
     // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same

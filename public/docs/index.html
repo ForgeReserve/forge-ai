@@ -1,0 +1,1392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forge AI API</title>
+<meta name="description" content="Build on Forge AI: an OpenAI-compatible AI gateway paid with eCash. Quickstart, payments, private models and the full API reference.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/docs/docs.css">
+<noscript><style>@media (max-width: 960px) { .side { display: block; position: static; } .menu-btn { display: none; } }</style></noscript>
+<script src="/docs/docs.js" defer></script>
+</head>
+<body>
+<!-- Generated from docs/API.md by scripts/build-docs.ts. Edit the Markdown, then run: node scripts/build-docs.ts -->
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top">
+<a class="brand" href="/" aria-label="Forge AI home"><svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg><span>FORGE</span><span class="ai">AI</span></a>
+<span class="crumb">API</span>
+<span class="spacer"></span>
+<a class="top-link" href="/v2/">Open the app</a>
+<button type="button" class="menu-btn" aria-controls="toc" aria-expanded="false">Sections</button>
+</header>
+<div class="layout">
+<aside class="side" id="toc">
+<nav aria-label="Sections"><ul>
+<li><a href="#quickstart">Quickstart</a><ul>
+<li><a href="#1-list-the-models">1. List the models</a></li>
+<li><a href="#2-open-a-balance">2. Open a balance</a></li>
+<li><a href="#3-ask-a-free-model">3. Ask a free model</a></li>
+<li><a href="#4-add-funds">4. Add funds</a></li>
+<li><a href="#5-ask-a-private-model">5. Ask a private model</a></li>
+</ul></li>
+<li><a href="#openai-sdks">OpenAI SDKs</a><ul>
+<li><a href="#javascript">JavaScript</a></li>
+<li><a href="#python">Python</a></li>
+</ul></li>
+<li><a href="#basics">Basics</a><ul>
+<li><a href="#base-url-and-format">Base URL and format</a></li>
+<li><a href="#balance-keys">Balance keys</a></li>
+<li><a href="#units-and-amounts">Units and amounts</a></li>
+<li><a href="#invite-codes">Invite codes</a></li>
+<li><a href="#event-passes">Event passes</a></li>
+</ul></li>
+<li><a href="#paying">Paying</a><ul>
+<li><a href="#holds-and-charges">Holds and charges</a></li>
+<li><a href="#pay-per-request-nut-24">Pay per request (NUT-24)</a></li>
+<li><a href="#open-a-balance">Open a balance</a></li>
+<li><a href="#top-up-with-ecash">Top up with eCash</a></li>
+<li><a href="#lightning">Lightning</a></li>
+<li><a href="#on-chain">On-chain</a></li>
+<li><a href="#ecash-from-another-mint">eCash from another mint</a></li>
+<li><a href="#read-a-balance">Read a balance</a></li>
+<li><a href="#take-funds-out">Take funds out</a></li>
+<li><a href="#lock-payouts-to-your-key">Lock payouts to your key</a></li>
+<li><a href="#web-search">Web search</a></li>
+</ul></li>
+<li><a href="#free-access">Free access</a><ul>
+<li><a href="#free-models">Free models</a></li>
+<li><a href="#free-voice-questions">Free voice questions</a></li>
+<li><a href="#free-questions-credits">Free questions (credits)</a></li>
+</ul></li>
+<li><a href="#private-and-standard-models">Private and standard models</a><ul>
+<li><a href="#encrypted-requests">Encrypted requests</a></li>
+</ul></li>
+<li><a href="#models">Models</a><ul>
+<li><a href="#get-v1-models"><span class="verb verb-get">GET</span> <code>/v1/models</code></a></li>
+</ul></li>
+<li><a href="#chat">Chat</a><ul>
+<li><a href="#post-v1-chat-completions"><span class="verb verb-post">POST</span> <code>/v1/chat/completions</code></a></li>
+</ul></li>
+<li><a href="#audio">Audio</a><ul>
+<li><a href="#post-v1-audio-transcriptions"><span class="verb verb-post">POST</span> <code>/v1/audio/transcriptions</code></a></li>
+<li><a href="#post-v1-audio-speech"><span class="verb verb-post">POST</span> <code>/v1/audio/speech</code></a></li>
+</ul></li>
+<li><a href="#wallet">Wallet</a><ul>
+<li><a href="#post-v1-wallet-open"><span class="verb verb-post">POST</span> <code>/v1/wallet/open</code></a></li>
+<li><a href="#post-v1-wallet-topup"><span class="verb verb-post">POST</span> <code>/v1/wallet/topup</code></a></li>
+<li><a href="#get-v1-wallet"><span class="verb verb-get">GET</span> <code>/v1/wallet</code></a></li>
+<li><a href="#post-v1-wallet-refund"><span class="verb verb-post">POST</span> <code>/v1/wallet/refund</code></a></li>
+<li><a href="#get-v1-wallet-refunds"><span class="verb verb-get">GET</span> <code>/v1/wallet/refunds</code></a></li>
+</ul></li>
+<li><a href="#funding">Funding</a><ul>
+<li><a href="#get-v1-wallet-fund-methods"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/methods</code></a></li>
+<li><a href="#get-v1-wallet-fund-mints"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/mints</code></a></li>
+<li><a href="#post-v1-wallet-fund-lightning"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/lightning</code></a></li>
+<li><a href="#post-v1-wallet-fund-onchain"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/onchain</code></a></li>
+<li><a href="#post-v1-wallet-fund-foreign-quote"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/foreign/quote</code></a></li>
+<li><a href="#post-v1-wallet-fund-foreign-confirm"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/foreign/confirm</code></a></li>
+<li><a href="#get-v1-wallet-fund"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund</code></a></li>
+<li><a href="#get-v1-wallet-fund-id"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/{id}</code></a></li>
+</ul></li>
+<li><a href="#change">Change</a><ul>
+<li><a href="#get-v1-change-request-id"><span class="verb verb-get">GET</span> <code>/v1/change/{request_id}</code></a></li>
+</ul></li>
+<li><a href="#free-questions">Free questions</a><ul>
+<li><a href="#get-v1-free"><span class="verb verb-get">GET</span> <code>/v1/free</code></a></li>
+<li><a href="#post-v1-free-challenge"><span class="verb verb-post">POST</span> <code>/v1/free/challenge</code></a></li>
+<li><a href="#post-v1-free-verify"><span class="verb verb-post">POST</span> <code>/v1/free/verify</code></a></li>
+<li><a href="#post-v1-free-claim"><span class="verb verb-post">POST</span> <code>/v1/free/claim</code></a></li>
+</ul></li>
+<li><a href="#cashu-card-relay">Cashu card relay</a><ul>
+<li><a href="#post-v1-wallet-fund-card-mint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/mint</code></a></li>
+<li><a href="#post-v1-wallet-fund-card-swap"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/swap</code></a></li>
+<li><a href="#post-v1-wallet-fund-card-restore"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/restore</code></a></li>
+</ul></li>
+<li><a href="#other-routes">Other routes</a><ul>
+<li><a href="#post-v1-beta-signup"><span class="verb verb-post">POST</span> <code>/v1/beta/signup</code></a></li>
+<li><a href="#get-healthz"><span class="verb verb-get">GET</span> <code>/healthz</code></a></li>
+<li><a href="#get-attestation"><span class="verb verb-get">GET</span> <code>/attestation</code></a></li>
+<li><a href="#get-well-known-hpke-keys"><span class="verb verb-get">GET</span> <code>/.well-known/hpke-keys</code></a></li>
+</ul></li>
+<li><a href="#errors">Errors</a><ul>
+</ul></li>
+<li><a href="#rate-limits">Rate limits</a><ul>
+</ul></li>
+<li><a href="#cors">CORS</a><ul>
+</ul></li>
+<li><a href="#modules">Modules</a><ul>
+</ul></li>
+</ul></nav>
+</aside>
+<main class="doc" id="content">
+<h1 id="top">Forge AI API</h1>
+<p>Forge AI is an AI gateway that speaks the OpenAI chat completions API and is paid with eCash (Cashu). Point any OpenAI client at it, send a balance key as the API key, and each request is paid from that balance. A request can also pay for itself with an eCash token in a header, with no account at all.</p>
+<p>The hosted gateway is at <code>https://ai.forge-reserve.com</code>. Every API route is under <code>/v1</code>.</p>
+<p>This page is generated from <code>docs/API.md</code> in the Forge AI repository by <code>scripts/build-docs.ts</code>. Everything on it is read from the gateway&#39;s code.</p>
+<h2 id="quickstart">Quickstart<a class="anchor" href="#quickstart" aria-label="Link to this section">#</a></h2>
+<p>Five steps from nothing to an answer. You need <code>curl</code> and an invite code. The hosted gateway opens new balances only with an invite code (<code>invite_only: true</code> in <code>GET /v1/models</code>); ask for one on the waitlist at <a href="/beta/">/beta/</a>.</p>
+<h3 id="1-list-the-models">1. List the models<a class="anchor" href="#1-list-the-models" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/models</code></pre></div>
+<p>Each model has an <code>id</code>, a <code>tier</code> (<code>enclave</code> for private models, <code>standard</code> for the rest) and a <code>pricing</code> block. Models with <code>pricing.free: true</code> cost nothing on a balance key.</p>
+<h3 id="2-open-a-balance">2. Open a balance<a class="anchor" href="#2-open-a-balance" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/wallet/open \
+  -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;invite&quot;: &quot;inv-YOUR_INVITE_CODE&quot;}&#x27;</span></code></pre></div>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sk-forge-YOUR_BALANCE_KEY&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;glm-5.3-flash&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p>Keep the <code>key</code>. It is shown once and it is the only way to spend the balance. The gateway stores only a SHA-256 of it.</p>
+<h3 id="3-ask-a-free-model">3. Ask a free model<a class="anchor" href="#3-ask-a-free-model" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash"><span class="hljs-built_in">export</span> FORGE_KEY=sk-forge-YOUR_BALANCE_KEY
+
+curl -s https://ai.forge-reserve.com/v1/chat/completions \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
+  -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;model&quot;: &quot;glm-5.3-flash&quot;, &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Say hello in five words.&quot;}]}&#x27;</span></code></pre></div>
+<p>The answer is a normal OpenAI chat completion. The response headers say what it cost: <code>X-Forge-Charged-Msub: 0</code> on a free model.</p>
+<h3 id="4-add-funds">4. Add funds<a class="anchor" href="#4-add-funds" aria-label="Link to this section">#</a></h3>
+<p>Ask for a Lightning invoice for 100 cents ($1.00). The amount goes onto the balance of the key you send.</p>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/wallet/fund/lightning \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
+  -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;amount&quot;: 100, &quot;unit&quot;: &quot;usd&quot;}&#x27;</span></code></pre></div>
+<p>A balance has one unit for life, set when it is opened: <code>usd</code> unless you send <code>&quot;unit&quot;: &quot;sat&quot;</code> to <code>/v1/wallet/open</code>. A funding in another unit is refused with <code>wrong_unit</code>, so fund a <code>usd</code> balance in <code>usd</code> and a <code>sat</code> balance in <code>sat</code>.</p>
+<p>Pay the <code>request</code> field (a BOLT11 invoice) from any Lightning wallet, then poll the funding until its <code>state</code> is <code>done</code>:</p>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/wallet/fund/fund_YOUR_FUNDING_ID \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span></code></pre></div>
+<p>If you already hold eCash from an accepted mint, add it in one call instead:</p>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/wallet/topup \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
+  -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;token&quot;: &quot;cashuB...&quot;}&#x27;</span></code></pre></div>
+<h3 id="5-ask-a-private-model">5. Ask a private model<a class="anchor" href="#5-ask-a-private-model" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/chat/completions \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
+  -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;model&quot;: &quot;tinfoil/gpt-oss-120b&quot;, &quot;max_tokens&quot;: 500,
+       &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;What is eCash?&quot;}]}&#x27;</span>
+
+curl -s https://ai.forge-reserve.com/v1/wallet -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span></code></pre></div>
+<p><code>X-Forge-Charged-Msub</code> and <code>X-Forge-Balance-Msub</code> on the answer say what was charged and what is left. <code>GET /v1/wallet</code> reads the balance at any time.</p>
+<h2 id="openai-sdks">OpenAI SDKs<a class="anchor" href="#openai-sdks" aria-label="Link to this section">#</a></h2>
+<p>The balance key is the API key. Set the base URL to the gateway&#39;s <code>/v1</code>. Nothing else changes.</p>
+<h3 id="javascript">JavaScript<a class="anchor" href="#javascript" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">javascript</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-javascript"><span class="hljs-keyword">import</span> <span class="hljs-title class_">OpenAI</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;openai&#x27;</span>;
+
+<span class="hljs-keyword">const</span> client = <span class="hljs-keyword">new</span> <span class="hljs-title class_">OpenAI</span>({
+  <span class="hljs-attr">baseURL</span>: <span class="hljs-string">&#x27;https://ai.forge-reserve.com/v1&#x27;</span>,
+  <span class="hljs-attr">apiKey</span>: process.<span class="hljs-property">env</span>.<span class="hljs-property">FORGE_KEY</span>, <span class="hljs-comment">// sk-forge-...</span>
+});
+
+<span class="hljs-keyword">const</span> completion = <span class="hljs-keyword">await</span> client.<span class="hljs-property">chat</span>.<span class="hljs-property">completions</span>.<span class="hljs-title function_">create</span>({
+  <span class="hljs-attr">model</span>: <span class="hljs-string">&#x27;glm-5.3-flash&#x27;</span>,
+  <span class="hljs-attr">messages</span>: [{ <span class="hljs-attr">role</span>: <span class="hljs-string">&#x27;user&#x27;</span>, <span class="hljs-attr">content</span>: <span class="hljs-string">&#x27;Write a haiku about eCash.&#x27;</span> }],
+});
+<span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(completion.<span class="hljs-property">choices</span>[<span class="hljs-number">0</span>].<span class="hljs-property">message</span>.<span class="hljs-property">content</span>);
+
+<span class="hljs-comment">// Streaming works the same way.</span>
+<span class="hljs-keyword">const</span> stream = <span class="hljs-keyword">await</span> client.<span class="hljs-property">chat</span>.<span class="hljs-property">completions</span>.<span class="hljs-title function_">create</span>({
+  <span class="hljs-attr">model</span>: <span class="hljs-string">&#x27;tinfoil/gpt-oss-120b&#x27;</span>,
+  <span class="hljs-attr">max_tokens</span>: <span class="hljs-number">400</span>,
+  <span class="hljs-attr">stream</span>: <span class="hljs-literal">true</span>,
+  <span class="hljs-attr">messages</span>: [{ <span class="hljs-attr">role</span>: <span class="hljs-string">&#x27;user&#x27;</span>, <span class="hljs-attr">content</span>: <span class="hljs-string">&#x27;Explain blind signatures in two sentences.&#x27;</span> }],
+});
+<span class="hljs-keyword">for</span> <span class="hljs-keyword">await</span> (<span class="hljs-keyword">const</span> chunk <span class="hljs-keyword">of</span> stream) process.<span class="hljs-property">stdout</span>.<span class="hljs-title function_">write</span>(chunk.<span class="hljs-property">choices</span>[<span class="hljs-number">0</span>]?.<span class="hljs-property">delta</span>?.<span class="hljs-property">content</span> ?? <span class="hljs-string">&#x27;&#x27;</span>);
+
+<span class="hljs-comment">// The cost is in the response headers.</span>
+<span class="hljs-keyword">const</span> { data, response } = <span class="hljs-keyword">await</span> client.<span class="hljs-property">chat</span>.<span class="hljs-property">completions</span>
+  .<span class="hljs-title function_">create</span>({ <span class="hljs-attr">model</span>: <span class="hljs-string">&#x27;tinfoil/gpt-oss-120b&#x27;</span>, <span class="hljs-attr">max_tokens</span>: <span class="hljs-number">200</span>, <span class="hljs-attr">messages</span>: [{ <span class="hljs-attr">role</span>: <span class="hljs-string">&#x27;user&#x27;</span>, <span class="hljs-attr">content</span>: <span class="hljs-string">&#x27;Hi&#x27;</span> }] })
+  .<span class="hljs-title function_">withResponse</span>();
+<span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(data.<span class="hljs-property">choices</span>[<span class="hljs-number">0</span>].<span class="hljs-property">message</span>.<span class="hljs-property">content</span>);
+<span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&#x27;charged msub&#x27;</span>, response.<span class="hljs-property">headers</span>.<span class="hljs-title function_">get</span>(<span class="hljs-string">&#x27;x-forge-charged-msub&#x27;</span>));
+<span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&#x27;balance msub&#x27;</span>, response.<span class="hljs-property">headers</span>.<span class="hljs-title function_">get</span>(<span class="hljs-string">&#x27;x-forge-balance-msub&#x27;</span>));</code></pre></div>
+<h3 id="python">Python<a class="anchor" href="#python" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">python</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-python"><span class="hljs-keyword">import</span> os
+<span class="hljs-keyword">from</span> openai <span class="hljs-keyword">import</span> OpenAI
+
+client = OpenAI(
+    base_url=<span class="hljs-string">&quot;https://ai.forge-reserve.com/v1&quot;</span>,
+    api_key=os.environ[<span class="hljs-string">&quot;FORGE_KEY&quot;</span>],  <span class="hljs-comment"># sk-forge-...</span>
+)
+
+completion = client.chat.completions.create(
+    model=<span class="hljs-string">&quot;glm-5.3-flash&quot;</span>,
+    messages=[{<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: <span class="hljs-string">&quot;Write a haiku about eCash.&quot;</span>}],
+)
+<span class="hljs-built_in">print</span>(completion.choices[<span class="hljs-number">0</span>].message.content)
+
+stream = client.chat.completions.create(
+    model=<span class="hljs-string">&quot;tinfoil/gpt-oss-120b&quot;</span>,
+    max_tokens=<span class="hljs-number">400</span>,
+    stream=<span class="hljs-literal">True</span>,
+    messages=[{<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: <span class="hljs-string">&quot;Explain blind signatures in two sentences.&quot;</span>}],
+)
+<span class="hljs-keyword">for</span> chunk <span class="hljs-keyword">in</span> stream:
+    <span class="hljs-keyword">if</span> chunk.choices:
+        <span class="hljs-built_in">print</span>(chunk.choices[<span class="hljs-number">0</span>].delta.content <span class="hljs-keyword">or</span> <span class="hljs-string">&quot;&quot;</span>, end=<span class="hljs-string">&quot;&quot;</span>)
+
+<span class="hljs-comment"># The cost is in the response headers.</span>
+raw = client.chat.completions.with_raw_response.create(
+    model=<span class="hljs-string">&quot;tinfoil/gpt-oss-120b&quot;</span>,
+    max_tokens=<span class="hljs-number">200</span>,
+    messages=[{<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: <span class="hljs-string">&quot;Hi&quot;</span>}],
+)
+<span class="hljs-built_in">print</span>(raw.parse().choices[<span class="hljs-number">0</span>].message.content)
+<span class="hljs-built_in">print</span>(<span class="hljs-string">&quot;charged msub&quot;</span>, raw.headers.get(<span class="hljs-string">&quot;x-forge-charged-msub&quot;</span>))</code></pre></div>
+<p>A stream ends with <code>data: [DONE]</code> and then one more event from the gateway, <code>event: forge</code> (see <a href="#streaming">Streaming</a>). Both SDKs stop reading at <code>[DONE]</code> (checked in <code>openai</code> 7.57.0 for JavaScript, <code>core/streaming.js</code>, and <code>openai</code> 2.48.0 for Python, <code>_streaming.py</code>), so the extra event never reaches your code. Read the stream yourself if you want it.</p>
+<h2 id="basics">Basics<a class="anchor" href="#basics" aria-label="Link to this section">#</a></h2>
+<h3 id="base-url-and-format">Base URL and format<a class="anchor" href="#base-url-and-format" aria-label="Link to this section">#</a></h3>
+<ul>
+<li>Base URL: <code>https://ai.forge-reserve.com/v1</code>.</li>
+<li>Request and response bodies are JSON, except speech to text (multipart form upload) and text to speech (WAV audio back).</li>
+<li>Times such as <code>expires_at</code>, <code>created_at</code>, <code>next_at</code> and <code>resets_at</code> are milliseconds since 1970 (UTC).</li>
+</ul>
+<h3 id="balance-keys">Balance keys<a class="anchor" href="#balance-keys" aria-label="Link to this section">#</a></h3>
+<p>A balance key looks like <code>sk-forge-</code> followed by 24 to 64 URL-safe characters. Send it as <code>Authorization: Bearer sk-forge-...</code>.</p>
+<ul>
+<li>The gateway makes one for you when it opens a balance and returns it once, in <code>key</code>.</li>
+<li>You may choose your own instead: send a new key of that shape as the bearer when you open or fund a balance. A lost response then never loses the key.</li>
+<li>The gateway stores only a SHA-256 of each key. A lost key cannot be recovered, and neither can the funds on it.</li>
+<li>Every request made with one key can be linked to the others by the gateway. Paying per request with eCash (below) avoids that link.</li>
+</ul>
+<h3 id="units-and-amounts">Units and amounts<a class="anchor" href="#units-and-amounts" aria-label="Link to this section">#</a></h3>
+<p>A balance is in <code>usd</code> (amounts in cents) or <code>sat</code>. Fields that end in <code>_msub</code> count thousandths of the unit: milli-cents for <code>usd</code>, millisatoshi for <code>sat</code>.</p>
+<ul>
+<li><code>balance_msub: 125000</code> on a <code>usd</code> balance is 125 cents, $1.25.</li>
+<li><code>amount</code> fields on funding, refunds and tokens are whole units (cents or sat).</li>
+<li>A request that costs 0.164 cents takes 164 msub. Sub-unit amounts stay on the balance and add up.</li>
+</ul>
+<p>Sat prices use the gateway&#39;s BTC/USD rate (<code>btc_usd</code> in <code>GET /v1/models</code>). When the gateway has no fresh rate, sat requests answer <code>503 rate_unavailable</code> and usd requests keep working.</p>
+<h3 id="invite-codes">Invite codes<a class="anchor" href="#invite-codes" aria-label="Link to this section">#</a></h3>
+<p>While a gateway is invite-only, opening a new balance needs an invite code (<code>inv-...</code>), and paying per request with eCash needs one in <code>X-Forge-Invite</code> on each request.</p>
+<ul>
+<li>Opening a balance redeems the invite and binds it to that balance. One invite opens one balance. A used one answers <code>403 invite_used</code>.</li>
+<li>When a top-up or funding opens a balance and that first funding fails or expires before anything is credited, the empty balance is removed and its invite opens again.</li>
+<li><code>POST /v1/wallet/open</code> always needs an invite, even on a gateway that is not invite-only, because it opens a balance for the free models.</li>
+</ul>
+<h3 id="event-passes">Event passes<a class="anchor" href="#event-passes" aria-label="Link to this section">#</a></h3>
+<p>An event pass (<code>pass-...</code>) is one code for a room full of people. It works only at <code>POST /v1/wallet/open</code>, where each use opens one balance at 0 for the free models. A pass has a number of uses and an expiry: past either, it answers <code>403 pass_used_up</code> or <code>403 pass_expired</code>. It never stands in for an invite on a funded top-up or a per-request payment. A balance opened with a pass takes funds later like any other.</p>
+<p>The event link <code>https://ai.forge-reserve.com/j#pass-...</code> opens Forge&#39;s join page with the pass filled in. The pass stays in the URL fragment, so it never reaches the server&#39;s logs.</p>
+<h2 id="paying">Paying<a class="anchor" href="#paying" aria-label="Link to this section">#</a></h2>
+<p>There are three ways to pay for a request.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Way</th>
+<th>What you send</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Balance key</td>
+<td><code>Authorization: Bearer sk-forge-...</code></td>
+<td>Apps and scripts that make many requests</td>
+</tr>
+<tr>
+<td>Per request (NUT-24)</td>
+<td><code>X-Cashu: cashuB...</code> on each request</td>
+<td>Agents that hold eCash and want no account</td>
+</tr>
+<tr>
+<td>Free model</td>
+<td>A balance key, even at 0</td>
+<td>Trying the API, events, free tiers in your own app</td>
+</tr>
+</tbody></table></div>
+<h3 id="holds-and-charges">Holds and charges<a class="anchor" href="#holds-and-charges" aria-label="Link to this section">#</a></h3>
+<p>Before a request is sent on, the gateway holds the most it can cost. When the answer is done, it charges what was used and releases the rest. No request is ever charged more than its hold.</p>
+<p>The hold of a metered model, in nano-USD (billionths of a dollar), using the figures under <code>pricing.hold</code> in <code>GET /v1/models</code>:</p>
+<div class="code"><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs">input_tokens  = ceil(request body bytes / bytes_per_token)
+hold_nano_usd = input_tokens * input_nano_usd_per_token
+              + max_tokens   * output_nano_usd_per_token</code></pre></div>
+<ul>
+<li><code>max_tokens</code> is the <code>max_completion_tokens</code> or <code>max_tokens</code> you send. Leave both out and the model&#39;s <code>max_output_tokens</code> is used for the hold and sent upstream. <strong>Set <code>max_tokens</code> to keep the hold small.</strong></li>
+<li>The request body is the whole JSON you send, in bytes.</li>
+<li>With web search on (below), the hold also adds the search fee <code>web_search.nano_usd</code>, <code>web_search.extra_input_tokens</code> more input, and output multiplied by <code>web_search.output_factor</code>.</li>
+<li>A supplier with <code>basis: &quot;flat&quot;</code> holds a flat schedule instead: the <code>nano_usd</code> of the first bucket whose <code>max_bytes</code> covers the body (else the last bucket), plus <code>max_tokens * output_nano_usd_per_token</code>.</li>
+<li>A free model holds 0.</li>
+</ul>
+<p>Converted to msub, rounded up: <code>usd</code> is <code>ceil(nano_usd / 10000)</code>, <code>sat</code> is <code>ceil(nano_usd * 100 / btc_usd)</code>. The smallest hold on a paid model is 1 msub.</p>
+<p>An example from the listing on 16 November 2026: <code>tinfoil/gpt-oss-120b</code> had <code>bytes_per_token: 2</code>, <code>input_nano_usd_per_token: 188</code> and <code>output_nano_usd_per_token: 750</code>. A 400-byte request with <code>max_tokens: 1000</code> holds <code>200 * 188 + 1000 * 750 = 787600</code> nano-USD, which is 79 msub on a usd balance (0.079 cents). Prices change: always read them from <code>GET /v1/models</code>.</p>
+<p>What is charged:</p>
+<ul>
+<li>The tokens the supplier reports, at the model&#39;s prices, plus the search fee when the model searched. Capped at the hold.</li>
+<li>No usage reported on a plaintext stream: the gateway counts the answer as it passes and charges that estimate, capped at the hold.</li>
+<li>No usage reported on a complete non-streaming or encrypted answer: the hold.</li>
+<li>A flat-priced supplier: its schedule.</li>
+<li>An upstream failure: nothing. The hold is released, and a per-request payment comes back in full as change.</li>
+<li>You disconnect mid-stream: the gateway stops the upstream call and charges what was produced so far.</li>
+</ul>
+<p>On a balance, <code>available_msub</code> (the balance less holds still open) must cover the hold, or the request is refused with <code>402 insufficient_balance</code>. Holds settle exactly once.</p>
+<h3 id="pay-per-request-nut-24">Pay per request (NUT-24)<a class="anchor" href="#pay-per-request-nut-24" aria-label="Link to this section">#</a></h3>
+<p>A client with eCash can pay each request on its own, with no balance key (<a href="https://github.com/cashubtc/nuts/blob/main/24.md">NUT-24</a>).</p>
+<ol>
+<li>Send the request with no <code>Authorization</code> and no <code>X-Cashu</code> (and <code>X-Forge-Invite</code> while invite-only). The gateway answers <code>402 payment_required</code>:</li>
+</ol>
+<div class="code"><span class="lang">http</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs">HTTP/1.1 402 Payment Required
+X-Cashu: creqA...
+X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
+
+{&quot;error&quot;: {&quot;message&quot;: &quot;pay 2 usd in eCash: retry with X-Cashu: cashuB... Unused value is returned as change.&quot;,
+           &quot;type&quot;: &quot;payment_required&quot;, &quot;code&quot;: &quot;payment_required&quot;},
+ &quot;payment_request&quot;: &quot;creqA...&quot;, &quot;amount&quot;: 2, &quot;unit&quot;: &quot;usd&quot;, &quot;mints&quot;: [&quot;https://...&quot;]}</code></pre></div>
+<p>   <code>X-Cashu</code> is a NUT-18 payment request: the amount (the hold, rounded up to whole units), the unit, the accepted mints and the request id. Ask for a sat quote with <code>X-Forge-Unit: sat</code>. Sat quotes carry a small buffer for rate moves.</p>
+<ol start="2">
+<li><p>Send the same request again with <code>X-Cashu: cashuB...</code> (a token worth at least <code>amount</code>, from one of <code>mints</code>, in that unit) and <code>X-Forge-Request-Id</code> set to the id from the 402. Each id can be used for one paid attempt. Reusing one answers <code>409 request_id_used</code> before the token is touched.</p>
+</li>
+<li><p>The gateway swaps the token, runs the request, charges whole units (the cost rounded up, capped at what you paid) and returns the rest as change:</p>
+<ul>
+<li>non-streaming: in the <code>X-Cashu-Change</code> header;</li>
+<li>streaming: in the final <code>event: forge</code> (<code>change</code>);</li>
+<li>always: at <code>GET /v1/change/{request_id}</code>, so change is never lost with a dropped response.</li>
+</ul>
+</li>
+</ol>
+<p>Add <code>X-Cashu-Pubkey</code> to lock the change to your own key (see <a href="#lock-payouts-to-your-key">Lock payouts to your key</a>). Free models never take eCash: they need a balance key, and a token sent with them is left untouched.</p>
+<h3 id="open-a-balance">Open a balance<a class="anchor" href="#open-a-balance" aria-label="Link to this section">#</a></h3>
+<ul>
+<li><code>POST /v1/wallet/open</code> with an invite code or event pass opens a balance at 0. It can use the free models at once and take funds later.</li>
+<li><code>POST /v1/wallet/topup</code> with a token, and the funding routes, open a balance on first use too (with an invite while invite-only).</li>
+<li>Send an existing key as the bearer to add to that balance instead.</li>
+</ul>
+<h3 id="top-up-with-ecash">Top up with eCash<a class="anchor" href="#top-up-with-ecash" aria-label="Link to this section">#</a></h3>
+<p><code>POST /v1/wallet/topup</code> with a <code>cashuB</code> token from one of the accepted mints (<code>mints</code> in <code>GET /v1/models</code>, and <code>ecash.mints</code> in <code>GET /v1/wallet/fund/methods</code>). The token&#39;s unit must match the balance. Sending the same token again to the same key is safe: it answers <code>replay: true</code> and credits nothing more.</p>
+<p>If the mint does not answer while a new balance is being opened, the answer is <code>503 topup_pending</code> with the new <code>key</code>. Retry with that key and the same token to finish.</p>
+<h3 id="lightning">Lightning<a class="anchor" href="#lightning" aria-label="Link to this section">#</a></h3>
+<p><code>POST /v1/wallet/fund/lightning</code> returns a BOLT11 invoice from the Forge mint in <code>request</code>. Pay it from any Lightning wallet. The funding goes <code>pending</code>, then <code>minting</code>, then <code>done</code>, and the balance is credited exactly the invoice amount. Unpaid past its expiry, it ends <code>expired</code>. <code>lightning.min</code> and <code>lightning.max</code> in <code>GET /v1/wallet/fund/methods</code> give the limits per unit.</p>
+<h3 id="on-chain">On-chain<a class="anchor" href="#on-chain" aria-label="Link to this section">#</a></h3>
+<p><code>POST /v1/wallet/fund/onchain</code> returns a bitcoin address in <code>request</code> (sat balances only). Each deposit the mint counts as paid is minted and credited, and the address stays watched for a while, so later deposits are credited too. <code>onchain.min_amount</code> and <code>onchain.confirmations</code> in <code>GET /v1/wallet/fund/methods</code> say what to expect.</p>
+<h3 id="ecash-from-another-mint">eCash from another mint<a class="anchor" href="#ecash-from-another-mint" aria-label="Link to this section">#</a></h3>
+<p>A token from another Cashu mint can still fund a balance. The gateway melts it at that mint to pay a Lightning invoice from the Forge mint, then credits what the Forge mint issues.</p>
+<ol>
+<li><code>POST /v1/wallet/fund/foreign/quote</code> with the token. Nothing is spent. The answer shows <code>foreign.credit</code> (what the balance gets) and <code>foreign.fee_max</code> (the most the token&#39;s mint can keep in fees).</li>
+<li><code>POST /v1/wallet/fund/foreign/confirm</code> with the funding <code>id</code> and the same token. The gateway receives it, melts it into the Forge invoice, then credits the balance. Unused fee reserve comes back as <code>foreign.change_token</code>. If the melt cannot go through, the token&#39;s value comes back as <code>foreign.refund_token</code> and the funding ends <code>refunded</code>.</li>
+</ol>
+<p>Which mints are accepted is listed at <code>GET /v1/wallet/fund/mints</code>. A mint off that list answers <code>409 mint_unlisted</code> with its lower cap; send the quote again with <code>&quot;accept_unlisted&quot;: true</code> to go ahead at your own risk. A token from one of the gateway&#39;s own mints answers <code>use_topup</code>: add it with <code>POST /v1/wallet/topup</code>.</p>
+<h3 id="read-a-balance">Read a balance<a class="anchor" href="#read-a-balance" aria-label="Link to this section">#</a></h3>
+<p><code>GET /v1/wallet</code> returns the balance, the part not held by running requests (<code>available_msub</code>), and what can be taken out (<code>refundable</code>, whole units). Every paid response also carries <code>X-Forge-Balance-Msub</code>.</p>
+<h3 id="take-funds-out">Take funds out<a class="anchor" href="#take-funds-out" aria-label="Link to this section">#</a></h3>
+<p><code>POST /v1/wallet/refund</code> turns whole units of the balance into a fresh eCash token from the gateway&#39;s mint. Leave out <code>amount</code> to take everything refundable. Redeem the token in any Cashu wallet. <code>GET /v1/wallet/refunds</code> lists every token issued to the key, so a token is never lost with a dropped response. If the token cannot be made at once, the answer is <code>202</code> with <code>status: &quot;owed&quot;</code>. The amount has left the balance and stays owed to the key: each later <code>POST /v1/wallet/refund</code> first tries again to issue what is owed.</p>
+<h3 id="lock-payouts-to-your-key">Lock payouts to your key<a class="anchor" href="#lock-payouts-to-your-key" aria-label="Link to this section">#</a></h3>
+<p>Every token the gateway hands back (change, refunds, other-mint change and refunds) is ordinary eCash until you redeem it. Give a public key and the token is locked to it (<a href="https://github.com/cashubtc/nuts/blob/main/11.md">NUT-11</a> P2PK): only the holder of the private key can redeem it, and the gateway cannot spend it.</p>
+<ul>
+<li>Per-request change: the <code>X-Cashu-Pubkey</code> header. Refunds: <code>&quot;pubkey&quot;</code> in the body. Other-mint funding: <code>&quot;pubkey&quot;</code> at quote or confirm.</li>
+<li>Accepted: a 33-byte compressed key in hex (<code>02...</code> or <code>03...</code>), an <code>npub1...</code>, or a 64-hex x-only key. Anything else answers <code>400 invalid_pubkey</code> before any eCash moves.</li>
+<li>A token locked to a key you do not hold is lost for good.</li>
+</ul>
+<h3 id="web-search">Web search<a class="anchor" href="#web-search" aria-label="Link to this section">#</a></h3>
+<p>Private models with <code>capabilities.web_search: true</code> can search the web from their enclave. Add <code>web_search_options</code> (an object) to a plaintext chat body to turn it on; an encrypted request sends <code>X-Forge-Web-Search: 1</code>. The hold adds the search fee and allowance listed under <code>pricing.hold.web_search</code>, and the fee is charged only when the model searched. A model that cannot search answers <code>400 web_search_unavailable</code>.</p>
+<h2 id="free-access">Free access<a class="anchor" href="#free-access" aria-label="Link to this section">#</a></h2>
+<h3 id="free-models">Free models<a class="anchor" href="#free-models" aria-label="Link to this section">#</a></h3>
+<p>A model with <code>pricing.free: true</code> costs nothing. <code>pricing.free_reason</code> says why. On the hosted gateway these are the Token Factory models, free during Token Factory&#39;s beta.</p>
+<ul>
+<li>They need a balance key, even one at 0. Open one with an invite code or event pass at <code>POST /v1/wallet/open</code>. This is what the Forge app calls Start free.</li>
+<li>Nothing is held or charged, in either unit, and no BTC/USD rate is needed. The response carries <code>X-Forge-Charged-Msub: 0</code>.</li>
+<li>Without a key the answer is <code>401 balance_key_required</code>, with no 402 and no payment request. eCash is never taken for a free model.</li>
+<li>The free models are standard models: their provider sees the prompt and the answer.</li>
+</ul>
+<p><code>GET /v1/wallet/fund/methods</code> lists them under <code>open.free_models</code>, and <code>POST /v1/wallet/open</code> returns the same list.</p>
+<h3 id="free-voice-questions">Free voice questions<a class="anchor" href="#free-voice-questions" aria-label="Link to this section">#</a></h3>
+<p>When the operator turns them on, speech to text works on a balance that cannot pay for it, a few times a day per balance, within a daily budget the operator pays. <code>free_voice</code> in <code>GET /v1/wallet/fund/methods</code> and in <code>GET /v1/wallet</code> says whether they are on and how many are left today. Used up, a transcription answers <code>402 free_voice_limit</code> with <code>Retry-After</code> (seconds to midnight UTC). Text to speech is never free.</p>
+<h3 id="free-questions-credits">Free questions (credits)<a class="anchor" href="#free-questions-credits" aria-label="Link to this section">#</a></h3>
+<p>A gateway can also hand out free questions as credits: eCash from a separate credit mint, worth one question each and worth nothing outside the gateway. A balance funded with credits is a free balance (<code>free: true</code>): it pays one credit per answered question, only on the models in <code>free.models</code> of <code>GET /v1/models</code>, within <code>free.max_input_tokens</code> and <code>free.max_output_tokens</code>. Credits never mix with money: they go on a free balance of their own, and a free balance is taken out only as credits.</p>
+<p>The daily faucet gives out credit vouchers to anyone who solves a short proof-of-work puzzle (see <a href="#get-v1-free"><code>GET /v1/free</code></a>). <code>free</code> in <code>GET /v1/models</code> is <code>null</code> and <code>free.enabled</code> in <code>GET /v1/wallet/fund/methods</code> is <code>false</code> while this is off, as it is on the hosted gateway today.</p>
+<h2 id="private-and-standard-models">Private and standard models<a class="anchor" href="#private-and-standard-models" aria-label="Link to this section">#</a></h2>
+<p>Each model has a <code>tier</code>. The <code>X-Forge-Privacy</code> response header says how a request was handled.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Standard</th>
+<th>Private, plaintext</th>
+<th>Private, encrypted</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tier</code></td>
+<td><code>standard</code></td>
+<td><code>enclave</code></td>
+<td><code>enclave</code></td>
+</tr>
+<tr>
+<td><code>X-Forge-Privacy</code></td>
+<td><code>standard</code></td>
+<td><code>enclave-plaintext</code></td>
+<td><code>enclave-encrypted</code></td>
+</tr>
+<tr>
+<td>Gateway sees the prompt</td>
+<td>In memory while relaying</td>
+<td>In memory while relaying</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Supplier sees the prompt</td>
+<td>Yes</td>
+<td>Only inside an attested enclave</td>
+<td>Only inside an attested enclave</td>
+</tr>
+</tbody></table></div>
+<p>Private models run at Tinfoil inside attested secure enclaves. The gateway never logs or stores prompts or answers on any tier. It keeps the model, token counts, cost, status and timing.</p>
+<h3 id="encrypted-requests">Encrypted requests<a class="anchor" href="#encrypted-requests" aria-label="Link to this section">#</a></h3>
+<p>A model with <code>encrypted_passthrough: true</code> takes requests encrypted end to end to the enclave (Tinfoil&#39;s EHBP: the body is HPKE ciphertext, the headers stay readable). The gateway forwards the bytes without being able to read them. It serves the enclave&#39;s attestation at <code>/attestation</code> and its key config at <code>/.well-known/hpke-keys</code>, so a client can verify the enclave and encrypt through the gateway&#39;s origin.</p>
+<p>An encrypted request must send:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Ehbp-Encapsulated-Key</code></td>
+<td>Set by the encrypting client. Marks the request as encrypted</td>
+</tr>
+<tr>
+<td><code>X-Tinfoil-Model</code></td>
+<td>The model&#39;s <code>upstream_model</code> (or its <code>id</code>). Required: the gateway cannot read the body</td>
+</tr>
+<tr>
+<td><code>X-Tinfoil-Max-Output-Tokens</code></td>
+<td>Optional. Capped at the model&#39;s <code>max_output_tokens</code>; it sets the hold</td>
+</tr>
+<tr>
+<td><code>X-Forge-Web-Search</code></td>
+<td><code>1</code> if the encrypted body turns on web search</td>
+</tr>
+</tbody></table></div>
+<p>The Forge web app does it with Tinfoil&#39;s SDK (<code>tinfoil</code> 1.4.0), which verifies the attestation and encrypts each body:</p>
+<div class="code"><span class="lang">javascript</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-javascript"><span class="hljs-keyword">import</span> { <span class="hljs-title class_">SecureClient</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&#x27;tinfoil&#x27;</span>;
+
+<span class="hljs-keyword">const</span> client = <span class="hljs-keyword">new</span> <span class="hljs-title class_">SecureClient</span>({
+  <span class="hljs-attr">baseURL</span>: <span class="hljs-string">&#x27;https://ai.forge-reserve.com/v1/&#x27;</span>,
+  <span class="hljs-attr">attestationBundleURL</span>: <span class="hljs-string">&#x27;https://ai.forge-reserve.com&#x27;</span>,
+});
+<span class="hljs-keyword">await</span> client.<span class="hljs-title function_">ready</span>();
+
+<span class="hljs-keyword">const</span> res = <span class="hljs-keyword">await</span> client.<span class="hljs-title function_">fetch</span>(<span class="hljs-string">&#x27;chat/completions&#x27;</span>, {
+  <span class="hljs-attr">method</span>: <span class="hljs-string">&#x27;POST&#x27;</span>,
+  <span class="hljs-attr">headers</span>: {
+    <span class="hljs-string">&#x27;content-type&#x27;</span>: <span class="hljs-string">&#x27;application/json&#x27;</span>,
+    <span class="hljs-attr">authorization</span>: <span class="hljs-string">`Bearer <span class="hljs-subst">${FORGE_KEY}</span>`</span>,
+    <span class="hljs-string">&#x27;X-Tinfoil-Model&#x27;</span>: <span class="hljs-string">&#x27;gpt-oss-120b&#x27;</span>,
+    <span class="hljs-string">&#x27;X-Tinfoil-Max-Output-Tokens&#x27;</span>: <span class="hljs-string">&#x27;500&#x27;</span>,
+  },
+  <span class="hljs-attr">body</span>: <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({ <span class="hljs-attr">model</span>: <span class="hljs-string">&#x27;gpt-oss-120b&#x27;</span>, <span class="hljs-attr">max_tokens</span>: <span class="hljs-number">500</span>, <span class="hljs-attr">messages</span>: [{ <span class="hljs-attr">role</span>: <span class="hljs-string">&#x27;user&#x27;</span>, <span class="hljs-attr">content</span>: <span class="hljs-string">&#x27;Hi&#x27;</span> }] }),
+});</code></pre></div>
+<p>A per-request payment cannot put change into an encrypted stream: fetch it from <code>X-Forge-Change-Url</code> (<code>/v1/change/{request_id}</code>). A private model sent in plaintext is served as <code>enclave-plaintext</code>, unless the operator requires encryption for it, which answers <code>400 encryption_required</code>.</p>
+<h2 id="models">Models<a class="anchor" href="#models" aria-label="Link to this section">#</a></h2>
+<h3 id="get-v1-models" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/models</code><a class="anchor" href="#get-v1-models" aria-label="Link to this section">#</a></h3>
+<p>The model list, in OpenAI&#39;s shape with extra fields. No key needed.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;object&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;list&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tinfoil/gpt-oss-120b&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;object&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;model&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;owned_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tinfoil&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;gpt-oss-120b&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;tier&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;enclave&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;privacy&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;enclave&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;encrypted_passthrough&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;uncensored&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;capabilities&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;vision&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;reasoning&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;reasoning_efforts&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;low&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;medium&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;high&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;web_search&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;speed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;fast&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;context_length&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">131072</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;max_output_tokens&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">8192</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;pricing&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;mode&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;metered&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;usd_per_mtok&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;input&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.1875</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;output&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.75</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;sat_per_mtok&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;input&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">288.4255</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;output&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1153.702</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;verified&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;hold&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;basis&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;metered&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;bytes_per_token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;input_nano_usd_per_token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">188</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;output_nano_usd_per_token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">750</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;web_search&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;nano_usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">62500000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;extra_input_tokens&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">16000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;output_factor&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span> <span class="hljs-punctuation">}</span>
+        <span class="hljs-punctuation">}</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;upstream_model&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;gpt-oss-120b&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;audio&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tinfoil/whisper-large-v3-turbo&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;transcription&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;...&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;units&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;mints&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;https://...&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;mint_aliases&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;https://...&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;invite_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;btc_usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">65008.12</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>data[].tier</code>, <code>privacy</code></td>
+<td><code>enclave</code> (private) or <code>standard</code></td>
+</tr>
+<tr>
+<td><code>data[].encrypted_passthrough</code></td>
+<td>The model takes encrypted requests</td>
+</tr>
+<tr>
+<td><code>data[].uncensored</code></td>
+<td>Tuned to refuse less</td>
+</tr>
+<tr>
+<td><code>data[].capabilities</code></td>
+<td><code>vision</code>, <code>reasoning</code>, <code>reasoning_efforts</code>, <code>web_search</code></td>
+</tr>
+<tr>
+<td><code>data[].max_output_tokens</code></td>
+<td>The most <code>max_tokens</code> can be</td>
+</tr>
+<tr>
+<td><code>data[].pricing.free</code>, <code>free_reason</code></td>
+<td>A free model, and why (<code>free_reason</code> only on free models)</td>
+</tr>
+<tr>
+<td><code>data[].pricing.mode</code></td>
+<td><code>metered</code> or <code>flat</code></td>
+</tr>
+<tr>
+<td><code>data[].pricing.usd_per_mtok</code>, <code>sat_per_mtok</code></td>
+<td>Price per million tokens, input and output, markup included. <code>sat_per_mtok</code> is <code>null</code> without a rate</td>
+</tr>
+<tr>
+<td><code>data[].pricing.hold</code></td>
+<td>The figures the hold is computed from (see <a href="#holds-and-charges">Holds and charges</a>)</td>
+</tr>
+<tr>
+<td><code>data[].upstream_model</code></td>
+<td>The enclave&#39;s own name for the model (private models only)</td>
+</tr>
+<tr>
+<td><code>audio</code></td>
+<td>Speech to text and text to speech models, listed apart from chat</td>
+</tr>
+<tr>
+<td><code>units</code></td>
+<td>Units the gateway takes</td>
+</tr>
+<tr>
+<td><code>mints</code></td>
+<td>Mints whose eCash is accepted for top-ups and per-request payment</td>
+</tr>
+<tr>
+<td><code>mint_aliases</code></td>
+<td>Other addresses of the same mints</td>
+</tr>
+<tr>
+<td><code>invite_only</code></td>
+<td>New balances and per-request payments need an invite</td>
+</tr>
+<tr>
+<td><code>btc_usd</code></td>
+<td>The BTC/USD rate used for sat prices, or <code>null</code></td>
+</tr>
+<tr>
+<td><code>free</code></td>
+<td>The free questions (credits) rules, or <code>null</code> while they are off</td>
+</tr>
+</tbody></table></div>
+<p>Each <code>audio</code> entry has <code>id</code>, <code>kind</code> (<code>transcription</code> or <code>speech</code>), <code>name</code>, <code>tier</code>, <code>max_seconds</code> (transcription) or <code>max_chars</code> (speech), <code>formats</code>, <code>voices</code> (speech), <code>languages</code>, and <code>pricing.usd</code> and <code>pricing.sat</code> with <code>request</code>, <code>second</code> and <code>kchar</code> (per 1,000 characters), markup included.</p>
+<h2 id="chat">Chat<a class="anchor" href="#chat" aria-label="Link to this section">#</a></h2>
+<h3 id="post-v1-chat-completions" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/chat/completions</code><a class="anchor" href="#post-v1-chat-completions" aria-label="Link to this section">#</a></h3>
+<p>OpenAI chat completions, streaming and non-streaming. Fields such as <code>tools</code>, <code>tool_choice</code>, <code>temperature</code> and <code>reasoning_effort</code> pass through to the model untouched.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Body field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>model</code></td>
+<td>Required. An <code>id</code> from <code>GET /v1/models</code></td>
+</tr>
+<tr>
+<td><code>messages</code></td>
+<td>Required. An array</td>
+</tr>
+<tr>
+<td><code>max_tokens</code> or <code>max_completion_tokens</code></td>
+<td>1 to the model&#39;s <code>max_output_tokens</code>. Left out, the model&#39;s maximum is used</td>
+</tr>
+<tr>
+<td><code>stream</code></td>
+<td><code>true</code> for server-sent events</td>
+</tr>
+<tr>
+<td><code>stream_options.include_usage</code></td>
+<td>Ask for the usage chunk. Without it the gateway still meters, and removes the usage chunk from your stream</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>Must be 1 if sent</td>
+</tr>
+<tr>
+<td><code>web_search_options</code></td>
+<td>Turns on web search (models with <code>capabilities.web_search</code>)</td>
+</tr>
+</tbody></table></div>
+<p>Request headers:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Authorization: Bearer sk-forge-...</code></td>
+<td>Pay from a balance</td>
+</tr>
+<tr>
+<td><code>X-Cashu: cashuB...</code></td>
+<td>Pay this request with eCash (NUT-24)</td>
+</tr>
+<tr>
+<td><code>X-Forge-Request-Id: req_...</code></td>
+<td>With <code>X-Cashu</code>: the id from the 402</td>
+</tr>
+<tr>
+<td><code>X-Forge-Invite: inv-...</code></td>
+<td>With per-request payment, while invite-only</td>
+</tr>
+<tr>
+<td><code>X-Forge-Unit: usd</code> or <code>sat</code></td>
+<td>Unit of the 402 quote when paying per request</td>
+</tr>
+<tr>
+<td><code>X-Cashu-Pubkey</code></td>
+<td>Lock per-request change to this key</td>
+</tr>
+<tr>
+<td><code>X-Forge-Web-Search: 1</code></td>
+<td>An encrypted body turns on web search</td>
+</tr>
+<tr>
+<td><code>Ehbp-Encapsulated-Key</code>, <code>X-Tinfoil-*</code></td>
+<td>Encrypted requests (see <a href="#encrypted-requests">Encrypted requests</a>)</td>
+</tr>
+</tbody></table></div>
+<p>Response headers:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>X-Forge-Request-Id</code></td>
+<td>This request&#39;s id</td>
+</tr>
+<tr>
+<td><code>X-Forge-Unit</code></td>
+<td>The unit it was paid in</td>
+</tr>
+<tr>
+<td><code>X-Forge-Privacy</code></td>
+<td><code>standard</code>, <code>enclave-plaintext</code> or <code>enclave-encrypted</code></td>
+</tr>
+<tr>
+<td><code>X-Forge-Charged-Msub</code></td>
+<td>What was charged (non-streaming)</td>
+</tr>
+<tr>
+<td><code>X-Forge-Balance-Msub</code></td>
+<td>The balance after it (balance payments, non-streaming)</td>
+</tr>
+<tr>
+<td><code>X-Cashu-Change</code></td>
+<td>Per-request change token (non-streaming)</td>
+</tr>
+<tr>
+<td><code>X-Forge-Change-Url</code></td>
+<td>Where per-request change can always be fetched</td>
+</tr>
+</tbody></table></div>
+<h4 id="streaming">Streaming<a class="anchor" href="#streaming" aria-label="Link to this section">#</a></h4>
+<p>A stream is the model&#39;s own server-sent events, then <code>data: [DONE]</code>, then one event from the gateway with the settlement:</p>
+<div class="code"><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs">data: {&quot;id&quot;:&quot;chatcmpl-...&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;content&quot;:&quot;Hello&quot;}}]}
+
+data: [DONE]
+
+event: forge
+data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quot;,&quot;charged_msub&quot;:1280,&quot;balance_msub&quot;:4998720}</code></pre></div>
+<p>The <code>forge</code> event carries <code>request_id</code>, <code>unit</code>, <code>charged_msub</code>, and <code>balance_msub</code> (balance) or <code>change</code>, <code>change_units</code> and <code>change_url</code> (per request). If the upstream stream fails midway, the gateway sends <code>data: {&quot;error&quot;: {...}}</code>, then the <code>forge</code> event with <code>partial: true</code>, and charges only what was produced. Stream headers are sent before the answer is done, so they carry no charge: read it from the <code>forge</code> event.</p>
+<h4 id="chat-errors">Chat errors<a class="anchor" href="#chat-errors" aria-label="Link to this section">#</a></h4>
+<p><code>400 invalid_request</code> (bad JSON, missing <code>model</code> or <code>messages</code>, <code>n</code> other than 1, <code>max_tokens</code> out of range, a malformed <code>X-Forge-Request-Id</code>), <code>404 model_not_found</code>, <code>401 invalid_key</code>, <code>401 balance_key_required</code> (free model without a key), <code>402 payment_required</code>, <code>402 insufficient_balance</code>, <code>403 invite_required</code>, <code>403 account_frozen</code>, <code>409 request_id_used</code>, <code>400 web_search_unavailable</code>, <code>400 encryption_required</code>, <code>503 rate_unavailable</code>, the token errors under <a href="#errors">Errors</a>, and <code>upstream_error</code> when the model fails (nothing is charged).</p>
+<h2 id="audio">Audio<a class="anchor" href="#audio" aria-label="Link to this section">#</a></h2>
+<p>Speech to text and text to speech, OpenAI-compatible, paid from a balance key only. The price of the request is held first, charged when the model answers and released when it fails. Responses carry the same <code>X-Forge-*</code> headers as chat. Audio and text are held in memory for the request only, never logged or stored. They are not encrypted end to end: the gateway relays them in plain form.</p>
+<h3 id="post-v1-audio-transcriptions" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/audio/transcriptions</code><a class="anchor" href="#post-v1-audio-transcriptions" aria-label="Link to this section">#</a></h3>
+<p>Multipart form upload.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>file</code></td>
+<td>Required. WAV audio. Billed by the length its header gives. MP3 is refused</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>Required. A <code>transcription</code> model from <code>audio</code> in <code>GET /v1/models</code></td>
+</tr>
+<tr>
+<td><code>language</code></td>
+<td>Optional. An ISO 639-1 code such as <code>en</code></td>
+</tr>
+<tr>
+<td><code>response_format</code></td>
+<td>Optional. Only <code>json</code></td>
+</tr>
+</tbody></table></div>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/audio/transcriptions \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
+  -F model=tinfoil/whisper-large-v3-turbo -F language=en -F file=@question.wav</code></pre></div>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;text&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;What is eCash?&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usage&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;duration&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;seconds&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2.4</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p>Errors: <code>415 unsupported_audio</code> (not WAV), <code>413 audio_too_long</code> (over the model&#39;s <code>max_seconds</code>), <code>400 audio_too_short</code> (under 0.3 seconds), <code>413 request_too_large</code> (over the upload limit, 4,000,000 bytes by default), <code>402 insufficient_balance</code>, <code>402 free_voice_limit</code>, <code>403 account_frozen</code>, <code>403 not_free_model</code> (a free-question balance), <code>404 model_not_found</code>.</p>
+<h3 id="post-v1-audio-speech" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/audio/speech</code><a class="anchor" href="#post-v1-audio-speech" aria-label="Link to this section">#</a></h3>
+<p>JSON body: <code>model</code> (a <code>speech</code> model), <code>input</code> (the text, at most the model&#39;s <code>max_chars</code>), <code>voice</code> (one of the model&#39;s <code>voices</code>; the first is used if left out), <code>response_format</code> (only <code>wav</code>). The answer is the audio itself.</p>
+<div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/audio/speech \
+  -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
+  -d <span class="hljs-string">&#x27;{&quot;model&quot;: &quot;tinfoil/voxtral-tts&quot;, &quot;input&quot;: &quot;Hello from Forge.&quot;, &quot;voice&quot;: &quot;neutral_female&quot;}&#x27;</span> \
+  -o hello.wav</code></pre></div>
+<p>Errors: <code>400 invalid_request</code> (no <code>input</code>, unknown <code>voice</code>), <code>413 text_too_long</code>, <code>402 insufficient_balance</code>, <code>403 account_frozen</code>, <code>403 not_free_model</code>, <code>404 model_not_found</code>.</p>
+<h2 id="wallet">Wallet<a class="anchor" href="#wallet" aria-label="Link to this section">#</a></h2>
+<h3 id="post-v1-wallet-open" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/open</code><a class="anchor" href="#post-v1-wallet-open" aria-label="Link to this section">#</a></h3>
+<p>Opens a balance at 0 that can use the free models now and take funds later.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Body field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>invite</code></td>
+<td>An invite code or event pass. Also accepted as the <code>X-Forge-Invite</code> header</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td><code>usd</code> (default) or <code>sat</code></td>
+</tr>
+</tbody></table></div>
+<p>Send an existing balance key as the bearer and it is answered as it is (<code>created: false</code>), with no invite used. Send a new key of the right shape to choose your own.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sk-forge-...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;created&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>key</code> is present only when the gateway made it. Errors: <code>403 invite_required</code>, <code>403 invite_used</code>, <code>403 invite_invalid</code>, <code>403 pass_expired</code>, <code>403 pass_used_up</code>, <code>409 wrong_balance</code> (a free-question balance key), <code>400 wrong_unit</code>, <code>401 invalid_key</code> (a bearer that is neither a known key nor the shape of one).</p>
+<h3 id="post-v1-wallet-topup" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/topup</code><a class="anchor" href="#post-v1-wallet-topup" aria-label="Link to this section">#</a></h3>
+<p>Adds an eCash token to a balance, or opens one with it.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Body field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>token</code></td>
+<td>Required. A <code>cashuB</code> token from an accepted mint</td>
+</tr>
+<tr>
+<td><code>invite</code></td>
+<td>For a new balance while invite-only. Also accepted as <code>X-Forge-Invite</code></td>
+</tr>
+</tbody></table></div>
+<p>Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sk-forge-...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;credited&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;replay&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>credited</code> is in whole units, after the mint&#39;s input fees. Errors: the token errors, <code>409 wrong_balance</code>, <code>400 wrong_unit</code> (the balance has another unit), <code>403 invite_required</code>, <code>503 topup_pending</code> (retry with the returned <code>key</code> and the same token).</p>
+<h3 id="get-v1-wallet" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet</code><a class="anchor" href="#get-v1-wallet" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">125000</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;available_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">120000</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;balance&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">125</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;refundable&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">120</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free_voice&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;per_day&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;left&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;resets_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1794873600000</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>available_msub</code> is the balance less holds of requests still running. <code>refundable</code> is what <code>POST /v1/wallet/refund</code> can take out now, in whole units. <code>free_voice.reason</code> is <code>allowance</code> or <code>budget</code> when none are left.</p>
+<h3 id="post-v1-wallet-refund" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/refund</code><a class="anchor" href="#post-v1-wallet-refund" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required. Optional body:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Body field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>amount</code></td>
+<td>Whole units, 1 to <code>refundable</code>. Left out, everything refundable</td>
+</tr>
+<tr>
+<td><code>pubkey</code></td>
+<td>Lock the token to this key</td>
+</tr>
+</tbody></table></div>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cashuB...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;amount&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">120</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;done&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;locked_to&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;refunds&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;amount&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">120</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;done&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cashuB...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;locked_to&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>200</code> with <code>status: &quot;done&quot;</code> and the token, or <code>202</code> with <code>status: &quot;owed&quot;</code> and <code>token: null</code> when the token could not be made at once (it stays owed and is delivered later). Errors: <code>400 invalid_amount</code>, <code>400 invalid_pubkey</code>, <code>503 wallet_insufficient</code>.</p>
+<h3 id="get-v1-wallet-refunds" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/refunds</code><a class="anchor" href="#get-v1-wallet-refunds" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required. Every token issued to this key, so none is lost: <code>{&quot;data&quot;: [{id, amount, unit, status, token, locked_to}]}</code>.</p>
+<h2 id="funding">Funding<a class="anchor" href="#funding" aria-label="Link to this section">#</a></h2>
+<p>Every funding route returns a funding object. The routes that create a funding also open a balance on first use: send <code>invite</code> in the body for a new balance while invite-only (these routes read the invite from the body only), and the answer carries <code>key</code> once when the gateway made it.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;fund_...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;lightning&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;pending&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;amount&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1000</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;request&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;lnbc...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;expires_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1794863600000</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;credited&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;mint&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;https://...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1794860000000</span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>method</code></td>
+<td><code>lightning</code>, <code>onchain</code> or <code>foreign</code></td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td><code>quoted</code>, <code>receiving</code>, <code>melting</code>, <code>pending</code>, <code>minting</code>, then <code>done</code>, <code>expired</code>, <code>failed</code> or <code>refunded</code></td>
+</tr>
+<tr>
+<td><code>request</code></td>
+<td>The invoice (Lightning) or address (on-chain)</td>
+</tr>
+<tr>
+<td><code>credited</code></td>
+<td>Whole units credited so far</td>
+</tr>
+<tr>
+<td><code>onchain</code></td>
+<td>On-chain only: <code>confirmations_required</code>, <code>paid_sat</code>, <code>seen_sat</code>, <code>confirmed_sat</code>, <code>confirmations</code>, <code>watch_until</code></td>
+</tr>
+<tr>
+<td><code>foreign</code></td>
+<td>Other-mint only: <code>mint</code>, <code>unlisted</code>, <code>unit</code>, <code>token_amount</code>, <code>credit</code>, <code>fee_max</code>, <code>change_token</code>, <code>refund_token</code>, <code>locked_to</code>, <code>payout_pending</code></td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>The last error while it was moving forward, if any</td>
+</tr>
+</tbody></table></div>
+<p>A balance can have a few unfinished fundings at once (5 by default); past that the answer is <code>429 too_many_pending</code>.</p>
+<h3 id="get-v1-wallet-fund-methods" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/methods</code><a class="anchor" href="#get-v1-wallet-fund-methods" aria-label="Link to this section">#</a></h3>
+<p>What this gateway can take now. No key needed.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;ecash&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;mints&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;https://...&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;units&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;lightning&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;units&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;min&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;max&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2000</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;onchain&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;min_amount&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;confirmations&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;foreign&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;max&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1000</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;policy&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;discovered&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;mints&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;https://...&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;mints_url&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/v1/wallet/fund/mints&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;unlisted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;max&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;invite_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free_voice&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;per_day&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;questions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;open&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre></div>
+<p>The figures above were read from the hosted gateway on 16 November 2026. <code>usd</code> limits are in cents.</p>
+<h3 id="get-v1-wallet-fund-mints" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/mints</code><a class="anchor" href="#get-v1-wallet-fund-mints" aria-label="Link to this section">#</a></h3>
+<p>Other mints whose eCash is accepted for funding: <code>{&quot;enabled&quot;, &quot;policy&quot;, &quot;mints&quot;: [{&quot;url&quot;, &quot;name&quot;?, &quot;reviewers&quot;?, &quot;source&quot;: &quot;discovered&quot; | &quot;operator&quot;}], &quot;updated_at&quot;}</code>. Discovered mints come from NIP-87 announcements and reviews on Nostr. No key needed.</p>
+<h3 id="post-v1-wallet-fund-lightning" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/lightning</code><a class="anchor" href="#post-v1-wallet-fund-lightning" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>amount</code> (whole units, within <code>lightning.min</code> and <code>lightning.max</code>), <code>unit</code>, <code>invite</code> (new balance). Returns a funding with the invoice in <code>request</code>. Errors: <code>400 invalid_amount</code>, <code>400 method_unavailable</code>, <code>400 wrong_unit</code>, <code>429 too_many_pending</code>, <code>503 mint_unavailable</code>.</p>
+<h3 id="post-v1-wallet-fund-onchain" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/onchain</code><a class="anchor" href="#post-v1-wallet-fund-onchain" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>invite</code> (new balance), or nothing. Sat balances only: a <code>usd</code> key answers <code>400 wrong_unit</code>. Returns a funding with the address in <code>request</code> and its progress in <code>onchain</code>. Errors: <code>400 method_unavailable</code>, <code>429 too_many_pending</code>, <code>503 mint_unavailable</code>.</p>
+<h3 id="post-v1-wallet-fund-foreign-quote" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/foreign/quote</code><a class="anchor" href="#post-v1-wallet-fund-foreign-quote" aria-label="Link to this section">#</a></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Body field</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>token</code></td>
+<td>Required. A <code>cashuB</code> token from another mint</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>The balance unit. May differ from the token&#39;s</td>
+</tr>
+<tr>
+<td><code>accept_unlisted</code></td>
+<td><code>true</code> to use a mint off the accepted list, at the lower cap</td>
+</tr>
+<tr>
+<td><code>pubkey</code></td>
+<td>Lock the change or refund to this key</td>
+</tr>
+<tr>
+<td><code>invite</code></td>
+<td>For a new balance</td>
+</tr>
+</tbody></table></div>
+<p>Returns a funding in state <code>quoted</code>. Nothing is spent until confirm. Errors: <code>400 use_topup</code> (the token is from one of the gateway&#39;s own mints), <code>400 mint_not_allowed</code>, <code>409 mint_unlisted</code> (with <code>unlisted: {mint, max}</code>), <code>400 mint_check_failed</code>, <code>400 amount_too_large</code>, <code>400 insufficient_amount</code>, <code>400 foreign_mint_error</code>, <code>400 credits_not_money</code>, <code>400 method_unavailable</code>.</p>
+<h3 id="post-v1-wallet-fund-foreign-confirm" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/foreign/confirm</code><a class="anchor" href="#post-v1-wallet-fund-foreign-confirm" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required. Body: <code>id</code> (from the quote), <code>token</code> (the same token), optional <code>pubkey</code>. Returns the funding as it moves on; poll it until <code>done</code> or <code>refunded</code>. Errors: <code>400 token_mismatch</code>, <code>409 quote_expired</code>, <code>409 in_flight</code>, <code>404 not_found</code>.</p>
+<h3 id="get-v1-wallet-fund" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund</code><a class="anchor" href="#get-v1-wallet-fund" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required. The 20 most recent fundings of this balance: <code>{&quot;data&quot;: [funding, ...]}</code>.</p>
+<h3 id="get-v1-wallet-fund-id" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/{id}</code><a class="anchor" href="#get-v1-wallet-fund-id" aria-label="Link to this section">#</a></h3>
+<p>Bearer key required. One funding. Polling it also moves it forward, so a funding finishes even if you only poll. <code>404 not_found</code> for a funding of another balance.</p>
+<h2 id="change">Change<a class="anchor" href="#change" aria-label="Link to this section">#</a></h2>
+<h3 id="get-v1-change-request-id" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/change/{request_id}</code><a class="anchor" href="#get-v1-change-request-id" aria-label="Link to this section">#</a></h3>
+<p>The change of a per-request (NUT-24) payment. No key: the request id is known only to the payer.</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;request_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;req_...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cashuB...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;amount&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;done&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cashuB...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;locked_to&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>409 not_settled</code> with <code>Retry-After</code> while the request is still running or the mint has not answered yet. <code>404 not_found</code> when there is no change for that id.</p>
+<h2 id="free-questions">Free questions<a class="anchor" href="#free-questions" aria-label="Link to this section">#</a></h2>
+<p>These routes run the daily faucet. While it is off they answer <code>404 not_found</code>. A claim gives a voucher of credits, which <code>POST /v1/wallet/topup</code> adds to a free balance.</p>
+<h3 id="get-v1-free" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/free</code><a class="anchor" href="#get-v1-free" aria-label="Link to this section">#</a></h3>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;questions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;vouchers_left_today&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">412</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;questions_left_today&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1236</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;available_now&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">17</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;next_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1794863600000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;bits&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">22</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<h3 id="post-v1-free-challenge" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/free/challenge</code><a class="anchor" href="#post-v1-free-challenge" aria-label="Link to this section">#</a></h3>
+<p>Body: none needed. Returns <code>{challenge, bits, expires_at}</code>. Errors: <code>429 faucet_empty</code> (with <code>next_at</code> and <code>retry_after</code>), <code>429 faucet_limit</code> (this address has had its share today).</p>
+<h3 id="post-v1-free-verify" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/free/verify</code><a class="anchor" href="#post-v1-free-verify" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>{&quot;solution&quot;: &quot;&lt;challenge&gt;:&lt;nonce&gt;&quot;}</code>, where the SHA-256 of that whole string starts with <code>bits</code> zero bits and the nonce is 1 to 64 characters of <code>0-9a-z</code>. Returns <code>{ticket, expires_at}</code>. Errors: <code>400 pow_invalid</code>, <code>400 challenge_unknown</code>, <code>409 challenge_used</code>, <code>410 challenge_expired</code>.</p>
+<h3 id="post-v1-free-claim" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/free/claim</code><a class="anchor" href="#post-v1-free-claim" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>{&quot;ticket&quot;: &quot;...&quot;}</code>. Returns <code>{token, questions, mint, unit}</code>. Errors: <code>400 ticket_unknown</code>, <code>409 claim_used</code>, <code>429 faucet_empty</code>, <code>429 faucet_limit</code>, <code>503 faucet_unavailable</code> (the ticket stays good; try again).</p>
+<h2 id="cashu-card-relay">Cashu card relay<a class="anchor" href="#cashu-card-relay" aria-label="Link to this section">#</a></h2>
+<p>The Forge Android app takes eCash off a Cashu card with one swap at the card&#39;s mint. The phone talks only to the gateway, so these routes carry that swap to the card&#39;s mint and the answer back. The gateway sees only blinded outputs and cannot take the eCash. It stores nothing of the request. The mint must be one of the gateway&#39;s own, or pass the same checks as <a href="#ecash-from-another-mint">other-mint funding</a>. No key needed.</p>
+<h3 id="post-v1-wallet-fund-card-mint" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/mint</code><a class="anchor" href="#post-v1-wallet-fund-card-mint" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>mint</code>, <code>unit</code>, optional <code>accept_unlisted</code>. Returns <code>{mint, trusted, unit, keysets, keys}</code>, and for another mint <code>max</code>, the most other-mint funding takes from it.</p>
+<h3 id="post-v1-wallet-fund-card-swap" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/swap</code><a class="anchor" href="#post-v1-wallet-fund-card-swap" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>mint</code>, <code>inputs</code> (1 to 128 card pieces <code>{amount, id, secret, C}</code>, the first may carry <code>witness</code>), <code>outputs</code> (1 to 64 blinded messages <code>{amount, id, B_}</code>), optional <code>accept_unlisted</code>. Passed to the mint&#39;s <code>/v1/swap</code>. Returns <code>{signatures}</code>.</p>
+<h3 id="post-v1-wallet-fund-card-restore" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/restore</code><a class="anchor" href="#post-v1-wallet-fund-card-restore" aria-label="Link to this section">#</a></h3>
+<p>Body: <code>mint</code>, <code>outputs</code>, optional <code>accept_unlisted</code>. Passed to the mint&#39;s <code>/v1/restore</code> (NUT-09). Returns <code>{outputs, signatures}</code>.</p>
+<p>A refusal by the mint answers <code>400 mint_refused</code> with the mint&#39;s own <code>mint_code</code>. A mint that fails, times out or rate-limits answers <code>503 mint_unavailable</code>.</p>
+<h2 id="other-routes">Other routes<a class="anchor" href="#other-routes" aria-label="Link to this section">#</a></h2>
+<h3 id="post-v1-beta-signup" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/beta/signup</code><a class="anchor" href="#post-v1-beta-signup" aria-label="Link to this section">#</a></h3>
+<p>Joins the waitlist for an invite. Body: <code>contact</code> (an email address or a Nostr <code>npub</code>), optional <code>note</code> (up to 500 characters). Returns <code>{&quot;ok&quot;: true}</code>. Errors: <code>400 invalid_contact</code>, <code>429 rate_limited</code> (3 signups a minute from one address).</p>
+<h3 id="get-healthz" class="endpoint"><span class="verb verb-get">GET</span> <code>/healthz</code><a class="anchor" href="#get-healthz" aria-label="Link to this section">#</a></h3>
+<p><code>{&quot;ok&quot;: true, &quot;rate&quot;: {&quot;btc_usd&quot;, &quot;age_s&quot;} | null, &quot;invite_only&quot;}</code>.</p>
+<h3 id="get-attestation" class="endpoint"><span class="verb verb-get">GET</span> <code>/attestation</code><a class="anchor" href="#get-attestation" aria-label="Link to this section">#</a></h3>
+<p>The private models&#39; enclave attestation bundle, proxied from Tinfoil so a browser can verify it through the gateway&#39;s origin. <code>404 not_found</code> when the gateway has no enclave supplier.</p>
+<h3 id="get-well-known-hpke-keys" class="endpoint"><span class="verb verb-get">GET</span> <code>/.well-known/hpke-keys</code><a class="anchor" href="#get-well-known-hpke-keys" aria-label="Link to this section">#</a></h3>
+<p>The enclave&#39;s HPKE key config for encrypted requests. <code>404 not_found</code> when the gateway has no enclave supplier.</p>
+<h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
+<p>Every error from an API route has the same shape:</p>
+<div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;balance too low: need 5410 msub, available 0 msub&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;insufficient_balance&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;insufficient_balance&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span></code></pre></div>
+<p><code>type</code> and <code>code</code> are the same. Some errors add fields beside <code>error</code>: <code>payment_request</code>, <code>amount</code>, <code>unit</code> and <code>mints</code> on a 402; <code>free_voice</code> on <code>free_voice_limit</code>; <code>free_models</code> on <code>not_free_model</code>; <code>unlisted</code> on <code>mint_unlisted</code>; <code>next_at</code> and <code>retry_after</code> on faucet refusals; <code>key</code> and <code>account_id</code> on <code>topup_pending</code>; <code>mint_code</code> on <code>mint_refused</code>. A path the gateway does not know answers <code>404</code> in plain text.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>400</td>
+<td><code>invalid_request</code></td>
+<td>The body or a header is malformed. The message says which</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>invalid_amount</code></td>
+<td>An amount out of range</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>invalid_token</code></td>
+<td>Not a <code>cashuB</code> token, too large, empty, or not decodable</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>untrusted_mint</code></td>
+<td>The token&#39;s mint is not accepted here</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>wrong_unit</code></td>
+<td>The unit is not taken here, or does not match the balance or quote</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>insufficient_amount</code></td>
+<td>The token is worth less than needed, after fees</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>token_spent</code></td>
+<td>The token was already redeemed</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>invalid_pubkey</code></td>
+<td>The lock key is not a valid secp256k1 key or npub</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>credits_need_balance</code></td>
+<td>Credits sent per request: add them with a top-up instead</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>credits_expired</code></td>
+<td>Credits from a retired keyset</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>credits_not_money</code></td>
+<td>Credits sent where money is needed</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>encryption_required</code></td>
+<td>This model takes only encrypted requests</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>web_search_unavailable</code></td>
+<td>Web search on a model that cannot search</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>audio_too_short</code></td>
+<td>A recording under 0.3 seconds</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>method_unavailable</code></td>
+<td>That funding method or unit is off</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>use_topup</code></td>
+<td>A token from the gateway&#39;s own mint sent to other-mint funding</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>mint_not_allowed</code></td>
+<td>That mint&#39;s eCash is not accepted</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>mint_check_failed</code></td>
+<td>An unlisted mint failed the gateway&#39;s live check</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>amount_too_large</code></td>
+<td>A token over the other-mint cap</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>token_mismatch</code></td>
+<td>Confirm sent a token other than the quoted one</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>foreign_mint_error</code></td>
+<td>The other mint cannot pay Lightning invoices (503 when it did not answer)</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>mint_refused</code></td>
+<td>The card&#39;s mint refused the swap</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>invalid_contact</code></td>
+<td>Not an email address or npub</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>issue_failed</code></td>
+<td>A payout failed and cannot be issued</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>free_too_long</code>, <code>free_too_much_output</code></td>
+<td>A free question over the caps</td>
+</tr>
+<tr>
+<td>400</td>
+<td><code>pow_invalid</code>, <code>challenge_unknown</code>, <code>ticket_unknown</code></td>
+<td>A faucet step that does not check out</td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>invalid_key</code></td>
+<td>Missing or unknown balance key</td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>balance_key_required</code></td>
+<td>A free model without a balance key</td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>payment_required</code></td>
+<td>Pay this request: see <code>X-Cashu</code></td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>insufficient_balance</code></td>
+<td>The available balance does not cover the hold</td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>free_voice_limit</code></td>
+<td>No free voice questions left today</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>invite_required</code></td>
+<td>An invite code is needed</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>invite_used</code>, <code>invite_invalid</code></td>
+<td>The invite was already redeemed, or is not valid</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>pass_expired</code>, <code>pass_used_up</code></td>
+<td>The event pass is past its expiry or its uses</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>balance_key_required</code></td>
+<td>A free model with a free-question balance key</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>account_frozen</code></td>
+<td>The operator froze this balance. Refunds still work</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>not_free_model</code>, <code>web_search_not_free</code></td>
+<td>A free-question balance used outside its rules</td>
+</tr>
+<tr>
+<td>404</td>
+<td><code>model_not_found</code></td>
+<td>No such model</td>
+</tr>
+<tr>
+<td>404</td>
+<td><code>not_found</code></td>
+<td>No such funding, change or feature here</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>request_id_used</code></td>
+<td>That request id already paid once. The token was not touched</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>not_settled</code></td>
+<td>Change is not ready yet: retry after <code>Retry-After</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>wrong_balance</code></td>
+<td>Money and credits on the wrong kind of balance</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>token_in_flight</code>, <code>in_flight</code></td>
+<td>The same token or payout is being processed now</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>insufficient_balance</code></td>
+<td>The balance changed during a refund: retry</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>quote_expired</code></td>
+<td>The other-mint quote expired: ask for a new one</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>mint_unlisted</code></td>
+<td>The mint is off the list: resend with <code>accept_unlisted: true</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>challenge_used</code>, <code>claim_used</code></td>
+<td>A faucet puzzle or ticket used twice</td>
+</tr>
+<tr>
+<td>410</td>
+<td><code>challenge_expired</code></td>
+<td>The faucet puzzle is too old</td>
+</tr>
+<tr>
+<td>413</td>
+<td><code>request_too_large</code></td>
+<td>The body is over the size limit</td>
+</tr>
+<tr>
+<td>413</td>
+<td><code>audio_too_long</code>, <code>text_too_long</code></td>
+<td>Over the audio model&#39;s limits</td>
+</tr>
+<tr>
+<td>415</td>
+<td><code>unsupported_audio</code></td>
+<td>Not a WAV recording</td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>rate_limited</code></td>
+<td>Too many requests: wait <code>Retry-After</code> seconds</td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>too_many_pending</code></td>
+<td>Too many unfinished fundings on this balance</td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>faucet_empty</code>, <code>faucet_limit</code></td>
+<td>No vouchers now, or none left for this address today</td>
+</tr>
+<tr>
+<td>500</td>
+<td><code>internal_error</code></td>
+<td>Something failed in the gateway</td>
+</tr>
+<tr>
+<td>502</td>
+<td><code>upstream_error</code></td>
+<td>The model&#39;s supplier failed. Nothing was charged</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>mint_unavailable</code></td>
+<td>A mint did not answer. Retry with the same token</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>rate_unavailable</code></td>
+<td>No BTC/USD rate: sat pricing is paused, usd works</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>topup_pending</code></td>
+<td>The top-up&#39;s outcome is not known yet: retry with the returned key</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>wallet_insufficient</code>, <code>wallet_inconsistent</code></td>
+<td>The gateway cannot make that payout right now</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>payout_unknown</code></td>
+<td>A locked payout the mint has not confirmed. It stays owed and is never paid twice</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>faucet_unavailable</code></td>
+<td>The voucher could not be made. The ticket stays good</td>
+</tr>
+</tbody></table></div>
+<p><code>upstream_error</code> keeps the supplier&#39;s status when it is a 4xx other than 429, so a bad request to the model comes back as that 4xx. Audio answers <code>503 upstream_error</code> while sat pricing is paused.</p>
+<h2 id="rate-limits">Rate limits<a class="anchor" href="#rate-limits" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>POST requests under <code>/v1</code> are limited per client address, and also per balance key when one is sent. GET requests are not limited.</li>
+<li>Each limit is a token bucket. The defaults are 60 requests a minute with a burst of 15. The operator can change them.</li>
+<li>Past the limit the answer is <code>429 rate_limited</code> with <code>Retry-After</code> in seconds.</li>
+<li>Request bodies are limited too: 1,000,000 bytes by default, and 4,000,000 bytes for speech to text uploads. Over that, <code>413 request_too_large</code>.</li>
+<li>The faucet adds its own daily budget and per-address limit. The waitlist takes 3 signups a minute from one address.</li>
+</ul>
+<h2 id="cors">CORS<a class="anchor" href="#cors" aria-label="Link to this section">#</a></h2>
+<p>Every <code>/v1</code> route answers cross-origin requests from any origin (<code>Access-Control-Allow-Origin: *</code>), for GET, POST and OPTIONS, with preflight results cached for 600 seconds. <code>/attestation</code> and <code>/.well-known/*</code> allow GET from any origin.</p>
+<p>Request headers a browser may send: <code>Accept</code>, <code>Authorization</code>, <code>Content-Type</code>, <code>X-Cashu</code>, <code>X-Cashu-Pubkey</code>, <code>X-Forge-Invite</code>, <code>X-Forge-Request-Id</code>, <code>X-Forge-Unit</code>, <code>Ehbp-Encapsulated-Key</code>, <code>X-Tinfoil-Enclave-Url</code>, <code>X-Tinfoil-Model</code>, <code>X-Tinfoil-Max-Output-Tokens</code>, <code>X-Tinfoil-Completion-Count</code>, <code>X-Forge-Web-Search</code>, <code>X-Bellows-Pow</code>.</p>
+<p>Response headers a browser may read: <code>X-Cashu</code>, <code>X-Cashu-Change</code>, <code>X-Forge-Request-Id</code>, <code>X-Forge-Unit</code>, <code>X-Forge-Charged-Msub</code>, <code>X-Forge-Balance-Msub</code>, <code>X-Forge-Change-Url</code>, <code>X-Forge-Privacy</code>, <code>X-Forge-Free-Voice-Left</code>, <code>Ehbp-Response-Nonce</code>, <code>Retry-After</code>, <code>X-Bellows-Pow-Challenge</code>.</p>
+<p>A browser app can hold a balance key and call the gateway directly. Anyone who can read the page&#39;s storage can spend that balance, so keep only small amounts on a key that lives in a browser.</p>
+<h2 id="modules">Modules<a class="anchor" href="#modules" aria-label="Link to this section">#</a></h2>
+<p>Forge AI is built as a reference: one working set of choices, made so each part can be swapped. Where two parts meet they speak an open protocol, so you can replace one side without asking Forge.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Seam</th>
+<th>Protocol</th>
+<th>What it means for you</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>App to gateway</td>
+<td>OpenAI chat completions API</td>
+<td>Any OpenAI client, agent framework or app of your own can be the app</td>
+</tr>
+<tr>
+<td>Gateway to models</td>
+<td>OpenAI API, and Tinfoil&#39;s EHBP for encrypted requests</td>
+<td>Encrypt to the enclave in your own client. The gateway only relays the bytes</td>
+</tr>
+<tr>
+<td>Paying</td>
+<td>Cashu (NUTs) and Lightning</td>
+<td>Your users pay from any Cashu or Lightning wallet</td>
+</tr>
+<tr>
+<td>Finding mints</td>
+<td>NIP-87 announcements and reviews on Nostr</td>
+<td>Mints the community reviews can fund a balance (<code>GET /v1/wallet/fund/mints</code>)</td>
+</tr>
+<tr>
+<td>Free questions</td>
+<td>Credit vouchers (Cashu eCash from a credit mint)</td>
+<td>An organisation can hand out questions on paper or a QR code</td>
+</tr>
+</tbody></table></div>
+<p>What this means for a builder:</p>
+<ul>
+<li><strong>Your app is a module.</strong> Any program that speaks the OpenAI API can call the gateway. A chat app, a voice assistant, a Telegram bot and an agent all use the same <code>/v1</code> routes.</li>
+<li><strong>Payment is a module.</strong> Your users can pay with a Lightning wallet, with eCash they already hold, or per request with no account. Nobody needs a bank card or a sign-up.</li>
+<li><strong>Privacy is a choice per request.</strong> Pick a private model (<code>tier: &quot;enclave&quot;</code>) and encrypt with Tinfoil&#39;s SDK, or use a standard model when that is enough.</li>
+</ul>
+<p>Inside the Forge app, the same idea runs through app modules: each way to fund (paper note, Lightning, Cashu card, other mint), each voice in and out, each photo filter and each look is a module with a manifest and a small interface. Today only the modules bundled with the app load. Signed third-party modules, their sandbox and their permissions are designed but not built yet.</p>
+
+<footer class="foot"><p>Forge AI. Generated from <code>docs/API.md</code>. <a href="#top">Back to the top</a></p></footer>
+</main>
+</div>
+</body>
+</html>

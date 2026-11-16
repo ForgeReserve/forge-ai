@@ -155,6 +155,8 @@ Add a supplier by implementing `Supplier` in `src/suppliers/types.ts` (one `chat
 
 ## API
 
+The public guide for builders is [docs/API.md](docs/API.md), served by the gateway at `/docs/`. The page is built from the Markdown with `pnpm build:docs` (`scripts/build-docs.ts`); `test/unit/api-docs.test.ts` fails when the two drift or when a `/v1` route is not documented.
+
 All amounts in `*_msub` fields are thousandths of the unit: milli-cents for `usd`, millisatoshi for `sat`.
 
 ### `POST /v1/chat/completions`
