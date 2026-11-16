@@ -83,6 +83,8 @@ const ALLOW = [
   'X-Tinfoil-Model',
   'X-Tinfoil-Max-Output-Tokens',
   'X-Tinfoil-Completion-Count',
+  // Web search on a private model: the body is encrypted, so the app says it in a header.
+  'X-Forge-Web-Search',
   // The app's answer to a Bellows proof of work challenge, sent again with the same request.
   'X-Bellows-Pow',
 ];

@@ -68,6 +68,8 @@ const ROUTES: Array<[string, string, string[]]> = [
   ['POST', '/v1/chat/completions', AUTH_JSON],
   // A private model: the body is encrypted to the enclave (EHBP, the Tinfoil SDK).
   ['POST', '/v1/chat/completions', ['authorization', 'content-type', 'ehbp-encapsulated-key', 'x-tinfoil-model', 'x-tinfoil-max-output-tokens']],
+  // The same, with web search on (the app says so in a header: the body is encrypted).
+  ['POST', '/v1/chat/completions', ['authorization', 'content-type', 'ehbp-encapsulated-key', 'x-tinfoil-model', 'x-tinfoil-max-output-tokens', 'x-forge-web-search']],
   // A Bellows asks for proof of work with a 428; the app sends the same request again with the solution.
   ['POST', '/v1/wallet/topup', [...AUTH_JSON, POW_HEADER]],
   ['GET', '/v1/free', []],

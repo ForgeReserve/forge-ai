@@ -911,7 +911,7 @@ Every error from an API route has the same shape:
 
 Every `/v1` route answers cross-origin requests from any origin (`Access-Control-Allow-Origin: *`), for GET, POST and OPTIONS, with preflight results cached for 600 seconds. `/attestation` and `/.well-known/*` allow GET from any origin.
 
-Request headers a browser may send: `Accept`, `Authorization`, `Content-Type`, `X-Cashu`, `X-Cashu-Pubkey`, `X-Forge-Invite`, `X-Forge-Request-Id`, `X-Forge-Unit`, `Ehbp-Encapsulated-Key`, `X-Tinfoil-Enclave-Url`, `X-Tinfoil-Model`, `X-Tinfoil-Max-Output-Tokens`, `X-Tinfoil-Completion-Count`, `X-Bellows-Pow`. `X-Forge-Web-Search` is not on this list, so a browser page on another origin cannot send it.
+Request headers a browser may send: `Accept`, `Authorization`, `Content-Type`, `X-Cashu`, `X-Cashu-Pubkey`, `X-Forge-Invite`, `X-Forge-Request-Id`, `X-Forge-Unit`, `Ehbp-Encapsulated-Key`, `X-Tinfoil-Enclave-Url`, `X-Tinfoil-Model`, `X-Tinfoil-Max-Output-Tokens`, `X-Tinfoil-Completion-Count`, `X-Forge-Web-Search`, `X-Bellows-Pow`.
 
 Response headers a browser may read: `X-Cashu`, `X-Cashu-Change`, `X-Forge-Request-Id`, `X-Forge-Unit`, `X-Forge-Charged-Msub`, `X-Forge-Balance-Msub`, `X-Forge-Change-Url`, `X-Forge-Privacy`, `X-Forge-Free-Voice-Left`, `Ehbp-Response-Nonce`, `Retry-After`, `X-Bellows-Pow-Challenge`.
 
