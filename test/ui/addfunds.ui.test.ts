@@ -199,10 +199,22 @@ describe('Add money as wallet cards', () => {
       return Math.abs(c!.x + c!.width / 2 - (t!.x + t!.width / 2));
     };
     await expect.poll(() => middle('lightning')).toBeLessThan(2);
-    // A finger swipes left: the next card.
+    // A finger swipes left: the next card. The finger is raw touch events (down, a move every frame, up),
+    // which the page scrolls as it would a real finger. Chrome's synthesizeScrollGesture is not used: in
+    // headless Chrome on Linux (CI) its touch gesture sends a touchstart and a touchend and no move.
     const cdp = await ctx.newCDPSession(page);
     const box = (await page.locator('#wayTrack').boundingBox())!;
-    const swipe = (xDistance: number) => cdp.send('Input.synthesizeScrollGesture', { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2), xDistance, yDistance: 0, gestureSourceType: 'touch', speed: 1200 });
+    const swipe = async (xDistance: number) => {
+      const x = Math.round(box.x + box.width / 2);
+      const y = Math.round(box.y + box.height / 2);
+      const steps = 12;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      for (let i = 1; i <= steps; i++) {
+        await new Promise((r) => setTimeout(r, 16));
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + Math.round((xDistance * i) / steps), y }] });
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
     await swipe(-200);
     await expect.poll(() => current(page)).toBe('card');
     await expect.poll(() => middle('card')).toBeLessThan(2);

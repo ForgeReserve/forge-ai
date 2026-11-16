@@ -415,7 +415,12 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
    Night ground in every look: the tokens are set here, so the parts it shares with other screens (the
    lists, the field and the buttons in its sheets) are dark too. The frame is the design's 390 by 844:
    the top row at 18, the 300 px hero at 92, the heading at 416, Next at 664 and the link below it. On a
-   shorter phone the gaps and then the hero shrink, the same on every step, so nothing scrolls. */
+   shorter phone the gaps and then the hero shrink, the same on every step, so nothing scrolls. Each gap
+   goes from the design's at 844 px high down to its least at 640, so a 360 by 640 phone keeps room for
+   a heading that wraps to two lines in a wider font than the design's (Linux and many Android phones
+   have neither Inter nor SF); between 640 and 844 the hero grows from 156 to 300 along a line too, so
+   that room stays. If the words still do not fit (a larger text size), the hero gives up its height
+   before anything scrolls. */
 .screen.fr {
   --bg: #0B0D10; --surface: #1A1E25; --surface-2: #171A22; --ink: #F5F5F7; --text-2: #A1A4AB; --text-body: #C9CBD1;
   --line: #2A2F3A; --dash: #4A505C; --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55; --memory: #3FCFB4; --memory-track: #16302C;
@@ -423,7 +428,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
   --primary: #F5F5F7; --primary-ink: #0B0D10; --shadow-primary: none; --shadow-raised-sm: none; --focus: #3FCFB4;
   color-scheme: dark;
   position: fixed; inset: 0; z-index: 5; min-height: 0; gap: 0; overflow-x: hidden; overflow-y: auto;
-  padding: max(18px, env(safe-area-inset-top)) max(24px, calc(50vw - 236px)) max(clamp(12px, 5dvh, 42px), env(safe-area-inset-bottom));
+  padding: max(18px, env(safe-area-inset-top)) max(24px, calc(50vw - 236px)) max(clamp(12px, calc(12px + (100dvh - 640px) * 0.147), 42px), env(safe-area-inset-bottom));
   background: var(--bg); color: var(--ink);
 }
 .fr :focus-visible { outline: 2px solid #3FCFB4; outline-offset: 3px; }
@@ -442,16 +447,18 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .fr-dots span.done, .fr-dots span.now { background: #F5F5F7; }
 .fr-dots span.now { width: 22px; }
 .fr-skip { grid-column: 3; justify-self: end; height: 48px; min-width: 48px; padding: 0 6px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
-.fr-hero { flex: none; height: clamp(112px, calc(100dvh - 484px), 300px); margin-top: clamp(8px, 3.1dvh, 26px); display: flex; justify-content: center; }
+.fr-hero { flex: 0 1 auto; height: clamp(112px, min(100dvh - 484px, 156px + (100dvh - 640px) * 0.706), 300px); min-height: 88px; margin-top: clamp(8px, calc(8px + (100dvh - 640px) * 0.0883), 26px); display: flex; justify-content: center; }
 .fr-hero svg { width: auto; height: 100%; aspect-ratio: 1; }
-.fr-text { flex: none; margin-top: clamp(12px, 2.85dvh, 24px); display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.fr-text { flex: none; margin-top: clamp(12px, calc(12px + (100dvh - 640px) * 0.0589), 24px); display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
 .fr .intro-title { margin: 0; font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; }
 .fr .intro-title:focus { outline: none; }
 .fr-lead { margin: 0; max-width: 330px; font-size: 17px; line-height: 1.45; color: #A1A4AB; }
 .fr-space { flex: 1 0 8px; }
 /* The Private only card: the switch (tile, words, track) and, at its end, the info button for Learn more. */
-.fr-toggle { flex: none; width: 100%; min-height: 72px; margin-bottom: clamp(12px, 3.8dvh, 32px); border-radius: 22px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: flex; align-items: stretch; padding: 0 4px 0 0; color: #F5F5F7; }
-.fr-switch { flex: 1 1 auto; min-width: 0; min-height: 72px; border: 0; border-radius: 21px; background: none; color: inherit; display: flex; align-items: center; gap: 12px; padding: 0 6px 0 14px; text-align: left; }
+.fr-toggle { flex: none; width: 100%; min-height: 72px; margin-bottom: clamp(12px, calc(12px + (100dvh - 640px) * 0.0981), 32px); border-radius: 22px; border: 1px solid rgba(63,207,180,0.45); background: rgba(63,207,180,0.10); display: flex; align-items: stretch; padding: 0 4px 0 0; color: #F5F5F7; }
+/* At 360 px wide the gaps in the switch are 8 and its padding 10 (12 and 14 from 390 up), so Private only
+   stays on one line in a wider font than the design's (DejaVu Sans on Linux needs 123 px for it). */
+.fr-switch { flex: 1 1 auto; min-width: 0; min-height: 72px; border: 0; border-radius: 21px; background: none; color: inherit; display: flex; align-items: center; gap: clamp(8px, calc(8px + (100vw - 360px) * 0.1333), 12px); padding: 0 6px 0 clamp(10px, calc(10px + (100vw - 360px) * 0.1333), 14px); text-align: left; }
 .fr-info { flex: none; align-self: center; width: 48px; height: 48px; border: 0; border-radius: 24px; background: none; color: #A1A4AB; display: flex; align-items: center; justify-content: center; }
 .fr-toggle-tile { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; background: rgba(63,207,180,0.16); color: #3FCFB4; display: flex; align-items: center; justify-content: center; }
 .fr-toggle-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -465,7 +472,7 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .fr-toggle.off .fr-track { background: #3A3D44; justify-content: flex-start; }
 .fr-next { flex: none; align-self: center; width: 76px; height: 76px; border-radius: 38px; border: 0; background: #F5F5F7; color: #0B0D10; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 7px rgba(245,245,247,0.07), 0 0 0 8px rgba(245,245,247,0.12), 0 12px 34px rgba(63,207,180,0.30), inset 0 -2px 0 rgba(11,13,16,0.10); transition: transform 120ms var(--ease); }
 .fr-next:active { transform: scale(.96); }
-.fr-links { flex: none; min-height: 48px; margin-top: 14px; display: flex; justify-content: center; }
+.fr-links { flex: none; min-height: 48px; margin-top: clamp(6px, calc(6px + (100dvh - 640px) * 0.0393), 14px); display: flex; justify-content: center; }
 .fr-money { align-self: center; }
 .fr-link { height: 48px; min-width: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border: 0; background: none; font-size: 15px; font-weight: 500; color: #A1A4AB; }
 /* The detail behind Learn more and See the full list, and the invite code: a sheet from the bottom. */
