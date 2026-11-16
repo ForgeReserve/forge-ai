@@ -93,6 +93,9 @@ async function hold(page: Page, sel: string, ms: number) {
   const box = (await page.locator(sel).boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
+  // The hold counts from the moment the app is recording: on a slow machine the microphone can take
+  // longer to open than the hold itself, and a release before then is a cancel.
+  await page.waitForSelector(`${sel}[data-phase=recording]`, { timeout: 15_000 });
   await page.waitForTimeout(ms);
   await page.mouse.up();
 }

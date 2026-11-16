@@ -327,7 +327,8 @@ describe('Share unseen', () => {
     expect(await page.textContent('#photoStatus')).toBe('A check did not run. Tap again to share anyway.');
     expect(await page.evaluate(() => (window as any).__shared.length)).toBe(0);
     await page.click('#photoShare');
-    await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    // The photo is drawn again before it is shared: over a second on a slow machine.
+    await expect.poll(() => page.evaluate(() => (window as any).__shared.length), { timeout: 15_000 }).toBe(1);
     const out = new Uint8Array((await page.evaluate(() => (window as any).__shared[0])).bytes);
     expect(META.readDetails(out).found).toEqual([]);
     // A new photo is checked afresh and warns again.
