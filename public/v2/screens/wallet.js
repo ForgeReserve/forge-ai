@@ -109,9 +109,12 @@ export function walletScreen(ctx) {
   const tabFor = (id, i) =>
     el('button', { type: 'button', role: 'tab', class: `way-tab tab-${id}`, id: `tab-${id}`, 'aria-label': id === 'start' ? t('startFree.title') : id === 'more' ? t('ways.more.name') : t(`fund.${id}.name`), 'aria-controls': `way-${id}`, onclick: () => show(i, true) }, tabIcon(id, ways.mods[id]));
 
-  /** Builds the cards and tabs for the ways there are now, keeping the card on show when it is still there. */
+  /**
+   * Builds the cards and tabs for the ways there are now, keeping the card on show when it is still there.
+   * Until the person moves, the card on show is ctx.first (a way's id) when it is among them.
+   */
   const build = () => {
-    const keep = moved ? order[now] : null;
+    const keep = moved ? order[now] : (ctx.first ?? null);
     order = ways.cards;
     cards.splice(0, cards.length, ...order.map(makeCard));
     track.replaceChildren(...cards.map((c) => c.node));

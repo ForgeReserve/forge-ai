@@ -1583,6 +1583,17 @@ function finishIntro() {
   leave('home');
 }
 
+// The card Add money opens on, once (introAddMoney).
+let firstWay = null;
+
+/** First run, "I'll add money instead": marks it seen, then opens Add money on the paper note's card, the home under it. */
+function introAddMoney() {
+  keep(SEEN_KEY, SEEN_VALUE);
+  firstWay = 'note';
+  nav('home', {}, { replace: true });
+  nav('addFunds');
+}
+
 /** Goes back to the nearest earlier `name` on the stack, or replaces this screen with it. */
 function backTo(name) {
   for (let i = depth() - 1; i >= 0; i--) if (trail[i] === name) return history.go(i - depth());
@@ -1618,8 +1629,11 @@ function screenFor(name, params) {
       return typeScreen(ctx);
     case 'funds':
       return fundsScreen(ctx);
-    case 'addFunds':
-      return walletScreen(ctx);
+    case 'addFunds': {
+      const first = firstWay;
+      firstWay = null;
+      return walletScreen({ ...ctx, first });
+    }
     case 'startFree': {
       // Opened by an event link (joinWith): on the question, then home.
       const joined = joinAsk;
@@ -1672,7 +1686,7 @@ function screenFor(name, params) {
     case 'introPrivate':
       // The recorded Listen clips: their manifest is read once, and Listen shows when it is in.
       clips.load().then((m) => m && store.set({}));
-      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, reader });
+      return firstRunScreen({ ...ctx, step: stepOfRoute(name), go: (step) => nav(STEP_ROUTES[step]), finish: finishIntro, addMoney: introAddMoney, reader });
     case 'erase':
       return eraseScreen(ctx);
     case 'engine':

@@ -429,8 +429,9 @@ describe('reading load on every screen', () => {
       await check(page, `${name}-sheet`);
       await page.click('#learnSheetClose');
     }
-    await page.waitForSelector('#introInviteLink:not([hidden])');
-    await page.click('#introInviteLink');
+    // The engine has free models: the round button is Start free and opens its sheet.
+    await page.waitForSelector('#introNext.free');
+    await page.click('#introNext');
     await page.waitForSelector('dialog#inviteSheet[open]');
     await check(page, 'intro-invite');
     expect(errors).toEqual([]);

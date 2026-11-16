@@ -4,9 +4,10 @@
 // Each step is the same frame: Listen, the step dots and Skip at the top; a 300 px hero whose two rings
 // light a quarter more each step; a heading and its lead; the round Next button; at most one secondary
 // link (none on Welcome; its row is kept so nothing moves). The detail behind Learn more and See the full
-// list opens in a sheet over the step. Start free (or the invite code) is the last step's link (owner,
-// 2026-11-15: once the code is in, the first run should be over), and Private only's Learn more is the
-// info button on its card.
+// list opens in a sheet over the step. On the last step, while the engine offers Start free, the round
+// button is green and opens the Start free sheet, the step's one button (owner, 2026-11-16: both choices
+// are on the sheet); else an invite code is the last step's link. Private only's Learn more is the info
+// button on its card.
 // The pure rules (steps, when it shows, which ways to pay, what Listen reads) are in core/firstrun.js.
 import { nextStep, payWays, spokenFor, stepNumber, stepOf, STEPS } from '../core/firstrun.js';
 import { el, icon, toast } from '../core/ui.js';
@@ -40,12 +41,13 @@ let shownLit = null;
 /**
  * ctx: t, state, actions, registry, wallet, plus
  * - step: the route param,
- * - go(step): opens another step, finish(): marks the guide seen and goes home,
+ * - go(step): opens another step, finish(): marks the guide seen and goes home, addMoney(): marks it
+ *   seen and opens Add money on the paper note's card,
  * - reader: {available(clip, pieces), read(pieces, clip) -> {done, stop()}}: the step's recorded clip, or
  *   the phone's own voice (both free, on the phone).
  * Back is the phone's own: each step is an entry in its history.
  */
-export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, reader, scan = null }) {
+export function firstRunScreen({ t, state, actions, registry, wallet, step: param, go, finish, addMoney = finish, reader, scan = null }) {
   const S = state.S;
   const step = stepOf(param);
   const n = stepNumber(step);
@@ -94,7 +96,9 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   const lead = el('p', { class: 'fr-lead', id: 'introLead', 'data-approved': '' });
   const text = el('div', { class: 'fr-text' }, el('h1', { class: 'intro-title', tabindex: '-1', 'data-approved': '', text: t(`intro.${step}.title`) }), lead);
 
-  const nextBtn = el('button', { type: 'button', class: 'fr-next', id: 'introNext', 'aria-label': t(next ? 'intro.next' : 'intro.start'), onclick: () => (next ? go(next) : finish()) }, svg(next ? SVG.next : SVG.start));
+  const nextBtn = el('button', { type: 'button', class: 'fr-next', id: 'introNext', 'aria-label': t(next ? 'intro.next' : 'intro.start'), onclick: () => (next ? go(next) : startSheet ? open(startSheet) : finish()) }, svg(next ? SVG.next : SVG.start));
+  // The last step's round button opens this sheet while Start free is offered (inviteLink), else it starts.
+  let startSheet = null;
   const linkBtn = (id, ico, key, sheet) => el('button', { type: 'button', class: 'fr-link', id, 'aria-haspopup': 'dialog', onclick: () => open(sheet) }, svg(SVG[ico]), el('span', { text: t(key) }));
 
   const item = (ico, tint, title, sub) => el('li', { class: 'intro-item' }, el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 22)), el('span', { class: 'row-text' }, el('b', { text: title }), el('small', { text: sub })));
@@ -238,13 +242,15 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
   }
 
   /**
-   * The last step's one link. While the engine has free models and the phone has no balance key: "Start
-   * free with an invite" (screens/startfree.js), a sheet that opens a $0 balance with the code and then
-   * asks before Private only is turned off. The answer is applied, the switch shows it, and the first run
-   * is over: the home opens, the answer's words in a toast (owner, 2026-11-15: once the code is in, the
-   * first run should go away). "I'll add money instead" keeps the code for funding and stays on the step.
-   * Else, while the engine asks for an invite code to open a balance: "I have an invite code", the field
-   * alone, kept in memory for the funding screens. A key from elsewhere: no link. redraw(): the step's update.
+   * The last step's way in. While the engine has free models and the phone has no balance key, the round
+   * button is the step's one button: green, it opens Start free (screens/startfree.js), a sheet that
+   * opens a $0 balance with the code and then asks before Private only is turned off. The answer is
+   * applied, the switch shows it, and the first run is over: the home opens, the answer's words in a
+   * toast (owner, 2026-11-15: once the code is in, the first run should go away). "I'll add money
+   * instead" keeps the code for funding, ends the first run and opens Add money on the paper note's card.
+   * Else, while the engine asks for an invite code to open a balance: the link "I have an invite code",
+   * the field alone, kept in memory for the funding screens. A key from elsewhere: no link.
+   * redraw(): the step's update.
    */
   function inviteLink(redraw) {
     const input = el('input', { id: 'introInvite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
@@ -270,7 +276,7 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
       finish();
     };
     const free = startFree({ t, state, actions, wallet, reader }, { id: 'intro', field: { input, box }, after: answered });
-    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close()) }, icon('coins', 20), el('span', { text: t('startFree.money') }));
+    const money = el('button', { type: 'button', class: 'fr-link fr-money', id: 'introAddMoney', onclick: () => (wallet.setInvite(input.value.trim()), s.close(), addMoney()) }, icon('coins', 20), el('span', { text: t('startFree.money') }));
     const s = sheet('inviteSheet', 'invite.label', box, free.node, money, done);
     const title = s.querySelector('h2');
     let shown = null;
@@ -281,29 +287,24 @@ export function firstRunScreen({ t, state, actions, registry, wallet, step: para
     s.head.insertBefore(listenSlot, s.head.lastChild);
     s.addEventListener('close', () => (sheetListen.stop(), scanner.stop()));
     sheets.destroyers.push(() => (sheetListen.destroy(), free.destroy?.()));
-    // The way to Start free is a clear choice beside the round Start (owner, 2026-11-15): a picture, a
-    // short word and what it needs, never a grey link.
-    const label = el('b', { class: 'fr-choice-word', text: t('intro.inviteLink') });
-    const sub = el('small', { class: 'fr-choice-sub' });
-    let ico = icon('ticket', 24);
-    const tile = el('span', { class: 'fr-choice-ico', 'aria-hidden': 'true' }, ico);
-    const link = el('button', { type: 'button', class: 'fr-choice', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, tile, el('span', { class: 'fr-choice-text' }, label, sub));
+    // The invite code is a clear choice beside the round Start (owner, 2026-11-15): a picture and a short
+    // word, never a grey link.
+    const tile = el('span', { class: 'fr-choice-ico', 'aria-hidden': 'true' }, icon('ticket', 24));
+    const link = el('button', { type: 'button', class: 'fr-choice', id: 'introInviteLink', 'aria-haspopup': 'dialog', onclick: () => open(s) }, tile, el('span', { class: 'fr-choice-text' }, el('b', { class: 'fr-choice-word', text: t('intro.inviteLink') })));
     const update = () => {
       // Start free while the sheet shows it: a key opened here keeps the sheet's own words until the
       // question is answered.
       const busy = free.busy();
       const free0 = !!S.methods?.open?.enabled && (!wallet.key() || busy);
-      link.hidden = (!!wallet.key() && !busy) || !(wallet.inviteOnly() || free0);
+      link.hidden = free0 || !!wallet.key() || !wallet.inviteOnly();
       if (free0 !== shown) {
         shown = free0;
-        label.textContent = t(free0 ? 'startFree.title' : 'intro.inviteLink');
-        sub.textContent = free0 ? t('intro.startFreeSub') : '';
-        sub.hidden = !free0;
-        link.classList.toggle('free', free0);
-        link.setAttribute('aria-label', t(free0 ? 'startFree.link' : 'intro.inviteLink'));
-        const swap = icon(free0 ? 'gift' : 'ticket', 24);
-        ico.replaceWith(swap);
-        ico = swap;
+        // Start free is the round button itself: green, and it opens the sheet.
+        startSheet = free0 ? s : null;
+        nextBtn.classList.toggle('free', free0);
+        nextBtn.setAttribute('aria-label', t(free0 ? 'startFree.link' : 'intro.start'));
+        if (free0) nextBtn.setAttribute('aria-haspopup', 'dialog');
+        else nextBtn.removeAttribute('aria-haspopup');
         title.textContent = t(free0 ? 'startFree.title' : 'invite.label');
       }
       sheetListen.update();
