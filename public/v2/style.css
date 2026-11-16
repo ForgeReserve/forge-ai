@@ -1,6 +1,7 @@
 /* Forge AI v2. Colours come from the look module as CSS custom properties; the values below are the
-   Midnight look, the default, so the first paint matches it before the modules load. No remote fonts: Inter is used
-   when the phone has it, else the system font. */
+   Midnight look, the default, so the first paint matches it before the modules load. No remote fonts: Inter
+   is served from our origin (scripts/vendor-inter.sh), so every phone and test browser lays text out alike. */
+@font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
   --bg: #0B0D10; --backdrop: #050608; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
   --line: #2A2F3A; --line-2: #333946; --bar-track: #1E222B; --grabber: #3A404C; --dash: #4A505C;

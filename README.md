@@ -362,11 +362,14 @@ pnpm typecheck
 pnpm test                 # unit tests
 pnpm mint:up && pnpm test:e2e && pnpm mint:down    # end to end against real local Nutshell mints
 pnpm test:ui              # the v2 app in a 412 x 915 browser (installed Chrome, no download); needs pnpm mint:up
+pnpm test:ui:linux        # the same UI suite in Linux, as CI runs it (Docker); needs pnpm mint:up. Run it before pushing a change a phone sees
 cd android && ./gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest   # the Android apps (Android SDK, JDK 17)
 pnpm test:live            # optional; needs TOKENFACTORY_API_KEY (read from .env if present)
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of these except the live tests on every pull request and every push to `main`, read-only and without credentials. `test/unit/images.test.ts` keeps its actions pinned by commit.
+CI (`.github/workflows/ci.yml`) runs all of these except the live tests on every pull request and every push to `main`, read-only and without credentials, in parallel jobs: type-check and unit tests, end to end, the Android apps, and the UI suite in three parts (the natural voice's tests on their own, `pnpm test:ui:voice`, and the other files in two `--shard` halves). `test/unit/images.test.ts` keeps its actions pinned by commit and checks that the parts cover every UI file.
+
+**Before pushing a UI change, run `pnpm test:ui:linux`.** A UI test that passes on a Mac can fail in CI for reasons of the machine, not the code: its fonts, its touch events, its speed. `scripts/ui-linux.sh` runs the suite (or the files you name, with any Vitest arguments) in Playwright's pinned Ubuntu image with DejaVu Sans as the fallback font, as on the GitHub runner, against the mints already running on the Mac (Docker Desktop's host networking must be on). The app serves its own font (Inter, `scripts/vendor-inter.sh`), so text has the same metrics on a Mac, on Linux and on phones; a test that measures layout waits for `document.fonts.ready`.
 
 `test/unit/files.test.ts` covers the attachment helpers (file types, text decoding and binary refusal, `.docx` unzip and text, `<file>` blocks, the 200,000-character budget, estimates). `test/unit/sw.test.ts` and `test/e2e/pwa.e2e.test.ts` cover the service worker version and shell list, `/sw.js`, manifest, icons and offline page headers; `test/e2e/files-privacy.e2e.test.ts` checks that file text reaches the supplier (or the enclave, encrypted) and never the logs or the database.
 

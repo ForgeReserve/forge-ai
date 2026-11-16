@@ -46,6 +46,8 @@
       }
     } catch (e) {} })();
   </script>
+  <!-- The app's font (style.css @font-face), asked for with the modules so the first screen has it. -->
+  <link rel="preload" href="/v2/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <!-- Every module the first screen needs, asked for at once (test/unit/v2/preload.test.ts keeps this
        list exactly in step with the imports). -->
   <link rel="modulepreload" href="/v2/app.js">

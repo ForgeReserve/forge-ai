@@ -122,6 +122,10 @@ describe('v2 in a phone-sized browser', () => {
     await expect.poll(async () => ((await page.textContent('#answerText')) ?? '').length).toBeGreaterThan(20);
     const mid = ((await page.textContent('#answerText')) ?? '').length;
     await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    // Markdown loads with the first answer screen and the answer shows as plain text until it is in
+    // (screens/answer.js), so the text is read once it is drawn as Markdown, here and after the reload.
+    const MARKDOWN = '#answerText:not(:has(> p.plain))';
+    await page.waitForSelector(MARKDOWN);
     const text = (await page.textContent('#answerText')) ?? '';
     expect(text.length).toBeGreaterThan(mid);
     expect(text.startsWith('Forge word word')).toBe(true);
@@ -143,6 +147,7 @@ describe('v2 in a phone-sized browser', () => {
     await page.goto(`${g.url}/v2/#/answer`);
     await page.reload();
     await page.waitForSelector('[data-screen=answer]');
+    await page.waitForSelector(MARKDOWN);
     expect(await page.textContent('#answerText')).toBe(text);
 
     // The v2 worker controls /v2/ only.
