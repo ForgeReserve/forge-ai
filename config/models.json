@@ -1,5 +1,5 @@
 {
-  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory models are FREE to users (pricing \"free\", owner decision 2026-11-15): Token Factory charges Forge nothing during its beta, so a request needs a balance key and is never held or charged (docs/PAYMENTS.md, Free models). They carry no token price; the 1.0 in / 4.0 out per million placeholders they had before were never from a rate card and were dropped. When the beta ends, set pricing back to paid with prices from the Token Factory rate card (their /v1/model/info returned no cost fields on 2026-11-09). Context lengths below are from that endpoint's max_input_tokens. Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09. Audio models (the audio list) were read from https://api.tinfoil.sh/api/config/models on 2026-11-13: whisper-large-v3-turbo requestPrice 0.01 USD and voxtral-tts requestPrice 0.002 USD per request, no token price; voices from docs.tinfoil.sh/guides/processing-audio. Web search (2026-11-14): Tinfoil's Private Web Search requestPrice 0.05 USD per request that searched, from https://api.tinfoil.sh/api/config/models (model websearch, type tool); every Tinfoil chat model listed there has toolCalling true, and docs.tinfoil.sh/guides/web-search says search is used alongside chat models. extra_input_tokens and output_factor are Forge's hold allowance for what a search adds (results in the input, several model calls), not Tinfoil figures.",
+  "_comment": "Prices are the supplier's cost in USD per million tokens; FORGE_MARKUP is applied on top. Token Factory models are FREE to users (pricing \"free\", owner decision 2026-11-15): Token Factory charges Forge nothing during its beta, so a request needs a balance key and is never held or charged (docs/PAYMENTS.md, Free models). They carry no token price; the 1.0 in / 4.0 out per million placeholders they had before were never from a rate card and were dropped. When the beta ends, set pricing back to paid with prices from the Token Factory rate card (their /v1/model/info returned no cost fields on 2026-11-09). Context lengths below are from that endpoint's max_input_tokens. Tinfoil prices were read from https://inference.tinfoil.sh/v1/models on 2026-11-09. Audio models (the audio list) were read from https://api.tinfoil.sh/api/config/models on 2026-11-13: whisper-large-v3-turbo requestPrice 0.01 USD and voxtral-tts requestPrice 0.002 USD per request, no token price; voices from docs.tinfoil.sh/guides/processing-audio. Web search (2026-11-14): Tinfoil's Private Web Search requestPrice 0.05 USD per request that searched, from https://api.tinfoil.sh/api/config/models (model websearch, type tool); every Tinfoil chat model listed there has toolCalling true, and docs.tinfoil.sh/guides/web-search says search is used alongside chat models. extra_input_tokens and output_factor are Forge's hold allowance for what a search adds (results in the input, several model calls), not Tinfoil figures. Speed marks (2026-11-15): fast or slow from an API battery of the free Token Factory models (median seconds to the first words / to the whole answer): fast = GLM 5.3 Flash 1.2/1.6, Nemotron 3 Ultra 1.8/3.2, GLM 5.3 2.3/7.7, DeepSeek V4.1 Flash 2.9/3.8, GLM 5.3 Flash Uncensored 2.7/4.9; slow = Qwen 3.8 27B 7.1/9.1, DeepSeek V4.1 Flash Uncensored 10.2/12.6, Kimi K3 Abliterated 13.0/13.6, GLM 5.3 Uncensored 36.6/61.5, Kimi K3.1 Pro 59.3/74.3; Nemotron 3.5 Lightning 4.1/4.8 is left unmarked. The private (Tinfoil) models were measured the same way and are all fast: gemma4-31b 1.0/1.9, llama3-3-70b 1.1/4.8, deepseek-v4-1-flash 2.1/2.3, gpt-oss-120b 2.4/6.2, glm-5-3 2.8/3.4, kimi-k3-1-pro 2.9/3.5 (the private Kimi K3.1 Pro is fast while the free Standard one is slow). A model not measured carries no mark.",
   "suppliers": {
     "tokenfactory": {
       "type": "openai",
@@ -44,9 +44,9 @@
         "medium",
         "high"
       ],
-      "speed": "fast",
       "name": "gpt-oss-120b",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "tinfoil/kimi-k3-1-pro",
@@ -66,7 +66,8 @@
         "max"
       ],
       "name": "Kimi K3.1 Pro",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "tinfoil/glm-5-3",
@@ -86,7 +87,8 @@
         "max"
       ],
       "name": "GLM 5.3",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "tinfoil/deepseek-v4-1-flash",
@@ -105,9 +107,9 @@
         "high",
         "max"
       ],
-      "speed": "fast",
       "name": "DeepSeek V4.1 Flash",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "tinfoil/gemma4-31b",
@@ -126,9 +128,9 @@
         "medium",
         "high"
       ],
-      "speed": "fast",
       "name": "Gemma 4 31B",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "tinfoil/llama3-3-70b",
@@ -143,7 +145,8 @@
       "vision": false,
       "reasoning": false,
       "name": "Llama 3.3 70B",
-      "web_search": true
+      "web_search": true,
+      "speed": "fast"
     },
     {
       "id": "qwen3.8-27b",
@@ -154,7 +157,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 196608,
-      "name": "Qwen 3.8 27B"
+      "name": "Qwen 3.8 27B",
+      "speed": "slow"
     },
     {
       "id": "glm-5.3",
@@ -165,7 +169,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 917504,
-      "name": "GLM 5.3"
+      "name": "GLM 5.3",
+      "speed": "fast"
     },
     {
       "id": "glm-5.3-flash",
@@ -176,7 +181,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 917504,
-      "name": "GLM 5.3 Flash"
+      "name": "GLM 5.3 Flash",
+      "speed": "fast"
     },
     {
       "id": "deepseek-v4.1-flash-1017",
@@ -187,7 +193,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 917504,
-      "name": "DeepSeek V4.1 Flash"
+      "name": "DeepSeek V4.1 Flash",
+      "speed": "fast"
     },
     {
       "id": "kimi-k3.1-pro",
@@ -198,7 +205,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 917504,
-      "name": "Kimi K3.1 Pro"
+      "name": "Kimi K3.1 Pro",
+      "speed": "slow"
     },
     {
       "id": "nemotron-3-ultra",
@@ -209,7 +217,8 @@
       "max_output_tokens": 8192,
       "uncensored": false,
       "context_length": 917504,
-      "name": "Nemotron 3 Ultra"
+      "name": "Nemotron 3 Ultra",
+      "speed": "fast"
     },
     {
       "id": "nemotron-3.5-lightning",
@@ -231,7 +240,8 @@
       "max_output_tokens": 8192,
       "uncensored": true,
       "context_length": 917504,
-      "name": "GLM 5.3 Uncensored"
+      "name": "GLM 5.3 Uncensored",
+      "speed": "slow"
     },
     {
       "id": "glm-5.3-flash-uncensored-fp8",
@@ -242,7 +252,8 @@
       "max_output_tokens": 8192,
       "uncensored": true,
       "context_length": 917504,
-      "name": "GLM 5.3 Flash Uncensored"
+      "name": "GLM 5.3 Flash Uncensored",
+      "speed": "fast"
     },
     {
       "id": "deepseek-v4.1-flash-1017-uncensored-fp8",
@@ -253,7 +264,8 @@
       "max_output_tokens": 8192,
       "uncensored": true,
       "context_length": 917504,
-      "name": "DeepSeek V4.1 Flash Uncensored"
+      "name": "DeepSeek V4.1 Flash Uncensored",
+      "speed": "slow"
     },
     {
       "id": "kimi-k3-abliterated",
@@ -264,7 +276,8 @@
       "max_output_tokens": 8192,
       "uncensored": true,
       "context_length": 917504,
-      "name": "Kimi K3 Abliterated"
+      "name": "Kimi K3 Abliterated",
+      "speed": "slow"
     }
   ],
   "audio": [

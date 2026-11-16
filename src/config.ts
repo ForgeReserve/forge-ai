@@ -275,7 +275,10 @@ const ModelSchema = z.object({
   reasoning: z.boolean().default(false),
   /** Values the chat page may send as reasoning_effort; empty means the control is hidden. */
   reasoning_efforts: z.array(z.string()).default([]),
-  /** Rough speed hint for the chat page. */
+  /**
+   * Speed mark, from a timing battery (config/models.json _comment): 'fast' shows a rabbit and 'slow' puts
+   * the model under the v2 picker's Slow heading (a turtle). Left out on a model not measured.
+   */
   speed: z.enum(['fast', 'balanced', 'slow']).optional(),
   /** Can search the web (its supplier sets web_search). Off on every request unless the client asks. */
   web_search: z.boolean().default(false),

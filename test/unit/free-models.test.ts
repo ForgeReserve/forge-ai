@@ -349,3 +349,39 @@ describe('the catalog', () => {
     expect(freeRules(c)!.models).toEqual(['mock-echo']);
   });
 });
+
+// Speed marks (owner, 2026-11-15): the v2 model picker shows a rabbit on fast models and lists slow ones
+// under their own Slow heading (a turtle). The marks come from a timing battery of every model: the
+// private (Tinfoil) ones are all fast, and the free Standard Kimi K3.1 Pro is slow while its private twin is fast.
+describe('speed marks in config/models.json and /v1/models', () => {
+  const raw = JSON.parse(readFileSync('config/models.json', 'utf8'));
+  it('marks the free models fast or slow, and every private model fast', () => {
+    const speed = Object.fromEntries(raw.models.map((m: any) => [m.id, m.speed ?? null]));
+    expect(speed).toMatchObject({
+      'glm-5.3-flash': 'fast',
+      'nemotron-3-ultra': 'fast',
+      'deepseek-v4.1-flash-1017': 'fast',
+      'glm-5.3-flash-uncensored-fp8': 'fast',
+      'glm-5.3': 'fast',
+      'kimi-k3.1-pro': 'slow',
+      'glm-5.3-uncensored-fp8': 'slow',
+      'kimi-k3-abliterated': 'slow',
+      'deepseek-v4.1-flash-1017-uncensored-fp8': 'slow',
+      'qwen3.8-27b': 'slow',
+      'nemotron-3.5-lightning': null,
+    });
+    for (const m of raw.models.filter((x: any) => x.supplier === 'tinfoil')) expect(m.speed, m.id).toBe('fast');
+    expect(speed['tinfoil/kimi-k3-1-pro']).toBe('fast');
+  });
+  it('serves the mark as speed, null where there is none', async () => {
+    const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_FOREIGN_DISCOVERY_RELAYS: '', TINFOIL_API_KEY: 'x', TOKENFACTORY_API_KEY: 'x' };
+    const config = loadConfig(e as NodeJS.ProcessEnv, raw);
+    const app = createApp(buildDeps(config, { rateSources: [fixedRateSource('fixed', 100_000)], env: e as NodeJS.ProcessEnv }));
+    const body = await (await app.request('http://gw.test/v1/models')).json();
+    const by = (id: string) => body.data.find((m: any) => m.id === id);
+    expect(by('glm-5.3-flash').speed).toBe('fast');
+    expect(by('kimi-k3.1-pro').speed).toBe('slow');
+    expect(by('nemotron-3.5-lightning').speed).toBeNull();
+    expect(by('tinfoil/gpt-oss-120b').speed).toBe('fast');
+  });
+});
