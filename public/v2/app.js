@@ -511,13 +511,31 @@ async function loadModels() {
       /* nothing cached */
     }
   }
+  await loadMethods();
+}
+
+// The ways to pay the engine offers, Start free among them. A read that fails is tried again: a little
+// later, when the phone is back online, and when the app comes back to the front (retryMethods).
+const METHODS_RETRY_MS = [2000, 5000, 15000, 30000];
+let methodsTries = 0;
+let methodsTimer = 0;
+let methodsLoading = false;
+
+async function loadMethods() {
+  if (methodsLoading || erased) return;
+  methodsLoading = true;
+  clearTimeout(methodsTimer);
   try {
     S.methods = await engine.fundMethods();
+    methodsTries = 0;
   } catch {
-    S.methods = null;
+    methodsTimer = setTimeout(loadMethods, METHODS_RETRY_MS[Math.min(methodsTries++, METHODS_RETRY_MS.length - 1)]);
   }
+  methodsLoading = false;
   store.set({});
 }
+
+const retryMethods = () => !S.methods && loadMethods();
 
 function applyModels(body) {
   if (!body) return;
@@ -1896,6 +1914,7 @@ async function start() {
   native?.join.onJoin(() => !erased && live && joinFromApp());
   addEventListener('online', () => {
     store.set({ online: true });
+    retryMethods();
     retryAll().then((n) => n && refreshBalance());
     settleOtherMint();
     resumeCards();
@@ -1905,6 +1924,7 @@ async function start() {
   // Auto-delete while open: the sweeper's timer, and a check whenever the app comes back to the front
   // (timers sleep while a phone screen is off). "On close" starts removing everything as the page goes.
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !erased && sweeper.sweep());
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && retryMethods());
   addEventListener('pagehide', () => S.settings.autoDelete === 'close' && !erased && burnEverything());
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
