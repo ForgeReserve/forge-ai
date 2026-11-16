@@ -363,6 +363,32 @@ describe('Start free on the first run', () => {
       await plain.close();
     }
   }, 60_000);
+
+  it('reads the ways to pay again after a failed read: later on its own, and at once when the phone is back online', async () => {
+    for (const how of ['timer', 'online'] as const) {
+      const { ctx, page, errors } = await phone();
+      let fail = true;
+      let reads = 0;
+      await page.route('**/v1/wallet/fund/methods', (route) => (reads++, fail ? route.abort('connectionaborted') : route.continue()));
+      await page.goto(`${g.url}/v2/#/start/private`);
+      await page.waitForSelector('[data-screen=intro][data-step=private]');
+      await expect.poll(() => reads).toBeGreaterThan(0);
+      // Without the engine's answer Start free is not offered: the plain round button.
+      expect(await page.getAttribute('#introNext', 'class')).not.toContain('free');
+      fail = false;
+      // The first retry is 2 s after the failure; back online asks at once.
+      if (how === 'online') await page.evaluate(() => dispatchEvent(new Event('online')));
+      await page.waitForSelector('#introNext.free', { timeout: how === 'online' ? 1500 : 6000 });
+      expect(await page.getAttribute('#introNext', 'aria-label')).toBe('Start free with an invite');
+      // Once read, it is not asked for again.
+      const n = reads;
+      await page.evaluate(() => dispatchEvent(new Event('online')));
+      await page.waitForTimeout(2500);
+      expect(reads).toBe(n);
+      expect(errors.filter((e) => !/ERR_CONNECTION_ABORTED/.test(e))).toEqual([]);
+      await ctx.close();
+    }
+  }, 60_000);
 });
 
 describe('Start free and the funds notice', () => {
