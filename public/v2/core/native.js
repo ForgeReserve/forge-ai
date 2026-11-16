@@ -1,5 +1,7 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
+// The iPhone app (ios/, docs/IOS.md) has the same bridge but only ForgeBars: everything else there is
+// the website's own way of doing it, or hidden as on the website (createNative).
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
@@ -14,11 +16,15 @@
 /** The engine the app talks to until the person sets another one in More. */
 export const DEFAULT_ENGINE = 'https://ai.forge-reserve.com';
 
-/** The bridge, when this page runs inside the Android app, else null. */
+/**
+ * The bridge, when this page runs inside the Android or the iPhone app, else null. platform is 'ios' in
+ * the iPhone app and 'android' in the Android one (Capacitor's only other native platform).
+ */
 export function nativeBridge(win = globalThis) {
   const cap = win?.Capacitor;
   if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform() || typeof cap.nativePromise !== 'function') return null;
   return {
+    platform: typeof cap.getPlatform === 'function' && cap.getPlatform() === 'ios' ? 'ios' : 'android',
     call: (plugin, method, options = {}) => cap.nativePromise(plugin, method, options),
     on: (plugin, event, fn) => (typeof cap.addListener === 'function' ? cap.addListener(plugin, event, fn) : null),
   };
@@ -46,15 +52,26 @@ const fileData = async (file) => bytesToBase64(new Uint8Array(await file.arrayBu
 
 /**
  * The app's native parts for the screens, or null on the website.
+ *   platform: 'android' or 'ios'.
  *   share: the share adapter (core/adapters.js) through the app's share sheet and save screen.
  *   shareIn: a photo shared in from another app.
  *   forget(): removes the photo files the app wrote to storage and the web view's cache.
+ *   isolated: the page is served cross-origin isolated (reloadForIsolation).
+ * The iPhone app has none of the Android plugins but ForgeBars, so there every other part is null and
+ * the page does what it does in Safari on an iPhone: the share sheet through navigator.share, Hold to
+ * talk through the browser's own ways, no card taps and no till (they need a Swift port first).
  */
 export function createNative(win = globalThis) {
   const bridge = nativeBridge(win);
   if (!bridge) return null;
   const { call, on } = bridge;
+  const bars = (color) => call('ForgeBars', 'set', { color }).catch(() => {});
+  if (bridge.platform === 'ios') {
+    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc: NO_READER, till: null, voice: null, speech: null, asr: null, bars };
+  }
   return {
+    platform: 'android',
+    isolated: true,
     share: {
       canShareFiles: () => true,
       /** Opens the share sheet. Resolves {opened: true}: the app is not told which app was picked. */
@@ -107,11 +124,24 @@ export function createNative(win = globalThis) {
     asr: nativeAsr(call, on),
     /**
      * The phone's status and navigation bars in this colour (a plain hex colour), with light icons on a
-     * dark one and dark icons on a light one (BarsPlugin.kt).
+     * dark one and dark icons on a light one (BarsPlugin.kt; on the iPhone, BarsPlugin.swift sets the
+     * status bar's text only, as the page draws under it).
      */
-    bars: (color) => call('ForgeBars', 'set', { color }).catch(() => {}),
+    bars,
   };
 }
+
+/**
+ * The iPhone app's card reader: none yet. The website lists the card ways and points to the Android
+ * app; the iPhone app has nowhere to point, so listed() says to leave them out (modules/fund/card and
+ * fedimint).
+ */
+export const NO_READER = Object.freeze({
+  supported: () => false,
+  listed: () => false,
+  status: async () => ({ available: false, enabled: false }),
+  start: () => ({ started: Promise.resolve(false), stop() {} }),
+});
 
 /**
  * Keeps the phone's bars the colour of the page, as a browser keeps them the theme-color: the look's
@@ -392,14 +422,14 @@ export function nativeNfc(call, on) {
 }
 
 /**
- * Inside the Android app, the page is served cross-origin isolated (MainActivity adds the headers, so
+ * Inside the Android app (native.isolated), the page is served cross-origin isolated (MainActivity adds the headers, so
  * the natural voice can run on several threads). The very first load can start before those headers
  * are in place; then the page reloads once. True when this page should reload now. `session` is
  * sessionStorage: the flag in it makes sure that happens once, also where the web view cannot isolate
  * a page at all (the voice then runs on one thread).
  */
 export function reloadForIsolation({ native, isolated, session }) {
-  if (!native || isolated) return false;
+  if (!native?.isolated || isolated) return false;
   try {
     if (session.getItem('forge2.isolationReload')) return false;
     session.setItem('forge2.isolationReload', '1');

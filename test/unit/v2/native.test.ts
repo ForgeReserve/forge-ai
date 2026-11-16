@@ -27,6 +27,13 @@ function fakeCapacitor(answers: Record<string, (opts: any) => any> = {}) {
   return { win: { Capacitor }, calls, listeners };
 }
 
+/** The bridge as the iPhone app has it: Capacitor says 'ios'. */
+function iosCapacitor() {
+  const f = fakeCapacitor();
+  (f.win.Capacitor as any).getPlatform = () => 'ios';
+  return f;
+}
+
 describe('the native bridge', () => {
   it('is there only inside the app', () => {
     expect(N.nativeBridge({})).toBeNull();
@@ -177,12 +184,16 @@ describe('cross-origin isolation in the app', () => {
   };
   it('reloads once when the app page came up without isolation, never on the website or when isolated', () => {
     const s = session();
-    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(true);
-    expect(N.reloadForIsolation({ native: {}, isolated: false, session: s })).toBe(false);
-    expect(N.reloadForIsolation({ native: {}, isolated: true, session: session() })).toBe(false);
+    const android = { isolated: true };
+    expect(N.reloadForIsolation({ native: android, isolated: false, session: s })).toBe(true);
+    expect(N.reloadForIsolation({ native: android, isolated: false, session: s })).toBe(false);
+    expect(N.reloadForIsolation({ native: android, isolated: true, session: session() })).toBe(false);
     expect(N.reloadForIsolation({ native: null, isolated: false, session: session() })).toBe(false);
     const blocked = { getItem: () => { throw new Error('blocked'); }, setItem() {} };
-    expect(N.reloadForIsolation({ native: {}, isolated: false, session: blocked })).toBe(false);
+    expect(N.reloadForIsolation({ native: android, isolated: false, session: blocked })).toBe(false);
+    // The iPhone app is never served isolated: it does not reload for it.
+    expect(N.reloadForIsolation({ native: N.createNative(iosCapacitor().win), isolated: false, session: session() })).toBe(false);
+    expect(N.createNative(fakeCapacitor().win).isolated).toBe(true);
   });
 });
 
@@ -334,5 +345,50 @@ describe('the native natural voice through ForgeVoice', () => {
     expect(calls[0]![2].id).toMatch(/^bench-/);
     expect(await v.saveLab('forge-voice-lab-1.json', '{}')).toBe(true);
     expect(calls[1]).toEqual(['ForgeVoice', 'saveLab', { name: 'forge-voice-lab-1.json', json: '{}' }]);
+  });
+});
+
+describe('the iPhone app (ios/, docs/IOS.md)', () => {
+  it('knows which app it is in: ios only when Capacitor says so', () => {
+    expect(N.nativeBridge(iosCapacitor().win).platform).toBe('ios');
+    const android = fakeCapacitor();
+    expect(N.nativeBridge(android.win).platform).toBe('android');
+    (android.win.Capacitor as any).getPlatform = () => 'android';
+    expect(N.createNative(android.win).platform).toBe('android');
+  });
+
+  it("talks to Forge's engine, as the Android app does", () => {
+    expect(N.defaultEngine(N.createNative(iosCapacitor().win))).toBe('https://ai.forge-reserve.com');
+  });
+
+  it('has only ForgeBars: every other part is left to the website ways', async () => {
+    const { win, calls } = iosCapacitor();
+    const nat = N.createNative(win);
+    expect(nat.platform).toBe('ios');
+    expect(nat.isolated).toBe(false);
+    for (const k of ['share', 'shareIn', 'forget', 'join', 'till', 'voice', 'speech', 'asr']) expect(nat[k], k).toBeNull();
+    await nat.bars('#0B0D10');
+    expect(calls).toEqual([['ForgeBars', 'set', { color: '#0B0D10' }]]);
+  });
+
+  it('has no card reader, and says to leave the card ways out', async () => {
+    const { win, calls } = iosCapacitor();
+    const nfc = N.createNative(win).nfc;
+    expect(nfc).toBe(N.NO_READER);
+    expect(nfc.supported()).toBe(false);
+    expect(nfc.listed()).toBe(false);
+    expect(await nfc.status()).toEqual({ available: false, enabled: false });
+    const r = nfc.start(() => {});
+    expect(await r.started).toBe(false);
+    r.stop();
+    expect(calls).toEqual([]);
+  });
+
+  it('a bridge that refuses ForgeBars is not an error for the page', async () => {
+    const { win } = iosCapacitor();
+    (win.Capacitor as any).nativePromise = async () => {
+      throw new Error('not implemented');
+    };
+    await expect(N.createNative(win).bars('#FFFFFF')).resolves.toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * The web app as the Android app bundles it (docs/ANDROID.md). The APK carries these files and loads
+ * The web app as the Android app bundles it (docs/ANDROID.md), and the iPhone app the same (docs/IOS.md). The APK carries these files and loads
  * nothing else as code: the v2 app (public/v2), the shared modules it imports (public/js), the vendored
  * libraries with their licences (public/vendor) and the icons. Never v1, the admin page, the beta page,
  * the /free page, the /download page or the /j page: those are the website's.
@@ -47,15 +47,17 @@ export interface CapacitorConfig {
   [k: string]: unknown;
 }
 
+/** The natural voice's files (public/v2/voice/phonon), which the APK carries uncompressed (build.gradle noCompress). */
+export const isVoiceFile = (rel: string) => rel.split(sep).join('/').startsWith('v2/voice/phonon/');
+
 /**
  * Writes the bundle into an Android assets folder: <assets>/public (the web files, with the v2 page as
  * its index.html), <assets>/capacitor.config.json and <assets>/capacitor.plugins.json. What was in
  * <assets>/public before is removed first, so a file deleted from public/ leaves the app too.
+ * For 'ios' the folder is the Xcode app folder (ios/App/App): the same public/, and the config with an
+ * empty packageClassList (no npm plugins; ForgeBars is registered by ForgeViewController.swift).
  */
-/** The natural voice's files (public/v2/voice/phonon), which the APK carries uncompressed (build.gradle noCompress). */
-export const isVoiceFile = (rel: string) => rel.split(sep).join('/').startsWith('v2/voice/phonon/');
-
-export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig): { files: number; bytes: number; voiceBytes: number } {
+export function writeBundle(publicDir: string, assetsDir: string, config: CapacitorConfig, platform: 'android' | 'ios' = 'android'): { files: number; bytes: number; voiceBytes: number } {
   const out = join(assetsDir, 'public');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
@@ -73,11 +75,15 @@ export function writeBundle(publicDir: string, assetsDir: string, config: Capaci
   const page = readFileSync(join(publicDir, 'v2', 'index.html'));
   writeFileSync(join(out, 'index.html'), page);
   bytes += page.length;
-  // The runtime reads these two. The web folder is the assets folder itself, so webDir is not passed on.
+  // The runtime reads these. The web folder is the assets folder itself, so webDir is not passed on.
   const { webDir: _webDir, ...runtime } = config;
-  writeFileSync(join(assetsDir, 'capacitor.config.json'), JSON.stringify(runtime, null, 2) + '\n');
-  // The app's own plugins (ForgeShare, ForgeShareIn) are registered in MainActivity, none from npm.
-  writeFileSync(join(assetsDir, 'capacitor.plugins.json'), '[]\n');
+  if (platform === 'ios') {
+    writeFileSync(join(assetsDir, 'capacitor.config.json'), JSON.stringify({ ...runtime, packageClassList: [] }, null, 2) + '\n');
+  } else {
+    writeFileSync(join(assetsDir, 'capacitor.config.json'), JSON.stringify(runtime, null, 2) + '\n');
+    // The app's own plugins (ForgeShare, ForgeShareIn) are registered in MainActivity, none from npm.
+    writeFileSync(join(assetsDir, 'capacitor.plugins.json'), '[]\n');
+  }
   return { files: files.length + 1, bytes, voiceBytes };
 }
 

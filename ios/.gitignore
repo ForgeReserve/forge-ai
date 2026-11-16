@@ -1,0 +1,12 @@
+# Built files
+App/build
+App/output
+DerivedData
+xcuserdata
+
+# CocoaPods puts these back from the Podfile and Podfile.lock (pod install)
+App/Pods
+
+# The web app, bundled at build time from public/ (scripts/ios-web.ts)
+App/App/public
+App/App/capacitor.config.json

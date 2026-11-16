@@ -134,9 +134,9 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, reade
       el(
         'ul',
         { class: 'goes', id: 'eraseGoes' },
-        // The Android app has no Classic app and no offline copy (its files are in the app), but it does
-        // keep photo files for sharing and from its camera.
-        ...(native ? ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesPhotos'] : ['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', 'goesClassic', 'goesOffline']).map((k) => sayEl('li', { id: `erase-${k}` }, t(`erase.${k}`), '', GOES_ICON[k])),
+        // The apps have no Classic app and no offline copy (their files are in the app). The Android app
+        // keeps photo files for sharing and from its camera; the iPhone app writes none (native.forget).
+        ...['goesConversations', 'goesSettings', 'goesKey', 'goesEcash', ...(!native ? ['goesClassic', 'goesOffline'] : native.forget ? ['goesPhotos'] : [])].map((k) => sayEl('li', { id: `erase-${k}` }, t(`erase.${k}`), '', GOES_ICON[k])),
       ),
       autoRow,
     ),

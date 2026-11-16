@@ -82,9 +82,10 @@ export function create(inputs) {
     id: 'card',
     group: 'unlinked',
     icon: 'card',
-    // Listed everywhere: on the website the row says cards need the app. Usable only where there is a
-    // reader, so How you pay shows a card only in the app.
-    available: () => true,
+    // Listed on the website and in the Android app: on the website the row says cards need the app.
+    // Not in the iPhone app, which has no reader yet and no app to point to (core/native.js NO_READER).
+    // Usable only where there is a reader, so How you pay shows a card only in the app.
+    available: () => nfc?.listed?.() !== false,
     usable: () => !!nfc?.supported?.(),
     view({ done, open }) {
       const msg = ui.msgLine();
