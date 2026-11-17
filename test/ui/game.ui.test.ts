@@ -142,6 +142,22 @@ async function holdPip(page: Page, ms: number) {
   await page.waitForTimeout(ms);
   await page.mouse.up();
 }
+/** Holds Pip down with a finger for `ms` (real touch input), as a phone does. */
+async function fingerHoldPip(page: Page, ms: number) {
+  const r = (await page.locator('#pipBtn').boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
+  await page.waitForTimeout(ms);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+/** The screen shown now (its data-screen). */
+const screenOf = (page: Page) => page.evaluate(() => document.querySelector('main')?.dataset.screen ?? '');
+/** Sets the address's hash by hand, as a typed address or a test driver does: an entry the app did not make. */
+async function rawHash(page: Page, hash: string, screen: string) {
+  await page.evaluate((h) => (location.hash = h), hash);
+  await expect.poll(() => screenOf(page)).toBe(screen);
+}
 /** The app put away and brought back, as a phone does (the page hidden, then shown). */
 async function awayAndBack(page: Page) {
   for (const state of ['hidden', 'visible']) {
@@ -376,6 +392,80 @@ describe("Pip's Garden", () => {
     await page.goto(`${g.url}/v2/#/more/model`);
     await onGame(page);
     expect(await page.evaluate(() => document.title)).toBe("Pip's Garden");
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  // A finger lifted after the hold must not press what the helper's home has under it (Type sits where Pip
+  // was), and entries the app did not make (an address typed, the hash set by hand) must not move the game
+  // or the helper's home from their places.
+  it('Pip held with a finger opens the helper, after addresses set by hand and taps in any order; Back from it shows the game', async () => {
+    const { ctx, page, errors } = await phone({ viewport: { width: 395, height: 811 } });
+    const orders: Array<Array<() => Promise<unknown>>> = [
+      [() => rawHash(page, '#/type', 'type'), () => rawHash(page, '#/more/history', 'history'), () => page.click('.back-head button.round'), () => rawHash(page, '#/', 'home')],
+      [() => page.click('#btn-type'), () => rawHash(page, '#/funds', 'funds'), () => rawHash(page, '#/', 'home'), () => page.click('#btn-more'), () => rawHash(page, '#/more/model', 'model'), () => rawHash(page, '#/', 'home')],
+      [() => rawHash(page, '#/funds', 'funds'), () => page.click('.back-head button.round'), () => rawHash(page, '#/type', 'type'), () => page.goBack(), () => page.click('#btn-type'), () => page.goBack()],
+      [() => rawHash(page, '#/more', 'home'), () => page.click('#btn-more'), () => rawHash(page, '#/type', 'type'), () => rawHash(page, '#/game', 'game')],
+      // More by hand, closed with its button: Back from the helper's home still shows the game.
+      [() => rawHash(page, '#/more', 'home'), () => page.click('#btn-more'), () => page.waitForSelector('#moreSheet', { state: 'detached' }), () => page.goBack(), () => onGame(page)],
+    ];
+    for (const [n, steps] of orders.entries()) {
+      await onGame(page);
+      await fingerHoldPip(page, 3300);
+      await onHelper(page);
+      for (const step of steps) {
+        await step();
+        await page.waitForTimeout(150);
+      }
+      // To the game: the game button, unless the order ended on it.
+      if ((await screenOf(page)) !== 'game') {
+        await onHelper(page);
+        await page.click('#gameBtn');
+      }
+      await onGame(page);
+      await fingerHoldPip(page, 3300);
+      await onHelper(page);
+      // Give a click the finger's lift might make the time to land: the helper's home stays.
+      await page.waitForTimeout(500);
+      expect(await screenOf(page), `order ${n}`).toBe('home');
+      // Back from the helper's home shows the game.
+      await page.goBack();
+      await onGame(page);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('Default: Done and Back go where they went, also after Back over addresses set by hand', async () => {
+    const { ctx, page, errors } = await phone({ playful: false });
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    const sheetOpen = () => page.$('#moreSheet').then(Boolean);
+    // Choose a model from More, an address set by hand on top, then Back: a choice still goes home.
+    await page.click('#btn-more');
+    await page.click('#moreModel');
+    await page.waitForSelector('[data-screen=model]');
+    await rawHash(page, '#/type', 'type');
+    await page.goBack();
+    await expect.poll(() => screenOf(page)).toBe('model');
+    await page.click('[data-model="mock-echo"]');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(false);
+    // More opened by hand, History from it, the home's address on top, then Back: Ask a question goes home.
+    await rawHash(page, '#/more', 'home');
+    await page.click('#moreHistory');
+    await page.waitForSelector('[data-screen=history]');
+    await rawHash(page, '#/', 'home');
+    await page.goBack();
+    await expect.poll(() => screenOf(page)).toBe('history');
+    await page.click('#historyAsk');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(false);
+    // A screen opened by hand is a first entry, as before: its Back goes to the screen it belongs to.
+    await rawHash(page, '#/more/look', 'look');
+    await page.click('.back-head button.round');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
