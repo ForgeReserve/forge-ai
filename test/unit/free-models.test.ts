@@ -355,6 +355,12 @@ describe('the catalog', () => {
 // private (Tinfoil) ones are all fast, and the free Standard Kimi K3.1 Pro is slow while its private twin is fast.
 describe('speed marks in config/models.json and /v1/models', () => {
   const raw = JSON.parse(readFileSync('config/models.json', 'utf8'));
+  it('lists GLM 5.3 Flash first among the free models, so it is the one a new phone lands on', () => {
+    // The fast free model leads the list (owner, 2026-11-17: GLM 5.3 took 5 to 11 s to its first words where
+    // Flash took 2.5 s). Start free chooses it by name (core/price.js PREFERRED_FREE); the list agrees.
+    const free = raw.models.filter((m: any) => m.pricing === 'free' && !/uncensored|abliterated/.test(m.id));
+    expect(free[0].id).toBe('glm-5.3-flash');
+  });
   it('marks the free models fast or slow, and every private model fast', () => {
     const speed = Object.fromEntries(raw.models.map((m: any) => [m.id, m.speed ?? null]));
     expect(speed).toMatchObject({

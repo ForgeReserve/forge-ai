@@ -149,6 +149,18 @@
       "speed": "fast"
     },
     {
+      "id": "glm-5.3-flash",
+      "supplier": "tokenfactory",
+      "upstream": "glm-5.3-flash",
+      "pricing": "free",
+      "free_reason": "Token Factory beta: no charge to Forge (owner, 2026-11-15)",
+      "max_output_tokens": 8192,
+      "uncensored": false,
+      "context_length": 917504,
+      "name": "GLM 5.3 Flash",
+      "speed": "fast"
+    },
+    {
       "id": "qwen3.8-27b",
       "supplier": "tokenfactory",
       "upstream": "qwen3.8-27b",
@@ -170,18 +182,6 @@
       "uncensored": false,
       "context_length": 917504,
       "name": "GLM 5.3",
-      "speed": "fast"
-    },
-    {
-      "id": "glm-5.3-flash",
-      "supplier": "tokenfactory",
-      "upstream": "glm-5.3-flash",
-      "pricing": "free",
-      "free_reason": "Token Factory beta: no charge to Forge (owner, 2026-11-15)",
-      "max_output_tokens": 8192,
-      "uncensored": false,
-      "context_length": 917504,
-      "name": "GLM 5.3 Flash",
       "speed": "fast"
     },
     {
