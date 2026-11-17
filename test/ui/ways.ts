@@ -8,6 +8,7 @@ export async function openWay(page: Page, id: string): Promise<void> {
   await page.waitForSelector('[data-screen=addFunds]');
   // The engine's methods arrive after the first paint: wait for the way's tab or its More tile.
   await page.waitForSelector(`#tab-${id}, #more-${id}, #pair-${id}`, { state: 'attached' });
+  await settled(page);
   if (await page.locator(`#pair-${id}`).count()) {
     // The Cashu card and the Fedimint card share one card when both are there: tap the printed card.
     await page.click('#tab-cards');
@@ -15,11 +16,28 @@ export async function openWay(page: Page, id: string): Promise<void> {
     await page.click(`#pair-${id}`);
   } else if (await page.locator(`#tab-${id}`).count()) {
     await page.click(`#tab-${id}`);
-    await page.waitForSelector(`#wayGo[data-way="${id}"]`);
-    await page.click('#wayGo');
+    // The big button names the way it opens: press it only while it is this way's, never another's.
+    await page.click(`#wayGo[data-way="${id}"]`);
   } else {
     await page.click('#tab-more');
     await page.click(`#more-${id}`);
+  }
+}
+
+/**
+ * Waits until the ways on Add money have stopped changing. The screen is drawn once before the engine's
+ * methods arrive and again after: a way can move from a card of its own to a shared card (the two card
+ * ways), and a tap made between the two draws lands on a button that is about to be replaced.
+ */
+async function settled(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+  const ways = () => page.$$eval('[id^="tab-"], [id^="more-"], [id^="pair-"]', (xs) => xs.map((x) => x.id).join(','));
+  let last = await ways();
+  for (let same = 0; same < 3; ) {
+    await page.waitForTimeout(120);
+    const now = await ways();
+    same = now === last ? same + 1 : 0;
+    last = now;
   }
 }
 
