@@ -233,7 +233,7 @@ pnpm -s test
 
 ## A filter: cover a date stamp
 
-Some cameras print the date in orange in a corner of every photo. A date can say where a person was and when. This filter finds that orange in the bottom right corner and covers it with a solid block, on the phone, before the photo is shared.
+Some cameras print the date in orange in a corner of every photo. A date can say where a person was and when. This filter finds that orange in the bottom right corner and covers it with a flat block, on the phone, before the photo is shared.
 
 ### Step 1: the filter's manifest
 
@@ -336,7 +336,7 @@ node scripts/v2-preload.ts
 
 ### Step 4: see the filter
 
-Reload the app and open Add, then Photo. Pick a photo with an orange date in the corner. The screen shows each check as it runs, then the photo with a black block over the date, and "Writing and numbers" in the list of changes. Tap the block to take it away; tap the photo to add one.
+Reload the app and open Add, then Photo. Pick a photo with an orange date in the corner. The screen shows each check as it runs, then the photo with a flat block over the date, in the colour of the photo around it, and "Writing and numbers" in the list of changes. Tap the block to take it away; tap the photo to add one.
 
 ### Step 5: test the search
 

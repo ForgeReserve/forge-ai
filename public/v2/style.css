@@ -419,7 +419,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .cover-layer { position: absolute; inset: 0; pointer-events: none; }
 .photo-stage[data-view="before"] .cover-layer { display: none; }
 .cover-box { position: absolute; padding: 0; margin: 0; border: 2px solid var(--gold); border-radius: 4px; background: transparent; pointer-events: auto; min-width: 12px; min-height: 12px; }
-.cover-box::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 48px); height: max(100%, 48px); transform: translate(-50%, -50%); }
+.cover-box::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 48px); height: max(100%, 48px); transform: translate(-50%, -50%); border-radius: inherit; }
+.cover-box[data-shape="ellipse"] { border-radius: 50%; }
 .cover-box:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
 .cover-draft { position: absolute; border: 2px dashed var(--gold); background: rgba(0, 0, 0, 0.35); pointer-events: none; }
 .changes { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }

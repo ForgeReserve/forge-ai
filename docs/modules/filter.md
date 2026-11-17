@@ -1,6 +1,6 @@
 # Filter modules
 
-A filter module checks a photo in Share unseen before it is shared. It finds hidden details in the file to take out, or places in the picture to cover with solid blocks: faces, writing, a number plate. Every filter runs on every photo, one after another, on the phone.
+A filter module checks a photo in Share unseen before it is shared. It finds hidden details in the file to take out, or places in the picture to cover: faces, writing, a number plate. Every filter runs on every photo, one after another, on the phone.
 
 Read [the overview](README.md) first. The bundled filters are in [`public/v2/modules/filter/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter) and described in the [module list](list.md#filter). [Write your first module](first-module.md#a-filter-cover-a-date-stamp) builds one step by step.
 
@@ -32,7 +32,7 @@ filter: ['t'],
 | `bytes` | The original file as a `Uint8Array`. Only the hidden details filter reads it. |
 | `type` | The file's type, such as `image/jpeg`. |
 
-Blocks are in the working picture's pixels.
+Covers are in the working picture's pixels. The new file is made at that size too, so a cover lands on the same pixels on the screen and in the file.
 
 ## What a filter provides
 
@@ -50,7 +50,7 @@ Required. Looks at the photo and resolves:
 
 | Field | What it is |
 | - | - |
-| `covers` | Blocks to paint: `[{x, y, w, h, kind}]` in the photo's pixels. `kind` is `'face'` or `'writing'`; without it a `faces` filter's blocks are faces and any other's are writing. Blocks are cut to the photo and empty ones dropped. |
+| `covers` | Covers to paint, in the photo's pixels: a box `{x, y, w, h, kind}`, or an ellipse `{shape: 'ellipse', cx, cy, rx, ry, x, y, w, h, kind}` whose `x`, `y`, `w` and `h` are its bounds. `kind` is `'face'` or `'writing'`; without it a `faces` filter's covers are faces and any other's are writing. `found`, optional, is the box of what the filter found (the face, the line of writing), which the cover holds; tests check it. Covers are cut to the photo and empty ones dropped. |
 | `found` | For a `details` filter: the hidden details the original file holds, from `'location'`, `'device'`, `'time'`, `'thumbnail'` and `'other'`. |
 | `known` | For a `details` filter: `false` when it could not read the file's details at all. |
 
@@ -58,7 +58,7 @@ Resolve `{covers: []}` when there is nothing to cover.
 
 ### `finish(bytes)`
 
-Optional. After the person picks Share, Save or Ask about it, the app draws the photo again with every block painted solid, makes a new JPEG, and hands its bytes to each filter's `finish` in turn. Return the cleaned bytes (a `Uint8Array`, or a promise of one). The hidden details filter takes every place for notes out of the JPEG here.
+Optional. After the person picks Share, Save or Ask about it, the app draws the photo again with every cover painted (see [How covers are painted](#how-covers-are-painted)), makes a new JPEG, and hands its bytes to each filter's `finish` in turn. Return the cleaned bytes (a `Uint8Array`, or a promise of one). The hidden details filter takes every place for notes out of the JPEG here.
 
 ### `prepare()`
 
@@ -69,8 +69,20 @@ Optional. Starts slow work early, such as loading a model. The app calls it once
 1. The registry calls `create(inputs)` once when the app starts.
 2. Share unseen opens: after 300 ms the app calls `prepare()` on every filter that has one.
 3. The person picks or takes a photo, or shares one in from another app. The app runs `analyse(photo)` on each filter in turn, through `runFilters` in [`public/v2/core/filters.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js), and shows each step as it runs.
-4. The person sees the photo before and after, with every block. They can take blocks away and add their own.
-5. Share, Save or Ask about it: the app paints the blocks into a new JPEG, calls each `finish(bytes)` in turn, and checks that the file holds no hidden details before it goes anywhere.
+4. The person sees the photo before and after, with every cover. They can take a cover away with a tap on it, and add their own by tapping or dragging on the photo.
+5. Share, Save or Ask about it: the app paints the covers into a new JPEG, calls each `finish(bytes)` in turn, and checks that the file holds no hidden details before it goes anywhere.
+
+## How covers are painted
+
+`paintCovers` in [`public/v2/core/covers.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/covers.js) paints them, for the screen and for the file alike:
+
+- Every pixel a cover touches is painted whole. There is no soft edge that keeps part of what was under it.
+- Each cover is one flat colour: the middle value of red, green and blue over a thin ring of pixels just outside it (about 4 pixels wide on a 1,000 pixel photo), counting only pixels under no cover. So it reads as a smudge, not a black bar, and the colour is made only of pixels the new file shows anyway.
+- A cover is never blurred or pixelated: a blurred face or line of writing can be sharpened or matched. Nothing under a cover reaches the new file in any form; a test changes every pixel under the covers and gets the same file, byte for byte.
+
+On the screen each cover also has a gold outline. The file has none.
+
+The face filter fits an ellipse round each face: it reaches half the detector's box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus two of the detector's pixels, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter's height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.
 
 ## Errors
 

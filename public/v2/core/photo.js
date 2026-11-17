@@ -1,7 +1,7 @@
 // Share unseen in the page: opens a photo on the phone, draws it with its cover blocks, and makes the new
 // file that is shared, saved or asked about. The photo is held in this page's memory only. Nothing here
 // stores it or sends it anywhere; the original file is never shared.
-import { alignBox, COVER_FILL } from './covers.js';
+import { paintCovers } from './covers.js';
 import { finishFile } from './filters.js';
 import { leftDetails } from './photometa.js';
 
@@ -68,17 +68,20 @@ export async function openPhoto(file) {
   return { width, height, canvas, pixels: ctx.getImageData(0, 0, width, height), bytes, type: file.type || 'image/*' };
 }
 
-/** Draws the photo with its blocks into `target` (a canvas of the photo's size): what will be shared. */
+/**
+ * Draws the photo with its covers into `target` (a canvas of the photo's size): what will be shared, and
+ * what the screen shows as After. Each cover is one flat colour from the uncovered pixels around it
+ * (paintCovers), at the photo's own pixels, so the screen and the file show the same covers.
+ */
 export function drawCovered(photo, covers, target) {
   target.width = photo.width;
   target.height = photo.height;
-  const ctx = target.getContext('2d');
+  const ctx = target.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(photo.canvas, 0, 0);
-  ctx.fillStyle = COVER_FILL;
-  for (const c of covers) {
-    const b = alignBox(c, photo.width, photo.height);
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-  }
+  if (!covers.length) return target;
+  const img = ctx.getImageData(0, 0, photo.width, photo.height);
+  paintCovers(img, covers);
+  ctx.putImageData(img, 0, 0);
   return target;
 }
 

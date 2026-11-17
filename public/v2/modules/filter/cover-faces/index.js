@@ -1,4 +1,4 @@
-// Share unseen, second filter: finds faces on the phone and covers each with a solid block.
+// Share unseen, second filter: finds faces on the phone and covers each with a flat ellipse (boxes.js).
 // The detector is face-api's tiny face detector (MIT) on TensorFlow.js (Apache-2.0), vendored in
 // public/vendor/face-api with its model file (about 190 KB) and licences. Both are loaded from this
 // app's own address when a photo is first checked; nothing is fetched from anyone else, and the photo

@@ -4,7 +4,7 @@
 // adds or takes away blocks by hand, and chooses Share, Ask about it or Save. Free: no balance needed.
 //
 // The photo lives in this screen's memory only. Leaving the screen lets go of it; nothing stores it.
-import { countKinds, dragBox, hitCover, tapBox, alignBox } from '../core/covers.js';
+import { countKinds, dragBox, hitCover, tapBox } from '../core/covers.js';
 import { changeRows, runFilters, withId } from '../core/filters.js';
 import { closePhoto, drawCovered, makeFile, openPhoto, shareOrSave, takeShared } from '../core/photo.js';
 import { el, icon, msgLine, say, sayEl } from '../core/ui.js';
@@ -156,13 +156,17 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     stage.dataset.view = 'after';
     stage.setAttribute('aria-label', t('photo.afterLabel'));
     say(hint, t('photo.hint'), '', 'hand');
-    // One button per block, over the painted block: tap (or Enter) takes it away.
+    // One button per cover, its outline over the painted cover: tap (or Enter) takes it away.
+    const pc = (v, of) => `${(v / of) * 100}%`;
     layer.replaceChildren(
       ...covers.map((c) => {
-        const b = alignBox(c, photo.width, photo.height);
-        // data-box: the block in the photo's pixels, as it is painted.
-        const btn = el('button', { type: 'button', class: 'cover-box', 'data-kind': c.kind, 'data-cover': c.id, 'data-box': `${b.x},${b.y},${b.w},${b.h}`, 'aria-label': t(BLOCK_LABEL[c.kind] ?? BLOCK_LABEL.mine), onclick: () => removeCover(c.id) });
-        Object.assign(btn.style, { left: `${(b.x / photo.width) * 100}%`, top: `${(b.y / photo.height) * 100}%`, width: `${(b.w / photo.width) * 100}%`, height: `${(b.h / photo.height) * 100}%` });
+        // In the photo's pixels: data-box the cover's bounds, data-ellipse an ellipse's centre and radii,
+        // data-found what the filter found under it.
+        const f = c.found;
+        const btn = el('button', { type: 'button', class: 'cover-box', 'data-kind': c.kind, 'data-cover': c.id, 'data-shape': c.shape ?? 'box', 'data-box': `${c.x},${c.y},${c.w},${c.h}`, ...(c.shape === 'ellipse' ? { 'data-ellipse': `${c.cx},${c.cy},${c.rx},${c.ry}` } : {}), ...(f ? { 'data-found': `${Math.floor(f.x)},${Math.floor(f.y)},${Math.ceil(f.x + f.w) - Math.floor(f.x)},${Math.ceil(f.y + f.h) - Math.floor(f.y)}` } : {}), 'aria-label': t(BLOCK_LABEL[c.kind] ?? BLOCK_LABEL.mine), onclick: () => removeCover(c.id) });
+        // An ellipse's outline is drawn whole; the photo's edge cuts it where the cover is cut.
+        const o = c.shape === 'ellipse' ? { x: c.cx - c.rx, y: c.cy - c.ry, w: 2 * c.rx, h: 2 * c.ry } : c;
+        Object.assign(btn.style, { left: pc(o.x, photo.width), top: pc(o.y, photo.height), width: pc(o.w, photo.width), height: pc(o.h, photo.height) });
         return btn;
       }),
     );
@@ -234,7 +238,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     if (cancelled || !photo) return;
     const q = toPhoto(e);
     if (p.moved) return addCover(dragBox(p.x, p.y, q.x, q.y, photo.width, photo.height));
-    const hit = hitCover(covers.map((c) => alignBox(c, photo.width, photo.height)), p.x, p.y, 4 * p.scale);
+    const hit = hitCover(covers, p.x, p.y, 4 * p.scale);
     if (hit >= 0) return removeCover(covers[hit].id);
     skipClickUntil = performance.now() + 800;
     addCover(tapBox(p.x, p.y, photo.width, photo.height));
