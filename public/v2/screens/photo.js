@@ -194,7 +194,19 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     const r = view.getBoundingClientRect();
     return { x: ((e.clientX - r.left) / r.width) * photo.width, y: ((e.clientY - r.top) / r.height) * photo.height, scale: photo.width / r.width };
   };
+  // A finger's tap that adds a block is followed by a click, and Chrome sends it to whatever is under the
+  // finger by then: the new block, whose click takes it away again. That one click is let go.
+  let skipClickUntil = 0;
+  stage.addEventListener(
+    'click',
+    (e) => {
+      if (performance.now() < skipClickUntil && e.target.closest('.cover-box')) e.stopPropagation();
+      skipClickUntil = 0;
+    },
+    true,
+  );
   stage.addEventListener('pointerdown', (e) => {
+    skipClickUntil = 0;
     if (showing !== 'after' || !photo || e.target.closest('.cover-box') || e.button > 0) return;
     press = { ...toPhoto(e), cx: e.clientX, cy: e.clientY, moved: false, id: e.pointerId };
     stage.setPointerCapture?.(e.pointerId);
@@ -223,8 +235,9 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     const q = toPhoto(e);
     if (p.moved) return addCover(dragBox(p.x, p.y, q.x, q.y, photo.width, photo.height));
     const hit = hitCover(covers.map((c) => alignBox(c, photo.width, photo.height)), p.x, p.y, 4 * p.scale);
-    if (hit >= 0) removeCover(covers[hit].id);
-    else addCover(tapBox(p.x, p.y, photo.width, photo.height));
+    if (hit >= 0) return removeCover(covers[hit].id);
+    skipClickUntil = performance.now() + 800;
+    addCover(tapBox(p.x, p.y, photo.width, photo.height));
   };
   stage.addEventListener('pointerup', (e) => endPress(e, false));
   stage.addEventListener('pointercancel', (e) => endPress(e, true));

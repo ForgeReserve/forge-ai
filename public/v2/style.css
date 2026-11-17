@@ -871,3 +871,10 @@ button.funds-ring { padding: 0; border: 0; border-radius: 50%; background: trans
 /* Add money's icon row fits a 360 px phone: the tabs share the width instead of scrolling off. */
 .way-tabs { gap: clamp(4px, calc((100vw - 330px) / 8), 8px); }
 .way-tab { flex: 0 1 52px; min-width: 44px; width: auto; height: auto; aspect-ratio: 1; max-height: 52px; }
+
+/* A screen's scrolling part never scrolls sideways (iPhone rehearsal, Share unseen). An info button sits
+   10 px past the edge of its line (.say > .info-btn), which made .scroll 10 px wider than itself, so a
+   swipe that was not quite straight moved the whole screen to the left. The scrolling part now reaches
+   10 px into the screen's padding on each side, with its content where it was, so the button fits inside
+   it; anything else that would stick out is cut off rather than scrolled to. */
+.scroll { margin-inline: -10px; padding-inline: 10px; overflow-x: hidden; }

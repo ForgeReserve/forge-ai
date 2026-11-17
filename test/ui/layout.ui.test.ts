@@ -176,3 +176,27 @@ describe('the rings keep their place under the sheets', () => {
     }, 90_000);
   }
 });
+
+describe('no screen scrolls sideways', () => {
+  // iPhone rehearsal: a screen's scrolling part (.scroll) was 10 px wider than itself, because an info
+  // button sits past the edge of its line, so a swipe that was not quite straight moved the screen to the
+  // left. The page's own width never showed it. Share unseen with photos is tested in photo.ui.test.ts.
+  const ROUTES = ['funds', 'more/look', 'more/model', 'more/voice', 'more/history', 'more/engine', 'more/erase', 'photo'];
+  for (const width of [360, 430]) {
+    it(`no part of a screen scrolls sideways (${width} px)`, async () => {
+      const page = await phone({ width, height: 800 });
+      for (const route of ROUTES) {
+        await page.goto(`${g.url}/v2/#/${route}`);
+        await page.waitForSelector('[data-screen]');
+        await page.waitForLoadState('networkidle');
+        const r = await page.evaluate(() => {
+          const parts = [document.scrollingElement!, ...document.querySelectorAll('main .scroll')];
+          return { parts: parts.length, wide: parts.filter((e) => e.scrollWidth > e.clientWidth).map((e) => `${e.className || e.tagName}: ${e.scrollWidth} in ${e.clientWidth}`) };
+        });
+        expect(r, route).toEqual({ parts: expect.any(Number), wide: [] });
+        expect(r.parts, `${route} has a scrolling part`).toBeGreaterThan(1);
+      }
+      await page.context().close();
+    });
+  }
+});

@@ -49,8 +49,8 @@ interface Phone {
 }
 
 /** A phone with no balance. With `sheet`, navigator.share is a stand-in that keeps what it is given. */
-async function phone({ sheet = true, workers = 'allow' as 'allow' | 'block' } = {}): Promise<Phone> {
-  const ctx = await browser.newContext({ ...PHONE, acceptDownloads: true, serviceWorkers: workers });
+async function phone({ sheet = true, workers = 'allow' as 'allow' | 'block', viewport = PHONE.viewport } = {}): Promise<Phone> {
+  const ctx = await browser.newContext({ ...PHONE, viewport, acceptDownloads: true, serviceWorkers: workers });
   await pastFirstRun(ctx);
   if (sheet)
     await ctx.addInitScript(() => {
@@ -410,4 +410,111 @@ describe('Share unseen', () => {
     expect(await page.locator('#photoFree').count()).toBe(1);
     await ctx.close();
   }, 60_000);
+});
+
+/**
+ * What on the screen could scroll or stick out sideways: the page, every part that scrolls (and the
+ * screen's scrolling part, whatever its overflow), and any element past the screen's edges. Empty when
+ * nothing can. The photo's blocks and their larger touch areas are inside the photo, which cuts them off.
+ */
+const sideways = (page: Page) =>
+  page.evaluate(() => {
+    const W = innerWidth;
+    const name = (e: Element) => `${e.tagName.toLowerCase()}${e.id ? `#${e.id}` : ''}${typeof e.className === 'string' && e.className ? `.${e.className.trim().replace(/\s+/g, '.')}` : ''}`;
+    const bad: string[] = [];
+    const doc = document.scrollingElement!;
+    if (doc.scrollWidth > W || scrollX !== 0) bad.push(`page ${doc.scrollWidth} wide, at ${scrollX}`);
+    for (const e of document.querySelectorAll('main, main *')) {
+      const o = getComputedStyle(e).overflowX;
+      if (o === 'auto' || o === 'scroll' || e.matches('.scroll')) {
+        if (e.scrollWidth > e.clientWidth) bad.push(`${name(e)} scrolls: ${e.scrollWidth} in ${e.clientWidth}`);
+        if (e.scrollLeft !== 0) bad.push(`${name(e)} scrolled to ${e.scrollLeft}`);
+      }
+      if (e.closest('.photo-stage, .sr-only')) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width && (r.left < -0.5 || r.right > W + 0.5)) bad.push(`${name(e)} at ${Math.round(r.left)} to ${Math.round(r.right)}`);
+    }
+    return bad;
+  });
+
+/** crew.jpg drawn into a new JPEG in the page: turned on its side (portrait), or in a phone screenshot's tall frame. */
+const reframed = async (page: Page, how: 'portrait' | 'tall') =>
+  Buffer.from(
+    await page.evaluate(
+      async ({ bytes, how }) => {
+        const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }));
+        const c = how === 'portrait' ? new OffscreenCanvas(bmp.height, bmp.width) : new OffscreenCanvas(1170, 2532);
+        const x = c.getContext('2d')!;
+        if (how === 'portrait') {
+          x.translate(bmp.height, 0);
+          x.rotate(Math.PI / 2);
+          x.drawImage(bmp, 0, 0);
+        } else {
+          x.fillStyle = '#ddd';
+          x.fillRect(0, 0, c.width, c.height);
+          x.drawImage(bmp, 0, 900, 1170, (1170 / bmp.width) * bmp.height);
+        }
+        return [...new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })).arrayBuffer())];
+      },
+      { bytes: [...CREW], how },
+    ),
+  );
+
+/** A point on the photo (page pixels) clear of every block and its touch area (48 px at least), the leftmost first. */
+const clearSpot = (page: Page) =>
+  page.evaluate(() => {
+    const c = document.querySelector('#photoCanvas')!.getBoundingClientRect();
+    const boxes = [...document.querySelectorAll('#coverLayer .cover-box')].map((b) => b.getBoundingClientRect());
+    for (let x = c.left + 8; x < c.right - 8; x += 8)
+      for (let y = c.top + 8; y < c.bottom - 8; y += 8) if (boxes.every((b) => x < b.left - 32 || x > b.right + 32 || y < b.top - 32 || y > b.bottom + 32)) return { x, y };
+    return null;
+  });
+
+describe('Share unseen never scrolls sideways', () => {
+  // iPhone rehearsal: the result screen sat about 10 px to the left after a drag, with the heading cut
+  // at the screen's edge. The phone widths: small Android, iPhone 13 to 17, the Pro Max and Plus sizes.
+  for (const width of [360, 390, 428, 430]) {
+    it(`at ${width} px, with landscape and portrait photos, before and after blocks added by tap and by drag`, async () => {
+      const { ctx, page, errors } = await phone({ viewport: { width, height: 844 } });
+      const cdp = await ctx.newCDPSession(page);
+      const touch = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+      await pick(page, 'IMG_2041.jpg', CREW);
+      const photos: [string, Buffer][] = [
+        ['landscape', CREW],
+        ['portrait', await reframed(page, 'portrait')],
+        ['tall', await reframed(page, 'tall')],
+      ];
+      for (const [kind, buffer] of photos) {
+        if (kind !== 'landscape') {
+          await page.click('#photoAnother');
+          await page.setInputFiles('#photoFile', { name: `${kind}.jpg`, mimeType: 'image/jpeg', buffer });
+          await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+        }
+        expect(await sideways(page), `${kind}: as it opens`).toEqual([]);
+        const mine = () => page.locator('#coverLayer .cover-box[data-kind=mine]').count();
+        // A tap on the photo, as near its left edge as is clear of blocks, adds a block there.
+        await page.locator('#photoCanvas').scrollIntoViewIfNeeded();
+        const box = (await page.locator('#photoCanvas').boundingBox())!;
+        const tap = (await clearSpot(page))!;
+        await page.touchscreen.tap(tap.x, tap.y);
+        await expect.poll(mine, { message: `${kind}: tap` }).toBe(1);
+        expect(await sideways(page), `${kind}: after a tap`).toEqual([]);
+        // A finger drag from a clear place to past the photo's right edge adds a block and moves nothing else.
+        const from = (await clearSpot(page))!;
+        const to = { x: box.x + box.width + 30, y: from.y + 40 };
+        await touch('touchStart', from.x, from.y);
+        for (let i = 1; i <= 8; i++) await touch('touchMove', from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+        await touch('touchEnd');
+        await expect.poll(mine, { message: `${kind}: drag` }).toBe(2);
+        expect(await sideways(page), `${kind}: after a drag on the photo`).toEqual([]);
+        // A swipe that is not quite straight, over the list of changes, scrolls down and never sideways.
+        const list = (await page.locator('#photoChanges').boundingBox())!;
+        await cdp.send('Input.synthesizeScrollGesture', { x: Math.round(list.x + list.width / 2), y: Math.round(Math.min(list.y + 20, 800)), xDistance: -120, yDistance: -60, gestureSourceType: 'touch', speed: 1200 });
+        expect(await sideways(page), `${kind}: after a sideways swipe`).toEqual([]);
+        await page.evaluate(() => document.querySelector('main .scroll')!.scrollTo(0, 0));
+      }
+      expect(errors).toEqual([]);
+      await ctx.close();
+    }, 120_000);
+  }
 });

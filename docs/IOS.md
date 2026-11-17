@@ -148,6 +148,8 @@ On a new iPhone 17 simulator, "Forge Speech" (iOS 26.5): the app built (Debug, s
 
 On an iPhone 17 simulator (iOS 26.5), with a probe in the installed copy only that feeds `test/unit/fixtures/photos/crew.jpg` through the page's file input: the face check finds the three faces, on the graphics chip (TensorFlow.js WebGL 2). The first check after the app opens takes about 8 seconds (loading the detector and building its shaders), the next ones well under a second; on the processor alone the five passes over a 2048 px photo take about 3 seconds. Before the fix the face check failed with `TypeError: Load failed`: face-api's `loadFromUri` turned `capacitor://localhost/vendor/face-api/model/` into `capacitor:/localhost/...` (`docs/modules/filter.md`, Platforms).
 
+A swipe that was not quite straight moved a screen's scrolling part 10 px to the left and left it there (seen on Share unseen; History had the same overflow): an info button sits 10 px past the edge of its line. Measured in the Simulator with Maestro swipes, before and after the fix in `style.css` (`.scroll`).
+
 ## Not verified
 
 - A real card tap: the Simulator has no NFC. Nothing in `NfcPlugin.swift` past `status` and the refusals has run: the sheet, a card's connection, a command, the 5 second limit, a card lost mid-command, the sheet's words.
