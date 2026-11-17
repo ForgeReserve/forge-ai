@@ -113,3 +113,66 @@ describe('layout on small phones', () => {
     }, 60_000);
   }
 });
+
+// The rings keep their place when Add or More opens (owner, 2026-11-17: "when pressing the add button, the
+// big mic button moves down a bit"). The bottom row stays in the page while a sheet is open; taken out of
+// it, its height went to the stage and the rings slid down by half of it or more. Measured in Default and
+// in Playful, on the two phones and on a laptop-sized window.
+describe('the rings keep their place under the sheets', () => {
+  const VIEWS = [...SIZES.map((s) => ({ ...s, touch: true })), { width: 1280, height: 800, touch: false }];
+  for (const v of VIEWS) {
+    it(`Add and More leave the rings where they were (${v.width} by ${v.height})`, async () => {
+      const ctx = await browser.newContext({ viewport: { width: v.width, height: v.height }, isMobile: v.touch, hasTouch: v.touch, deviceScaleFactor: 2 });
+      await pastFirstRun(ctx);
+      const page = await ctx.newPage();
+      for (const mode of ['default', 'playful']) {
+        if (mode === 'playful') {
+          await page.goto(`${g.url}/v2/#/more/look`);
+          await page.waitForSelector('[data-screen=look]');
+          await page.click('#mode-playful');
+          await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked')).toBe('true');
+          // The helper's home, not the cover game it opens on by default (docs/PLAYFUL.md).
+          if ((await page.getAttribute('#gameFirst', 'aria-checked')) === 'true') await page.click('#gameFirst');
+          await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
+          // The mode applies at once: no reload, which could come before the settings are stored.
+          await page.goto(`${g.url}/v2/#/`);
+          await page.waitForSelector('[data-screen=home][data-mode=playful]');
+        } else {
+          await page.goto(`${g.url}/v2/`);
+          await page.waitForSelector('[data-screen=home]');
+        }
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+        const at = async () => (await page.locator('.rings').first().boundingBox())!;
+        const row = async () => (await page.locator('.bottom-row').boundingBox())!;
+        const before = await at();
+        const rowBefore = await row();
+        for (const name of ['add', 'more']) {
+          await page.click(`#btn-${name}`);
+          await page.waitForSelector('.float-wrap .float-card');
+          await page.waitForTimeout(300);
+          const open = await at();
+          expect(Math.abs(open.y - before.y), `${mode}, ${name} open: the rings moved down or up`).toBeLessThanOrEqual(1);
+          expect(Math.abs(open.x - before.x), `${mode}, ${name} open: the rings moved sideways`).toBeLessThanOrEqual(1);
+          expect(Math.abs((await row()).y - rowBefore.y), `${mode}, ${name} open: the bottom row moved`).toBeLessThanOrEqual(1);
+          // The sheet's card lines up with the row under it.
+          const card = (await page.locator('.float-card').boundingBox())!;
+          expect(Math.abs(card.x - rowBefore.x), `${mode}, ${name}: the sheet is not over the row`).toBeLessThanOrEqual(1);
+          expect(Math.abs(card.width - rowBefore.width), `${mode}, ${name}: the sheet is wider or narrower than the row`).toBeLessThanOrEqual(1);
+          // Close is on top of the sheet's layer, where the finger is.
+          const onTop = await page.evaluate((n) => {
+            const r = document.querySelector(`#btn-${n}`)!.getBoundingClientRect();
+            return !!document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest(`#btn-${n}`);
+          }, name);
+          expect(onTop, `${mode}, ${name}: Close is under the sheet`).toBe(true);
+          await page.click(`#btn-${name}`);
+          await page.waitForSelector('.float-wrap', { state: 'detached' });
+          await page.waitForTimeout(300);
+          const after = await at();
+          expect(Math.abs(after.y - before.y), `${mode}, ${name} closed: the rings did not come back`).toBeLessThanOrEqual(1);
+        }
+      }
+      await ctx.close();
+    }, 90_000);
+  }
+});

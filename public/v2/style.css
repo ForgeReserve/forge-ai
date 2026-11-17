@@ -100,11 +100,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .bottom-btn.is-open { background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); }
 
 /* Floating menu over the home (Add, More): a layer over the whole home, talk button included, with the
-   card above the bottom row. The bottom row stays fixed on top of the layer, so Close is always in view;
-   a card taller than the space scrolls inside itself. */
+   card above the bottom row. The bottom row stays on top of the layer, so Close is always in view; a card
+   taller than the space scrolls inside itself. The row keeps its place in the page (sticky, not fixed):
+   taken out of the page it would leave its height to the stage, and the rings would move down. */
 .float-wrap { position: fixed; z-index: 20; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(520px, 100%); display: flex; flex-direction: column; justify-content: flex-end; padding: max(16px, env(safe-area-inset-top)) 16px calc(max(16px, env(safe-area-inset-bottom)) + 74px); }
 .float-card { background: var(--surface); border-radius: 26px; box-shadow: var(--shadow-float); padding: 8px; display: flex; flex-direction: column; gap: 4px; animation: rise 220ms var(--ease) both; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; flex: none; }
-.home.with-sheet .bottom-row { position: fixed; z-index: 21; left: 50%; transform: translateX(-50%); width: calc(min(520px, 100%) - 32px); bottom: max(16px, env(safe-area-inset-bottom)); }
+.home.with-sheet .bottom-row { position: sticky; z-index: 21; bottom: max(16px, env(safe-area-inset-bottom)); }
 .row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; text-align: left; padding: 10px 12px; background: transparent; border: 0; border-radius: 18px; color: var(--ink); }
 .row:hover { background: var(--surface-2); }
 .row-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -361,6 +362,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 /* A laptop: the same column, centred, with room around it. */
 @media (min-width: 700px) {
   .screen { padding: 24px; }
+  /* The sheet's card lines up with the bottom row, which keeps the screen's wider padding here. */
+  .float-wrap { padding-left: 24px; padding-right: 24px; padding-bottom: calc(max(24px, env(safe-area-inset-bottom)) + 74px); }
 }
 
 /* History (XHistoryLight), burn and Erase everything (DErase) */
