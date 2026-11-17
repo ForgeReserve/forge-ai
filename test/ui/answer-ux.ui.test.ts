@@ -7,9 +7,9 @@ import { selection, wordAt } from './select.ts';
 
 // The answer screen's UX pass (owner, 2026-11-15): the wait shows it is working, then offers a fast model;
 // the model picker's speed groups (rabbits and turtles); Listen and the bottom row pinned under a long
-// answer, with Copy, Ask again and Burn never left half under them; Burn held, never one tap; a new model
-// starts a new conversation and each answer names its model; and Funds says free questions work at $0
-// when a paid model is chosen.
+// answer, with Copy, Ask again and Burn never left half under them; Burn held, never one tap, and a quick
+// touch on it says so; a new model starts a new conversation and each answer names its model; and Funds
+// says free questions work at $0 when a paid model is chosen.
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 
 let g: Gateway;
@@ -405,6 +405,85 @@ describe('Burn, held', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
+
+  // On the phones a quick touch on Burn showed no hint: where the answer left Burn half under the dock, the
+  // finger at its middle touched the dock, not Burn. Real touch input here, as a phone sends it.
+  it('a quick touch on Burn says to hold, once, wherever the answer leaves it; a held touch burns, one slid off does not', async () => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 } } });
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    const words = await answerLength(page);
+    const cdp = await ctx.newCDPSession(page);
+    const touch = async (x: number, y: number, ms: number, to?: { x: number; y: number }) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      if (to) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
+      await page.waitForTimeout(ms);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    // How many messages the toast has shown since it was last emptied.
+    await page.evaluate(() => {
+      (window as any).toasts = 0;
+      new MutationObserver((recs) => recs.forEach((r) => (r.target as HTMLElement).id === 'toast' && r.addedNodes.length && (window as any).toasts++)).observe(document.body, { subtree: true, childList: true });
+    });
+    const emptyToast = () =>
+      page.evaluate(() => {
+        document.getElementById('toast')?.replaceChildren();
+        (window as any).toasts = 0;
+      });
+    const middle = async (sel: string) => {
+      const b = (await page.locator(sel).boundingBox())!;
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    };
+    // Answers of many lengths: wherever Burn comes to rest in view, a quick touch at its middle says to hold.
+    for (const n of [2, 3, 4, 5, 6, 7, 8, 9]) {
+      words(n);
+      await askAgain(page, `Touch it? ${n}`);
+      // The row comes to rest (it may glide up above the dock), as a person waits for it.
+      await page.waitForTimeout(700);
+      const m = await middle('#burnBtn');
+      if (m.y >= 811) continue; // below the screen: nothing to touch until it is scrolled to
+      await emptyToast();
+      await touch(m.x, m.y, 60);
+      await expect.poll(() => page.textContent('#toast'), { message: `${n} times the words` }).toMatch(/^Hold to burn\./);
+      await page.waitForTimeout(600);
+      expect(await page.evaluate(() => (window as any).toasts), `${n} times the words`).toBe(1);
+      expect(await page.isVisible('[data-screen=answer]')).toBe(true);
+    }
+    expect(await conversations(page)).toBe(1);
+    // Touched, slid off and let go before the end: nothing burns.
+    const m = await middle('#burnBtn');
+    await touch(m.x, m.y, 500, { x: m.x, y: m.y - 200 });
+    await page.waitForFunction(() => !document.querySelector('.answer-card.burning'), null, { timeout: 3000 });
+    expect(await page.isVisible('[data-screen=answer]')).toBe(true);
+    expect(await conversations(page)).toBe(1);
+    // Held to the end: it burns, and the home it lands on takes nothing from the finger's lift.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [m] });
+    await page.waitForSelector('[data-screen=home]', { timeout: 6000 });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(() => conversations(page)).toBe(0);
+    await page.waitForTimeout(400);
+    expect(await page.isVisible('[data-screen=home]')).toBe(true);
+    // History's flame and Burn all: a quick touch says to hold there too.
+    words(1);
+    await askAgain(page, 'Keep me for History.');
+    await page.goto(`${g.url}/v2/#/more/history`);
+    await page.waitForSelector('.burn-one');
+    for (const sel of ['.burn-one', '#burnAllYes']) {
+      if (sel === '#burnAllYes') {
+        await page.click('#burnAll');
+        await page.waitForSelector('#burnAllYes');
+      }
+      await emptyToast();
+      const t = await middle(sel);
+      await touch(t.x, t.y, 60);
+      await expect.poll(() => page.textContent('#toast'), { message: sel }).toMatch(/^Hold to burn\./);
+      await page.waitForTimeout(600);
+      expect(await page.evaluate(() => (window as any).toasts), sel).toBe(1);
+    }
+    expect(await conversations(page)).toBe(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
   it("a screen reader's activation cannot hold: the first says to press again, the second burns, and a late second starts over", async () => {
     const { ctx, page, errors } = await phone();

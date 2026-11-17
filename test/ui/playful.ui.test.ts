@@ -288,8 +288,9 @@ describe('Playful mode', () => {
     await expect.poll(() => pipText(page, '#pipLine')).toBe('Copied');
     expect(await page.$eval('#toast', (n) => n.classList.contains('show') && /Copied/.test(n.textContent ?? '')).catch(() => false)).toBe(false);
 
-    // Burn: a tap only says to hold it; held, the conversation burns and Pip says so on the home.
-    await page.click('#burnBtn');
+    // Burn: a tap (a finger's, real touch input) only says to hold it; held, the conversation burns and
+    // Pip says so on the home.
+    await page.tap('#burnBtn');
     await expect.poll(() => pipText(page, '#pipLine')).toMatch(/^Hold to burn/);
     expect(await page.isVisible('[data-screen=answer]')).toBe(true);
     const b = (await page.locator('#burnBtn').boundingBox())!;
