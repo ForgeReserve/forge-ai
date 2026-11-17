@@ -15,7 +15,7 @@
     "test": "vitest run test/unit",
     "test:e2e": "vitest run test/e2e",
     "test:ui": "vitest run test/ui",
-    "test:ui:voice": "vitest run test/ui/phonon.ui.test.ts",
+    "test:ui:voice": "vitest run test/ui/phonon",
     "test:ui:linux": "scripts/ui-linux.sh",
     "ios:web": "node scripts/ios-web.ts",
     "test:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run test/live",

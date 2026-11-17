@@ -53,13 +53,15 @@ describe('CI workflow', () => {
     expect(uses.length).toBeGreaterThan(0);
     for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
     expect(ci).toMatch(/^permissions: \{\}$/m);
-    expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(['      contents: read', '      contents: read', '      contents: read', '      contents: read']);
+    const jobs = ci.slice(ci.indexOf('\njobs:\n')).match(/^ {2}[\w-]+:$/gm) ?? [];
+    expect(jobs.map((j) => j.trim())).toEqual(['changes:', 'check:', 'e2e:', 'ui:', 'android:', 'repeat:', 'ci-ok:']);
+    expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(jobs.map(() => '      contents: read'));
   });
 
   it('runs read-only, without credentials, and covers every suite', () => {
     expect(ci).not.toMatch(/\$\{\{\s*secrets\./);
     expect(ci).not.toMatch(/persist-credentials: true/);
-    for (const step of ['pnpm install --frozen-lockfile', 'pnpm typecheck', 'pnpm test', 'pnpm mint:up', 'pnpm test:e2e', 'pnpm test:ui', './gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest']) {
+    for (const step of ['pnpm install --frozen-lockfile', 'pnpm typecheck', 'pnpm test', 'scripts/ci-mints.sh start', 'scripts/ci-mints.sh wait', 'pnpm test:e2e', 'node scripts/ui-split.ts files', './gradlew assembleUniversalDebug assemblePrivatevoiceDebug testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest']) {
       expect(ci, step).toContain(step);
     }
     // Both APKs are checked for 16 KB pages, and the universal one for carrying no speech to text model.
@@ -67,14 +69,9 @@ describe('CI workflow', () => {
     expect(ci).toMatch(/zipalign[\s\S]*-c -P 16/);
   });
 
-  it('runs the UI suite in parallel parts that together cover every file', () => {
-    // The natural voice's file on its own, and every other file in one of the --shard parts.
-    expect(ci).toMatch(/^ {8}part: \[voice, 1\/2, 2\/2\]$/m);
-    expect(ci).toContain('pnpm test:ui --exclude test/ui/phonon.ui.test.ts --shard="$PART"');
-    const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
-    expect(pkg.scripts['test:ui:voice']).toBe('vitest run test/ui/phonon.ui.test.ts');
-    expect(ci).toContain('pnpm test:ui:voice');
-    // Every job has a time limit, so a hung browser fails in minutes rather than hours.
-    expect(ci.match(/^ {2}\w+:\n {4}runs-on:/gm)?.length).toBe(ci.match(/^ {4}timeout-minutes: \d+$/gm)?.length);
+  it('gives every job a time limit, so a hung browser fails in minutes rather than hours', () => {
+    // The UI suite's parts and the rules that skip jobs are tested in test/unit/ci.test.ts.
+    const jobs = ci.slice(ci.indexOf('\njobs:\n')).match(/^ {2}[\w-]+:$/gm) ?? [];
+    expect(ci.match(/^ {4}timeout-minutes: \d+$/gm)?.length).toBe(jobs.length);
   });
 });

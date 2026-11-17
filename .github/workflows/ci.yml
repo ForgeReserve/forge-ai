@@ -1,6 +1,8 @@
 # CI: typecheck, unit, end-to-end, UI and Android checks on every pull request and every push to main.
 #
 # Read-only: it deploys nothing, pushes nothing and holds no secrets. Every action is pinned by commit.
+# docs/CI.md explains the jobs, the UI split, the skip rules and the repeat job. The one check to require
+# is ci-ok: it always reports, and passes only when every job the change needs passed.
 name: CI
 
 on:
@@ -15,6 +17,38 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Which jobs this change needs (scripts/ci-changes.ts, tested in test/unit/ci.test.ts). A push to main
+  # runs everything; so does any change to the build, the tooling or CI itself.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      e2e: ${{ steps.rules.outputs.e2e }}
+      ui: ${{ steps.rules.outputs.ui }}
+      android: ${{ steps.rules.outputs.android }}
+      ui_parts: ${{ steps.rules.outputs.ui_parts }}
+      repeat: ${{ steps.rules.outputs.repeat }}
+      repeat_count: ${{ steps.rules.outputs.repeat_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A pull request is checked out as its merge commit: the first parent is the base branch, so
+          # the diff between the two is what the pull request changes.
+          fetch-depth: 2
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Decide what runs
+        id: rules
+        run: node scripts/ci-changes.ts
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -41,7 +75,13 @@ jobs:
           pnpm typecheck
           pnpm test
 
+      - name: The UI parts run every UI test file once
+        # Asks Vitest which files each part's command runs, without running them (scripts/ui-split.ts).
+        run: node scripts/ui-split.ts verify
+
   e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -51,6 +91,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Start the local mints
+        # In the background, with the Docker Hub retry: the image pulls while Node is set up.
+        run: scripts/ci-mints.sh start
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -63,17 +107,25 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Local mints
-        # Docker Hub now and then answers a pull with a 5xx: try again before calling the run failed.
-        run: for i in 1 2 3; do pnpm mint:up && exit 0; sleep $((i * 15)); done; exit 1
+        run: scripts/ci-mints.sh wait
 
       - name: End-to-end tests against local mints
-        run: pnpm test:e2e
+        # A docs-only change runs the docs page's test alone (docs/CI.md).
+        env:
+          E2E: ${{ needs.changes.outputs.e2e }}
+        run: |
+          if [ "$E2E" = docs ]; then
+            pnpm exec vitest run test/e2e/docs.e2e.test.ts
+          else
+            pnpm test:e2e
+          fi
 
-  # The UI suite runs in three parallel parts of about five minutes each: the natural voice's tests
-  # (test/ui/phonon.ui.test.ts, which measure real speech on the runner's processor) on their own, and
-  # the other files split in two by Vitest's --shard. `pnpm test:ui:linux` runs the same suite in Linux
-  # on a Mac before a push.
+  # The UI suite in parts of about three minutes of tests each, dealt by recorded time
+  # (scripts/ui-split.ts, test/ui/timings.json). `pnpm test:ui:linux` runs the same suite in Linux on a
+  # Mac before a push.
   ui:
+    needs: changes
+    if: needs.changes.outputs.ui != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -81,13 +133,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [voice, 1/2, 2/2]
+        part: ${{ fromJSON(needs.changes.outputs.ui_parts) }}
     name: ui (${{ matrix.part }})
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Start the local mints
+        run: scripts/ci-mints.sh start
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -104,20 +159,42 @@ jobs:
         run: node scripts/phonon-model.ts
 
       - name: Local mints
-        run: for i in 1 2 3; do pnpm mint:up && exit 0; sleep $((i * 15)); done; exit 1
+        run: scripts/ci-mints.sh wait
 
       - name: UI tests against local mints
         # The UI tests drive the runner's installed Chrome (channel: 'chrome'), so no browser is downloaded.
+        # Each file's time goes to a JSON report, kept below, to refresh test/ui/timings.json.
         env:
           PART: ${{ matrix.part }}
         run: |
-          if [ "$PART" = voice ]; then
-            pnpm test:ui:voice
-          else
-            pnpm test:ui --exclude test/ui/phonon.ui.test.ts --shard="$PART"
+          if [ "$PART" = docs ]; then
+            pnpm exec vitest run test/ui/docs.ui.test.ts
+            exit 0
           fi
+          PLAN=$(node scripts/ui-split.ts plan)
+          echo "$PLAN"
+          printf '## UI part %s of the plan\n\n~~~\n%s\n~~~\n' "$PART" "$PLAN" >>"$GITHUB_STEP_SUMMARY"
+          FILES=$(node scripts/ui-split.ts files "$PART")
+          if [ -z "$FILES" ]; then
+            echo "part $PART has no files" >&2
+            exit 1
+          fi
+          mapfile -t LIST <<<"$FILES"
+          echo "part $PART runs: ${LIST[*]}"
+          pnpm exec vitest run "${LIST[@]}" --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/ui-times/ui-part-$PART.json"
+
+      - name: Keep this part's test times
+        if: matrix.part != 'docs'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-times-${{ matrix.part }}
+          path: ${{ runner.temp }}/ui-times/
+          if-no-files-found: error
+          retention-days: 30
 
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -167,3 +244,90 @@ jobs:
             echo "the universal APK carries Forge Private Voice's speech to text" >&2
             exit 1
           fi
+
+  # On a pull request, each UI test file it adds or changes (or that imports a changed helper in test/ui)
+  # runs 5 more times, so a test that passes four times in five fails here before it reaches main. A long
+  # file's runs are spread over several jobs (scripts/ci-changes.ts).
+  repeat:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.repeat_count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.repeat) }}
+    name: repeat (${{ matrix.label }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the local mints
+        run: scripts/ci-mints.sh start
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Natural voice files
+        run: node scripts/phonon-model.ts
+
+      - name: Local mints
+        run: scripts/ci-mints.sh wait
+
+      - name: Run the changed UI test file again
+        # Every run goes to the end, so the summary says how many of them passed.
+        env:
+          FILE: ${{ matrix.file }}
+          RUNS: ${{ matrix.runs }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          pass=0
+          fail=0
+          for i in $(seq 1 "$RUNS"); do
+            echo "::group::run $i of $RUNS: $FILE"
+            if pnpm exec vitest run "$FILE"; then
+              pass=$((pass + 1))
+            else
+              fail=$((fail + 1))
+              echo "::error file=$FILE::run $i of $RUNS failed"
+            fi
+            echo "::endgroup::"
+          done
+          echo "$LABEL: $pass of $RUNS extra runs of $FILE passed" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$fail" -eq 0 ]
+
+  # The one check to require. It always runs and reports: it fails if a job failed or was cancelled, or
+  # was skipped although this change needs it; a job skipped by the rules is fine.
+  ci-ok:
+    if: always()
+    needs: [changes, check, e2e, ui, android, repeat]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Every job this change needs passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-changes.ts verdict
