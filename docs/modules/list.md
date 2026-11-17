@@ -18,7 +18,7 @@ Every module that ships with the Forge app, grouped by kind. Within a kind they 
 | `fund` | `forge.fund.onchain` | On-chain | When on | When on | When on | The deposit | Public on the chain |
 | `fund` | `forge.fund.othermint` | Other mint | Yes | Yes | Yes | The token, less fees | The engine sees the other mint |
 | `voice-in` | `forge.voice-in.bundled` | On this phone | No | Forge Private Voice only | No | Free | Yes |
-| `voice-in` | `forge.voice-in.phone` | On this phone | No | Where the phone has the language | No | Free | Yes |
+| `voice-in` | `forge.voice-in.phone` | On this phone | No | Where the phone has the language | Where the iPhone hears the language on the phone | Free | Yes |
 | `voice-in` | `forge.voice-in.engine` | Engine | Yes | Yes | Yes | Paid per request | With an enclave model |
 | `voice-in` | `forge.voice-in.device` | This browser | Where the browser has one | Where the web view has one | Yes | Free | No |
 | `voice-out` | `forge.voice-out.phonon` | Natural voice | Where the browser runs it | Yes | Yes | Free | Yes |
@@ -160,7 +160,7 @@ The phone's own on-device speech recogniser, offered where it has the language n
 - **Id:** `forge.voice-in.phone`, known in the app as `phone`.
 - **Folder:** [`public/v2/modules/voice-in/phone/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/voice-in/phone)
 - **Needs:** `speech` (ForgeSpeech). The app uses only a recogniser that runs on the phone.
-- **Works on:** the Android app, on a phone whose recogniser has the language. Not on the website or the iPhone app.
+- **Works on:** the Android app, on a phone whose recogniser has the language, and the iPhone app, where Apple's recogniser hears the language on the phone itself (it never sends the sound to Apple). Not on the website.
 - **Costs:** nothing.
 - **Private:** yes. The sound never leaves the phone; only the words come back to the page.
 

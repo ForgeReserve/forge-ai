@@ -1,13 +1,14 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
-// The iPhone app (ios/, docs/IOS.md) has the same bridge with ForgeBars and ForgeNfc: everything else
-// there is the website's own way of doing it, or hidden (createNative).
+// The iPhone app (ios/, docs/IOS.md) has the same bridge with ForgeBars, ForgeNfc and ForgeSpeech:
+// everything else there is the website's own way of doing it, or hidden (createNative).
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
 // through: its pay requests and card link, with its token kept by the app), ForgeVoice (the natural
 // voice made by native code: the answer's text goes to the app, which plays the sound itself),
-// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser: only words come back),
+// ForgeSpeech (Hold to talk heard by the phone's own on-device recogniser, Android's or Apple's: only
+// words come back),
 // ForgeJoin (an event pass from the link that opened the app, /j#<pass>),
 // ForgeAsr (Hold to talk heard by Forge Private Voice's own model, the same way) and ForgeBars (the phone's status and navigation bars in the page's colour). The
 // balance key and chats never pass through it; a card's answers carry its pieces, which only the page
@@ -57,10 +58,11 @@ const fileData = async (file) => bytesToBase64(new Uint8Array(await file.arrayBu
  *   shareIn: a photo shared in from another app.
  *   forget(): removes the photo files the app wrote to storage and the web view's cache.
  *   isolated: the page is served cross-origin isolated (reloadForIsolation).
- * The iPhone app has two of the Android plugins, ForgeBars and ForgeNfc (card taps, through the
- * iPhone's NFC sheet), so there every other part is null and the page does what it does in Safari on an
- * iPhone: the share sheet through navigator.share, Hold to talk through the browser's own ways, and no
- * till (ForgeTill needs a Swift port first).
+ * The iPhone app has three of the Android plugins, ForgeBars, ForgeNfc (card taps, through the
+ * iPhone's NFC sheet) and ForgeSpeech (Hold to talk heard by Apple's recogniser on the phone itself,
+ * SpeechPlugin.swift), so there every other part is null and the page does what it does in Safari on an
+ * iPhone: the share sheet through navigator.share, Hold to talk through the engine or the browser's own
+ * recogniser where the phone cannot hear it itself, and no till (ForgeTill needs a Swift port first).
  */
 export function createNative(win = globalThis) {
   const bridge = nativeBridge(win);
@@ -70,7 +72,9 @@ export function createNative(win = globalThis) {
   if (bridge.platform === 'ios') {
     // An app built before ForgeNfc has no reader: the card ways are left out there, as before.
     const nfc = hasPlugin(win, 'ForgeNfc') ? nativeNfc(call, on, { sheet: true }) : NO_READER;
-    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc, till: null, voice: null, speech: null, asr: null, bars };
+    // An app built before ForgeSpeech: the engine hears Hold to talk, as before.
+    const speech = hasPlugin(win, 'ForgeSpeech') ? nativeSpeech(call, on) : null;
+    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc, till: null, voice: null, speech, asr: null, bars };
   }
   return {
     platform: 'android',
@@ -170,7 +174,8 @@ export function followBars(bars, doc = globalThis.document) {
 
 /**
  * Hold to talk heard by the phone's own on-device speech recogniser through ForgeSpeech (docs/VOICE.md,
- * Speech input). The sound stays on the phone: only the words come over the bridge. available({locale})
+ * Speech input): SpeechPlugin.kt in the Android app, SpeechPlugin.swift in the iPhone app, with the same
+ * calls, events and codes. The sound stays on the phone: only the words come over the bridge. available({locale})
  * resolves {onDevice, reason, locale}: onDevice only when the on-device recogniser has the language now,
  * and locale is the one to listen with. start({locale, onEvent}) resolves {id, stop(), cancel()} once
  * it listens, or rejects with {code} permission, busy or unavailable; onEvent gets {type}: started,

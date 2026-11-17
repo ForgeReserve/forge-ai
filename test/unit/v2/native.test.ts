@@ -407,6 +407,42 @@ describe('the iPhone app (ios/, docs/IOS.md)', () => {
     expect(calls).toEqual([['ForgeBars', 'set', { color: '#0B0D10' }]]);
   });
 
+  it("has ForgeSpeech where the app registered it: Android's calls, events and codes", async () => {
+    const f = iosCapacitor(
+      {
+        'ForgeSpeech.available': () => ({ onDevice: true, reason: null, locale: 'en-US' }),
+        'ForgeSpeech.start': (o) => {
+          if (o.locale !== 'en-GB') throw Object.assign(new Error('Speech recognition is not allowed.'), { code: 'permission' });
+          return undefined;
+        },
+      },
+      ['ForgeBars', 'ForgeNfc', 'ForgeSpeech'],
+    );
+    const nat = N.createNative(f.win);
+    for (const k of ['share', 'shareIn', 'forget', 'join', 'till', 'voice', 'asr']) expect(nat[k], k).toBeNull();
+    expect(nat.speech.supported()).toBe(true);
+    expect(await nat.speech.available({ locale: 'en-GB' })).toEqual({ onDevice: true, reason: null, locale: 'en-US' });
+    const got: any[] = [];
+    const s = await nat.speech.start({ locale: 'en-GB', onEvent: (ev: any) => got.push(ev) });
+    const fire = f.listeners.find(([p, e]) => p === 'ForgeSpeech' && e === 'speech')![2] as (ev: any) => void;
+    for (const ev of [{ type: 'started' }, { type: 'level', level: 0.4 }, { type: 'partial', text: 'Is it' }, { type: 'final', text: 'Is it open?' }, { type: 'end' }]) fire({ id: s.id, ...ev });
+    // Another press's events are not this one's.
+    fire({ id: 'ask-other', type: 'final', text: 'no' });
+    expect(got.map((e) => e.type)).toEqual(['started', 'level', 'partial', 'final', 'end']);
+    await s.stop();
+    expect(f.calls.map(([p, m, o]) => `${p}.${m}:${JSON.stringify(o)}`)).toEqual([
+      'ForgeSpeech.available:{"locale":"en-GB"}',
+      `ForgeSpeech.start:{"id":"${s.id}","locale":"en-GB"}`,
+      `ForgeSpeech.stop:{"id":"${s.id}"}`,
+    ]);
+    // A refused permission keeps its code, as on Android.
+    await expect(nat.speech.start({ locale: 'en-US' })).rejects.toMatchObject({ code: 'permission' });
+  });
+
+  it('a build without ForgeSpeech leaves Hold to talk to the engine, as before', () => {
+    expect(N.createNative(iosCapacitor({}, ['ForgeBars', 'ForgeNfc']).win).speech).toBeNull();
+  });
+
   it('a build without ForgeNfc has no card reader, and says to leave the card ways out', async () => {
     const { win, calls } = iosCapacitor();
     const nfc = N.createNative(win).nfc;

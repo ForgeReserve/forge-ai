@@ -43,6 +43,8 @@ describe('iPhone app project', () => {
     }
     expect(plistString('NSCameraUsageDescription')).toMatch(/read a code/);
     expect(plistString('NSMicrophoneUsageDescription')).toMatch(/question you speak/);
+    // Speech recognition: on the phone (ForgeSpeech), and This browser in Voice (WebKit's, which may send it to Apple).
+    expect(plistString('NSSpeechRecognitionUsageDescription')).toMatch(/into words on this phone\. Your voice stays on it, unless you pick This browser\./);
     expect(plistString('NFCReaderUsageDescription')).toMatch(/reads an eCash card only when you hold it to the phone/);
   });
 
@@ -55,12 +57,56 @@ describe('iPhone app project', () => {
     expect(read('ios/App/App/Base.lproj/LaunchScreen.storyboard')).toContain('red="0.043137254901960784" green="0.050980392156862744" blue="0.062745098039215685"');
   });
 
-  it('registers its plugins, ForgeBars and ForgeNfc, as the page calls them', () => {
+  it('registers its plugins, ForgeBars, ForgeNfc and ForgeSpeech, as the page calls them', () => {
     expect(read('ios/App/App/BarsPlugin.swift')).toContain('public let jsName = "ForgeBars"');
-    expect(read('ios/App/App/ForgeViewController.swift')).toContain('registerPluginInstance(BarsPlugin())');
-    expect(read('ios/App/App/ForgeViewController.swift')).toContain('registerPluginInstance(NfcPlugin())');
+    for (const p of ['BarsPlugin', 'NfcPlugin', 'SpeechPlugin']) expect(read('ios/App/App/ForgeViewController.swift')).toContain(`registerPluginInstance(${p}())`);
     expect(read('ios/App/App/Base.lproj/Main.storyboard')).toContain('customClass="ForgeViewController" customModule="App"');
-    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift', 'NfcPlugin.swift', 'NfcRules.swift']) expect(project).toContain(`${f} in Sources`);
+    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift', 'NfcPlugin.swift', 'NfcRules.swift', 'SpeechPlugin.swift', 'SpeechRules.swift']) expect(project).toContain(`${f} in Sources`);
+  });
+
+  it("ForgeSpeech has the Android plugin's methods, events and error codes", () => {
+    const swift = read('ios/App/App/SpeechPlugin.swift');
+    const rules = read('ios/App/App/SpeechRules.swift');
+    const kotlin = read('android/app/src/main/java/com/forgereserve/ai/SpeechPlugin.kt');
+    const kotlinRules = read('android/app/src/main/java/com/forgereserve/ai/SpeechRules.kt');
+    expect(swift).toContain('public let jsName = "ForgeSpeech"');
+    expect(kotlin).toContain('@CapacitorPlugin(name = "ForgeSpeech"');
+    const kotlinMethods = [...kotlin.matchAll(/@PluginMethod\s+fun (\w+)/g)].map((m) => m[1]).sort();
+    const swiftMethods = [...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1]).sort();
+    expect(swiftMethods).toEqual(kotlinMethods);
+    for (const m of swiftMethods) expect(swift).toContain(`@objc func ${m}(_ call: CAPPluginCall)`);
+    // start's refusals: the same codes.
+    const codes = (src: string) => [...new Set([...src.matchAll(/reject\([^)]*?"(\w+)"\)/g)].map((m) => m[1]))].sort();
+    expect(codes(swift)).toEqual(codes(kotlin));
+    // One event, "speech", with the same types; the error codes the page may get are Android's.
+    expect(swift).toContain('notifyListeners("speech", data: d)');
+    for (const type of ['started', 'level', 'error', 'end']) expect(swift).toContain(`"${type}"`);
+    for (const type of ['partial', 'final']) expect(rules).toContain(`"${type}"`);
+    const androidCodes = new Set([...kotlinRules.matchAll(/-> "([a-z-]+)"/g)].map((m) => m[1]).concat(['no-speech', 'interrupted']));
+    const iosCodes = [...rules.matchAll(/return "([a-z-]+)"/g)].map((m) => m[1]!).filter((c) => !c.startsWith('language-') && !c.startsWith('recognizer-') && c !== 'en-US');
+    expect(iosCodes.length).toBeGreaterThan(0);
+    for (const c of iosCodes) expect(androidCodes, c).toContain(c);
+  });
+
+  it('ForgeSpeech never lets a request leave the phone, and keeps no sound or words', () => {
+    const swift = read('ios/App/App/SpeechPlugin.swift');
+    // Every request requires the phone, and only one place makes one, behind the guard.
+    expect(swift.match(/SFSpeechAudioBufferRecognitionRequest\(\)/g)).toHaveLength(1);
+    expect(swift).toContain('request.requiresOnDeviceRecognition = true');
+    expect(swift.match(/recognitionTask\(with:/g)).toHaveLength(1);
+    const guard = swift.indexOf('guard SpeechRules.onDeviceOnly(recogniserOnDevice: l.recognizer.supportsOnDeviceRecognition, requestRequiresOnDevice: request.requiresOnDeviceRecognition)');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(swift.indexOf('recognitionTask(with:'));
+    // supportsOnDeviceRecognition can be set in the SDK: the app only ever reads it.
+    expect(swift).not.toMatch(/supportsOnDeviceRecognition\s*=[^=]/);
+    expect(swift).not.toMatch(/requiresOnDeviceRecognition\s*=\s*false/);
+    // No file and no other request kind: the sound goes only to the request, in memory.
+    expect(swift).not.toMatch(/SFSpeechURLRecognitionRequest|AVAudioFile|FileManager|write\(to|UserDefaults/);
+    // Logged: the availability line and an error's domain and code. Never words or sound.
+    for (const line of swift.match(/CAPLog\.print\([^\n]*/g) ?? []) expect(line).not.toMatch(/text|transcription|formattedString|buffer/i);
+    // The audio session is let go with others told, and put back as it was.
+    expect(swift).toContain('setActive(false, options: .notifyOthersOnDeactivation)');
+    expect(swift).toContain('setCategory(saved.category, mode: saved.mode, options: saved.options)');
   });
 
   it("ForgeNfc has the Android plugin's methods, event and error codes", () => {
@@ -98,11 +144,14 @@ describe('iPhone app project', () => {
     expect(plist).not.toMatch(/<string>nfc<\/string>/);
   });
 
-  it('tests NfcRules in a unit test bundle of its own, with no team', () => {
+  it('tests NfcRules and SpeechRules in a unit test bundle of its own, with no team', () => {
     expect(project).toContain('productType = "com.apple.product-type.bundle.unit-test";');
     expect(project).toContain('NfcRulesTests.swift in Sources');
     expect(project.match(/NfcRules\.swift in Sources/g)).toHaveLength(4);
     expect(read('ios/App/AppTests/NfcRulesTests.swift')).toContain('final class NfcRulesTests: XCTestCase');
+    expect(project).toContain('SpeechRulesTests.swift in Sources');
+    expect(project.match(/SpeechRules\.swift in Sources/g)).toHaveLength(4);
+    expect(read('ios/App/AppTests/SpeechRulesTests.swift')).toContain('final class SpeechRulesTests: XCTestCase');
   });
 
   it('bundles the web app on every build, before the files are copied in', () => {

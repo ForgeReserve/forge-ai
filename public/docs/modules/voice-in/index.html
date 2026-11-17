@@ -147,7 +147,7 @@
 </tr>
 </tbody></table></div>
 <h3 id="speech"><code>speech</code><a class="anchor" href="#speech" aria-label="Link to this section">#</a></h3>
-<p>The phone&#39;s own on-device recogniser, in the Android app only (<code>nativeSpeech</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js"><code>public/v2/core/native.js</code></a>). The sound stays on the phone; only the words come back. Outside the Android app it is an empty object.</p>
+<p>The phone&#39;s own on-device recogniser, in the Android and iPhone apps (<code>nativeSpeech</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js"><code>public/v2/core/native.js</code></a>): Android&#39;s on-device recogniser, or Apple&#39;s restricted to the phone. The sound stays on the phone; only the words come back. Outside the apps it is an empty object.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -258,7 +258,7 @@
 <td><code>phone</code></td>
 <td>Not available</td>
 <td>Where the phone&#39;s on-device recogniser has the language</td>
-<td>Not available</td>
+<td>Where Apple&#39;s recogniser hears the language on the phone itself</td>
 </tr>
 <tr>
 <td><code>engine</code></td>
@@ -273,7 +273,7 @@
 <td>The WebKit recogniser, Apple&#39;s</td>
 </tr>
 </tbody></table></div>
-<p><code>speech</code> and <code>asr</code> are empty objects outside the Android app. <code>mic</code> and <code>recognizer</code> are the browser&#39;s on every platform.</p>
+<p><code>speech</code> is an empty object on the website, <code>asr</code> outside the Android app. <code>mic</code> and <code>recognizer</code> are the browser&#39;s on every platform.</p>
 <h2 id="a-minimal-voice-in-module">A minimal voice-in module<a class="anchor" href="#a-minimal-voice-in-module" aria-label="Link to this section">#</a></h2>
 <p>This module uses the browser&#39;s own recogniser. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/voice-in/listen"><code>docs/modules/examples/voice-in/listen/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>. Its id is <code>listen</code>, so the app loads it and does not use it until <code>pickVoiceIn</code> knows that id.</p>
 <p><code>manifest.json</code>:</p>
