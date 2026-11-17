@@ -1,4 +1,4 @@
-// Fund module: Tap a card. A Cashu eCash card (the card protocol 2.0 that flash-pos speaks) gives its
+// Fund module: Tap a Cashu card. A Cashu eCash card (the card protocol 2.0 that flash-pos speaks) gives its
 // eCash to this phone: the card proves its key, the person enters its PIN and picks how much (all of it
 // by default), the card signs one swap at its own mint, and the eCash that comes back is added to the
 // funds. The work is core/card/flow.js; this file is the screen.
@@ -12,6 +12,7 @@
 // first, removed once credited). A card from another mint the engine takes through other-mint funding:
 // the eCash is kept in the vault, marked not added, and the Other mint screen opens with it.
 import { inviteField } from '../kit.js';
+import { cardFace } from '../../../screens/brands/cards.js';
 
 const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
 
@@ -111,9 +112,9 @@ export function create(inputs) {
       const art = (amountText) =>
         ui.el(
           'div',
-          { class: 'card-art', role: 'img', 'aria-label': t('fund.card.picture') },
-          ui.el('span', { class: 'card-art-word', text: t('fund.card.artWord') }),
-          ui.el('span', { class: 'card-art-waves' }, ui.icon('nfc', 28)),
+          { class: 'card-art', 'data-brand': 'card', role: 'img', 'aria-label': t('fund.card.picture') },
+          // The card as it is printed (screens/brands/cards.js), with what it holds over it once read.
+          cardFace('card'),
           amountText ? ui.el('span', { class: 'card-art-amount', text: amountText }) : null,
         );
 

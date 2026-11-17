@@ -176,7 +176,9 @@ describe('Add money as wallet cards', () => {
     for (const id of await wayOrder(page)) {
       await page.click(`#tab-${id}`);
       expect((await page.textContent(`#way-${id} .way-word`))!.trim().split(/\s+/)).toHaveLength(1);
-      if (id !== 'more') expect((await page.textContent('#wayGo'))!.trim().split(/\s+/)).toHaveLength(1);
+      if (id !== 'more' && id !== 'cards') expect((await page.textContent('#wayGo'))!.trim().split(/\s+/)).toHaveLength(1);
+      // The two cards say one word each under their pictures.
+      if (id === 'cards') expect(await page.locator('#way-cards .way-pair-btn > span').allTextContents()).toEqual(['Cashu', 'Fedimint']);
     }
     expect(errors).toEqual([]);
     await ctx.close();
@@ -187,7 +189,7 @@ describe('Add money as wallet cards', () => {
     await page.goto(`${g.url}/v2/#/funds/add`);
     await page.waitForSelector('#tab-start');
     const order = await wayOrder(page);
-    expect(order).toEqual(['start', 'note', 'lightning', 'card', 'ecash', 'more']);
+    expect(order).toEqual(['start', 'note', 'lightning', 'cards', 'ecash', 'more']);
     expect(await current(page)).toBe('start');
     expect(await page.textContent('#wayGo')).toBe('Start');
     // A tab: its card comes to the middle, and the big button says what it does.
@@ -216,9 +218,10 @@ describe('Add money as wallet cards', () => {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     };
     await swipe(-200);
-    await expect.poll(() => current(page)).toBe('card');
-    await expect.poll(() => middle('card')).toBeLessThan(2);
-    expect(await page.textContent('#wayGo')).toBe('Tap');
+    await expect.poll(() => current(page)).toBe('cards');
+    await expect.poll(() => middle('cards')).toBeLessThan(2);
+    // The two cards are its buttons: the big one waits, as on More.
+    expect(await page.isVisible('#wayGo')).toBe(false);
     // And back.
     await swipe(200);
     await expect.poll(() => current(page)).toBe('lightning');
@@ -226,11 +229,11 @@ describe('Add money as wallet cards', () => {
     // The arrow keys on the tabs.
     await page.focus('#tab-lightning');
     await page.keyboard.press('ArrowRight');
-    expect(await current(page)).toBe('card');
+    expect(await current(page)).toBe('cards');
     // The More card: its tiles open the other ways, and the big button waits.
     await page.click('#tab-more');
     expect(await page.isVisible('#wayGo')).toBe(false);
-    expect(await page.locator('#way-more .way-tile').evaluateAll((ts) => ts.map((x) => x.id))).toEqual(['more-free', 'more-fedimint', 'more-othermint']);
+    expect(await page.locator('#way-more .way-tile').evaluateAll((ts) => ts.map((x) => x.id))).toEqual(['more-free', 'more-othermint']);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
@@ -263,19 +266,19 @@ describe('Add money as wallet cards', () => {
     await page.waitForSelector('[data-fund=ecash]');
     await page.goBack();
     await page.waitForSelector('#tab-more');
-    expect(await wayOrder(page)).toEqual(['start', 'ecash', 'note', 'lightning', 'card', 'more']);
+    expect(await wayOrder(page)).toEqual(['start', 'ecash', 'note', 'lightning', 'cards', 'more']);
     // With money on the balance there is no Start free: the way used last is first.
     await page.waitForTimeout(300); // the setting is written to IndexedDB
     await withKey(page, await fundedKey());
     await page.goto(`${g.url}/v2/#/funds/add`);
     await page.waitForSelector('#tab-more');
-    await expect.poll(() => wayOrder(page)).toEqual(['ecash', 'note', 'lightning', 'card', 'more']);
+    await expect.poll(() => wayOrder(page)).toEqual(['ecash', 'note', 'lightning', 'cards', 'more']);
     // Other mint, from the More card: next time it has a card of its own, first, and leaves More.
     await openWay(page, 'othermint');
     await page.waitForSelector('[data-fund=othermint]');
     await page.goBack();
     await page.waitForSelector('#tab-more');
-    expect(await wayOrder(page)).toEqual(['othermint', 'note', 'lightning', 'card', 'ecash', 'more']);
+    expect(await wayOrder(page)).toEqual(['othermint', 'note', 'lightning', 'cards', 'ecash', 'more']);
     expect(await page.locator('#more-othermint').count()).toBe(0);
     await shot(page, 'card-0-othermint-own-card.png');
     // Remembered on this phone: the order holds after a reload.

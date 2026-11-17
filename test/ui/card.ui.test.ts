@@ -120,22 +120,38 @@ async function openCard(page: Page) {
   await page.waitForSelector('#cardHold');
 }
 
-describe('Tap a card', () => {
-  it('on the website: a wallet card of its own that says the app reads cards, and its screen says so too', async () => {
+describe('Tap a Cashu card', () => {
+  it('on the website: the Cashu card beside the Fedimint card, a wallet card that says the app reads cards, and its screen says so too', async () => {
     const ctx = await browser.newContext(PHONE);
     await pastFirstRun(ctx);
     const page = await ctx.newPage();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('#tab-card');
-    expect(await wayOrder(page)).toEqual(['note', 'lightning', 'card', 'ecash', 'more']);
-    expect(await page.getAttribute('#tab-card', 'aria-label')).toBe('Tap a card');
-    expect(await page.getAttribute('#way-card .way-badge', 'aria-label')).toBe('Android app');
-    await page.click('#tab-card');
-    await page.click('#wayInfoBtn-card');
-    expect(await page.locator('#wayInfo-card p').allTextContents()).toEqual(['Hold the card to the back of the phone. It cannot be linked to you.', 'Cards work in the Android app.']);
-    await page.click('#wayGo');
+    await page.waitForSelector('#tab-cards');
+    // Named as plainly as the Fedimint card, and beside it (owner, 2026-11-17): the two printed cards on one
+    // wallet card, each its own button with its word.
+    expect(await wayOrder(page)).toEqual(['note', 'lightning', 'cards', 'ecash', 'more']);
+    expect(await page.getAttribute('#tab-cards', 'aria-label')).toBe('Tap a card: Cashu or Fedimint');
+    expect(await page.getAttribute('#way-cards .way-badge', 'aria-label')).toBe('Android app');
+    expect(await page.textContent('#way-cards .way-word')).toBe('Cards');
+    expect(await page.getAttribute('#pair-card', 'aria-label')).toBe('Tap a Cashu card');
+    expect(await page.textContent('#pair-card > span')).toBe('Cashu');
+    expect(await page.locator('#pair-card .card-face text').first().textContent()).toBe('CASHU ECASH CARD');
+    expect(await page.getAttribute('#pair-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
+    expect(await page.textContent('#pair-fedimint > span')).toBe('Fedimint');
+    await page.click('#tab-cards');
+    await page.click('#wayInfoBtn-cards');
+    expect(await page.locator('#wayInfo-cards p').allTextContents()).toEqual([
+      'Tap a Cashu card',
+      'Hold the card to the back of the phone. It cannot be linked to you.',
+      'Tap a Fedimint card',
+      'A till takes the payment from the card and pays your funds.',
+      'Cards work in the Android app.',
+    ]);
+    await page.click('#pair-card');
     await page.waitForSelector('#cardAppOnly');
-    expect(await page.textContent('#cardAppOnly')).toBe('Android app only. Cards work in the Forge app for Android. A web page cannot talk to a card.');
+    expect(await page.textContent('[data-screen=fund] h1')).toBe('Tap a Cashu card');
+    expect(await page.getAttribute('.card-art', 'aria-label')).toBe('A Cashu card');
+    expect(await page.textContent('#cardAppOnly')).toBe('Android app only. Cashu cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#cardGetApp', 'href')).toBe('/download');
     // The page did not fetch the curve library: nothing is loaded for cards on the website.
     expect(await page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('/vendor/noble.js')))).toBe(false);
@@ -218,7 +234,7 @@ describe('Tap a card', () => {
     // Erase everything warns that a card payment is not finished; its button leads back to the card.
     await page.goto(`${app}/#/more/erase`);
     await page.waitForSelector('#eraseCards');
-    expect(await page.textContent('#eraseCards')).toBe('A card payment is open. A card payment is not finished on this phone. Finish it in Tap a card first, or that money is lost.');
+    expect(await page.textContent('#eraseCards')).toBe('A Cashu card payment is open. A Cashu card payment is not finished on this phone. Finish it in Tap a Cashu card first, or that money is lost.');
     await page.click('#eraseSaveFirst');
     await page.waitForSelector('[data-fund=card] #cardHold');
 

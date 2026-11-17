@@ -7,8 +7,13 @@ import type { Page } from 'playwright-core';
 export async function openWay(page: Page, id: string): Promise<void> {
   await page.waitForSelector('[data-screen=addFunds]');
   // The engine's methods arrive after the first paint: wait for the way's tab or its More tile.
-  await page.waitForSelector(`#tab-${id}, #more-${id}`, { state: 'attached' });
-  if (await page.locator(`#tab-${id}`).count()) {
+  await page.waitForSelector(`#tab-${id}, #more-${id}, #pair-${id}`, { state: 'attached' });
+  if (await page.locator(`#pair-${id}`).count()) {
+    // The Cashu card and the Fedimint card share one card when both are there: tap the printed card.
+    await page.click('#tab-cards');
+    await page.waitForSelector('#wayGo[data-way="cards"]', { state: 'attached' });
+    await page.click(`#pair-${id}`);
+  } else if (await page.locator(`#tab-${id}`).count()) {
     await page.click(`#tab-${id}`);
     await page.waitForSelector(`#wayGo[data-way="${id}"]`);
     await page.click('#wayGo');

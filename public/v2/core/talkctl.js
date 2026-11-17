@@ -17,14 +17,16 @@ const TICK_MS = 100;
  * unlockAudio(), called
  * inside every tap that may lead to sound, before anything is awaited (iPhone Safari starts sound only
  * there: adapters.js speaker.unlock), phoneVoice() (the phone's own voice-out module, or null) and
- * naturalDeclined {get(), set()} (Not now on the natural voice's offer, kept on the phone).
+ * naturalDeclined {get(), set()} (Not now on the natural voice's offer, kept on the phone),
+ * voicesReady() (resolves once the phone lists its own voices, or after a short wait: a browser lists
+ * them a moment after the page opens) and readAloudOff() (true when the person turned reading aloud off).
  *
  * Listen speaks at once (owner, 2026-11-15): while the natural voice is not on the phone yet, the phone's
  * own voice reads the answer, and the natural voice is offered after, as an upgrade (S.voiceOffer, shown
  * under Listen), until the person gets it or says Not now. Only a phone with no voice of its own asks
  * before the download, as before.
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} } }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} }, voicesReady = async () => false, readAloudOff = () => false }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -200,10 +202,23 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
    * on their own again until the person taps Listen. retry: Try again after a failed download, which
    * the person already agreed to (no second question).
    */
-  function speak(msg, { auto = false, retry = false, natural = false } = {}) {
+  function speak(msg, { auto = false, retry = false, natural = false, waited = false } = {}) {
     if (!auto) unlockAudio();
+    if (!msg?.content) return;
     const mod = voiceOut();
-    if (!mod || !msg?.content) return;
+    if (!mod) {
+      // No voice to read with. The phone's own may not be listed yet: give it a moment, once. Then, for
+      // an answer the person expects to hear, say there is no voice rather than stay silent.
+      if (!auto || readAloudOff()) return;
+      if (!waited) {
+        const ticket = {};
+        asking = ticket;
+        voicesReady().then(() => asking === ticket && ((asking = null), speak(msg, { auto, waited: true })));
+        return;
+      }
+      ui.toast(t('speak.noVoice'), 4500);
+      return;
+    }
     stopSpeaking();
     if (!mod.download) return play(mod, msg);
     const ticket = {};
@@ -213,7 +228,14 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       if (asking !== ticket) return;
       let view = null;
       if (d.needed) {
-        const phone = retry || natural ? null : phoneVoice();
+        let phone = retry || natural ? null : phoneVoice();
+        // The phone's own voices are listed a moment after the page opens: wait for them before taking the
+        // phone for one with no voice (which would ask about the download instead of reading).
+        if (!phone && !retry && !natural) {
+          await voicesReady();
+          if (asking !== ticket) return;
+          phone = phoneVoice();
+        }
         if (phone) {
           // The phone's own voice reads now; the natural voice waits for the person to ask for it.
           asking = null;

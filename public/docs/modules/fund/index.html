@@ -567,7 +567,7 @@
 <h3 id="icon"><code>icon</code><a class="anchor" href="#icon" aria-label="Link to this section">#</a></h3>
 <p>Optional. An icon name from <code>ui.ICONS</code>. The app draws it on the module&#39;s More tile, its tab and its card when it has no picture of its own for this <code>id</code>. Without it the app draws <code>plus</code>.</p>
 <h3 id="usable"><code>usable()</code><a class="anchor" href="#usable" aria-label="Link to this section">#</a></h3>
-<p>Optional. Return <code>false</code> on a phone that cannot use the module. The first run&#39;s How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a card returns <code>nfc.supported()</code>.</p>
+<p>Optional. Return <code>false</code> on a phone that cannot use the module. The first run&#39;s How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a Cashu card returns <code>nfc.supported()</code>.</p>
 <h3 id="sub"><code>sub()</code><a class="anchor" href="#sub" aria-label="Link to this section">#</a></h3>
 <p>Optional. Returns the string key of the line behind the module&#39;s info button on Add money. Without it the app uses <code>fund.&lt;id&gt;.sub</code> when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired.</p>
 <p>The bundled modules also set <code>group</code> (<code>&#39;unlinked&#39;</code> or <code>&#39;depends&#39;</code>). No app code reads it.</p>
@@ -663,7 +663,7 @@
 <td><code>supported()</code> false</td>
 </tr>
 </tbody></table></div>
-<p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a card does.</p>
+<p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a Cashu card does.</p>
 <h2 id="a-minimal-fund-module">A minimal fund module<a class="anchor" href="#a-minimal-fund-module" aria-label="Link to this section">#</a></h2>
 <p>This module adds pasted eCash. It reuses eCash&#39;s strings, so it needs only <code>fund.paste.name</code> in the string table. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/fund/paste"><code>docs/modules/examples/fund/paste/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>.</p>
 <p><code>manifest.json</code>:</p>
@@ -714,7 +714,7 @@
 }</code></pre></div>
 <p>To try it, copy the folder to <code>public/v2/modules/fund/paste/</code>, add <code>{ kind: &#39;fund&#39;, folder: &#39;paste&#39; }</code> to <code>BUNDLED</code>, add <code>&#39;fund.paste.name&#39;: &#39;Paste eCash&#39;,</code> to the string table and run <code>node scripts/v2-preload.ts</code>. It shows as a tile on Add money&#39;s More card. On an engine that needs an invite code, a first top-up also needs the invite: the bundled modules use <code>inviteField</code> from <code>fund/kit.js</code> for that.</p>
 <h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
-<p>Pure logic belongs in functions the module exports, tested in Node: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/card-module.test.ts"><code>test/unit/v2/card-module.test.ts</code></a> tests Tap a card&#39;s <code>routeFor</code> and <code>wordsFor</code>. The screens are tested in a phone-sized Chrome against a local gateway and the local test mints: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/note.ui.test.ts"><code>test/ui/note.ui.test.ts</code></a> scans a note, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/ways.ts"><code>test/ui/ways.ts</code></a> opens any way from Add money by its id.</p>
+<p>Pure logic belongs in functions the module exports, tested in Node: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/card-module.test.ts"><code>test/unit/v2/card-module.test.ts</code></a> tests Tap a Cashu card&#39;s <code>routeFor</code> and <code>wordsFor</code>. The screens are tested in a phone-sized Chrome against a local gateway and the local test mints: <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/note.ui.test.ts"><code>test/ui/note.ui.test.ts</code></a> scans a note, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/ways.ts"><code>test/ui/ways.ts</code></a> opens any way from Add money by its id.</p>
 
 <footer class="foot"><p>Forge AI. Generated from <code>docs/modules/fund.md</code>. <a href="#top">Back to the top</a></p></footer>
 </main>
