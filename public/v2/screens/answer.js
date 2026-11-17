@@ -7,7 +7,9 @@
 // waited; after SLOW_MS a "Slow model" note offers a fast model in one tap (owner, 2026-11-15).
 // The dock stays pinned at the bottom whatever the answer's length: Stop while it is being made, Listen
 // (or Stop) once it is in, with the natural voice offered under it after the phone's own voice read an
-// answer, and the bottom row (Type, Add, More).
+// answer, and the bottom row (Type, Add, More). Copy, Ask again and Burn never rest half under it: once
+// the answer is in, and when a kept answer is opened, a row the dock covers is brought up just above it
+// (clearOfDock). Never while the answer streams, and a row out of view below the screen stays there.
 //
 // Markdown (js/markdown.js with marked and DOMPurify, about 80 KB) loads when an answer screen is first
 // made, not with the app, so it does not hold up the first paint. Until it is in, the answer shows as
@@ -25,7 +27,7 @@ export const loadMarkdown = () =>
   ));
 import { errorView } from '../core/errors.js';
 import { priceLine } from '../core/price.js';
-import { el, icon, say, sayEl, toast } from '../core/ui.js';
+import { el, icon, reduced, say, sayEl, toast } from '../core/ui.js';
 import { holdToBurn } from './burn.js';
 import { bottomRow, rings, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
@@ -271,6 +273,7 @@ export function answer({ t, state, nav, actions, format }) {
       return t(p.key, p);
     })();
     tiles.replaceChildren(...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []), tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice), burnTile());
+    clearOfDock();
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
@@ -304,6 +307,17 @@ export function answer({ t, state, nav, actions, format }) {
     // A stopped answer shows the stop mark, whatever it cost.
     say(note, noteText, '', a.meta?.stopped ? 'stop' : a.meta?.free || modelFree ? 'gift' : cost ? 'coins' : null);
   };
+  /** Brings the action row up above the dock when the dock covers any of it, once the answer is in. */
+  let clearing = 0;
+  function clearOfDock() {
+    cancelAnimationFrame(clearing);
+    clearing = requestAnimationFrame(() => {
+      if (!tiles.childElementCount || state.view().streaming || !main.isConnected) return;
+      const row = tiles.getBoundingClientRect();
+      if (row.bottom <= dock.getBoundingClientRect().top || row.top >= innerHeight) return;
+      tiles.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'instant' : 'smooth' });
+    });
+  }
   const showSpeaking = (v) => {
     const on = v.speak.current && v.speak.state !== 'idle';
     speaking.hidden = !on;
@@ -321,6 +335,16 @@ export function answer({ t, state, nav, actions, format }) {
     speakVia.hidden = !(on && v.speak.viaEngine);
     say(speakVia, speakVia.hidden ? '' : t('speak.viaEngine'), '', 'eye');
   };
+  // The page's scroll padding is the dock's height while this screen shows, so a row brought into view,
+  // and a button the keyboard moves to, stop above the dock instead of under it.
+  const root = document.documentElement;
+  const sized = new ResizeObserver(() => {
+    root.style.scrollPaddingBottom = `${dock.offsetHeight}px`;
+    clearOfDock();
+  });
+  sized.observe(dock);
+  sized.observe(card);
+  addEventListener('resize', clearOfDock);
   update();
   // Once markdown is in, the answer is drawn again with it.
   let gone = false;
@@ -339,6 +363,10 @@ export function answer({ t, state, nav, actions, format }) {
     destroy: () => {
       gone = true;
       clearInterval(timer);
+      sized.disconnect();
+      cancelAnimationFrame(clearing);
+      removeEventListener('resize', clearOfDock);
+      root.style.removeProperty('scroll-padding-bottom');
       burner?.destroy();
       hold.destroy?.();
     },
