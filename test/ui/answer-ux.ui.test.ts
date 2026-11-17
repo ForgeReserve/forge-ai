@@ -460,7 +460,8 @@ describe('money at $0 with free models', () => {
     const { ctx, page, errors } = await phone();
     await zeroBalance(page);
     // Private only is on: the private model is chosen, and it needs money.
-    expect(await page.textContent('#modelChip')).toBe('tinfoil/enc-model');
+    // The chip is drawn empty and named once the home has the model list.
+    await expect.poll(() => page.textContent('#modelChip')).toBe('tinfoil/enc-model');
     expect(await page.getAttribute('#modelChip', 'data-kind')).toBe('private');
     expect(await page.isVisible('#addMoney')).toBe(true);
     // Add money and Add (to the question) never share a picture.
