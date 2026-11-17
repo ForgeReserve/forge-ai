@@ -1,11 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { micArgs, micFile } from './mic.ts';
 
 // Hold to talk in a phone-sized Chrome. The microphone is Chrome's fake capture device (a steady beep),
 // reached through the app's own microphone adapter; the engine is a local gateway whose mock audio
@@ -21,7 +19,7 @@ beforeAll(async () => {
   browser = await chromium.launch({
     channel: 'chrome',
     headless: true,
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: micArgs(),
   });
 }, 60_000);
 
@@ -239,18 +237,8 @@ describe('hold to talk', () => {
   }, 90_000);
 
   it('a hold with nothing said is not sent: no speech request, no question, nothing paid, and the app says so', async () => {
-    // A microphone that hears silence: Chrome plays this file as the microphone.
-    const wav = Buffer.alloc(44 + 48000 * 2 * 2);
-    wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16);
-    wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(48000, 24); wav.writeUInt32LE(96000, 28);
-    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
-    const file = join(mkdtempSync(join(tmpdir(), 'forge-silence-')), 'silence.wav');
-    writeFileSync(file, wav);
-    const quiet = await chromium.launch({
-      channel: 'chrome',
-      headless: true,
-      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required', `--use-file-for-fake-audio-capture=${file}`],
-    });
+    // A microphone that hears silence (test/ui/mic.ts).
+    const quiet = await chromium.launch({ channel: 'chrome', headless: true, args: micArgs(micFile({ voice: false })) });
     try {
       const { ctx, page, errors, calls } = await phone(quiet);
       const chats: string[] = [];

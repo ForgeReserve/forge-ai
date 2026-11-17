@@ -3,6 +3,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from 'playwrig
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { micArgs } from './mic.ts';
 
 // Free voice questions (docs/PAYMENTS.md) in the v2 app: a $0 balance opened with an invite, on a free
 // model, holds to talk, sees "Free", and gets an answer without being charged. Once today's free voice
@@ -27,7 +28,7 @@ beforeAll(async () => {
   browser = await chromium.launch({
     channel: 'chrome',
     headless: true,
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: micArgs(),
   });
 }, 60_000);
 
