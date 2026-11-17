@@ -1,0 +1,30 @@
+{
+  "source": "Vitest JSON reports, 2026-11-17: .tmp/ui-times",
+  "files": {
+    "test/ui/addfunds.ui.test.ts": 28.8,
+    "test/ui/android.ui.test.ts": 62.1,
+    "test/ui/answer-ux.ui.test.ts": 50,
+    "test/ui/card.ui.test.ts": 53.3,
+    "test/ui/docs.ui.test.ts": 11.5,
+    "test/ui/fedimint.ui.test.ts": 29.7,
+    "test/ui/firstrun.ui.test.ts": 44.5,
+    "test/ui/free-models.ui.test.ts": 35.5,
+    "test/ui/free-voice.ui.test.ts": 4.8,
+    "test/ui/free.ui.test.ts": 11.2,
+    "test/ui/game.ui.test.ts": 77.9,
+    "test/ui/history.ui.test.ts": 76.9,
+    "test/ui/home-art.ui.test.ts": 15,
+    "test/ui/join.ui.test.ts": 9.7,
+    "test/ui/layout.ui.test.ts": 20.9,
+    "test/ui/literacy.ui.test.ts": 58.5,
+    "test/ui/midnight.ui.test.ts": 43.1,
+    "test/ui/note.ui.test.ts": 20.4,
+    "test/ui/phonon-lab.ui.test.ts": 179.9,
+    "test/ui/phonon.ui.test.ts": 111.1,
+    "test/ui/photo.ui.test.ts": 35.9,
+    "test/ui/playful.ui.test.ts": 36.5,
+    "test/ui/search.ui.test.ts": 4.7,
+    "test/ui/v2.ui.test.ts": 51.8,
+    "test/ui/voice.ui.test.ts": 44
+  }
+}
