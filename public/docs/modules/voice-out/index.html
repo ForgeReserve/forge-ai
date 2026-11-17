@@ -130,11 +130,19 @@
 </thead>
 <tbody><tr>
 <td><code>voices(lang = &#39;en&#39;)</code></td>
-<td>The phone&#39;s own voices for the language.</td>
+<td>The phone&#39;s own voices for the language, its default voice first. Browsers list them a moment after the page opens, so this can be empty at first.</td>
+</tr>
+<tr>
+<td><code>ready(ms = 2000, lang = &#39;en&#39;)</code></td>
+<td>Resolves <code>true</code> once the phone lists a voice of its own for the language, or <code>false</code> after <code>ms</code> with none.</td>
+</tr>
+<tr>
+<td><code>unlock()</code></td>
+<td>Speaks a silent utterance inside a tap, once a page. iPhone Safari drops an utterance started outside a tap until the page has spoken in one; the app calls it in every tap that may lead to a reading.</td>
 </tr>
 <tr>
 <td><code>speak(text, lang = &#39;en&#39;)</code></td>
-<td>Reads <code>text</code>. Returns <code>{done, stop()}</code>.</td>
+<td>Reads <code>text</code>. Returns <code>{done, stop()}</code>. <code>done</code> rejects with an <code>AudioBlocked</code> error when the browser refused the utterance or dropped it without a word.</td>
 </tr>
 </tbody></table></div>
 <h3 id="audio"><code>audio</code><a class="anchor" href="#audio" aria-label="Link to this section">#</a></h3>

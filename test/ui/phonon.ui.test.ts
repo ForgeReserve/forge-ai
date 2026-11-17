@@ -53,11 +53,11 @@ async function fundedKey(): Promise<string> {
  * A phone with a funded balance and the microphone allowed; Private only off, the mock-echo model.
  * context: more context options; before: runs on the context before its first page opens.
  */
-async function phone({ context = {}, before, phoneVoice = false }: { context?: object; before?: (ctx: BrowserContext) => Promise<void>; phoneVoice?: boolean } = {}): Promise<Phone> {
+async function phone({ context = {}, before, phoneVoice = false }: { context?: object; before?: (ctx: BrowserContext) => Promise<void>; phoneVoice?: boolean | { late?: boolean; tapOnly?: boolean } } = {}): Promise<Phone> {
   const ctx = await browser.newContext({ ...PHONE, ...context });
   // Whether the phone has a voice of its own (it reads at once while the natural voice is not here yet):
   // none by default, so the one-time question before the download is what these tests see.
-  await fakePhoneVoice(ctx, phoneVoice);
+  await fakePhoneVoice(ctx, !!phoneVoice, typeof phoneVoice === 'object' ? phoneVoice : {});
   await before?.(ctx);
   await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
@@ -334,6 +334,33 @@ describe('the natural voice', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 180_000);
+
+  // No sound before the natural voice was downloaded (owner, 2026-11-17). The phone's voices are listed a
+  // moment after the page first asks for them: a spoken answer that asked in that moment found no voice
+  // and asked about the download instead of reading. The app waits for the list.
+  it("reads a spoken answer with the phone's own voice when its voices are listed late", async () => {
+    const { ctx, page, errors } = await phone({ phoneVoice: { late: true } });
+    await page.evaluate(() => (window as any).__voicesLate());
+    await hold(page, '#talkBtn', 900);
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 20_000 }).toBeGreaterThan(0);
+    expect(await page.isVisible('#voiceDownload')).toBe(false);
+    expect(await played(page)).toBe(0);
+    await page.waitForSelector('#voiceOffer:not([hidden])');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  // iPhone Safari drops an utterance started outside a tap, silently, until the page spoke inside one. The
+  // answer to a spoken question is read seconds after the finger lifts: letting go unlocks the voice.
+  it("reads a spoken answer with the phone's own voice where only a tap lets a page speak (iPhone Safari)", async () => {
+    const { ctx, page, errors } = await phone({ phoneVoice: { tapOnly: true } });
+    await hold(page, '#talkBtn', 900);
+    await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 20_000 }).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window as any).__dropped)).toBe(0);
+    expect(await page.isVisible('#voiceDownload')).toBe(false);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
 
   it('Not now on the offer is kept: the next Listen reads at once with no offer', async () => {
     const { ctx, page, errors } = await phone({ phoneVoice: true });

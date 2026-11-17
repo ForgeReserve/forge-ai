@@ -1211,9 +1211,15 @@ const talk = createTalk({
   errorText: (err) => errorText(err, S.unit),
   askDownload: (bytes) => askVoiceDownload(bytes),
   showDownload: (bytes) => showVoiceDownload(bytes),
-  unlockAudio: () => adapters.speaker.unlock?.(),
+  // Web Audio, and the phone's own voice, which iPhone Safari lets a page use only after it spoke in a tap.
+  unlockAudio: () => {
+    adapters.speaker.unlock?.();
+    adapters.synth.unlock?.();
+  },
   // The phone's own voice, which reads at once while the natural voice is not on the phone yet.
   phoneVoice: () => reader.mod(),
+  voicesReady: () => adapters.synth.ready?.(2000) ?? Promise.resolve(false),
+  readAloudOff: () => S.settings.voiceOut === 'off',
   naturalDeclined: {
     get: () => !!S.settings.naturalNotNow,
     set: () => {

@@ -20,6 +20,7 @@ const VOUT: any = await import('../../../public/v2/modules/voice-out/engine/inde
 const VOUT_DEVICE: any = await import('../../../public/v2/modules/voice-out/device/index.js' as string);
 const ERR: any = await import('../../../public/v2/core/errors.js' as string);
 const EN: any = (await import('../../../public/v2/strings/en.js' as string)).default;
+const ADAPTERS: any = await import('../../../public/v2/core/adapters.js' as string);
 
 /** Runs events through the state machine from idle; returns the final state and every effect. */
 function run(events: object[]) {
@@ -906,5 +907,178 @@ describe('the system prompt of a spoken question', () => {
     expect(api2[0].content).not.toContain('read aloud');
     // The longer prompt is counted in the request size the hold is worked out from.
     expect(C.tokensOf(spoken, { systemPrompt: C.systemPromptFor(spoken, opts) })).toBeGreaterThan(C.tokensOf(spoken, { systemPrompt: en['system.prompt'] }));
+  });
+});
+
+// No sound on the web before the natural voice is downloaded (owner, 2026-11-17). While the natural voice
+// is not on the phone, the phone's own voice reads at once. Two things kept it silent: iPhone Safari drops
+// an utterance started outside a tap with no event at all, so the reading never started and never ended;
+// and the phone's voices are listed a moment after the page opens, so a read asked for in that moment
+// found no voice, asked about the download instead, or did nothing.
+describe("the phone's own voice in the browser (core/adapters.js synth)", () => {
+  const synth = ADAPTERS.adapters.synth;
+
+  /** A speechSynthesis stand-in. mode: 'speak' (start, then end), 'drop' (iPhone Safari outside a tap: nothing at all), 'refuse' (Chrome with no tap yet). */
+  function fakeSynth({ voices = [] as any[], mode = 'speak' } = {}) {
+    const listeners = new Set<() => void>();
+    const spoken: any[] = [];
+    const s: any = {
+      list: voices,
+      speaking: false,
+      pending: false,
+      getVoices: () => s.list,
+      addEventListener: (_: string, f: () => void) => listeners.add(f),
+      removeEventListener: (_: string, f: () => void) => listeners.delete(f),
+      speak(u: any) {
+        spoken.push(u);
+        if (mode === 'drop') return;
+        if (mode === 'refuse') return setTimeout(() => u.onerror?.({ error: 'not-allowed' }), 0);
+        setTimeout(() => u.onstart?.(), 0);
+        setTimeout(() => u.onend?.(), 5);
+      },
+      cancel() {},
+      list_later(v: any[]) {
+        s.list = v;
+        for (const f of listeners) f();
+      },
+    };
+    (globalThis as any).speechSynthesis = s;
+    (globalThis as any).SpeechSynthesisUtterance = class {
+      text: string;
+      volume = 1;
+      voice: unknown = null;
+      lang = '';
+      onstart: any;
+      onend: any;
+      onerror: any;
+      constructor(text: string) {
+        this.text = text;
+      }
+    };
+    return { s, spoken, listeners };
+  }
+  const voice = (name: string, lang = 'en-US', extra = {}) => ({ name, lang, localService: true, default: false, ...extra });
+
+  it('lists only voices on the phone for the language, the default first', () => {
+    fakeSynth({ voices: [voice('Albert'), { ...voice('Google US English'), localService: false }, voice('Samantha', 'en-US', { default: true }), voice('Thomas', 'fr-FR')] });
+    expect(synth.voices('en').map((v: any) => v.name)).toEqual(['Samantha', 'Albert']);
+  });
+
+  it('ready() waits for voices listed late, and gives up after its time with none', async () => {
+    const f = fakeSynth();
+    const late = synth.ready(1000);
+    setTimeout(() => f.s.list_later([voice('Samantha')]), 20);
+    expect(await late).toBe(true);
+    expect(f.listeners.size).toBe(0);
+    fakeSynth();
+    expect(await synth.ready(30)).toBe(false);
+  });
+
+  it('reads and ends; an utterance the phone dropped is AudioBlocked, not a silence for ever', async () => {
+    fakeSynth({ voices: [voice('Samantha')] });
+    await expect(synth.speak('Hello.', 'en', { startMs: 50 }).done).resolves.toBeUndefined();
+    fakeSynth({ voices: [voice('Samantha')], mode: 'drop' });
+    await expect(synth.speak('Hello.', 'en', { startMs: 50 }).done).rejects.toMatchObject({ name: 'AudioBlocked' });
+    fakeSynth({ voices: [voice('Samantha')], mode: 'refuse' });
+    await expect(synth.speak('Hello.', 'en', { startMs: 50 }).done).rejects.toMatchObject({ name: 'AudioBlocked' });
+  });
+
+  it('one still waiting its turn is not taken for dropped', async () => {
+    const f = fakeSynth({ voices: [voice('Samantha')], mode: 'drop' });
+    f.s.pending = true;
+    const r = synth.speak('Hello.', 'en', { startMs: 20 });
+    const settled = await Promise.race([r.done.then(() => 'settled', () => 'settled'), new Promise((res) => setTimeout(() => res('waiting'), 80))]);
+    expect(settled).toBe('waiting');
+    r.stop();
+  });
+
+  it('unlock() speaks one silent utterance, once a page', () => {
+    const f = fakeSynth({ voices: [voice('Samantha')] });
+    synth.unlock();
+    synth.unlock();
+    expect(f.spoken.map((u) => [u.text, u.volume])).toEqual([[' ', 0]]);
+  });
+});
+
+describe('reading an answer with the phone voice while the natural voice is not here', () => {
+  function setup({ phoneAfterWait = true, out = 'phonon' as 'phonon' | null, off = false } = {}) {
+    const S: any = {};
+    const store = { S, set: (p: object) => Object.assign(S, p) };
+    const asked: number[] = [];
+    const spoken: string[] = [];
+    const toasts: string[] = [];
+    let listed = false;
+    const phone = { id: 'device', pieceSize: () => 300, speak: (p: string[]) => (spoken.push(`phone:${p.join(' ')}`), { done: Promise.resolve({ chargedMsub: 0 }), stop() {} }) };
+    const natural = { id: 'phonon', pieceSize: () => 1500, download: async () => ({ needed: true, bytes: 65e6 }), speak: (p: string[]) => (spoken.push(`natural:${p.join(' ')}`), { done: Promise.resolve({ chargedMsub: 0 }), stop() {} }) };
+    const ctl = CTL.createTalk({
+      store,
+      t: (k: string) => k,
+      ui: { toast: (x: string) => toasts.push(x) },
+      nav() {},
+      haptics: { pulse() {} },
+      voiceIn: () => null,
+      // With no natural voice to offer (out null), the phone's own voice is the one picked once listed.
+      voiceOut: () => (out === 'phonon' ? natural : listed ? phone : null),
+      blocker: () => null,
+      ask: async () => {},
+      refresh() {},
+      errorText: () => 'error',
+      askDownload: async (bytes: number) => (asked.push(bytes), false),
+      phoneVoice: () => (listed ? phone : null),
+      voicesReady: async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        listed = phoneAfterWait;
+        return listed;
+      },
+      readAloudOff: () => off,
+    });
+    return { S, ctl, asked, spoken, toasts };
+  }
+  const msg = { id: 'a1', content: 'An answer.' };
+  const settle = () => new Promise((r) => setTimeout(r, 30));
+
+  it('waits for voices listed late and reads with them, offering the natural voice after', async () => {
+    const x = setup();
+    x.ctl.speak(msg, { auto: true });
+    await settle();
+    expect(x.spoken).toEqual(['phone:An answer.']);
+    expect(x.asked).toEqual([]);
+    expect(x.S.voiceOffer).toEqual({ bytes: 65e6 });
+  });
+
+  it('with no voice of its own at all, asks about the download as before', async () => {
+    const x = setup({ phoneAfterWait: false });
+    x.ctl.speak(msg);
+    await settle();
+    expect(x.asked).toEqual([65e6]);
+    expect(x.spoken).toEqual([]);
+  });
+
+  it('with no voice to read with at all, a spoken answer says so; Off stays quiet', async () => {
+    const late = setup({ out: null });
+    late.ctl.speak(msg, { auto: true });
+    await settle();
+    expect(late.spoken).toEqual(['phone:An answer.']);
+    expect(late.toasts).toEqual([]);
+    const none = setup({ out: null, phoneAfterWait: false });
+    none.ctl.speak(msg, { auto: true });
+    await settle();
+    expect(none.toasts).toEqual(['speak.noVoice']);
+    const off = setup({ out: null, phoneAfterWait: false, off: true });
+    off.ctl.speak(msg, { auto: true });
+    await settle();
+    expect(off.toasts).toEqual([]);
+  });
+
+  it('says the sound is blocked when the phone dropped the reading', async () => {
+    const x = setup();
+    const blocked = { id: 'device', pieceSize: () => 300, speak: () => ({ done: Promise.reject(Object.assign(new Error('off'), { name: 'AudioBlocked' })), stop() {} }) };
+    const S: any = {};
+    const toasts: string[] = [];
+    const ctl = CTL.createTalk({ store: { S, set: (p: object) => Object.assign(S, p) }, t: (k: string) => k, ui: { toast: (t: string) => toasts.push(t) }, nav() {}, haptics: { pulse() {} }, voiceIn: () => null, voiceOut: () => blocked, blocker: () => null, ask: async () => {}, refresh() {}, errorText: () => 'error' });
+    ctl.speak(msg, { auto: true });
+    await settle();
+    expect(toasts).toEqual(['speak.blocked']);
+    expect(x.toasts).toEqual([]);
   });
 });

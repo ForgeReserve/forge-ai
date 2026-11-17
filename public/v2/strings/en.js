@@ -75,6 +75,7 @@ export default {
   'speak.viaEngine': 'Read by the engine. It sees the answer on the way.',
   'speak.failed': 'Could not read it aloud.',
   'speak.blocked': 'Sound blocked. The phone kept the sound off. Tap Listen to hear the answer.',
+  'speak.noVoice': 'No voice here. This phone has no voice to read the answer aloud. The answer is on the screen.',
   // Type
   'type.title': 'Type',
   'type.placeholder': 'Ask anything',

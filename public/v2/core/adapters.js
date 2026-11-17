@@ -37,6 +37,11 @@ function playbackSession() {
   };
 }
 
+/** How long an utterance may take to start before the phone is taken to have dropped it. */
+const SYNTH_START_MS = 2500;
+let synthUnlocked = false;
+const blockedError = () => Object.assign(new Error('the phone kept the sound off'), { name: 'AudioBlocked' });
+
 const defaults = {
   camera: {
     available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
@@ -271,23 +276,96 @@ const defaults = {
   /**
    * The phone's own voices (speechSynthesis), only those that run on the phone (localService), so the
    * answer is never sent to a voice service. speak() returns {done: Promise, stop()}.
+   *
+   * Two things keep a browser's own voice silent, and both are handled here. The voices are listed late:
+   * Chrome lists none until a moment after the page first asks, iOS Safari a while after the page opens
+   * (ready(ms) waits for them). And iPhone Safari drops an utterance started outside a tap, with no
+   * event at all (WebKit SpeechSynthesis::speak), until the page has spoken once inside one: unlock()
+   * speaks a silent one in the tap, and speak() rejects with AudioBlocked when an utterance never starts.
    */
   synth: {
     voices(lang = 'en') {
       const all = typeof speechSynthesis !== 'undefined' ? speechSynthesis.getVoices() : [];
-      return all.filter((v) => v.localService && v.lang?.toLowerCase().startsWith(lang.toLowerCase()));
+      const ours = all.filter((v) => v.localService && v.lang?.toLowerCase().startsWith(lang.toLowerCase()));
+      // The phone's default voice first: the first one listed can be a novelty voice (macOS lists Albert,
+      // Bad News and Bells among its English voices).
+      return [...ours.filter((v) => v.default), ...ours.filter((v) => !v.default)];
     },
-    speak(text, lang = 'en') {
+    /** Resolves true once the phone lists a voice of its own for `lang`, false after `ms` with none. */
+    ready(ms = 2000, lang = 'en') {
+      if (defaults.synth.voices(lang).length) return Promise.resolve(true);
+      if (typeof speechSynthesis === 'undefined') return Promise.resolve(false);
+      return new Promise((res) => {
+        const check = () => {
+          if (!defaults.synth.voices(lang).length) return;
+          finish(true);
+        };
+        const finish = (ok) => {
+          clearTimeout(timer);
+          clearInterval(poll);
+          speechSynthesis.removeEventListener?.('voiceschanged', check);
+          res(ok);
+        };
+        const timer = setTimeout(() => finish(defaults.synth.voices(lang).length > 0), ms);
+        // Some browsers fill the list without the event: look again now and then too.
+        const poll = setInterval(check, 250);
+        speechSynthesis.addEventListener?.('voiceschanged', check);
+      });
+    },
+    /** Inside a tap: a silent utterance, once a page, so the phone lets the page speak later (iOS). */
+    unlock() {
+      if (synthUnlocked) return;
+      try {
+        const synth = globalThis.speechSynthesis;
+        if (!synth || typeof SpeechSynthesisUtterance !== 'function') return;
+        synth.getVoices();
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        synth.speak(u);
+        synthUnlocked = true;
+      } catch {
+        /* no speech here */
+      }
+    },
+    speak(text, lang = 'en', { startMs = SYNTH_START_MS } = {}) {
       const u = new SpeechSynthesisUtterance(text);
       const voice = defaults.synth.voices(lang)[0];
       if (voice) u.voice = voice;
       u.lang = voice?.lang ?? lang;
+      let watch = 0;
+      let heard = false;
       const done = new Promise((res, rej) => {
-        u.onend = () => res();
-        u.onerror = (e) => (e.error === 'interrupted' || e.error === 'canceled' ? res() : rej(new Error(e.error)));
+        const end = (fn) => {
+          clearTimeout(watch);
+          heard = true;
+          fn();
+        };
+        u.onstart = () => {
+          heard = true;
+          clearTimeout(watch);
+        };
+        u.onend = () => end(res);
+        u.onerror = (e) => {
+          if (e.error === 'interrupted' || e.error === 'canceled') return end(res);
+          // Chrome refuses a page that has had no tap yet.
+          if (e.error === 'not-allowed') return end(() => rej(blockedError()));
+          end(() => rej(new Error(e.error)));
+        };
+        // An utterance the browser dropped never starts, ends or fails: say the sound is blocked rather
+        // than wait for ever in silence. One still waiting its turn (pending) or under way is left alone.
+        watch = setTimeout(() => {
+          if (heard || speechSynthesis.speaking || speechSynthesis.pending) return;
+          rej(blockedError());
+        }, startMs);
       });
       speechSynthesis.speak(u);
-      return { done, stop: () => speechSynthesis.cancel() };
+      return {
+        done,
+        stop: () => {
+          clearTimeout(watch);
+          speechSynthesis.cancel();
+        },
+      };
     },
   },
 

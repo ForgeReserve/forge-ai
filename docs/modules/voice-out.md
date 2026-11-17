@@ -40,8 +40,10 @@ The phone's own voices (`adapters.synth`), only those that run on the phone, so 
 
 | Function | What it does |
 | - | - |
-| `voices(lang = 'en')` | The phone's own voices for the language. |
-| `speak(text, lang = 'en')` | Reads `text`. Returns `{done, stop()}`. |
+| `voices(lang = 'en')` | The phone's own voices for the language, its default voice first. Browsers list them a moment after the page opens, so this can be empty at first. |
+| `ready(ms = 2000, lang = 'en')` | Resolves `true` once the phone lists a voice of its own for the language, or `false` after `ms` with none. |
+| `unlock()` | Speaks a silent utterance inside a tap, once a page. iPhone Safari drops an utterance started outside a tap until the page has spoken in one; the app calls it in every tap that may lead to a reading. |
+| `speak(text, lang = 'en')` | Reads `text`. Returns `{done, stop()}`. `done` rejects with an `AudioBlocked` error when the browser refused the utterance or dropped it without a word. |
 
 ### `audio`
 
