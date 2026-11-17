@@ -10,6 +10,7 @@
 // Every payment is stored on the phone before the till hears of it, and stays until the engine
 // credited it or the till gave the card its money back. A failed payment is listed with Get it back.
 import { inviteField, poll } from '../kit.js';
+import { cardFace } from '../../../screens/brands/cards.js';
 import { tillLabel } from '../../../core/till.js';
 
 const kids = (...list) => list.filter((x) => x != null && x !== '' && x !== false);
@@ -115,9 +116,9 @@ export function create(inputs) {
       const art = (amountText) =>
         ui.el(
           'div',
-          { class: 'card-art', role: 'img', 'aria-label': t('fund.fedimint.picture') },
-          ui.el('span', { class: 'card-art-word', text: t('fund.fedimint.artWord') }),
-          ui.el('span', { class: 'card-art-waves' }, ui.icon('nfc', 28)),
+          { class: 'card-art', 'data-brand': 'fedimint', role: 'img', 'aria-label': t('fund.fedimint.picture') },
+          // The card as it is printed (screens/brands/cards.js), with what it holds over it once read.
+          cardFace('fedimint'),
           amountText ? ui.el('span', { class: 'card-art-amount', text: amountText }) : null,
         );
       const amountOf = (rec) => format.units(rec.amount, rec.unit);

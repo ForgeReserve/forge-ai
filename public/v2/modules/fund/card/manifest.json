@@ -3,7 +3,7 @@
   "kind": "fund",
   "version": "1.0.0",
   "name": {
-    "en": "Tap a card"
+    "en": "Tap a Cashu card"
   },
   "permissions": [],
   "entry": "index.js",

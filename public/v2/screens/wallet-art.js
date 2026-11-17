@@ -2,13 +2,15 @@
 // standard (screens/firstrun-art.js, C-Welcome to C-Private): one light for every picture, a key light from
 // the top left and a soft teal rim light from the bottom right, layered gradients for volume, specular
 // highlights and soft contact shadows, and real materials: a gift box for Start free, a printed paper note,
-// a lit Lightning bolt, a bank-card-like Cashu card at a phone, the C-Pay coin for eCash, and for the
-// More ways a coin swap, a bitcoin coin, a free-question voucher and a Fedimint card.
+// a lit Lightning bolt, the Cashu card and the Fedimint card each at a phone (their printed faces, from
+// screens/brands/cards.js), the C-Pay coin for eCash, and for the More ways a coin swap, a bitcoin coin and
+// a free-question voucher.
 //
 // The markup is static and from this file only (built from numbers here, never from data). Every drawing
 // gets its own id prefix, so two pictures on one screen never share a gradient or a filter.
 import { dash, dashAfter } from '../core/rings.js';
 import { el, icon } from '../core/ui.js';
+import { cashuFace, fedimintFace } from './brands/cards.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const TEAL = '#3FCFB4';
@@ -399,47 +401,11 @@ ${depth.join('')}
 ${sparkle(p, 196, 44, 8)}${sparkle(p, 58, 64, 5)}${sparkle(p, 186, 150, 4, '#BFF7EA')}<circle cx="70" cy="146" r="1.8" fill="#FFF4CF" opacity="0.8"/><circle cx="204" cy="96" r="1.4" fill="#FFF4CF" opacity="0.7"/>`;
 };
 
-/** A bank-card-like card with its chip, contactless mark and raised digits. (x, y) its top left. */
-const bankCard = (p, { x, y, w = 140, h = 88, face = 'cf', mark = '#C9A24A' }) => {
-  const s = w / 140;
-  const at = (dx, dy) => `${r1(x + dx * s)} ${r1(y + dy * s)}`;
-  const digits = [];
-  for (let g = 0; g < 4; g++) for (let i = 0; i < 4; i++) digits.push(`M${at(14 + g * 28 + i * 5.6, 58)}h${r1(3.4 * s)}v${r1(5.6 * s)}h-${r1(3.4 * s)}z`);
-  return `<rect x="${x + 3 * s}" y="${y + 8 * s}" width="${w}" height="${h}" rx="${12 * s}" fill="#000000" opacity="0.28" ${f(p, 'b4')}/>
-<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${12 * s}" fill="url(#${p}${face})"/>
-<path d="M${at(0, 30)}C${at(40, 22)} ${at(90, 40)} ${at(140, 26)}L${at(140, 12)}A${12 * s} ${12 * s} 0 0 0 ${at(128, 0)}L${at(12, 0)}A${12 * s} ${12 * s} 0 0 0 ${at(0, 12)}Z" fill="#FFFFFF" opacity="0.35"/>
-<rect x="${x + 14 * s}" y="${y + 20 * s}" width="${28 * s}" height="${21 * s}" rx="${4 * s}" fill="url(#${p}chip)"/>
-<path d="M${at(14, 27)}h${10 * s}M${at(14, 34)}h${10 * s}M${at(32, 27)}h${10 * s}M${at(32, 34)}h${10 * s}M${at(24, 20)}v${21 * s}M${at(32, 20)}v${21 * s}" fill="none" stroke="#7A5512" stroke-opacity="0.6" stroke-width="${r1(0.9 * s)}"/>
-<rect x="${x + 14 * s}" y="${y + 20 * s}" width="${28 * s}" height="${21 * s}" rx="${4 * s}" fill="none" stroke="#FFF4CF" stroke-opacity="0.7" stroke-width="${r1(0.8 * s)}"/>
-<path d="M${at(54, 24)}a${7 * s} ${7 * s} 0 0 1 0 ${12 * s}M${at(59, 20)}a${12 * s} ${12 * s} 0 0 1 0 ${20 * s}M${at(64, 16)}a${17 * s} ${17 * s} 0 0 1 0 ${28 * s}" fill="none" stroke="${mark}" stroke-width="${r1(2.2 * s)}" stroke-linecap="round"/>
-<path d="${digits.join('')}" fill="#5A3C08" opacity="0.28" transform="translate(${r1(0.6 * s)} ${r1(0.9 * s)})"/>
-<path d="${digits.join('')}" fill="#FFFFFF" opacity="0.85"/>
-<rect x="${x + 14 * s}" y="${y + 72 * s}" width="${50 * s}" height="${4.4 * s}" rx="${2.2 * s}" fill="${mark}" opacity="0.55"/>
-<circle cx="${x + 120 * s}" cy="${y + 20 * s}" r="${9 * s}" fill="url(#${p}chip)"/><circle cx="${x + 120 * s}" cy="${y + 20 * s}" r="${6 * s}" fill="none" stroke="#FFF4CF" stroke-opacity="0.7" stroke-width="${r1(0.8 * s)}"/>
-<path d="M${at(1.5, 76)}L${at(1.5, 12)}A${10.5 * s} ${10.5 * s} 0 0 1 ${at(12, 1.5)}L${at(120, 1.5)}" fill="none" stroke="#FFFFFF" stroke-width="${r1(1.2 * s)}"/>
-<path d="M${at(138.5, 14)}L${at(138.5, 76)}A${10.5 * s} ${10.5 * s} 0 0 1 ${at(128, 86.5)}L${at(30, 86.5)}" fill="none" stroke="${TEAL}" stroke-opacity="0.7" stroke-width="${r1(1.3 * s)}" ${f(p, 'b06')}/>`;
-};
-
-/** The card face and chip gradients. */
-const cardDefs = (p) =>
-  lg(`${p}cf`, [0, 0, 1, 1], [
-    [0, '#FFFFFF'],
-    [0.45, '#FBF3DE'],
-    [1, '#E2D0A2'],
-  ]) +
-  lg(`${p}cb`, [0, 0, 1, 1], [
-    [0, '#5B86D6'],
-    [0.5, '#2F62BF'],
-    [1, '#1B3F86'],
-  ]) +
-  lg(`${p}chip`, [0, 0, 1, 1], [
-    [0, '#FFF0BE'],
-    [0.45, '#E9C36A'],
-    [1, '#A97A24'],
-  ]);
-
-/** Tap a card: a Cashu card held to the back of a phone, the tap's waves between them. */
-const CARD = (p) => `<defs>${filters(p)}${cardDefs(p)}
+/**
+ * A card held to the back of a phone, the tap's waves between them. face: the card's printed face
+ * (screens/brands/cards.js), drawn as the card itself, with its shadow and the scene's light on its edges.
+ */
+const tapScene = (face) => (p) => `<defs>${filters(p)}
 ${lg(`${p}ph`, [0, 0, 1, 1], [
   [0, '#4A525E'],
   [0.35, '#262B33'],
@@ -459,7 +425,7 @@ ${lg(`${p}glare`, [0, 0, 1, 1], [
   [1, '#FFFFFF', 0],
 ])}
 </defs>
-${contact(p, 176, 184, 46, 4, 0.35, '#5A3C08')}
+${contact(p, 176, 184, 46, 4, 0.35, '#0B0D10')}
 <rect x="134" y="24" width="86" height="160" rx="18" fill="#000000" opacity="0.3" ${f(p, 'b4')}/>
 <rect x="130" y="18" width="86" height="160" rx="18" fill="url(#${p}ph)"/>
 <rect x="137" y="28" width="72" height="140" rx="11" fill="url(#${p}sc)"/>
@@ -469,7 +435,12 @@ ${contact(p, 176, 184, 46, 4, 0.35, '#5A3C08')}
 <path d="M131.5 40V156" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="1.2" stroke-linecap="round"/>
 <path d="M215 40V158A18 18 0 0 1 199 177" fill="none" stroke="${TEAL}" stroke-opacity="0.75" stroke-width="1.4" ${f(p, 'b06')}/>
 <rect x="216" y="56" width="2.6" height="20" rx="1.3" fill="#2A2F37"/>
-<g transform="rotate(-16 92 112)">${bankCard(p, { x: 22, y: 70 })}</g>
+<g transform="rotate(-16 92 112)">
+<rect x="25" y="78" width="140" height="88" rx="6" fill="#000000" opacity="0.3" ${f(p, 'b4')}/>
+${face(p, { x: 22, y: 70 })}
+<path d="M23.5 150V77A5.5 5.5 0 0 1 29 71.5H150" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="1.1"/>
+<path d="M160.5 78V152A5.5 5.5 0 0 1 155 157.5H50" fill="none" stroke="${TEAL}" stroke-opacity="0.7" stroke-width="1.3" ${f(p, 'b06')}/>
+</g>
 <g fill="none" stroke-linecap="round">
 <path d="M150 72a22 22 0 0 1 0 36M160 62a36 36 0 0 1 0 56M170 52a50 50 0 0 1 0 76" stroke="${TEAL}" stroke-opacity="0.55" stroke-width="7" ${f(p, 'b2')} transform="translate(-14 4)"/>
 <path d="M150 72a22 22 0 0 1 0 36M160 62a36 36 0 0 1 0 56M170 52a50 50 0 0 1 0 76" stroke="#FFF6DD" stroke-width="4" transform="translate(-14 4)"/>
@@ -498,7 +469,17 @@ ${coin(p, { cx: 134, cy: 86, rx: 54, ry: 21, h: 13 })}
 <ellipse cx="72" cy="154" rx="3" ry="8" fill="#FFF6DC" opacity="0.35" ${f(p, 'b1')}/>
 ${sparkle(p, 202, 40, 7, '#E2B552')}${sparkle(p, 48, 66, 5, '#E2B552')}`;
 
-const ART = { start: GIFT, note: NOTE, lightning: BOLT, card: CARD, ecash: COINS };
+/** Tap a Cashu card and Tap a Fedimint card: each card, as printed, at the phone. */
+const CARD = tapScene(cashuFace);
+const FEDIMINT = tapScene(fedimintFace);
+
+/** The two cards together (Funds' fanned stack): the Fedimint card behind, the Cashu card in front. */
+const CARDS = (p) => `<defs>${filters(p)}</defs>
+${contact(p, 125, 176, 80, 5, 0.3, '#0B0D10')}
+<g transform="rotate(10 160 90)"><rect x="83" y="52" width="140" height="88" rx="6" fill="#000000" opacity="0.28" ${f(p, 'b4')}/>${fedimintFace(`${p}f`, { x: 80, y: 44 })}</g>
+<g transform="rotate(-12 90 120)"><rect x="23" y="88" width="140" height="88" rx="6" fill="#000000" opacity="0.3" ${f(p, 'b4')}/>${cashuFace(`${p}c`, { x: 20, y: 80 })}</g>`;
+
+const ART = { start: GIFT, note: NOTE, lightning: BOLT, card: CARD, fedimint: FEDIMINT, cards: CARDS, ecash: COINS };
 
 // ------------------------------------------------------------------ the More ways (100 by 100)
 
@@ -557,10 +538,6 @@ ${lg(`${p}st`, [0, 0, 1, 1], [
 <path d="M18.6 66V56a6 6 0 0 0 0-12V34.6H82" fill="none" stroke="#FFFFFF" stroke-width="0.9"/>
 <path d="M82 56v10H22" fill="none" stroke="${TEAL}" stroke-opacity="0.7" stroke-width="1" ${f(p, 'b06')}/>
 </g>`,
-  // A Fedimint card: a bank-like card, its waves.
-  fedimint: (p) => `<defs>${filters(p)}${cardDefs(p)}${disc(p, ['#F5F9FF', '#DCE9FF', '#A9C4F2'])}</defs>${discBody(p)}
-<g transform="rotate(-14 46 54)">${bankCard(p, { x: 14, y: 36, w: 58, h: 36.5, face: 'cb', mark: '#FFF6DD' })}</g>
-<g fill="none" stroke-linecap="round"><path d="M74 38a10 10 0 0 1 0 16M80 32a18 18 0 0 1 0 28M86 26a26 26 0 0 1 0 40" stroke="#2459B8" stroke-width="3.2"/><path d="M74 38a10 10 0 0 1 0 16" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="1" transform="translate(-0.6 -0.6)"/></g>`,
 };
 
 /**
@@ -589,13 +566,17 @@ const TAB = {
   start: '<rect x="4" y="10" width="16" height="10" rx="1.5" fill="currentColor" fill-opacity="0.16"/><rect x="3" y="7" width="18" height="4" rx="1"/><path d="M4 11v8.5a.5.5 0 0 0 .5.5h15a.5.5 0 0 0 .5-.5V11M12 7v13M12 7c-1.6-3.2-5.4-3.4-5.4-1.2S10 7 12 7c2 0 5.4 1 5.4-1.2S13.6 3.8 12 7z"/>',
   note: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="7" y="8.5" width="10" height="7" rx="1" fill="currentColor" fill-opacity="0.16"/><circle cx="10" cy="12" r="1.6"/>',
   lightning: '<path d="M13.2 2.5 5 13.6h6.1l-1.2 7.9 8.2-11.1H12z" fill="currentColor" fill-opacity="0.22"/>',
-  card: '<rect x="2" y="6" width="15" height="11" rx="2.5" fill="currentColor" fill-opacity="0.16"/><rect x="4.5" y="9" width="4" height="3" rx=".6"/><path d="M19 8a4 4 0 0 1 0 6M21.5 6a7 7 0 0 1 0 10"/>',
+  // The two cards: a card and its waves, with the brand's plain shape where the chip would be (the
+  // cashew of the Cashu card, the heptagon of the Fedimint card), so the two tabs are told apart.
+  card: '<rect x="2" y="6" width="15" height="11" rx="2.5" fill="currentColor" fill-opacity="0.16"/><path transform="translate(4.9 6.8) scale(.092) rotate(-14 50 50)" d="M58 7C76 7 90 18 90 33C90 46 78 50 66 52C58 53 55 60 59 68C62 74 70 77 70 85C70 92 63 96 54 96C30 96 10 77 10 52C10 27 31 7 58 7Z" fill="currentColor" stroke="none"/><path d="M19 8a4 4 0 0 1 0 6M21.5 6a7 7 0 0 1 0 10"/>',
   ecash: '<ellipse cx="12" cy="6" rx="7" ry="3" fill="currentColor" fill-opacity="0.22"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
   more: '<circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="18" cy="12" r="2" fill="currentColor"/>',
   othermint: '<ellipse cx="7.5" cy="15" rx="4.5" ry="2" fill="currentColor" fill-opacity="0.2"/><ellipse cx="16.5" cy="9" rx="4.5" ry="2" fill="currentColor" fill-opacity="0.2"/><path d="M5 9c.5-3 3-4.5 6-4.3M9 3l2 1.7-2 1.8M19 15c-.5 3-3 4.5-6 4.3M15 21l-2-1.7 2-1.8"/>',
   onchain: '<circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.16"/><path d="M9.5 7.5H13a2.2 2.2 0 0 1 0 4.4H9.5h4a2.3 2.3 0 0 1 0 4.6h-4zM9.5 7.5v9M11 6v1.5M13 6v1.5M11 16.5V18M13 16.5V18"/>',
   free: '<path d="M3 8h18v3a1.6 1.6 0 0 0 0 3.2V17H3v-2.8A1.6 1.6 0 0 0 3 11z" fill="currentColor" fill-opacity="0.16"/><path d="M15 8v9" stroke-dasharray="1.6 1.8"/><path d="M9 9.8l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z"/>',
-  fedimint: '<rect x="2" y="6" width="15" height="11" rx="2.5" fill="currentColor" fill-opacity="0.16"/><rect x="4.5" y="9" width="4" height="3" rx=".6"/><path d="M19 8a4 4 0 0 1 0 6M21.5 6a7 7 0 0 1 0 10"/>',
+  // The two cards together: one behind the other, the waves of the tap.
+  cards: '<rect x="6" y="3.5" width="13" height="9" rx="2" fill="currentColor" fill-opacity="0.16"/><rect x="2" y="9" width="14" height="10" rx="2.2" fill="currentColor" fill-opacity="0.16"/><path d="M5 13h3"/><path d="M19.5 14a3.5 3.5 0 0 1 0 5M22 12a6.5 6.5 0 0 1 0 9" transform="translate(-1 -1)"/>',
+  fedimint: '<rect x="2" y="6" width="15" height="11" rx="2.5" fill="currentColor" fill-opacity="0.16"/><polygon transform="translate(-.5 3.7) scale(.2)" points="50,23 61.73,28.65 64.62,41.34 56.51,51.51 43.49,51.51 35.38,41.34 38.27,28.65" fill="currentColor" stroke="none"/><path d="M19 8a4 4 0 0 1 0 6M21.5 6a7 7 0 0 1 0 10"/>',
 };
 
 /** A tab's icon: the design's, or the module's own. */

@@ -212,7 +212,7 @@ Optional. An icon name from `ui.ICONS`. The app draws it on the module's More ti
 
 ### `usable()`
 
-Optional. Return `false` on a phone that cannot use the module. The first run's How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a card returns `nfc.supported()`.
+Optional. Return `false` on a phone that cannot use the module. The first run's How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a Cashu card returns `nfc.supported()`.
 
 ### `sub()`
 
@@ -271,7 +271,7 @@ Add these to [`public/v2/strings/en.js`](https://github.com/ForgeReserve/forge-a
 | `nfc` | `supported()` false: card ways are listed and say they need the Android app | Reads cards (ForgeNfc) | `listed()` false: card ways are left out |
 | `till` | `supported()` false | Pairs and pays (ForgeTill) | `supported()` false |
 
-A module that needs a card or a till returns `usable()` false where it cannot work, and its `view` says so in one line with a link to `/download`, as Tap a card does.
+A module that needs a card or a till returns `usable()` false where it cannot work, and its `view` says so in one line with a link to `/download`, as Tap a Cashu card does.
 
 ## A minimal fund module
 
@@ -335,4 +335,4 @@ To try it, copy the folder to `public/v2/modules/fund/paste/`, add `{ kind: 'fun
 
 ## Tests
 
-Pure logic belongs in functions the module exports, tested in Node: [`test/unit/v2/card-module.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/card-module.test.ts) tests Tap a card's `routeFor` and `wordsFor`. The screens are tested in a phone-sized Chrome against a local gateway and the local test mints: [`test/ui/note.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/note.ui.test.ts) scans a note, and [`test/ui/ways.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/ways.ts) opens any way from Add money by its id.
+Pure logic belongs in functions the module exports, tested in Node: [`test/unit/v2/card-module.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/card-module.test.ts) tests Tap a Cashu card's `routeFor` and `wordsFor`. The screens are tested in a phone-sized Chrome against a local gateway and the local test mints: [`test/ui/note.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/note.ui.test.ts) scans a note, and [`test/ui/ways.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/ways.ts) opens any way from Add money by its id.

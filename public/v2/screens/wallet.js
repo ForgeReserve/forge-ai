@@ -4,12 +4,13 @@
 // sits behind the card's info button and is read by Listen; the screen itself has no sentences.
 //
 // The order (core/ways.js): Start free first while it is wanted, then the way used last on this phone,
-// then Scan a note, Lightning, Tap a card and eCash, then More, whose tiles open the other ways. Ways the
-// engine turns off get no card. Each card opens the way's own screen (a fund module, or Start free), which
-// works exactly as before.
+// then Scan a note, Lightning, the Cashu card, the Fedimint card and eCash, then More, whose tiles open the
+// other ways. Ways the engine turns off get no card. Each card opens the way's own screen (a fund module,
+// or Start free), which works exactly as before.
 import { has } from '../core/i18n.js';
 import { el, icon, reduced } from '../core/ui.js';
-import { orderWays } from '../core/ways.js';
+import { CARD_WAYS, cardOf, orderWays } from '../core/ways.js';
+import { cardFace } from './brands/cards.js';
 import { listenButton, listenHeader } from './parts.js';
 import { startFreeWanted } from './startfree.js';
 import { cardArt, spotArt, stackCard, tabIcon } from './wallet-art.js';
@@ -24,11 +25,19 @@ export function waysNow({ state, registry }) {
 
 // What a card's privacy badge says: the way cannot be linked to you, or someone sees the payment.
 const BADGE = { note: 'unlinked', ecash: 'unlinked', card: 'unlinked', lightning: 'seen', onchain: 'seen', start: 'free' };
+/** A way that reads a card, which only the Android app can do: on the website its card says so. */
+const appOnly = (id, mod) => CARD_WAYS.includes(id) && !!mod?.usable && !mod.usable();
 const BADGE_ICON = { unlinked: 'shield', seen: 'eye', free: 'gift', app: 'phone' };
 
-/** One way's word, its button's word, its full name and its info lines. */
-function wayWords(t, id, mod, more = []) {
+/** One way's word, its button's word, its full name and its info lines. mods: every way's module. */
+function wayWords(t, id, mod, more = [], mods = {}) {
   const known = (k) => (has(k) ? t(k) : null);
+  // The two card ways together: each one's name and its line, and where cards are read.
+  if (id === 'cards') {
+    const info = CARD_WAYS.flatMap((m) => [t(`fund.${m}.name`), ...wayWords(t, m, mods[m]).info.filter((x) => x !== t('ways.cardApp'))]);
+    if (CARD_WAYS.some((m) => appOnly(m, mods[m]))) info.push(t('ways.cardApp'));
+    return { name: t('ways.cards.name'), word: t('ways.cards.word'), go: t('ways.go'), info };
+  }
   const name = id === 'start' ? t('startFree.title') : id === 'more' ? t('ways.more.name') : t(`fund.${id}.name`);
   const word = known(`ways.${id}.word`) ?? name;
   const go = known(`ways.${id}.go`) ?? t('ways.go');
@@ -39,7 +48,7 @@ function wayWords(t, id, mod, more = []) {
     const sub = mod?.sub?.() ?? `fund.${id}.sub`;
     info = has(sub) ? [t(sub)] : [];
     // Cards are read by the Android app; on the website the card's screen points there.
-    if (id === 'card' && mod?.usable && !mod.usable()) info.push(t('ways.cardApp'));
+    if (appOnly(id, mod)) info.push(t('ways.cardApp'));
   }
   return { name, word, go, info };
 }
@@ -79,10 +88,10 @@ export function walletScreen(ctx) {
   /** One card: picture, badge, word, and the info line behind its button. */
   const makeCard = (id, i) => {
     const mod = ways.mods[id];
-    const words = wayWords(t, id, mod, ways.more);
+    const words = wayWords(t, id, mod, ways.more, ways.mods);
     const node = el('section', { class: 'way-card', 'data-way': id, id: `way-${id}`, role: 'tabpanel', 'aria-labelledby': `tab-${id}`, 'aria-roledescription': t('ways.card') });
     const lines = el('div', { class: 'way-info', id: `wayInfo-${id}`, hidden: true }, ...words.info.map((x) => el('p', { text: x })));
-    const kind = id === 'card' && mod?.usable && !mod.usable() ? 'app' : BADGE[id];
+    const kind = (id === 'cards' ? CARD_WAYS.every((m) => appOnly(m, ways.mods[m])) : appOnly(id, mod)) ? 'app' : BADGE[id];
     const badge = kind ? el('span', { class: `way-badge badge-${kind}`, role: 'img', 'aria-label': t(`ways.badge.${kind}`), title: t(`ways.badge.${kind}`) }, icon(BADGE_ICON[kind], 16)) : null;
     let info = null;
     if (id === 'more') {
@@ -94,27 +103,36 @@ export function walletScreen(ctx) {
       );
       node.append(el('div', { class: 'way-art' }, grid), el('div', { class: 'way-foot' }, el('b', { class: 'way-word', text: words.word })));
     } else {
+      let art;
+      if (id === 'cards') {
+        // The two cards as they are printed, side by side: a tap on one opens its way.
+        art = el(
+          'div',
+          { class: 'way-art way-pair' },
+          ...CARD_WAYS.map((m) => el('button', { type: 'button', class: 'way-pair-btn', 'data-brand': m, id: `pair-${m}`, 'aria-label': t(`fund.${m}.name`), onclick: () => (i === now ? openWay(ctx, m) : show(i)) }, cardFace(m), el('span', { text: t(`ways.${m}.word`) }))),
+        );
+      }
       info = el('button', { type: 'button', class: 'way-info-btn', id: `wayInfoBtn-${id}`, 'aria-label': t('ways.info', { name: words.name }), 'aria-expanded': 'false', 'aria-controls': `wayInfo-${id}` }, icon('info', 22));
       info.addEventListener('click', () => {
         lines.hidden = !lines.hidden;
         info.setAttribute('aria-expanded', String(!lines.hidden));
       });
       // A tap on the picture does what the big button does.
-      const art = el('button', { type: 'button', class: 'way-art', tabindex: '-1', 'aria-hidden': 'true', onclick: () => (i === now ? openWay(ctx, id) : show(i)) }, cardArt(id, mod, words.name));
+      art ??= el('button', { type: 'button', class: 'way-art', tabindex: '-1', 'aria-hidden': 'true', onclick: () => (i === now ? openWay(ctx, id) : show(i)) }, cardArt(id, mod, words.name));
       node.append(art, info, el('div', { class: 'way-foot' }, badge, el('b', { class: 'way-word', text: words.word }), lines));
     }
     return { id, node, words, info, lines };
   };
 
   const tabFor = (id, i) =>
-    el('button', { type: 'button', role: 'tab', class: `way-tab tab-${id}`, id: `tab-${id}`, 'aria-label': id === 'start' ? t('startFree.title') : id === 'more' ? t('ways.more.name') : t(`fund.${id}.name`), 'aria-controls': `way-${id}`, onclick: () => show(i, true) }, tabIcon(id, ways.mods[id]));
+    el('button', { type: 'button', role: 'tab', class: `way-tab tab-${id}`, id: `tab-${id}`, 'aria-label': id === 'start' ? t('startFree.title') : id === 'more' ? t('ways.more.name') : id === 'cards' ? t('ways.cards.name') : t(`fund.${id}.name`), 'aria-controls': `way-${id}`, onclick: () => show(i, true) }, tabIcon(id, ways.mods[id]));
 
   /**
    * Builds the cards and tabs for the ways there are now, keeping the card on show when it is still there.
    * Until the person moves, the card on show is ctx.first (a way's id) when it is among them.
    */
   const build = () => {
-    const keep = moved ? order[now] : (ctx.first ?? null);
+    const keep = moved ? order[now] : ctx.first ? cardOf(ctx.first, ways.cards) : null;
     order = ways.cards;
     cards.splice(0, cards.length, ...order.map(makeCard));
     track.replaceChildren(...cards.map((c) => c.node));
@@ -141,9 +159,10 @@ export function walletScreen(ctx) {
     const c = cards[now];
     if (!c) return;
     goWord.textContent = c.words.go;
-    // The More card's tiles are its buttons: the big one waits, so nothing jumps.
-    go.classList.toggle('way-go-idle', c.id === 'more');
-    go.disabled = c.id === 'more';
+    // The More card's tiles, and the two cards, are their buttons: the big one waits, so nothing jumps.
+    const idle = c.id === 'more' || c.id === 'cards';
+    go.classList.toggle('way-go-idle', idle);
+    go.disabled = idle;
     go.dataset.way = c.id;
     listen.stop();
     listen.update();
@@ -189,7 +208,7 @@ export function walletScreen(ctx) {
   });
   go.addEventListener('click', () => {
     const c = cards[now];
-    if (c && c.id !== 'more') openWay(ctx, c.id);
+    if (c && c.id !== 'more' && c.id !== 'cards') openWay(ctx, c.id);
   });
 
   const update = () => {

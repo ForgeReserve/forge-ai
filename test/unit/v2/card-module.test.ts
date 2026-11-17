@@ -28,7 +28,7 @@ describe('the Tap a card module', () => {
     const inputs = R.inputsFor('fund', { t: 1, nfc: 2, card: 3, state: 4 });
     expect(Object.keys(inputs).sort()).toEqual(['card', 'nfc', 't']);
     for (const k of ['name', 'sub']) expect(en[`fund.card.${k}`]).toBeTruthy();
-    expect(en['fund.card.name']).toBe('Tap a card');
+    expect(en['fund.card.name']).toBe('Tap a Cashu card');
   });
 
   it('is listed everywhere, but usable (and so in How you pay) only where there is a reader', () => {

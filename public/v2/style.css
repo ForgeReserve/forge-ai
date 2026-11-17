@@ -249,9 +249,11 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .note-mint { align-self: center; margin: 0; overflow-wrap: anywhere; text-align: center; }
 .token-out { display: flex; flex-direction: column; gap: 14px; }
 .card-art { position: relative; align-self: center; width: min(260px, 100%); aspect-ratio: 260 / 164; border-radius: 18px; border: 2px solid var(--gold-callout); background: var(--surface); box-shadow: var(--shadow-raised-sm, none); display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
-.card-art-word { font-size: 18px; font-weight: 700; letter-spacing: 0.06em; color: var(--gold-ink); }
-.card-art-waves { position: absolute; right: 16px; top: 14px; color: var(--gold-ink); }
+/* The Cashu card and the Fedimint card as printed (screens/brands/cards.js), what was read over them. */
+.card-art[data-brand] { padding: 0; border: 0; background: none; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 22px rgba(0,0,0,0.3); }
+.card-face { display: block; width: 100%; height: 100%; }
 .card-art-amount { font-size: 28px; font-weight: 700; }
+.card-art[data-brand] .card-art-amount { position: absolute; right: 12px; bottom: 10px; padding: 2px 12px; border-radius: 14px; background: rgba(11,13,16,0.72); color: #FFFFFF; font-size: 24px; }
 .card-hold { margin: 0; text-align: center; font-size: 18px; font-weight: 600; }
 .card-view .note { text-align: center; }
 .card-view .field .note { text-align: left; }
@@ -579,14 +581,24 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .way-card[data-way="start"], .stack-card[data-way="start"], .sf-hero { background: linear-gradient(160deg, #18A08A 0%, #0E7C6B 55%, #0A5F52 100%); --ink-c: #FFFFFF; }
 .way-card[data-way="note"], .stack-card[data-way="note"] { background: linear-gradient(160deg, #FFFDF6 0%, #F4ECD6 60%, #E9DCB8 100%); }
 .way-card[data-way="lightning"], .stack-card[data-way="lightning"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
-.way-card[data-way="card"], .stack-card[data-way="card"] { background: linear-gradient(160deg, #F2CF78 0%, #D4A544 55%, #B3802A 100%); }
+/* The two cards on their brands' grounds: the Cashu card on its deep green, the Fedimint card on its pale paper. */
+.way-card[data-way="card"], .stack-card[data-way="card"] { background: linear-gradient(160deg, #2B4C31 0%, #173526 55%, #10271E 100%); --ink-c: #EDF3E7; }
+.way-card[data-way="fedimint"], .stack-card[data-way="fedimint"] { background: linear-gradient(160deg, #FFFFFF 0%, #F5F7FD 55%, #DCE4F7 100%); --ink-c: #1A3272; }
+/* Both cards on one card: the two printed cards side by side on the night of the Lightning card, each one a
+   button that opens its way, its word under it. */
+.way-card[data-way="cards"], .stack-card[data-way="cards"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
+.way-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 12px; padding: 20px 16px 0; }
+.way-pair-btn { min-width: 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 4px 10px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.06); color: #FFFFFF; font-size: 20px; font-weight: 800; }
+.way-pair-btn .card-face { width: 100%; height: auto; border-radius: 7px; box-shadow: 0 8px 16px rgba(0,0,0,0.45); }
+.way-pair-btn[data-brand="card"] span { color: #D3F39A; }
+.way-pair-btn[data-brand="fedimint"] span { color: #B9C8EE; }
 .way-card[data-way="ecash"], .stack-card[data-way="ecash"] { background: linear-gradient(160deg, #FBF1D6 0%, #F6E9C8 60%, #EBD9A8 100%); }
 .way-card, .stack-card { background: linear-gradient(160deg, #FFFFFF 0%, #F1EFE9 100%); }
 .way-art { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px 20px 0; border: 0; background: transparent; color: inherit; }
 .way-art-svg { width: 100%; height: 100%; max-height: 240px; }
 .way-art-disc { width: min(160px, 70%); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #FFFFFF, #F1EFE9 60%, #DAD6CB); box-shadow: 0 10px 20px rgba(20,22,26,0.12); display: flex; align-items: center; justify-content: center; color: #3F4348; }
 .way-info-btn { position: absolute; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 24px; border: 0; background: rgba(20,22,26,0.08); color: var(--ink-c, inherit); display: flex; align-items: center; justify-content: center; }
-.way-card[data-way="start"] .way-info-btn, .way-card[data-way="lightning"] .way-info-btn, .sf-hero .way-info-btn { background: rgba(255,255,255,0.18); }
+.way-card[data-way="start"] .way-info-btn, .way-card[data-way="lightning"] .way-info-btn, .way-card[data-way="card"] .way-info-btn, .way-card[data-way="cards"] .way-info-btn, .sf-hero .way-info-btn { background: rgba(255,255,255,0.18); }
 .way-foot { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 24px 22px; }
 .way-card.now .way-foot { animation: wayin 350ms ease-out both; }
 .way-word { font-size: 32px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; }
@@ -596,6 +608,7 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .way-card[data-way="onchain"] .badge-seen { color: #8A6410; }
 .badge-free { background: rgba(255,255,255,0.18); color: #FFFFFF; }
 .badge-app { background: rgba(20,22,26,0.12); color: #14161A; }
+.way-card[data-way="card"] .badge-app, .way-card[data-way="cards"] .badge-app { background: rgba(255,255,255,0.18); color: #FFFFFF; }
 .way-info p { margin: 0; font-size: 15px; line-height: 1.35; opacity: .9; }
 .way-card[data-way="more"] .way-art { padding: 16px 16px 4px; }
 .way-tiles { width: 100%; height: 100%; max-height: 300px; align-self: center; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); gap: 10px; }
@@ -607,7 +620,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .way-tab[aria-selected="true"] { border: 3px solid var(--ink); }
 .tab-start, .tab-free { color: var(--teal); }
 .tab-note, .tab-ecash, .tab-onchain { color: var(--gold-ink); }
-.tab-card, .tab-fedimint { color: var(--blue); }
+.tab-card { color: var(--green); }
+.tab-fedimint, .tab-cards { color: var(--blue); }
 .tab-othermint { color: var(--violet); }
 .tab-more { color: var(--text-body); }
 .way-go { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }

@@ -10,6 +10,7 @@ import { type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { FakeFedimintCard, MockTill } from '../support/mocktill.ts';
 import { nodeTill } from '../support/tillnode.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // Tap a Fedimint card in a phone-sized browser (slice A14). On the website the row says a page cannot
 // read cards. In the Android app's bundle, a stand-in for Capacitor's bridge plays ForgeNfc (the card,
@@ -173,10 +174,7 @@ const tillPays = (page: Page) => page.evaluate(() => JSON.parse(localStorage.get
 /** Opens Tap a Fedimint card, pairs with the mock till by pasting its pay code, and sees the price. */
 async function pairAndPrice(page: Page) {
   await page.goto(`${app}/#/funds/add`);
-  await page.waitForSelector('#tab-more');
-  await page.click('#tab-more');
-  expect(await page.textContent('#more-fedimint')).toBe('Fedimint');
-  await page.click('#more-fedimint');
+  await openWay(page, 'fedimint');
   await page.waitForSelector('#fedNeedTill');
   // A till's own POS code is refused.
   await page.fill('#fedPairText', `fedimintcard-till:${till.url}?t=${till.posToken}`);
@@ -195,16 +193,22 @@ async function pairAndPrice(page: Page) {
 }
 
 describe('Tap a Fedimint card', () => {
-  it('on the website: a tile on the More card, and its screen says only the app can do it', async () => {
+  it('on the website: beside the Cashu card on one wallet card, and its screen says only the app can do it', async () => {
     const ctx = await browser.newContext(PHONE);
     await pastFirstRun(ctx);
     const page = await ctx.newPage();
     await page.goto(`${g.url}/v2/#/funds/add`);
-    await page.waitForSelector('#tab-more');
-    await page.click('#tab-more');
-    expect(await page.getAttribute('#more-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
-    await page.click('#more-fedimint');
+    await page.waitForSelector('#tab-cards');
+    // As plain as the Cashu card (owner, 2026-11-17): no longer a tile on More, its printed face beside
+    // the Cashu card's, its name and its word.
+    expect(await page.locator('#more-fedimint').count()).toBe(0);
+    await page.click('#tab-cards');
+    expect(await page.getAttribute('#pair-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
+    expect(await page.textContent('#pair-fedimint > span')).toBe('Fedimint');
+    expect(await page.locator('#pair-fedimint .card-face text').first().textContent()).toBe('FEDIMINT ECASH CARD');
+    await page.click('#pair-fedimint');
     await page.waitForSelector('#fedAppOnly');
+    expect(await page.getAttribute('.card-art', 'aria-label')).toBe('A Fedimint card');
     expect(await page.textContent('#fedAppOnly')).toBe('Android app only. Fedimint cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#fedGetApp', 'href')).toBe('/download');
     await ctx.close();
