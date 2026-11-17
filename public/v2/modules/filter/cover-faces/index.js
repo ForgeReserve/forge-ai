@@ -9,8 +9,20 @@ import { faceCover, INPUT_SIZE, keepFaces, MIN_SCORE, passes } from './boxes.js'
 
 const LIB = new URL('../../../../vendor/face-api/face-api.js', import.meta.url).href;
 const MODEL = new URL('../../../../vendor/face-api/model/', import.meta.url).href;
+const MANIFEST = 'tiny_face_detector_model-weights_manifest.json';
 
 let loading = null;
+
+/**
+ * Loads the model's weights from the folder at `base` into face-api. Not face-api's loadFromUri: it
+ * rebuilds the address and keeps it whole only for the http and https schemes, so in the iPhone app
+ * (served from capacitor://localhost) it asked for capacitor:/localhost/... and the face check never ran.
+ */
+export async function loadModel(api, base = MODEL) {
+  const res = await fetch(new URL(MANIFEST, base));
+  if (!res.ok) throw new Error(`face model: ${res.status}`);
+  api.nets.tinyFaceDetector.loadFromWeightMap(await api.tf.io.loadWeights(await res.json(), base));
+}
 
 /** Loads the detector once: the graphics chip when it works, else the plain processor. */
 function load() {
@@ -24,7 +36,7 @@ function load() {
     }
     if (!gpu) await api.tf.setBackend('cpu');
     await api.tf.ready();
-    await api.nets.tinyFaceDetector.loadFromUri(MODEL);
+    await loadModel(api);
     return api;
   })().catch((e) => {
     loading = null;
