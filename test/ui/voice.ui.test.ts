@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
@@ -43,8 +46,8 @@ interface Phone {
 }
 
 /** A phone with a funded balance, the microphone allowed, Private only off and the mock-echo model. */
-async function phone(): Promise<Phone> {
-  const ctx = await browser.newContext({ ...PHONE });
+async function phone(from: Browser = browser): Promise<Phone> {
+  const ctx = await from.newContext({ ...PHONE });
   await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
   const page = await ctx.newPage();
@@ -233,6 +236,38 @@ describe('hold to talk', () => {
     }
     expect(errors).toEqual([]);
     await ctx.close();
+  }, 90_000);
+
+  it('a hold with nothing said is not sent: no speech request, no question, nothing paid, and the app says so', async () => {
+    // A microphone that hears silence: Chrome plays this file as the microphone.
+    const wav = Buffer.alloc(44 + 48000 * 2 * 2);
+    wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(48000, 24); wav.writeUInt32LE(96000, 28);
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
+    const file = join(mkdtempSync(join(tmpdir(), 'forge-silence-')), 'silence.wav');
+    writeFileSync(file, wav);
+    const quiet = await chromium.launch({
+      channel: 'chrome',
+      headless: true,
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required', `--use-file-for-fake-audio-capture=${file}`],
+    });
+    try {
+      const { ctx, page, errors, calls } = await phone(quiet);
+      const chats: string[] = [];
+      page.on('request', (r) => r.url().endsWith('/v1/chat/completions') && chats.push(r.url()));
+      await hold(page, '#talkBtn', 2500);
+      await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe('Nothing was heard. Hold the button and speak.');
+      await page.waitForTimeout(500);
+      expect(calls.transcriptions).toEqual([]);
+      expect(chats).toEqual([]);
+      await page.goto(`${g.url}/v2/#/`);
+      await page.waitForSelector('[data-screen=home]');
+      await expect.poll(() => page.textContent('#balanceText')).toBe('$3.00');
+      expect(errors).toEqual([]);
+      await ctx.close();
+    } finally {
+      await quiet.close();
+    }
   }, 90_000);
 
   it('a tap explains the button, sliding off cancels, and neither sends anything', async () => {

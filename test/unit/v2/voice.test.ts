@@ -367,7 +367,7 @@ describe('voice modules get only their own inputs', () => {
 });
 
 /** A fake microphone that delivers `seconds` of sound at `rate` when started. */
-function fakeMic(seconds: number, rate = 48000) {
+function fakeMic(seconds: number, rate = 48000, loud = 0.2) {
   const m = {
     stopped: 0,
     available: () => true,
@@ -377,7 +377,7 @@ function fakeMic(seconds: number, rate = 48000) {
         sampleRate: rate,
         onData: (f: any) => {
           fn = f;
-          for (let i = 0; i < seconds * 10; i++) fn(new Float32Array(rate / 10).fill(0.2));
+          for (let i = 0; i < seconds * 10; i++) fn(new Float32Array(rate / 10).fill(loud));
         },
         stop: () => m.stopped++,
       };
@@ -446,6 +446,25 @@ describe('voice in through the engine', () => {
     // A little over half a second is sent.
     const audio = audioFor(sttModel());
     await (await VIN.create({ mic: fakeMic(0.6), audio }).start({})).finish({});
+    expect(audio.sent).toHaveLength(1);
+  });
+
+  it('sends nothing and pays nothing for a hold with no voice in it, however long', async () => {
+    // Three seconds of a quiet room (no sound at all, then a faint hiss): the button was held and
+    // nothing was said. The level bars still get their readings.
+    for (const hiss of [0, 0.005]) {
+      const mic = fakeMic(3, 48000, hiss);
+      const audio = audioFor(sttModel());
+      const levels: number[] = [];
+      const session = await VIN.create({ mic, audio }).start({ onLevel: (l: number) => levels.push(l) });
+      expect(Math.max(...levels)).toBeLessThan(VIN.VOICE_LEVEL);
+      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+      expect(audio.sent).toHaveLength(0);
+      expect(mic.stopped).toBe(1);
+    }
+    // A quiet voice is still sent: a chunk only has to reach the voice level.
+    const audio = audioFor(sttModel());
+    await (await VIN.create({ mic: fakeMic(2, 48000, 0.02), audio }).start({})).finish({});
     expect(audio.sent).toHaveLength(1);
   });
 
