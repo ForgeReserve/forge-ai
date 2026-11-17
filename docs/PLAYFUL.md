@@ -1,6 +1,6 @@
 # Playful mode
 
-Status: the home, the answer and the cover game built, 2026-11-16 (the game on branch `playful-game`). The home and the answer work with the real app, and Playful opens on the game, Pip's Garden, with the helper behind it. The set-up sheet and child limits are not built (Build next, below).
+Status: the home, the answer and the cover game built, 2026-11-16 (the game on branch `playful-game`); the game made harder, 2026-11-17 (Tuning the difficulty). The home and the answer work with the real app, and Playful opens on the game, Pip's Garden, with the helper behind it. The set-up sheet and child limits are not built (Build next, below).
 
 Playful is a second `mode` module (docs/MODULES.md): the same app with Pip, bright colours and big buttons on the home and the answer screen. It is made for people who read poorly and for children, and as a friendly cover. The owner's design is four artboards (390 by 844): Playful home (`KidsHome`), Playful answer (`KidsChat`), the set-up sheet (`KidsGrownUp`) and the cover game (`KidsCover`). The home, the answer and the cover game are built here, and of the set-up sheet two of its lines: "Open as a game first" and its warning.
 
@@ -58,21 +58,63 @@ Playful is a second `mode` module (docs/MODULES.md): the same app with Pip, brig
 
 ## The cover game
 
-The design's `KidsCover`: "Pip's Garden", a header with the level, "Match three to grow the garden.", a 5 by 5 board in four colours on a darker panel, Moves and Flowers, and Pip's card at the bottom. It is a real game, and it is the first screen while Playful is on and "Open as a game first" is on (the default).
+The design's `KidsCover`: "Pip's Garden", a header with the level, "Match three to grow the garden.", a 5 by 5 board in four colours on a darker panel, Moves and Flowers with the level's goal between them, and Pip's card at the bottom. It is a real game, and it is the first screen while Playful is on and "Open as a game first" is on (the default).
 
 ### Playing
 
 - **The board.** `SIZE` (5) tiles on a side and `KINDS` (4) kinds, constants in `games/garden/logic.js`. Each kind has its colour and its own picture, so colour is never the only cue: a sun on yellow (#FFD23F), a leaf on green (#3DDC97), a flower on coral (#FF8A7A), a drop on sky blue (#7FD4FF). The pictures are inline SVG in the ink colour.
 - **Moves.** Drag a tile onto a neighbour, or tap one (it lifts) and then a neighbour. A swap that makes no run of three slides back and costs nothing; Pip says "No match." Runs of three or more clear, the tiles above fall, new ones drop in from the top, and new runs clear in turn (a chain). The board never starts or settles with no possible move: a board left stuck is reshuffled ("No moves left. New tiles!").
-- **Flowers** (the score): 10 for each tile cleared, 10 more for each tile past three in one run, times the round's place in the chain (2 for the first cascade, 3 for the next).
-- **Levels.** A level asks for so many matches (each run counts one, chains too) within so many moves: 5 matches in 15 moves at level 1, one more match each level, to at most 24, and one more move every fifth level (`goalFor`). Level done: "The garden bloomed!" and Next level. Out of moves: "Out of moves." and Play again (the same level, the flowers kept).
-- **Pip's card** says what happened in a few words: "Nice move!" (or "Wow, a chain!") and how many matches are left, in words up to ten ("Three more matches to bloom."). A short tap on Pip makes Pip say a game line.
+- **Flowers** (the score): 10 for each tile cleared, 10 more for each tile past three in one run, times the round's place in the chain (2 for the first cascade, 3 for the next). A chain grows many flowers; it does not count toward the goal.
+- **Levels.** A level asks for so many tiles of one kind within 15 moves (`goalFor`): suns at level 1, leaves at 2, flowers at 3, drops at 4, then round again. Only the tiles the player's own swap matches count, not the ones a chain clears after it. Level 1 asks for 10 suns, and each level a little more, to 24 from level 15 on (`GOALS`). One swap can match at most 9 tiles of a kind (a row and a column through the cell its tile moved to), so no level is won in one move. Level done: "The garden bloomed!" and Next level. Out of moves: "Out of moves." and Play again (the same level, the flowers kept).
+- **The goal** shows between Moves and Flowers: the kind's tile and how many are left ("10"). A screen reader hears its name first ("Suns to match: 10").
+- **Pip's card** says what happened in a few words: "Nice move!" (or "Wow, a chain!") and how many are left, in words up to ten ("Three more suns to bloom."). A swap that matched none of the level's kind still grows flowers, and Pip points at the goal: "Match the suns!" A short tap on Pip makes Pip say a game line.
 - **Motion.** The tiles move with transform and opacity only (a swap 170 ms, a clear 200 ms, a fall 260 ms). With reduced motion each step shows at once.
-- **Kept on the phone.** The level, the flowers, the moves left, the matches made and the board, in the app's database beside the settings (`kv` key `game`), through two actions the mode gets (`coverProgress`, `saveCoverProgress`). A reload opens the same board. A level just done is kept as the next level, so a phone closed then opens on it. Erase everything removes it with the rest of the database, and no write follows an erase.
+- **Kept on the phone.** The level, the flowers, the moves left, the goal tiles matched and the board, as `{v: 2, level, flowers, moves, got, board}`, in the app's database beside the settings (`kv` key `game`), through two actions the mode gets (`coverProgress`, `saveCoverProgress`). A reload opens the same board. A level just done is kept as the next level, so a phone closed then opens on it. Erase everything removes it with the rest of the database, and no write follows an erase.
+- **A game kept under the first rules** (`v: 1`, which counted matches, chains too) keeps its level and its flowers and opens on a new board under these rules, with all 15 moves and none of the goal matched (`restore`). Nothing else changes, so the app needs no change for it.
+
+### Tuning the difficulty
+
+The first rules were far too easy. A 5 by 5 board with four kinds cascades a lot, and every match of a chain counted toward the goal, so one ordinary swap could finish a level (on a phone at Level 4, one swap chained into all eight matches). `node scripts/garden-sim.ts` plays every level many times from fresh boards with three simple players, using the real `logic.js` and a seeded random source, so the same arguments print the same table. The players see the board as a person does, and nothing of the tiles still to come: **random** takes any swap that matches; **greedy** takes the swap that matches most of the level's kind now (then most tiles), ties at random; **careless** is greedy, but one move in three is any swap.
+
+Under the first rules every player won every level to 20, whatever it did (1,000 games a level):
+
+| Level | Goal | Greedy won | Random won | Greedy moves used | Greedy won in 1 move | in 1 or 2 |
+|---|---|---|---|---|---|---|
+| 1 | 5 matches in 15 | 100% | 100% | 2.4 | 15% | 55% |
+| 2 | 6 in 15 | 100% | 100% | 2.8 | 11% | 41% |
+| 3 | 7 in 15 | 100% | 100% | 3.2 | 7% | 31% |
+| 5 | 9 in 16 | 100% | 100% | 4.0 | 2% | 14% |
+| 10 | 14 in 17 | 100% | 100% | 5.9 | 0% | 2% |
+| 15 | 19 in 18 | 100% | 100% | 7.8 | 0% | 0% |
+| 20 | 24 in 19 | 100% | 100% | 10.0 | 0% | 0% |
+
+These rules (1,000 games a level):
+
+| Level | Goal | Greedy won | Careless won | Random won | Greedy moves used | Fewest moves to a win |
+|---|---|---|---|---|---|---|
+| 1 | 10 suns in 15 | 100% | 97% | 72% | 7.2 | 3 |
+| 2 | 11 leaves | 99% | 97% | 68% | 7.9 | 2 |
+| 3 | 12 flowers | 99% | 97% | 65% | 8.0 | 3 |
+| 5 | 15 suns | 96% | 86% | 37% | 10.2 | 4 |
+| 10 | 22 leaves | 51% | 30% | 2% | 14.0 | 7 |
+| 15 | 24 flowers | 34% | 17% | 1% | 14.5 | 8 |
+| 20 | 24 drops | 38% | 16% | 1% | 14.5 | 8 |
+
+No level was won in one move, by any player (it cannot be: see Levels). A chain still follows about every second move (1.85 rounds of clearing a move), and grows flowers.
+
+The levers, all in `games/garden/logic.js`:
+
+- `GOALS`: how many tiles each level asks for; levels past the table keep the last. The main lever: one more tile is about 5 to 8 points of the greedy player's wins around level 10.
+- `MOVES`: moves in every level.
+- What counts: `move` counts `goalTiles(steps[0].runs, kind)`, the tiles of the swap's own runs. Counting the chain's too (`steps`) puts luck back: a lucky chain wins a level.
+- `KINDS`: a fifth kind cuts cascades (1.45 rounds of clearing a move against 1.85), but it is a cliff: the same 10 tiles that greedy wins 99% of the time with four kinds it wins 79% of the time with five, and a sixth on a 5 by 5 board leaves few moves. It also needs a new colour and picture. Since only the swap's own tiles count, cascades no longer decide a level, so the board keeps the design's four kinds at every level.
+- `SIZE`: a 6 by 6 board does not keep 48 px targets at 360 by 640.
+
+`test/unit/v2/garden.test.ts` (the difficulty) plays 300 seeded games a level with the greedy and random players, and fails when the curve leaves its bands: greedy wins level 1 to 3 at least 95% of the time and never wins level 1 in fewer than three moves; greedy wins level 10 between 40% and 60%, every level to 20 at least 25%, each level at most 12 points above the one before, and falls by five-level spans; random wins level 1 at least half the time, every level from 5 under half and from 10 under a tenth; no player wins any level in one move. After a change to the levers, run the script, then the test.
 
 ### Keyboard and screen readers
 
-- The board is a grid of 25 buttons over the tiles, one tab stop: the arrow keys move along it, Enter or Space picks a tile up, an arrow key then swaps it that way, and Escape puts it down. Each button is named by its tile and place ("Yellow sun, row 1, column 2") and says whether it is picked. What happened is said in a live region ("No match. The tiles went back.", "Nice move! Two more matches to bloom. Flowers 60.").
+- The board is a grid of 25 buttons over the tiles, one tab stop: the arrow keys move along it, Enter or Space picks a tile up, an arrow key then swaps it that way, and Escape puts it down. Each button is named by its tile and place ("Yellow sun, row 1, column 2") and says whether it is picked. What happened is said in a live region ("No match. The tiles went back.", "Nice move! Two more suns to bloom. Flowers 60.").
 - Pip is a button named only "Pip". Enter or Space held for 3 seconds opens the helper, as the hold does; a short press is a game line.
 - A screen reader's activation cannot hold. As with Burn (`screens/burn.js`), the first activation of Pip makes Pip say a game line, and a second within 6 seconds opens the helper. Nothing on the screen or in the live region says so: a person glancing at the screen sees a game. Mode and look tells screen reader users ("With a screen reader, activate Pip two times in a row."), out of sight.
 
@@ -104,10 +146,11 @@ Still showing through, not fixed in this pass:
 | File | What it is |
 |---|---|
 | `public/v2/modules/mode/playful/cover.js` | The cover screen: the game in Playful's frame, Pip and the hold (`holdPip`, `HOLD_MS`), the title, icon and bar colour, and the held messages. `GAME` names the game it shows. |
-| `public/v2/modules/mode/playful/games/garden/logic.js` | The game's rules, with no imports: the board, runs, swaps, gravity and refill, no moves and the reshuffle, flowers, level goals, one whole move, and the record checked on load. Every chance comes from a `rand()` passed in. |
+| `public/v2/modules/mode/playful/games/garden/logic.js` | The game's rules, with no imports: the board, runs, swaps, gravity and refill, no moves and the reshuffle, flowers, level goals (`GOALS`, `MOVES`), one whole move, and the record checked on load. Every chance comes from a `rand()` passed in. |
 | `public/v2/modules/mode/playful/games/garden/index.js` | The game on screen: `mount(node, host)`. |
 | `public/v2/modules/mode/playful/games/garden/garden.css` | Its styles, under `.gd`. |
 | `public/v2/modules/mode/playful/games/garden/icon.svg` | The page's icon while it shows. |
+| `scripts/garden-sim.ts` | Plays the levels many times with simple players and prints how hard each is (Tuning the difficulty). The unit test uses its players. |
 
 ### Add a cover game
 
@@ -138,6 +181,7 @@ The registry has a `cover` kind (docs/MODULES.md: "a game screen plus a hidden w
 | Design sizes at 390 by 844. | At 360 by 640 Pip and the bar get smaller and the rings shrink to fit. The answer is one screen high: the card's words scroll inside it, the actions, the reply button and the bar stay in view. |
 | The cover game's design has no Pip sprout, and fixed numbers (Level 7, Moves 12, Flowers 340). | The module's Pip, with its sprout. The level, moves and flowers are the game's own: a new phone starts at Level 1, Moves 15, Flowers 0. |
 | The design's cover shows only words for Moves and Flowers. | Each has a small picture beside it (two arrows, a flower), for people who read poorly. |
+| The design's goal is matches ("Three more matches to bloom."). | Each level asks for tiles of one kind, so one lucky chain cannot finish it (Tuning the difficulty): "Three more suns to bloom.", and the kind's tile with the number between Moves and Flowers. |
 | The design has no way back from the helper to the game. | A game button in the helper's top row, and Back from the helper's home. |
 | Contrast. | White on the purple is 7.4:1. The design's green line (#2E7D5B) on white is 5.0:1 and its soft ink (#4A4470) 8.9:1, both kept. A Standard route on the white bubble uses #A3392A (6.6:1). |
 
@@ -168,6 +212,6 @@ The registry has a `cover` kind (docs/MODULES.md: "a game screen plus a hidden w
 ## Tests
 
 - `test/unit/v2/playful.test.ts`: the mode setting, the star chip's words, what Pip says, the first sentence, the colours' contrast, and that the fonts are the pinned files with their licence, loaded only by Playful.
-- `test/unit/v2/garden.test.ts`: the cover game's rules with a seeded random source (boards, runs, swaps, gravity and refill, chains, no moves and the reshuffle, flowers, level goals, the record), the setting, that Erase everything takes the record, that the game's words never name the app, and that the game imports nothing of the app.
-- `test/ui/game.ui.test.ts` (`pnpm test:ui:linux test/ui/game.ui.test.ts`): Playful opens on the game and the game shows nothing of the app (the words, the title, the icon and the bar); a swap that matches and one that slides back; a level done and out of moves; Pip held 3 seconds opens the helper and 1 second does not; the game button and Back; a reload, the app put away and brought back, and a helper address all show the game; messages held until the helper opens; the switch off opens the helper; the fit at 360 by 640, 390 by 844 and 412 by 915; keyboard play and the keyboard and screen reader ways in; Erase everything removes the record; Default fetches nothing of the game. `GAME_SHOTS=1` saves screenshots to `.tmp/game-shots/`.
+- `test/unit/v2/garden.test.ts`: the cover game's rules with a seeded random source (boards, runs, swaps, gravity and refill, chains, no moves and the reshuffle, flowers, level goals and what counts toward them, the record and a record kept under the first rules), the difficulty's bands (Tuning the difficulty), the setting, that Erase everything takes the record, that the game's words never name the app, and that the game imports nothing of the app.
+- `test/ui/game.ui.test.ts` (`pnpm test:ui:linux test/ui/game.ui.test.ts`): Playful opens on the game and the game shows nothing of the app (the words, the title, the icon and the bar); a swap that matches and one that slides back; a level done and out of moves, seeded through the record so no test leans on luck; a record kept under the first rules; Pip held 3 seconds opens the helper and 1 second does not; the game button and Back; a reload, the app put away and brought back, and a helper address all show the game; messages held until the helper opens; the switch off opens the helper; the fit at 360 by 640, 390 by 844 and 412 by 915 (with a middle and a late level, and a six-figure score); keyboard play and the keyboard and screen reader ways in; Erase everything removes the record; Default fetches nothing of the game. `GAME_SHOTS=1` saves screenshots to `.tmp/game-shots/`.
 - `test/ui/playful.ui.test.ts` (`pnpm test:ui:linux test/ui/playful.ui.test.ts`), with "Open as a game first" off: choosing Playful and back, kept after a reload, with Default fetching nothing of Playful; the home (Pip, the rings and the bar in their colours, 48 px controls, Type, Add and More); no money; a typed question answered in the card with Again, Share and a held Burn; Hold to talk recorded, cancelled and sent; the fit at 360 by 640, 390 by 844 and 412 by 915. `PLAYFUL_SHOTS=1` saves screenshots of the home and the answer to `.tmp/playful-shots/`.

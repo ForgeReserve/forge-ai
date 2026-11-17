@@ -24,10 +24,10 @@
   transform: translate(calc(var(--c) * (100% + var(--gap))), calc(var(--r) * (100% + var(--gap)))) scale(var(--s, 1));
   transition: transform var(--slide, 180ms) cubic-bezier(.3, .7, .4, 1), opacity 200ms ease; will-change: transform;
 }
-.gd-tile.k0 { background: var(--gd-yellow); }
-.gd-tile.k1 { background: var(--gd-green); }
-.gd-tile.k2 { background: var(--gd-coral); }
-.gd-tile.k3 { background: var(--gd-sky); }
+.gd-tile.k0, .gd-mini.k0 { background: var(--gd-yellow); }
+.gd-tile.k1, .gd-mini.k1 { background: var(--gd-green); }
+.gd-tile.k2, .gd-mini.k2 { background: var(--gd-coral); }
+.gd-tile.k3, .gd-mini.k3 { background: var(--gd-sky); }
 .gd-shape { width: 58%; height: 58%; }
 .gd-tile.picked { --s: 1.1; box-shadow: 0 0 0 4px #FFFFFF; z-index: 1; }
 .gd-tile.gone { --s: 0.3; opacity: 0; }
@@ -36,10 +36,13 @@
 .gd-cell { min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 28%; background: transparent; touch-action: none; -webkit-touch-callout: none; }
 .gd-cell:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 2px; }
 
-/* Moves and Flowers. */
-.gd-stats { display: flex; justify-content: space-between; font-family: var(--pf-display); font-size: 18px; font-weight: 700; }
-.gd-stat-wrap { display: inline-flex; align-items: center; gap: 6px; }
+/* Moves, the level's goal (its tile and how many are left) and Flowers. */
+.gd-stats { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--pf-display); font-size: 18px; font-weight: 700; }
+.gd-stat-wrap { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .gd-mark { flex: none; }
+.gd-goal { gap: 8px; font-size: 22px; font-weight: 800; }
+.gd-mini { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 28%; box-shadow: inset 0 -3px 0 rgba(27,20,64,0.16); }
+.gd-mini .gd-shape { width: 66%; height: 66%; }
 
 /* Pip's card: Pip (held three seconds, the helper opens; nothing on screen says so), the line and the one under it. */
 .gd-card { margin-top: auto; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 24px; background: #FFFFFF; color: var(--gd-ink); --focus: var(--gd-ink); }
@@ -52,6 +55,14 @@
 .gd-go:empty { display: none; }
 .gd-btn { min-height: 48px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px 3px; border: 0; border-radius: 16px; background: var(--gd-yellow); color: var(--gd-ink); box-shadow: inset 0 -5px 0 rgba(27,20,64,0.18); font-family: var(--pf-display); font-size: 17px; font-weight: 800; white-space: nowrap; }
 .gd-btn:active { transform: translateY(2px); }
+
+/* Narrow phones (360 wide): the three counts stay on one line with a six-figure score. */
+@media (max-width: 380px) {
+  .gd-stats { font-size: 16px; gap: 6px; }
+  .gd-stat-wrap { gap: 4px; }
+  .gd-goal { gap: 6px; font-size: 20px; }
+  .gd-mini { width: 28px; height: 28px; }
+}
 
 /* The cover screen holds only the game, one screen high. */
 .pf-cover { flex: none; height: 100dvh; min-height: 0; overflow: hidden; padding-left: 20px; padding-right: 20px; }

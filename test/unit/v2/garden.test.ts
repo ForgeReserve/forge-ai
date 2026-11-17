@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 // Pip's Garden, Playful's cover game (docs/PLAYFUL.md, The cover game): the rules in
-// public/v2/modules/mode/playful/games/garden/logic.js with a seeded random source, the setting that opens
-// it first, where its record is kept (and that Erase everything takes it), and that the game sees nothing
-// of the app.
+// public/v2/modules/mode/playful/games/garden/logic.js with a seeded random source, how hard the levels are
+// (scripts/garden-sim.ts, played many times), the setting that opens it first, where its record is kept
+// (and that Erase everything takes it), and that the game sees nothing of the app.
 const ROOT = resolve(import.meta.dirname, '../../..');
 const GAME = 'public/v2/modules/mode/playful/games/garden';
 const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
@@ -16,6 +16,8 @@ const ROUTER: any = await import('../../../public/v2/core/router.js' as string);
 const E: any = await import('../../../public/v2/core/erase.js' as string);
 const DB: any = await import('../../../public/v2/core/db.js' as string);
 const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
+const SIM = await import('../../../scripts/garden-sim.ts');
+type SimStats = import('../../../scripts/garden-sim.ts').LevelStats;
 
 /** A seeded random source (mulberry32): the same seed, the same boards. */
 function seeded(seed: number) {
@@ -42,10 +44,12 @@ const board = (...rows: string[]) => rows.join('').split('').map((c) => K[c]!);
 const at = (r: number, c: number) => r * G.SIZE + c;
 
 describe('the board', () => {
-  it('is 5 by 5 with four kinds, and those are constants', () => {
+  it('is 5 by 5 with four kinds and 15 moves a level, and those are constants', () => {
     expect(G.SIZE).toBe(5);
     expect(G.KINDS).toBe(4);
     expect(G.RUN).toBe(3);
+    expect(G.MOVES).toBe(15);
+    expect(G.VERSION).toBe(2);
   });
 
   it('starts with no match and at least one move, from any seed, and the same seed gives the same board', () => {
@@ -94,7 +98,7 @@ describe('matches', () => {
   });
 
   it('an invalid swap changes nothing and costs no move', () => {
-    const g = { level: 1, flowers: 0, moves: 15, made: 0, board: board('lfsdl', 'ssfld', 'dlfsl', 'fsdlf', 'ldsfd') };
+    const g = { level: 1, flowers: 0, moves: 15, got: 0, board: board('lfsdl', 'ssfld', 'dlfsl', 'fsdlf', 'ldsfd') };
     expect(G.move(g, at(0, 0), at(0, 1), seeded(1))).toEqual({ ok: false });
     expect(G.move(g, at(0, 0), at(3, 3), seeded(1))).toEqual({ ok: false });
     expect(g.moves).toBe(15);
@@ -148,33 +152,74 @@ describe('scoring and levels', () => {
     expect(G.flowersFor([{ kind: 0, cells: [0, 1, 2] }, { kind: 1, cells: [5, 10, 15] }], 3)).toBe(180);
   });
 
-  it('a level asks for one more match than the one before, within 15 moves (one more every fifth level)', () => {
-    expect(G.goalFor(1)).toEqual({ matches: 5, moves: 15 });
-    expect(G.goalFor(2)).toEqual({ matches: 6, moves: 15 });
-    expect(G.goalFor(5)).toEqual({ matches: 9, moves: 16 });
-    expect(G.goalFor(7)).toEqual({ matches: 11, moves: 16 });
-    expect(G.goalFor(40).matches).toBe(24);
+  it('a level asks for so many tiles of one kind, in turn sun, leaf, flower, drop, within 15 moves', () => {
+    expect(G.goalFor(1)).toEqual({ kind: K.s, count: 10, moves: 15 });
+    expect(G.goalFor(2)).toEqual({ kind: K.l, count: 11, moves: 15 });
+    expect(G.goalFor(3)).toEqual({ kind: K.f, count: 12, moves: 15 });
+    expect(G.goalFor(4)).toEqual({ kind: K.d, count: 13, moves: 15 });
+    expect(G.goalFor(5).kind).toBe(K.s);
+    expect(G.goalFor(10).count).toBe(22);
+    // Past the table every level asks for the last count.
+    expect(G.goalFor(G.GOALS.length).count).toBe(G.GOALS.at(-1));
+    expect(G.goalFor(400).count).toBe(G.GOALS.at(-1));
     expect(G.goalFor(0)).toEqual(G.goalFor(1));
+    // The goal never shrinks from one level to the next.
+    for (let n = 1; n < 30; n++) expect(G.goalFor(n + 1).count).toBeGreaterThanOrEqual(G.goalFor(n).count);
   });
 
-  it('a valid move takes a move, counts matches and flowers, and ends the level when the goal is met', () => {
+  it('one swap matches at most 9 tiles of a kind, and every goal is more, so no level is won in one move', () => {
+    // A swap's runs of one kind all pass through the one cell that got a tile of that kind: its row and
+    // its column, 5 + 5 - 1 tiles at most.
+    for (let seed = 1; seed <= 200; seed++) {
+      const g = G.newGame(1, 0, seeded(seed));
+      for (let i = 0; i < 25; i++) for (const j of [G.step(i, 'right'), G.step(i, 'down')]) {
+        if (j < 0 || !G.canSwap(g.board, i, j)) continue;
+        for (let k = 0; k < G.KINDS; k++) expect(G.goalTiles(G.findRuns(G.swapped(g.board, i, j)), k)).toBeLessThanOrEqual(9);
+      }
+    }
+    expect(Math.min(...G.GOALS)).toBeGreaterThan(9);
+  });
+
+  it("a move counts the level's tiles its own runs matched, not the chain's, and ends the level at the goal", () => {
+    // Swapping (0,2) and (1,2) brings a sun into row 1 beside two suns: three suns, level 1's kind.
     const b = board('lfsdl', 'ssfld', 'dlfsl', 'fsdlf', 'ldsfd');
-    const g = { level: 1, flowers: 100, moves: 15, made: 4, board: b };
+    const g = { level: 1, flowers: 100, moves: 15, got: 7, board: b };
     const r = G.move(g, at(0, 2), at(1, 2), seeded(5));
     expect(r.ok).toBe(true);
-    expect(r.matches).toBeGreaterThanOrEqual(1);
+    expect(r.got).toBe(3);
     expect(r.game.moves).toBe(14);
-    expect(r.game.made).toBe(4 + r.matches);
+    expect(r.game.got).toBe(10);
     expect(r.flowers).toBeGreaterThanOrEqual(30);
     expect(r.game.flowers).toBe(100 + r.flowers);
     expect(r.outcome).toBe('won');
     expect(G.toGo(r.game)).toBe(0);
     // Done: no more moves are taken.
     expect(G.move(r.game, 0, 1, seeded(5))).toEqual({ ok: false });
+    // The same swap at level 2 (leaves) matches no leaf: a move spent, flowers grown, nothing counted.
+    const r2 = G.move({ ...g, level: 2, got: 0 }, at(0, 2), at(1, 2), seeded(5));
+    expect(r2.got).toBe(0);
+    expect(r2.game.got).toBe(0);
+    expect(r2.flowers).toBeGreaterThanOrEqual(30);
+    expect(r2.outcome).toBeNull();
+  });
+
+  it("a chain grows flowers but not the goal", () => {
+    // A sun swap, then the three new suns from rand 0 make a second round of suns on the top row.
+    const b = board('lfdld', 'dlfsl', 'ssdsf', 'fdlfs', 'dfsld');
+    const g = { level: 1, flowers: 0, moves: 15, got: 0, board: b };
+    const r = G.move(g, at(2, 2), at(1, 3), seq([0, 0, 0], seeded(4)));
+    expect(r.ok).toBe(false);
+    const r2 = G.move(g, at(2, 2), at(2, 3), seq([0, 0, 0], seeded(4)));
+    expect(r2.ok).toBe(true);
+    expect(r2.steps.length).toBeGreaterThanOrEqual(2);
+    expect(r2.steps[1].runs.some((x: any) => x.kind === K.s)).toBe(true);
+    expect(r2.steps[0].runs).toEqual([{ kind: K.s, cells: [10, 11, 12] }]);
+    expect(r2.got).toBe(3);
+    expect(r2.flowers).toBe(r2.steps.reduce((n: number, s: any, k: number) => n + G.flowersFor(s.runs, k + 1), 0));
   });
 
   it('the last move without the goal is out of moves', () => {
-    const g = { level: 3, flowers: 0, moves: 1, made: 0, board: board('lfsdl', 'ssfld', 'dlfsl', 'fsdlf', 'ldsfd') };
+    const g = { level: 3, flowers: 0, moves: 1, got: 0, board: board('lfsdl', 'ssfld', 'dlfsl', 'fsdlf', 'ldsfd') };
     const r = G.move(g, at(0, 2), at(1, 2), seeded(3));
     expect(r.game.moves).toBe(0);
     expect(r.outcome).toBe('lost');
@@ -217,18 +262,89 @@ describe('no moves', () => {
   });
 });
 
+// How hard the levels are, from scripts/garden-sim.ts: each level played from fresh boards by a greedy
+// player (the swap that matches most of the goal now) and a random one (any swap that matches), seeded so
+// the numbers are the same every run. A change to GOALS, MOVES, KINDS or what counts must stay in these
+// bands (docs/PLAYFUL.md, Tuning the difficulty).
+describe('the difficulty', () => {
+  const LEVELS = Array.from({ length: 20 }, (_, k) => k + 1);
+  const GAMES = 300;
+  let greedy: SimStats[] = [];
+  let random: SimStats[] = [];
+  beforeAll(() => {
+    greedy = SIM.simulate('greedy', LEVELS, GAMES, 1);
+    random = SIM.simulate('random', LEVELS, GAMES, 1);
+  });
+  const won = (s: SimStats[], level: number) => s[level - 1]!.won;
+  /** The average share won over levels from..to. */
+  const span = (s: SimStats[], from: number, to: number) => s.slice(from - 1, to).reduce((n, x) => n + x.won, 0) / (to - from + 1);
+
+  it('level 1 is won nearly always by the greedy player, and never in fewer than three moves', () => {
+    expect(won(greedy, 1)).toBeGreaterThanOrEqual(0.95);
+    expect(greedy[0]!.fewest).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the greedy player's wins fall steadily, to about half by level 10, and stay at a quarter or more to level 20", () => {
+    for (const level of [1, 2, 3]) expect(won(greedy, level), `level ${level}`).toBeGreaterThanOrEqual(0.95);
+    expect(won(greedy, 10)).toBeGreaterThanOrEqual(0.4);
+    expect(won(greedy, 10)).toBeLessThanOrEqual(0.6);
+    for (const level of LEVELS) {
+      expect(won(greedy, level), `level ${level}`).toBeGreaterThanOrEqual(0.25);
+      // Never much above the level before (the seeded games wobble a few points where goals are equal).
+      if (level > 1) expect(won(greedy, level), `level ${level}`).toBeLessThanOrEqual(won(greedy, level - 1) + 0.12);
+    }
+    // Steadily, five levels at a time.
+    expect(span(greedy, 1, 5)).toBeGreaterThan(span(greedy, 6, 10) + 0.15);
+    expect(span(greedy, 6, 10)).toBeGreaterThan(span(greedy, 11, 15) + 0.1);
+    expect(span(greedy, 11, 15)).toBeGreaterThan(span(greedy, 16, 20) - 0.03);
+  });
+
+  it('the random player wins the first levels often and loses later ones most of the time', () => {
+    expect(won(random, 1)).toBeGreaterThanOrEqual(0.5);
+    for (const level of LEVELS.filter((n) => n >= 5)) expect(won(random, level), `level ${level}`).toBeLessThan(0.5);
+    for (const level of LEVELS.filter((n) => n >= 10)) expect(won(random, level), `level ${level}`).toBeLessThan(0.1);
+  });
+
+  it('no level is won in one move by any player, and a chain still happens on about every second move', () => {
+    const careless = SIM.simulate('careless', [1, 2, 3], GAMES, 1);
+    for (const s of [...greedy, ...random, ...careless]) {
+      expect(s.inOne, `level ${s.level}`).toBe(0);
+      expect(s.fewest, `level ${s.level}`).toBeGreaterThanOrEqual(2);
+    }
+    for (const s of greedy) expect(s.chain).toBeGreaterThan(1.5);
+  });
+});
+
 describe('the record kept on the phone', () => {
   it('restores a good record, and starts its level again from a bad one', () => {
     const g = G.newGame(4, 220, seeded(2));
-    expect(G.restore(JSON.parse(JSON.stringify({ v: 1, ...g })), seeded(9))).toEqual(g);
-    const fresh = G.restore({ ...g, board: [1, 2, 3] }, seeded(9));
+    expect(G.restore(JSON.parse(JSON.stringify({ v: 2, ...g })), seeded(9))).toEqual(g);
+    const fresh = G.restore({ v: 2, ...g, board: [1, 2, 3] }, seeded(9));
     expect(fresh.level).toBe(4);
     expect(fresh.flowers).toBe(220);
     expect(fresh.moves).toBe(G.goalFor(4).moves);
+    expect(fresh.got).toBe(0);
     expect(G.restore(null, seeded(9)).level).toBe(1);
     expect(G.restore({ level: -3, flowers: 'x' }, seeded(9))).toMatchObject({ level: 1, flowers: 0 });
-    // A board with a run in it is not taken.
-    expect(G.restore({ ...g, board: board('sssld', 'lfdfs', 'lfdsl', 'ldfsd', 'fsdlf') }, seeded(9)).board).not.toEqual(board('sssld', 'lfdfs', 'lfdsl', 'ldfsd', 'fsdlf'));
+    // A board with a run in it is not taken, nor a count at or past the goal.
+    expect(G.restore({ v: 2, ...g, board: board('sssld', 'lfdfs', 'lfdsl', 'ldfsd', 'fsdlf') }, seeded(9)).board).not.toEqual(board('sssld', 'lfdfs', 'lfdsl', 'ldfsd', 'fsdlf'));
+    expect(G.restore({ v: 2, ...g, got: G.goalFor(4).count }, seeded(9)).got).toBe(0);
+    expect(G.restore({ v: 2, ...g, moves: 16 }, seeded(9)).moves).toBe(15);
+  });
+
+  it('a game kept under the first rules keeps its level and flowers, with a new board under these rules', () => {
+    // As the first rules kept it (v 1: matches made, chains too), on a phone at level 4 with 1,080 flowers.
+    const old = { v: 1, level: 4, flowers: 1080, moves: 9, made: 3, board: G.newBoard(seeded(21)) };
+    const g = G.restore(JSON.parse(JSON.stringify(old)), seeded(9));
+    expect(g).toEqual({ level: 4, flowers: 1080, moves: 15, got: 0, board: expect.any(Array) });
+    expect(G.findRuns(g.board)).toEqual([]);
+    expect(G.hasMove(g.board)).toBe(true);
+    expect(G.outcome(g)).toBeNull();
+    expect(G.toGo(g)).toBe(13);
+    // A game past every level of the table keeps its level too, at the last goal.
+    expect(G.restore({ v: 1, level: 31, flowers: 9000, moves: 3, made: 20, board: old.board }, seeded(9))).toMatchObject({ level: 31, flowers: 9000, moves: 15, got: 0 });
+    // The screen keeps the new shape.
+    expect(read(`${GAME}/index.js`)).toMatch(/progress\.save\(\{ v: VERSION, level: g\.level, flowers: g\.flowers, moves: g\.moves, got: g\.got, board: g\.board\.slice\(\) \}\)/);
   });
 
   it('is kept in the database beside the settings, through the two actions a mode gets', () => {
