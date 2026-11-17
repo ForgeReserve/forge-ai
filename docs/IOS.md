@@ -7,11 +7,11 @@ Forge for iPhone is the v2 web app in a Capacitor shell (`ios/`, Capacitor 6.2.3
 - Name **Forge**, bundle id `com.forgereserve.ai`, iPhone only, iOS 16.4 and up, portrait.
 - The same web bundle as the APK (`scripts/lib/android-web.ts`): the v2 app, what it imports, the icons and the natural voice (Phonon 31m and its voices, 65 MB), so answers are read aloud offline from the first open. The app is about 93 MB.
 - One flavour: the universal app. There is no Forge Private Voice for iPhone.
-- No analytics, no tracking, no third-party SDK. Its own native code is ForgeBars and ForgeNfc (below).
+- No analytics, no tracking, no third-party SDK. Its own native code is ForgeBars, ForgeNfc and ForgeSpeech (below).
 
 ## What the iPhone app does in place of the Android app's plugins
 
-The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/native.js`). ForgeBars and ForgeNfc are there; every other part is `null`, so the page does what it does in Safari on an iPhone.
+The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/native.js`). ForgeBars, ForgeNfc and ForgeSpeech are there; every other part is `null`, so the page does what it does in Safari on an iPhone.
 
 | Android feature (plugin) | iPhone app |
 |---|---|
@@ -22,7 +22,7 @@ The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/nat
 | Card taps, Cashu eCash cards (ForgeNfc) | Native: `NfcPlugin.swift`, below. Tap a card is listed and works as on Android, a press then a tap on iOS's NFC sheet. |
 | Fedimint cards and the till (ForgeTill) | Hidden: there is no till plugin yet. The row is left out where a phone reads cards but has no till (`modules/fund/fedimint`). |
 | Natural voice, native (ForgeVoice) | Web: the browser's build of the same voice, from the app's own files: on the graphics chip where WebKit has WebGPU, else the processor on one thread (the page is not cross-origin isolated here). Simulator (processor, one thread): RTF 0.18, no gaps. |
-| Hold to talk on the phone (ForgeSpeech) | Web: the engine hears it (paid), as in Safari. **This browser** under Voice is the WebKit recogniser (Apple's), offered only with Private only off, as on the website. |
+| Hold to talk on the phone (ForgeSpeech) | Native: `SpeechPlugin.swift`, below. Where Apple's recogniser hears the language on the phone itself, On this phone is offered and chosen by default, free, and the sound never leaves the phone. Elsewhere the engine hears it (paid), as in Safari. **This browser** under Voice is the WebKit recogniser (Apple's, which may send the sound to Apple), offered only with Private only off, as on the website. |
 | Hold to talk, Forge Private Voice (ForgeAsr) | Not available (no second app). |
 | Back button | iPhones have none: every screen has its own Back. |
 | Cross-origin isolation (MainActivity) | Not done: WKWebView gets no isolation headers from Capacitor, so the page never reloads for it and the voice runs on one thread. |
@@ -46,6 +46,41 @@ What iOS changes, and how the page follows it:
 cd ios/App
 xcodebuild test -workspace App.xcworkspace -scheme AppTests -destination 'name=<a simulator>'
 ```
+
+## Hold to talk on the phone (ForgeSpeech)
+
+`ios/App/App/SpeechPlugin.swift` is the Android plugin (`SpeechPlugin.kt`) in Swift with Apple's Speech framework: the same name, ForgeSpeech, the same methods (`available`, `start`, `stop`, `cancel`), the same `speech` event `{id, type}` with `started`, `level {level}`, `partial {text}`, `final {text}`, `error {code}` and `end` (always last), and the same codes (`permission`, `busy`, `unavailable` from `start`; `permission`, `unavailable`, `no-speech`, `busy`, `audio`, `failure`, `interrupted` in `error`). The page's module (`voice-in/phone`) and the choice (`pickVoiceIn`) are unchanged. The pure parts are in `SpeechRules.swift`, with `SpeechSession` ported from the Kotlin one.
+
+**How the sound stays on the phone.** Apple's recogniser can hear a language on the phone, or send the sound to Apple's servers. The plugin uses only the first:
+
+- Every request is an `SFSpeechAudioBufferRecognitionRequest` with `requiresOnDeviceRecognition = true`. Apple's documentation and the SDK header say a request "only honors this setting if" the recogniser's `supportsOnDeviceRecognition` is also true. So before every request (the first, and each one after a pause) the plugin checks `SpeechRules.onDeviceOnly`: the recogniser must say `supportsOnDeviceRecognition` and the request must require the phone, else no request is made and the page is told `unavailable`. The plugin never sets `supportsOnDeviceRecognition` (the SDK lets an app set it), never makes any other kind of request, and writes nothing to storage.
+- `available` offers On this phone only where a recogniser for the language says `supportsOnDeviceRecognition` and `isAvailable`. Where Apple hears the language only on its servers, it says `language-not-on-device` (Android's `language-not-downloaded`), and the app uses the engine as it does today.
+- `test/unit/ios.test.ts` checks the source: one place makes a request, it sets `requiresOnDeviceRecognition = true`, the guard comes before the task, and nothing assigns `supportsOnDeviceRecognition`. `SpeechRulesTests.swift` tests the guard.
+- What it depends on: Apple keeping its word that a request with `requiresOnDeviceRecognition` does not send audio over the network, and `supportsOnDeviceRecognition` telling the truth. Neither can be checked from the app. The device test below (airplane mode) is the practical check.
+- This browser under Voice is WebKit's recogniser, not this plugin: it may send the sound to Apple, so it is never private and is off with Private only on.
+
+**Languages.** The page asks in the phone's English (`en-GB`, `en-IN`, ...) or else `en-US`. The plugin takes Apple's list (`SFSpeechRecognizer.supportedLocales()`) and tries the same tag, then US English, then the language's other regions, never another language, and listens with the first that hears on the phone. A recogniser that falls back to the keyboard's language is not used. Which languages an iPhone hears on the phone depends on the phone and on what it has downloaded; Apple publishes no list for on-device recognition, and none was confirmed on a real iPhone. In a new Simulator (iOS 26.5) Apple first heard none on the device: `en-US`, `en-GB`, `en-JM` and `de-DE` all said `language-not-on-device`. About 12 minutes later the same Simulator said `en-US` is heard on the device (`en-GB` and `en-JM` then listen in `en-US`), while `de-DE`, `fr-FR` and `ja-JP` still said `language-not-on-device`. Most likely the Simulator fetched Apple's on-device English after the first use; that is not proven. The page asks once when the app opens, so a language that arrives later is offered from the next open. To check a language on an iPhone, open More, Voice: On this phone is listed only when Apple's recogniser hears the language on the phone. The availability line (`ForgeSpeech: available locale=... onDevice=... reason=...`) is printed to Xcode's console when Capacitor's logging is on (`loggingBehavior` in the installed copy's `capacitor.config.json`); it never holds words.
+
+Other reasons `available` gives: `recognizer-unavailable` (it hears on the phone but cannot take a request now, `isAvailable` false), `language-not-supported` (no locale of the language at all).
+
+**Permissions.** `start` asks for speech recognition (`SFSpeechRecognizer.requestAuthorization`, the first prompt), then the microphone (the second; `AVAudioApplication` from iOS 17, `AVAudioSession` before). A refusal of either rejects `start` with `permission`, as Android does for the microphone, and the talk button says to allow the microphone. `available` asks for nothing, so no prompt shows until the first press.
+
+**Audio.** The microphone is captured with `AVAudioEngine`; its sound goes only to the request, in memory. For the press only, the audio session is set to `playAndRecord`, mode `measurement` (the least of the system's own processing, the primary microphone), with `duckOthers` (other apps' sound is lowered, not stopped, and the session is mixable, so the web view's own sound is not interrupted) and `defaultToSpeaker`. What was set before is kept. When the press ends the session is let go with `notifyOthersOnDeactivation` (ducking ends, other apps may play again) and the category and mode go back to what they were, so reading the answer aloud afterwards (Web Audio and the phone's voice in the web view) is as before. A call or an alarm that takes the audio (`interruptionNotification`), and leaving the app, end the press with `interrupted` and nothing is asked, as Android's leaving does. Headphones in or out mid-press end that request with its words kept, and the next one listens on the new input. A second `start` while one is open is refused with `busy`; `stop` and `cancel` with nothing running resolve and do nothing.
+
+**Live words and limits.** Words come as `partial` while the button is held, and once after `stop` as `final`. Apple can end a request on its own (a long pause, its limit of about a minute for one request); while the button is held the plugin starts the next request and joins the words (`SpeechSession`, at most 20 times), so nothing heard is lost. The page stops at 60 s (`maxSeconds`), and a request starts after the press, so the page's limit comes first. After `stop`, if the last result has not come within 4 s, the words so far are the question; the plugin's own safety stop is at 90 s. A hold with nothing said ends with `error` `no-speech` (Apple's 1110, "Failed to recognize any speech", or a last result with no words), and the app says "Nothing was heard." and asks nothing. Apple's errors map as `SpeechRules.errorCode`: 1700 `permission`, 1100 `busy`, kLSR 102, 201, 300 `unavailable` (the next question goes to the engine), kLSR 301 `interrupted`, the Speech framework's audio read error `audio`, anything else `failure`. Nothing is logged but the availability line and an error's domain and code.
+
+### Checking it on an iPhone
+
+Build and run on the iPhone from Xcode (Run on an iPhone, below), with Forge set to an engine with a balance or free questions.
+
+1. Open More, Voice. **On this phone** should be listed first and chosen. If it is not, Apple does not hear the language on this phone (Online is chosen): stop here and note the phone's language and iOS version.
+2. Go home and press and hold the talk button. iOS asks to allow speech recognition, with the words "Forge turns a question you speak into words on this phone. Your voice stays on it, unless you pick This browser." Allow. Then it asks for the microphone ("Forge uses the microphone only while you hold the talk button, to hear a question you speak."). Allow. Letting go to answer the prompts ends that press with "Nothing was heard."; hold again. Refusing either should make the talk button say the microphone is blocked; nothing is sent.
+3. Hold and say a question. The line under the rings says "Stays on this phone", the level bars move with your voice, and your words show as you speak. A pause in the middle should not cut the question. Let go: the question shown is your words, and the answer comes. If no words show while speaking, the microphone or the recogniser failed: note it.
+4. Hold for three seconds saying nothing, and let go. The app should say "Nothing was heard. Hold the button and speak." and ask nothing. If it says "Could not hear it", Apple ended with an error other than no speech: note it.
+5. Turn on airplane mode (Wi-Fi off too) and ask by voice again. The words should still show while you hold: that shows the sound is heard on the phone. (The answer then fails, as the engine is out of reach.) If no words show, Apple needs the network for this language here, which the app should never use: report it.
+6. Play music in another app, then hold to talk: the music should dip while you hold and come back after. Then tap Listen on an answer: it should be read aloud as before. Silence after a press means the audio session was not put back.
+7. Hold to talk and have someone call the phone mid-hold. The press should end; after the call, letting go asks nothing ("Nothing was heard."), and the next hold works. Do the same with headphones plugged in or out mid-hold: the words heard so far should stay and the question should be sent.
+8. Hold to talk and press the side button or go home mid-hold: back in Forge, nothing was asked, and the next hold works.
 
 ## Build and run in the Simulator
 
@@ -88,8 +123,8 @@ Card taps need the **NFC Tag Reading** capability on the App ID `com.forgereserv
 `ios/App/App/Info.plist`, each asked for only when it is first used:
 
 - Camera: "Forge uses the camera to read a code, or to take a photo when you ask it to."
-- Microphone: "Forge uses the microphone to record a question you speak."
-- Speech recognition: "If you pick the phone's speech recognition in Voice, Apple turns a question you speak into words."
+- Microphone: "Forge uses the microphone only while you hold the talk button, to hear a question you speak."
+- Speech recognition: "Forge turns a question you speak into words on this phone. Your voice stays on it, unless you pick This browser." One permission covers both recognisers: ForgeSpeech, which hears on the phone, and WebKit's This browser in Voice, which may send the sound to Apple.
 - Adding to Photos: "Forge saves a photo to your library only when you pick Save."
 - NFC: "Forge reads an eCash card only when you hold it to the phone to add money." iOS shows no prompt for it: the NFC sheet itself is the permission.
 
@@ -105,9 +140,14 @@ Web Audio plays in the app even without a tap (Capacitor lets media play without
 
 On a new iPhone 17 simulator (iOS 26.5): the app built (Debug, signed to run locally, with the NFC entitlement in its simulated entitlements) and started. With Capacitor's logging turned on in the installed copy only, and a probe in the installed copy only: `Capacitor.Plugins` has ForgeBars and ForgeNfc, `status` answers `{available: false, enabled: false}`, `start` refuses with `no_nfc`, `transceive` refuses a card that is not there with `tag_gone` and a misframed command with `bad_apdu`, `close` and `stop` resolve. With the plain app, driven with Maestro: Add money lists the card with its privacy badge, not the one that points to the app, Tap a card says "This phone cannot read cards." after one `status` call and no `start`, with no error, and the More card has no Fedimint card. The press then tap flow with a card is tested in Chrome against a stand-in for the plugin (`test/ui/card.ui.test.ts`, the iPhone cases).
 
+## Checked in the Simulator for Hold to talk (2026-11-17)
+
+On a new iPhone 17 simulator, "Forge Speech" (iOS 26.5): the app built (Debug, signed to run locally) and started. With Capacitor's logging and a probe in an installed copy only: `Capacitor.Plugins` has ForgeBars, ForgeNfc and ForgeSpeech; `available` first answered `{onDevice: false, reason: "language-not-on-device"}` for `en-US`, `en-GB`, `en-JM` and `de-DE`; `stop` and `cancel` with nothing running resolve; `start` with no id refuses with `bad_call`. With the plain app, driven with Maestro: the first run and the home show no error, and More, Voice listed Online (the engine, chosen) and This browser (off with Private only on), with no On this phone row: the fallback, with no error. About 12 minutes later, on the same Simulator, `available` said `onDevice: true` for `en-US` (and for `en-GB` and `en-JM`, listening in `en-US`), still no for `de-DE`, `fr-FR` and `ja-JP`, and More, Voice then listed **On this phone** first and chosen, with Private only on. No permission prompt showed (`available` asks for none). A press was not tried: it would need the two permission prompts answered in the Simulator, and the Mac's own microphone permission for the Simulator, which this check does not answer for the owner. `SpeechRulesTests.swift` passes in the test bundle.
+
 ## Not verified
 
 - A real card tap: the Simulator has no NFC. Nothing in `NfcPlugin.swift` past `status` and the refusals has run: the sheet, a card's connection, a command, the 5 second limit, a card lost mid-command, the sheet's words.
+- Hold to talk on the phone (ForgeSpeech) past `available` and the refusals: no request has run, so the permission prompts, live words, the joining after a pause, a silent hold on a phone, Apple's error codes as they really come, the audio session's effect on playback afterwards, a call or a route change mid-hold and airplane mode are all untested (Checking it on an iPhone, above). Which languages an iPhone hears on the phone is not known.
 - Anything on a real iPhone: signing, the permission prompts, the camera reading a real code, Hold to talk with a real microphone, the ring switch and `navigator.audioSession`, the share sheet and Save to Photos, screen sizes other than the iPhone 17's.
 - Paid requests, funding, Start free with a code: not run against the production engine.
 - WebKit's own speech recogniser on a phone: in the Simulator it started and stopped without error.

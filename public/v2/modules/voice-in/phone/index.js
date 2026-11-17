@@ -1,8 +1,9 @@
-// Voice in through the phone's own on-device speech recogniser, in the Android app only (ForgeSpeech,
-// core/native.js nativeSpeech). The sound never leaves the phone: the app uses only the recogniser that
-// runs on the phone, never one that sends it to a server, and only the words come back to the page.
-// Free and private. Offered only where the phone says its on-device recogniser has the language now;
-// elsewhere (the website, an older phone, a phone without one) the engine's speech to text is used.
+// Voice in through the phone's own on-device speech recogniser, in the Android and iPhone apps
+// (ForgeSpeech, core/native.js nativeSpeech: Android's on-device recogniser, Apple's restricted to the
+// phone). The sound never leaves the phone: the app uses only the recogniser that runs on the phone,
+// never one that sends it to a server, and only the words come back to the page. Free and private.
+// Offered only where the phone says its on-device recogniser has the language now; elsewhere (the
+// website, an older phone, a phone without one) the engine's speech to text is used.
 // Handed only t and the native speech bridge (null outside the app; core/registry.js).
 
 /** How long the last words may take to come after the button is let go. */
@@ -20,7 +21,7 @@ export function localeFor(lang) {
 export function create({ speech: bridge = null }) {
   // On the website the app has no bridge (the registry then hands an empty one).
   const speech = typeof bridge?.available === 'function' && typeof bridge?.start === 'function' ? bridge : null;
-  let state = { onDevice: false, reason: speech ? 'checking' : 'not in the Android app', locale: localeFor(globalThis.navigator?.language) };
+  let state = { onDevice: false, reason: speech ? 'checking' : 'not in the app', locale: localeFor(globalThis.navigator?.language) };
   const check = async () => {
     if (!speech) return state;
     state = { ...state, ...(await speech.available({ locale: state.locale }).catch(() => ({ onDevice: false, reason: 'check failed' }))) };

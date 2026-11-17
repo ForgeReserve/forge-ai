@@ -98,7 +98,7 @@ export function pickMode(ready, settings) {
 /**
  * The voice-in module to use: the chosen one when it can be used. Otherwise, and with 'auto' (the
  * default) or 'phone', On this phone: Forge Private Voice's own speech to text (its APK only), else the
- * phone's own on-device recogniser (Android app only) when it has the language; else the engine's. With
+ * phone's own on-device recogniser (in the Android and iPhone apps) when it has the language; else the engine's. With
  * 'engine' chosen, the engine's first. The browser's recogniser is never used with Private only on,
  * since the browser may send the sound to its maker, and never unless chosen.
  * mods: {bundled, phone, engine, device}, each a module instance or undefined.

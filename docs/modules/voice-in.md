@@ -52,7 +52,7 @@ The engine's audio calls for speech to text. The app makes the paid call with th
 
 ### `speech`
 
-The phone's own on-device recogniser, in the Android app only (`nativeSpeech` in [`public/v2/core/native.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js)). The sound stays on the phone; only the words come back. Outside the Android app it is an empty object.
+The phone's own on-device recogniser, in the Android and iPhone apps (`nativeSpeech` in [`public/v2/core/native.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js)): Android's on-device recogniser, or Apple's restricted to the phone. The sound stays on the phone; only the words come back. Outside the apps it is an empty object.
 
 | Function | What it does |
 | - | - |
@@ -141,11 +141,11 @@ A voice-in module with any other id loads, and the app never uses it or lists it
 | Module | Website | Android app | iPhone app |
 | - | - | - | - |
 | `bundled` | Not available | Forge Private Voice APK only | Not available |
-| `phone` | Not available | Where the phone's on-device recogniser has the language | Not available |
+| `phone` | Not available | Where the phone's on-device recogniser has the language | Where Apple's recogniser hears the language on the phone itself |
 | `engine` | Where there is a microphone and the engine has a speech to text model | The same | The same |
 | `device` | Where the browser has a recogniser | Where the web view has one | The WebKit recogniser, Apple's |
 
-`speech` and `asr` are empty objects outside the Android app. `mic` and `recognizer` are the browser's on every platform.
+`speech` is an empty object on the website, `asr` outside the Android app. `mic` and `recognizer` are the browser's on every platform.
 
 ## A minimal voice-in module
 

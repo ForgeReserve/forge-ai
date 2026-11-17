@@ -1082,3 +1082,109 @@ describe('reading an answer with the phone voice while the natural voice is not 
     expect(x.toasts).toEqual([]);
   });
 });
+
+/**
+ * The iPhone app's ForgeSpeech as SpeechPlugin.swift answers, through the real bridge code
+ * (core/native.js createNative): Capacitor says 'ios' and lists the plugin; available() says whether
+ * Apple's recogniser hears the language on the phone; start() asks the two permissions, then events
+ * {id, type} come on "speech": started, level, partial; stop() ends with final (or, for a silent hold,
+ * error no-speech), then end.
+ */
+function iosSpeech({ onDevice = true, refuse = false, silent = false, plugin = true } = {}) {
+  const calls: string[] = [];
+  const listeners: Array<(ev: any) => void> = [];
+  const emit = (ev: any) => listeners.forEach((fn) => fn(ev));
+  const Capacitor = {
+    isNativePlatform: () => true,
+    getPlatform: () => 'ios',
+    Plugins: { ForgeBars: {}, ForgeNfc: {}, ...(plugin ? { ForgeSpeech: {} } : {}) },
+    nativePromise: async (p: string, method: string, opts: any) => {
+      calls.push(`${p}.${method}`);
+      if (p !== 'ForgeSpeech') return undefined;
+      if (method === 'available') return onDevice ? { onDevice: true, reason: null, locale: 'en-US' } : { onDevice: false, reason: 'language-not-on-device', locale: 'en-US' };
+      if (method === 'start') {
+        if (refuse) throw Object.assign(new Error('Speech recognition is not allowed.'), { code: 'permission' });
+        emit({ id: opts.id, type: 'started' });
+        emit({ id: opts.id, type: 'level', level: 0.3 });
+        if (!silent) emit({ id: opts.id, type: 'partial', text: 'Where is' });
+        return {};
+      }
+      if (method === 'stop') {
+        if (silent) emit({ id: opts.id, type: 'error', code: 'no-speech' });
+        else emit({ id: opts.id, type: 'final', text: 'Where is the market?' });
+        emit({ id: opts.id, type: 'end' });
+      }
+      if (method === 'cancel') emit({ id: opts.id, type: 'end' });
+      return {};
+    },
+    addListener: (p: string, event: string, fn: (ev: any) => void) => {
+      if (p === 'ForgeSpeech' && event === 'speech') listeners.push(fn);
+      return { remove: async () => {} };
+    },
+  };
+  const native = N.createNative({ Capacitor });
+  return { native, calls };
+}
+
+describe("voice in on this phone in the iPhone app (Apple's recogniser, on the phone only)", () => {
+  const engine = { id: 'engine', available: () => true, private: () => true };
+  const device = { id: 'device', available: () => true, private: () => false };
+
+  it('is offered and picked first where Apple hears the language on the phone, also with Private only on', async () => {
+    const { native, calls } = iosSpeech();
+    expect(native.platform).toBe('ios');
+    const phone = VIN_PHONE.create(R.inputsFor('voice-in', { t: () => '', speech: native.speech }));
+    await phone.checked;
+    expect(phone.available()).toBe(true);
+    expect(phone.private()).toBe(true);
+    expect(phone.price(30)).toBe(0);
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { ...STATE.DEFAULT_SETTINGS })?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { privateOnly: true, voiceIn: 'auto' })?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ phone, engine, device }, { privateOnly: false, voiceIn: 'phone' })?.id).toBe('phone');
+    expect(calls).toEqual(['ForgeSpeech.available']);
+  });
+
+  it('shows the words as they come, sends the final words, and asks the engine nothing', async () => {
+    const { native, calls } = iosSpeech();
+    const phone = VIN_PHONE.create({ speech: native.speech });
+    await phone.checked;
+    const heard: string[] = [];
+    const levels: number[] = [];
+    const s = await phone.start({ onText: (x: string) => heard.push(x), onLevel: (l: number) => levels.push(l) });
+    expect(heard).toEqual(['Where is']);
+    expect(levels).toEqual([0.3]);
+    expect(await s.finish()).toEqual({ text: 'Where is the market?', chargedMsub: 0, balanceMsub: null });
+    expect(calls).toEqual(['ForgeSpeech.available', 'ForgeSpeech.start', 'ForgeSpeech.stop']);
+  });
+
+  it('a silent hold is an empty question, so the app says nothing was heard and sends nothing', async () => {
+    const { native } = iosSpeech({ silent: true });
+    const phone = VIN_PHONE.create({ speech: native.speech });
+    await phone.checked;
+    expect(await (await phone.start()).finish()).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+    expect(EN['talk.empty']).toBe('Nothing was heard. Hold the button and speak.');
+  });
+
+  it('a refused permission reads as the microphone adapter says it, as on Android', async () => {
+    const { native } = iosSpeech({ refuse: true });
+    const phone = VIN_PHONE.create({ speech: native.speech });
+    await phone.checked;
+    await expect(phone.start()).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(phone.available()).toBe(true);
+  });
+
+  it('where Apple hears the language only on its servers, or in an app without the plugin, the engine hears it', async () => {
+    const off = iosSpeech({ onDevice: false });
+    const a = VIN_PHONE.create({ speech: off.native.speech });
+    await a.checked;
+    expect(a.available()).toBe(false);
+    expect(a.status().reason).toBe('language-not-on-device');
+    expect(STATE.pickVoiceIn({ phone: a, engine }, { ...STATE.DEFAULT_SETTINGS })?.id).toBe('engine');
+    const old = iosSpeech({ plugin: false });
+    expect(old.native.speech).toBeNull();
+    const b = VIN_PHONE.create(R.inputsFor('voice-in', { t: () => '', speech: old.native.speech }));
+    await b.checked;
+    expect(b.available()).toBe(false);
+    expect(old.calls).toEqual([]);
+  });
+});

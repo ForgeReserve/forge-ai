@@ -30,7 +30,7 @@ export const INPUTS = {
  * with a cover game also gets the game's own record on the phone (coverProgress, saveCoverProgress).
  * A voice module gets the engine's audio calls for its direction only, which the app makes with the
  * balance key the module never sees. A voice-in module also gets the phone's on-device recogniser in the
- * Android app (core/native.js nativeSpeech: available and start only; empty on the website) and Forge
+ * Android and iPhone apps (core/native.js nativeSpeech: available and start only; empty on the website) and Forge
  * Private Voice's own speech to text (nativeAsr: available and start only). A
  * voice-out module also gets the phone's own Phonon engine (core/phonon.js): whether it can run, what a first use downloads, the loaded model, the native voice
  * in the Android app, the voice picked, and how fast this phone makes it (core/voicepace.js).
@@ -186,7 +186,7 @@ export const BUNDLED = [
   { kind: 'fund', folder: 'onchain' },
   { kind: 'fund', folder: 'othermint' },
   // Forge Private Voice's own speech to text first (its APK only), then the phone's own on-device
-  // recogniser in the Android app where it has the language: both free and private.
+  // recogniser in the Android or iPhone app where it has the language: both free and private.
   { kind: 'voice-in', folder: 'bundled' },
   { kind: 'voice-in', folder: 'phone' },
   { kind: 'voice-in', folder: 'engine' },
