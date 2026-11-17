@@ -181,6 +181,9 @@ describe('Tap a Cashu card', () => {
       'A till takes the payment from the card and pays your funds.',
       'Cards work in the Forge app, Android or iPhone.',
     ]);
+    // A printed card opens its way only once its wallet card is the one on show: until the slide to it
+    // has finished, a tap on it just brings the card forward.
+    await page.waitForSelector('#wayGo[data-way="cards"]', { state: 'attached' });
     await page.click('#pair-card');
     await page.waitForSelector('#cardAppOnly');
     expect(await page.textContent('[data-screen=fund] h1')).toBe('Tap a Cashu card');

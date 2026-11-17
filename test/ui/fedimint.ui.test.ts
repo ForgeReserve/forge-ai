@@ -206,6 +206,8 @@ describe('Tap a Fedimint card', () => {
     expect(await page.getAttribute('#pair-fedimint', 'aria-label')).toBe('Tap a Fedimint card');
     expect(await page.textContent('#pair-fedimint > span')).toBe('Fedimint');
     expect(await page.locator('#pair-fedimint .card-face text').first().textContent()).toBe('FEDIMINT ECASH CARD');
+    // A tap on a printed card opens its way once its wallet card is the one on show (see card.ui.test.ts).
+    await page.waitForSelector('#wayGo[data-way="cards"]', { state: 'attached' });
     await page.click('#pair-fedimint');
     await page.waitForSelector('#fedAppOnly');
     expect(await page.getAttribute('.card-art', 'aria-label')).toBe('A Fedimint card');
