@@ -77,7 +77,8 @@ async function phone({ viewport = PHONE.viewport, playful = true, reduce = false
     await page.goto(`${g.url}/v2/#/more/look`);
     await page.waitForSelector('[data-screen=look]');
     await page.click('#mode-playful');
-    await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked')).toBe('true');
+    // On only once Playful's screens, styles and typefaces are in (the typefaces are waited up to 1.5 s).
+    await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked'), { timeout: 10_000 }).toBe('true');
     await page.goto(`${g.url}/v2/#/`);
     await page.reload();
     await onGame(page);

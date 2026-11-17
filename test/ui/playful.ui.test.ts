@@ -94,7 +94,8 @@ async function choose(page: Page, mode: string) {
   await page.goto(`${g.url}/v2/#/more/look`);
   await page.waitForSelector('[data-screen=look]');
   await page.click(`#mode-${mode}`);
-  await expect.poll(() => page.getAttribute(`#mode-${mode}`, 'aria-checked')).toBe('true');
+  // On only once the mode's screens, styles and typefaces are in (Playful waits up to 1.5 s for its typefaces).
+  await expect.poll(() => page.getAttribute(`#mode-${mode}`, 'aria-checked'), { timeout: 10_000 }).toBe('true');
   if (mode === 'playful' && (await page.getAttribute('#gameFirst', 'aria-checked')) === 'true') {
     await page.click('#gameFirst');
     await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
