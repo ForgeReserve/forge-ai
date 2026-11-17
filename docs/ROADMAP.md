@@ -36,7 +36,7 @@ Decided by the owner on 2026-11-12. The event is 2 to 4 December 2026.
 | A5 | Share unseen, photos | Faces and numbers covered on the phone, location and file details stripped, before and after view, share to a messenger; first `filter` plugins | 5 days |
 | A6 | First run | Onboarding, the limits screen, Private only on by default, price before send | 3 days |
 | A7 | Languages | Translation framework, right-to-left layout, first ten languages for native speakers to check | 4 days |
-| A8 | Guides | Signed guide packages, search on the phone, spoken answers with the source passage | 6 days |
+| A8 | Guides | Signed guide packages, search on the phone, spoken answers with the source passage ([GUIDES.md](GUIDES.md)) | 6 days |
 | A9 | Witness | Record, write up, hide names and places, seal with the time, send or keep | 4 days |
 | A10 | Cover | Install under a chosen name and icon, one puzzle game, hidden way in | 5 days |
 | A11 | Protection steps | Checklist per platform, merged with Forge's own status | 2 days |
