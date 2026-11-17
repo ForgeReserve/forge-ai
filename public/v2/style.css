@@ -289,6 +289,12 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .look-card.on .radio { border: 7px solid var(--ink); }
 .setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 0 16px; border-radius: 18px; border: 0; background: var(--surface); color: var(--ink); font-weight: 600; }
 .setting-row .value { color: var(--teal); }
+/* Mode and look, under the modes while one with a cover game is chosen: how to open the helper, and the
+   design's warning of what the cover does not hide. */
+.cover-note { display: flex; flex-direction: column; gap: 8px; }
+.cover-note .hint { padding: 0 4px; }
+.cover-warn { margin: 0; display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border: 1px solid var(--gold-line); border-radius: 16px; color: var(--text-2); font-size: 13px; line-height: 1.45; }
+.cover-warn .ico { margin-top: 1px; color: var(--gold); }
 .model-card { flex-direction: column; align-items: flex-start; gap: 8px; border-width: 1px; }
 .model-card small { font-size: 13px; color: var(--text-2); }
 .model-card .warn-text { color: var(--low-ink); }

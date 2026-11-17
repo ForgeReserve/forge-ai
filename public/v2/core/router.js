@@ -3,6 +3,8 @@
 
 export const ROUTES = {
   home: '',
+  // The cover game a mode can open on, its helper (the home) behind it (docs/PLAYFUL.md, app.js coverOn).
+  game: 'game',
   type: 'type',
   answer: 'answer',
   add: 'add',

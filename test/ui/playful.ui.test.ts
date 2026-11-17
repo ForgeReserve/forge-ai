@@ -85,12 +85,19 @@ async function phone({ viewport = PHONE.viewport, funded = true, playful = true,
   return { ctx, page, errors, asked };
 }
 
-/** Chooses a mode in More, Mode and look. */
+/**
+ * Chooses a mode in More, Mode and look. Playful's helper screens are what this file tests: "Open as a
+ * game first" is turned off, so the app opens on the helper (the cover game is game.ui.test.ts).
+ */
 async function choose(page: Page, mode: string) {
   await page.goto(`${g.url}/v2/#/more/look`);
   await page.waitForSelector('[data-screen=look]');
   await page.click(`#mode-${mode}`);
   await expect.poll(() => page.getAttribute(`#mode-${mode}`, 'aria-checked')).toBe('true');
+  if (mode === 'playful' && (await page.getAttribute('#gameFirst', 'aria-checked')) === 'true') {
+    await page.click('#gameFirst');
+    await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
+  }
 }
 
 const playfulHome = (page: Page) => page.waitForSelector('[data-screen=home][data-mode=playful]');

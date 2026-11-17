@@ -57,6 +57,7 @@
 <li><a href="#id"><code>id</code></a></li>
 <li><a href="#home-options"><code>home(options)</code></a></li>
 <li><a href="#answer"><code>answer()</code></a></li>
+<li><a href="#cover"><code>cover()</code></a></li>
 <li><a href="#ready"><code>ready()</code></a></li>
 <li><a href="#the-screen">The screen</a></li>
 </ul></li>
@@ -76,7 +77,7 @@
 </aside>
 <main class="doc" id="content">
 <h1 id="top">Mode modules</h1>
-<p>A mode module draws the two screens a person sees most: the home and the answer. The rest of the app (Type, Funds, Add money, More and its screens) stays the same in every mode. The person picks a mode in More, Mode and look. The app ships with two: Default, with the rings, and Playful, with Pip.</p>
+<p>A mode module draws the two screens a person sees most: the home and the answer. It may also draw a cover, a game the app opens on with the home behind it. The rest of the app (Type, Funds, Add money, More and its screens) stays the same in every mode. The person picks a mode in More, Mode and look. The app ships with two: Default, with the rings, and Playful, with Pip and its cover game, Pip&#39;s Garden.</p>
 <p>Read <a href="/docs/modules/">the overview</a> first. The bundled modes are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode"><code>public/v2/modules/mode/</code></a> and described in the <a href="/docs/modules/list#mode">module list</a>. Playful is described in full in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PLAYFUL.md"><code>docs/PLAYFUL.md</code></a>.</p>
 <h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
 <p><code>kind</code> is <code>mode</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>. For a mode the app has no strings of its own for, More, Mode and look shows the manifest&#39;s <code>name.en</code>.</p>
@@ -86,7 +87,7 @@
 <span class="hljs-comment">// PROJECTIONS</span>
 <span class="hljs-attr">mode</span>: {
   <span class="hljs-attr">state</span>: [<span class="hljs-string">&#x27;view&#x27;</span>, <span class="hljs-string">&#x27;subscribe&#x27;</span>],
-  <span class="hljs-attr">actions</span>: [<span class="hljs-string">&#x27;ask&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-string">&#x27;again&#x27;</span>, <span class="hljs-string">&#x27;copyAnswer&#x27;</span>, <span class="hljs-string">&#x27;startFresh&#x27;</span>, <span class="hljs-string">&#x27;burn&#x27;</span>, <span class="hljs-string">&#x27;talkDown&#x27;</span>, <span class="hljs-string">&#x27;talkMove&#x27;</span>, <span class="hljs-string">&#x27;talkUp&#x27;</span>, <span class="hljs-string">&#x27;talkCancel&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>, <span class="hljs-string">&#x27;stopSpeaking&#x27;</span>, <span class="hljs-string">&#x27;setSearch&#x27;</span>, <span class="hljs-string">&#x27;useFastModel&#x27;</span>, <span class="hljs-string">&#x27;getNaturalVoice&#x27;</span>, <span class="hljs-string">&#x27;naturalNotNow&#x27;</span>],
+  <span class="hljs-attr">actions</span>: [<span class="hljs-string">&#x27;ask&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-string">&#x27;again&#x27;</span>, <span class="hljs-string">&#x27;copyAnswer&#x27;</span>, <span class="hljs-string">&#x27;startFresh&#x27;</span>, <span class="hljs-string">&#x27;burn&#x27;</span>, <span class="hljs-string">&#x27;talkDown&#x27;</span>, <span class="hljs-string">&#x27;talkMove&#x27;</span>, <span class="hljs-string">&#x27;talkUp&#x27;</span>, <span class="hljs-string">&#x27;talkCancel&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>, <span class="hljs-string">&#x27;stopSpeaking&#x27;</span>, <span class="hljs-string">&#x27;setSearch&#x27;</span>, <span class="hljs-string">&#x27;useFastModel&#x27;</span>, <span class="hljs-string">&#x27;getNaturalVoice&#x27;</span>, <span class="hljs-string">&#x27;naturalNotNow&#x27;</span>, <span class="hljs-string">&#x27;coverProgress&#x27;</span>, <span class="hljs-string">&#x27;saveCoverProgress&#x27;</span>],
 },</code></pre></div>
 <h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
 <p><code>t(key, params)</code> returns the text for <code>key</code> from the string table. See <a href="/docs/modules/fund#t">Fund</a>.</p>
@@ -234,9 +235,13 @@
 <td><code>freeModels</code></td>
 <td><code>true</code> when the engine lists free models.</td>
 </tr>
+<tr>
+<td><code>cover</code></td>
+<td><code>true</code> when the app opens on this mode&#39;s cover (it has <code>cover()</code> and &quot;Open as a game first&quot; is on). Playful shows its game button then.</td>
+</tr>
 </tbody></table></div>
 <h3 id="nav"><code>nav</code><a class="anchor" href="#nav" aria-label="Link to this section">#</a></h3>
-<p><code>nav(name, params = {}, {replace = false})</code> opens a screen by its route name from <code>ROUTES</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/router.js"><code>public/v2/core/router.js</code></a>: <code>home</code>, <code>type</code>, <code>answer</code>, <code>add</code>, <code>more</code>, <code>funds</code>, <code>addFunds</code>, <code>model</code>, <code>voice</code>, <code>history</code>, <code>photo</code>, and the others there. <code>replace</code> replaces the current history entry instead of adding one.</p>
+<p><code>nav(name, params = {}, {replace = false})</code> opens a screen by its route name from <code>ROUTES</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/router.js"><code>public/v2/core/router.js</code></a>: <code>home</code>, <code>game</code>, <code>type</code>, <code>answer</code>, <code>add</code>, <code>more</code>, <code>funds</code>, <code>addFunds</code>, <code>model</code>, <code>voice</code>, <code>history</code>, <code>photo</code>, and the others there. <code>replace</code> replaces the current history entry instead of adding one. While the cover is on, <code>nav(&#39;game&#39;)</code> goes back to the cover at the start of the history, and <code>nav(&#39;home&#39;)</code> goes back to the home just above it, so Back from the home shows the game and Back from the game never shows the home.</p>
 <h3 id="actions"><code>actions</code><a class="anchor" href="#actions" aria-label="Link to this section">#</a></h3>
 <p>The answer and voice actions. None of them takes money out.</p>
 <div class="table-wrap"><table>
@@ -298,6 +303,14 @@
 <td><code>naturalNotNow()</code></td>
 <td>Stops offering the natural voice on this phone.</td>
 </tr>
+<tr>
+<td><code>coverProgress()</code></td>
+<td>The cover game&#39;s own record on this phone (whatever it saved last), or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>saveCoverProgress(data)</code></td>
+<td>Keeps the cover game&#39;s record, in the app&#39;s database beside the settings. Erase everything removes it.</td>
+</tr>
 </tbody></table></div>
 <h3 id="format"><code>format</code><a class="anchor" href="#format" aria-label="Link to this section">#</a></h3>
 <p>Amounts in words: <code>units</code>, <code>int</code>, <code>cost</code>, <code>plain</code>, <code>parse</code> and <code>modelPrice</code>. See <a href="/docs/modules/fund#format">Fund</a>.</p>
@@ -308,6 +321,8 @@
 <p>Required. Draws the home. <code>options</code> is <code>{sheet, open}</code> when the person opened the Add or More menu: <code>sheet</code> is the menu&#39;s element, which the mode must show over or in its home, and <code>open</code> is <code>&#39;add&#39;</code> or <code>&#39;more&#39;</code>. With no menu open it is called with no argument. Returns a screen.</p>
 <h3 id="answer"><code>answer()</code><a class="anchor" href="#answer" aria-label="Link to this section">#</a></h3>
 <p>Required. Draws the answer screen for the open conversation. Returns a screen.</p>
+<h3 id="cover"><code>cover()</code><a class="anchor" href="#cover" aria-label="Link to this section">#</a></h3>
+<p>Optional. Draws the cover: a game the app opens on, with the home behind it (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PLAYFUL.md"><code>docs/PLAYFUL.md</code></a>, The cover game). Returns a screen, which shows at the route <code>game</code>. A mode with a cover opens on it while &quot;Open as a game first&quot; is on (on by default; More, Mode and look shows the switch for Playful): fresh, after a reload, and whenever the app comes back from the background. The cover goes to the home with <code>nav(&#39;home&#39;)</code>. While it shows it should show nothing of the app: Playful&#39;s sets the page&#39;s title and icon to the game&#39;s and holds the app&#39;s short messages until the home opens.</p>
 <h3 id="ready"><code>ready()</code><a class="anchor" href="#ready" aria-label="Link to this section">#</a></h3>
 <p>Optional. Loads what the mode&#39;s screens need. The app calls it before it first draws the mode, when the person picks it and at start on a phone where it is chosen, and draws Default until it resolves. A rejection leaves Default on; when the person just picked the mode, the app says it could not load. Playful keeps its screens, stylesheet and typefaces out of the first paint this way.</p>
 <h3 id="the-screen">The screen<a class="anchor" href="#the-screen" aria-label="Link to this section">#</a></h3>
@@ -340,7 +355,7 @@
 <ol>
 <li>The registry calls <code>create(inputs)</code> once when the app starts, with the looks, before the first screen is drawn.</li>
 <li>A chosen mode other than Default: the app calls <code>ready()</code> before the first frame.</li>
-<li>On every navigation to the home, the Add or More menu, or the answer, the app calls <code>home(options)</code> or <code>answer()</code> again and calls <code>destroy()</code> on the screen before.</li>
+<li>On every navigation to the home, the Add or More menu, the answer or the cover, the app calls <code>home(options)</code>, <code>answer()</code> or <code>cover()</code> again and calls <code>destroy()</code> on the screen before.</li>
 <li>While a screen shows, the app calls its <code>update()</code> after every change of state.</li>
 </ol>
 <h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
@@ -411,7 +426,7 @@
 }</code></pre></div>
 <p>To try it, copy the folder to <code>public/v2/modules/mode/plain/</code>, add <code>{ kind: &#39;mode&#39;, folder: &#39;plain&#39; }</code> to <code>BUNDLED</code>, run <code>node scripts/v2-preload.ts</code>, and pick Plain in More, Mode and look.</p>
 <h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
-<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/playful.test.ts"><code>test/unit/v2/playful.test.ts</code></a> tests Playful&#39;s pure rules; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/playful.ui.test.ts"><code>test/ui/playful.ui.test.ts</code></a> picks Playful in Chrome and walks its home and answer.</p>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/playful.test.ts"><code>test/unit/v2/playful.test.ts</code></a> tests Playful&#39;s pure rules and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/garden.test.ts"><code>test/unit/v2/garden.test.ts</code></a> its cover game&#39;s; <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/playful.ui.test.ts"><code>test/ui/playful.ui.test.ts</code></a> picks Playful in Chrome and walks its home and answer, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/game.ui.test.ts"><code>test/ui/game.ui.test.ts</code></a> plays the cover game and opens the helper behind it.</p>
 
 <footer class="foot"><p>Forge AI. Generated from <code>docs/modules/mode.md</code>. <a href="#top">Back to the top</a></p></footer>
 </main>

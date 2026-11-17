@@ -36,6 +36,15 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
   const modes = el('div', { class: 'mode-list', role: 'radiogroup', 'aria-label': t('look.mode') });
   const group = el('div', { class: 'look-list', role: 'radiogroup', 'aria-label': t('look.look') });
   const follow = el('button', { type: 'button', class: 'setting-row', id: 'followSystem', role: 'switch', 'aria-label': t('look.followLabel') });
+  // Playful only: open on its cover game, the helper behind it (docs/PLAYFUL.md), and what that does not hide.
+  const gameFirst = el('button', { type: 'button', class: 'setting-row', id: 'gameFirst', role: 'switch', 'aria-label': t('look.gameFirstLabel') });
+  gameFirst.addEventListener('click', () => actions.setGameFirst(S.settings.gameFirst === false));
+  const coverNote = el(
+    'div',
+    { class: 'cover-note', id: 'coverNote' },
+    el('p', { class: 'hint' }, el('span', { text: t('look.gameFirstHow') }), el('span', { class: 'sr-only', text: ` ${t('look.gameFirstReader')}` })),
+    el('p', { class: 'cover-warn', id: 'coverWarn' }, icon('eye', 18), el('span', { text: t('look.coverWarn') })),
+  );
   const draw = () => {
     const using = S.settings.mode ?? 'default';
     modes.replaceChildren(
@@ -64,6 +73,12 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
         );
       }),
     );
+    const playful = (S.settings.mode ?? 'default') === 'playful';
+    const on = S.settings.gameFirst !== false;
+    gameFirst.hidden = coverNote.hidden = !playful;
+    gameFirst.setAttribute('aria-checked', String(on));
+    gameFirst.replaceChildren(el('span', {}, icon('grid', 20), el('span', { text: t('look.gameFirst') })), el('span', { class: 'value', text: on ? t('look.on') : t('look.off') }));
+    coverNote.querySelector('.hint').hidden = !on;
     follow.setAttribute('aria-checked', String(!!S.settings.followSystem));
     follow.replaceChildren(el('span', {}, icon('phone', 20), el('span', { text: t('look.follow') })), el('span', { class: 'value', text: S.settings.followSystem ? t('look.on') : t('look.off') }));
   };
@@ -78,6 +93,8 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
       { class: 'scroll' },
       el('h2', { class: 'caps', text: t('look.mode') }),
       modes,
+      gameFirst,
+      coverNote,
       // Classic is the v1 chat page, a link rather than a mode module.
       // The Android app carries only this app, so it has no Classic to open.
       native ? null : el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),

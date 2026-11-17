@@ -51,7 +51,7 @@ Each app module is a **plugin**: a folder with a manifest and code, loaded from 
 | `look` | Colours and type | design tokens | Light, Dark, Midnight |
 | `mode` | The main layout | a home screen plus an answer screen | Default (rings), Classic (chat), Playful |
 
-Corrections, 2026-11-16: Classic is a link to the v1 chat page in More, Mode and look, not a `mode` module. Of the `filter` default set, voice changing is not built. `cover`, `guides`, `protect` and `language` are in the registry's `KINDS`, but no module of those kinds exists and no screen uses one. The built modules are listed in [`docs/modules/list.md`](modules/list.md).
+Corrections, 2026-11-16: Classic is a link to the v1 chat page in More, Mode and look, not a `mode` module. Of the `filter` default set, voice changing is not built. `cover`, `guides`, `protect` and `language` are in the registry's `KINDS`, but no module of those kinds exists and no screen uses one. The first cover game, Pip's Garden, is built inside the Playful mode module (`public/v2/modules/mode/playful/games/garden/`), with an interface made to move to a `cover` module later ([`docs/PLAYFUL.md`](PLAYFUL.md), Add a cover game). The built modules are listed in [`docs/modules/list.md`](modules/list.md).
 
 ### The manifest
 

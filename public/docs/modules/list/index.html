@@ -585,11 +585,11 @@
 <li><strong>Private:</strong> yes. It draws on the phone.</li>
 </ul>
 <h3 id="playful">Playful<a class="anchor" href="#playful" aria-label="Link to this section">#</a></h3>
-<p>Pip, bright colours and big buttons on the home and the answer screen, for people who read poorly and for children.</p>
+<p>Pip, bright colours and big buttons on the home and the answer screen, for people who read poorly and for children. It opens on a cover game, Pip&#39;s Garden, with the helper behind it: hold Pip 3 seconds to open the helper. &quot;Open as a game first&quot; in Mode and look turns the game off.</p>
 <ul>
 <li><strong>Id:</strong> <code>forge.mode.playful</code>, known in the app as <code>playful</code>.</li>
 <li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode/playful"><code>public/v2/modules/mode/playful/</code></a></li>
-<li><strong>Needs:</strong> the same inputs as Default. Its <code>ready()</code> loads its screens, <code>playful.css</code> and two typefaces, Baloo 2 and Nunito, from <code>public/v2/vendor/</code>, once Playful is chosen.</li>
+<li><strong>Needs:</strong> the same inputs as Default, and the game&#39;s record (<code>coverProgress</code>, <code>saveCoverProgress</code>). Its <code>ready()</code> loads its screens, the game, <code>playful.css</code>, the game&#39;s stylesheet and two typefaces, Baloo 2 and Nunito, from <code>public/v2/vendor/</code>, once Playful is chosen.</li>
 <li><strong>Works on:</strong> the website and both apps. Offline, it opens only once it has been loaded before.</li>
 <li><strong>Costs:</strong> nothing. Questions asked from it cost what the model costs.</li>
 <li><strong>Private:</strong> yes. It draws on the phone.</li>

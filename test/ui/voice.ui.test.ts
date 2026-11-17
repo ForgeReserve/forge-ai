@@ -206,6 +206,9 @@ describe('hold to talk', () => {
         await page.waitForSelector('#mode-playful');
         await page.click('#mode-playful');
         await expect.poll(() => page.textContent('#mode-playful')).toContain('On now.');
+        // The helper's home, not the cover game it opens on by default (docs/PLAYFUL.md).
+        await page.click('#gameFirst');
+        await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
         await page.goto(`${g.url}/v2/#/`);
         await page.reload();
         await page.waitForSelector('[data-screen=home][data-mode=playful]');
