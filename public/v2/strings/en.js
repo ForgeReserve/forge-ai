@@ -910,6 +910,7 @@ export default {
   'fund.onchain.get': 'Get a deposit address',
   'fund.onchain.getting': 'Getting a new address',
   'fund.onchain.satOnly': 'Not for dollar funds. On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.',
+  'fund.onchain.useLightning': 'Use Lightning',
   'fund.onchain.min': 'Least you can send: {amount}',
   'fund.onchain.confirmations': 'Confirmations needed: {count}',
   'fund.onchain.watching': 'Watching the address',

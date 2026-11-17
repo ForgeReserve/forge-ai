@@ -494,6 +494,11 @@ describe('v2 money paths in a phone-sized browser', () => {
       await usd.page.waitForSelector('[data-fund=onchain]');
       expect(await usd.page.textContent('[data-fund=onchain] .fund-body')).toBe('Not for dollar funds. On-chain deposits add to a sat balance. Your funds are in US dollars, so use Lightning or eCash.');
       expect(await usd.page.locator('#onchainGet').count()).toBe(0);
+      // Never a dead end (owner, 2026-11-17: "the on-chain bitcoin option doesn't seem to have any
+      // functionality"): the one way forward is a button, and it opens Lightning.
+      await usd.page.click('#onchainUseLightning');
+      await usd.page.waitForSelector('[data-fund=lightning]');
+      expect(usd.errors).toEqual([]);
       await usd.ctx.close();
     } finally {
       await go.close();

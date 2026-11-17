@@ -9,9 +9,13 @@ export function create(inputs) {
     group: 'depends',
     icon: 'chain',
     available: (methods) => !!methods?.onchain?.enabled,
-    view({ done }) {
+    view({ done, open }) {
       const O = wallet.methods()?.onchain ?? {};
-      if (wallet.key() && wallet.unit() && wallet.unit() !== 'sat') return { node: ui.el('div', { class: 'scroll fund-body' }, ui.sayEl('p', {}, t('fund.onchain.satOnly'))) };
+      // A dollar balance cannot take a deposit in sats: say so, with the one way forward the engine has.
+      if (wallet.key() && wallet.unit() && wallet.unit() !== 'sat') {
+        const next = wallet.methods()?.lightning?.enabled ? ui.el('button', { type: 'button', class: 'btn primary block', id: 'onchainUseLightning', onclick: () => open('lightning') }, ui.icon('bolt', 20), ui.el('span', { text: t('fund.onchain.useLightning') })) : null;
+        return { node: ui.el('div', { class: 'fund-view' }, ui.el('div', { class: 'scroll fund-body' }, ui.sayEl('p', {}, t('fund.onchain.satOnly'))), ui.el('div', { class: 'foot' }, next)) };
+      }
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
       const go = ui.el('button', { type: 'button', class: 'btn primary block', id: 'onchainGet' }, ui.icon('qr', 20), ui.el('span', { text: t('fund.onchain.get') }));
