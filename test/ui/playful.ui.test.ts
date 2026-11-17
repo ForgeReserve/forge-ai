@@ -97,6 +97,8 @@ async function choose(page: Page, mode: string) {
   if (mode === 'playful' && (await page.getAttribute('#gameFirst', 'aria-checked')) === 'true') {
     await page.click('#gameFirst');
     await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
+    // The settings are written to IndexedDB without waiting: give the write a moment before the page goes.
+    await page.waitForTimeout(500);
   }
 }
 
