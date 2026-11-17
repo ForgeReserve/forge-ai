@@ -13,7 +13,7 @@
 // neighbour, or tap one then the other. With the keyboard: the arrow keys move between the tiles, Enter or
 // Space picks one up, an arrow key then swaps it that way, and Escape puts it down. What happened is said
 // in a live region. With reduced motion nothing slides: each step shows at once.
-import { isNeighbour, move, newGame, restore, SIZE, step, toGo } from './logic.js';
+import { goalFor, isNeighbour, move, newGame, restore, SIZE, step, toGo, VERSION } from './logic.js';
 
 export const id = 'garden';
 /** The string key of the game's name, which is also the page's title while it shows. */
@@ -76,6 +76,10 @@ export function mount(node, { t, el, reduced, pip, progress }) {
   const level = el('p', { class: 'gd-level', id: 'gameLevel' });
   const moves = el('span', { class: 'gd-stat', id: 'gameMoves' });
   const flowers = el('span', { class: 'gd-stat', id: 'gameFlowers' });
+  // The level's goal under the board: its tile and how many are left (the screen reader hears its name).
+  const goalTile = el('span', { class: 'gd-mini', 'aria-hidden': 'true' });
+  const goalName = el('span', { class: 'sr-only' });
+  const goalLeft = el('span', { class: 'gd-stat', id: 'gameGoalLeft' });
   const layer = el('div', { class: 'gd-tiles', 'aria-hidden': 'true' });
   const cellsBox = el('div', { class: 'gd-cells', id: 'gameCells', role: 'group', 'aria-label': t('garden.board', { size }) });
   const cells = Array.from({ length: n }, (_, i) => el('button', { type: 'button', class: 'gd-cell', 'data-i': String(i), tabindex: i === 0 ? '0' : '-1' }));
@@ -92,7 +96,13 @@ export function mount(node, { t, el, reduced, pip, progress }) {
     el('header', { class: 'gd-head' }, el('h1', { class: 'gd-title', text: t('garden.title') }), level),
     el('p', { class: 'gd-how', text: t('garden.how') }),
     board,
-    el('div', { class: 'gd-stats' }, el('span', { class: 'gd-stat-wrap' }, mark('moves'), moves), el('span', { class: 'gd-stat-wrap' }, mark('flowers'), flowers)),
+    el(
+      'div',
+      { class: 'gd-stats' },
+      el('span', { class: 'gd-stat-wrap' }, mark('moves'), moves),
+      el('span', { class: 'gd-stat-wrap gd-goal', id: 'gameGoal' }, goalTile, goalName, goalLeft),
+      el('span', { class: 'gd-stat-wrap' }, mark('flowers'), flowers),
+    ),
     el('div', { class: 'gd-card' }, pip.node, el('div', { class: 'gd-words' }, say, sub), go),
     live,
   );
@@ -134,17 +144,27 @@ export function mount(node, { t, el, reduced, pip, progress }) {
 
   // ---------------------------------------------------------------- Pip's card and the counts
 
-  /** How many matches are left, in words: "Three more matches to bloom." */
+  /** The level's goal tile kind. */
+  const goalKind = () => goalFor(game.level).kind;
+  /** How many of the level's tiles are left, in words up to ten: "Three more suns to bloom." */
   const left = () => {
     const k = toGo(game);
-    if (k === 1) return t('garden.toGoOne');
-    return t('garden.toGo', { count: k <= 10 ? t(`garden.num.${k}`) : String(k) });
+    if (k === 1) return t(`garden.toGoOne.${goalKind()}`);
+    return t(`garden.toGo.${goalKind()}`, { count: k <= 10 ? t(`garden.num.${k}`) : String(k) });
   };
 
   const show = () => {
     level.textContent = t('garden.level', { n: game.level });
     moves.textContent = t('garden.moves', { n: Math.max(0, game.moves) });
     flowers.textContent = t('garden.flowers', { n: game.flowers });
+    const kind = goalKind();
+    if (goalTile.dataset.kind !== String(kind)) {
+      goalTile.className = `gd-mini k${kind}`;
+      goalTile.dataset.kind = String(kind);
+      goalTile.replaceChildren(shape(kind));
+    }
+    goalName.textContent = t(`garden.goal.${kind}`);
+    goalLeft.textContent = String(toGo(game));
     say.textContent = t(card.say);
     sub.textContent = card.sub === 'left' ? left() : card.sub ? t(card.sub, { n: game.level }) : '';
     sub.hidden = !sub.textContent;
@@ -176,7 +196,7 @@ export function mount(node, { t, el, reduced, pip, progress }) {
     live.textContent = '';
     setTimeout(() => !dead && (live.textContent = text), 30);
   };
-  const keep = (g = game) => progress.save({ v: 1, level: g.level, flowers: g.flowers, moves: g.moves, made: g.made, board: g.board.slice() });
+  const keep = (g = game) => progress.save({ v: VERSION, level: g.level, flowers: g.flowers, moves: g.moves, got: g.got, board: g.board.slice() });
 
   // ---------------------------------------------------------------- moves
 
@@ -249,7 +269,9 @@ export function mount(node, { t, el, reduced, pip, progress }) {
       card = { say: 'garden.lost', sub: 'garden.lostSub', mood: 'oops', button: 'again' };
     } else {
       keep();
-      card = { say: res.shuffled ? 'garden.shuffle' : chain ? 'garden.chain' : 'garden.nice', sub: 'left', mood: res.shuffled ? 'thinking' : 'reading', button: null };
+      // A swap that matched none of the level's tiles still grows flowers; Pip points at the goal.
+      const line = res.shuffled ? 'garden.shuffle' : !res.got ? `garden.find.${goalKind()}` : chain ? 'garden.chain' : 'garden.nice';
+      card = { say: line, sub: 'left', mood: res.shuffled || !res.got ? 'thinking' : 'reading', button: null };
     }
     show();
     tell(`${t(card.say)} ${sub.textContent} ${t('garden.flowers', { n: game.flowers })}.`);

@@ -11,10 +11,13 @@ import { pastFirstRun } from './firstrun-seen.ts';
 // reload and the app put away and brought back show the game; "Open as a game first" off opens the helper;
 // the game screen shows nothing of the app; the fit at 360 by 640 and 412 by 915; play with the keyboard;
 // messages held until the helper opens; Erase everything removes the game's record; and Default fetches
-// nothing of the game. GAME_SHOTS=1 also saves screenshots to .tmp/game-shots.
+// nothing of the game. No test leans on luck: one move can never finish a level, and where a test needs a
+// level done or lost it seeds the game through its record, with a seeded board. GAME_SHOTS=1 also saves
+// screenshots to .tmp/game-shots, among them a middle and a late level at 360 by 640 and 390 by 844.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 const SHOTS = process.env.GAME_SHOTS ? resolve(import.meta.dirname, '../../.tmp/game-shots') : null;
 const G: any = await import('../../public/v2/modules/mode/playful/games/garden/logic.js' as string);
+const { seeded } = await import('../../scripts/garden-sim.ts');
 
 let g: Gateway;
 let browser: Browser;
@@ -97,6 +100,31 @@ function badSwap(b: number[]): [number, number] {
   }
   throw new Error('no swap without a match');
 }
+/** A swap on board `b` that matches tiles of `kind`, or null. */
+function goalMove(b: number[], kind: number): [number, number] | null {
+  for (let i = 0; i < 25; i++) for (const d of ['right', 'down']) {
+    const j = G.step(i, d);
+    if (j >= 0 && G.canSwap(b, i, j) && G.goalTiles(G.findRuns(G.swapped(b, i, j)), kind) > 0) return [i, j];
+  }
+  return null;
+}
+/** A board from a seeded random source (the same every run) with a swap that matches tiles of `kind`. */
+function goalBoard(kind: number): { board: number[]; swap: [number, number] } {
+  for (let seed = 1; ; seed++) {
+    const board = G.newBoard(seeded(seed));
+    const swap = goalMove(board, kind);
+    if (swap) return { board, swap };
+  }
+}
+/** Puts a game in the app's database as the game keeps it (the page reloads after to take it). */
+const keepGame = (page: Page, game: object) =>
+  page.evaluate(async (game) => {
+    const db: IDBDatabase = await new Promise((r) => (indexedDB.open('forge2', 1).onsuccess = (e: any) => r(e.target.result)));
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(game, 'game');
+    await new Promise((r) => (tx.oncomplete = r));
+    db.close();
+  }, game);
 /** Drags from one cell's middle onto another's. */
 async function drag(page: Page, a: number, b: number) {
   const ra = (await page.locator(cell(a)).boundingBox())!;
@@ -155,7 +183,11 @@ describe("Pip's Garden", () => {
     expect(await page.locator('.gd-tile').count()).toBe(25);
     expect(await textOf(page, '#gameMoves')).toBe('Moves 15');
     expect(await textOf(page, '#gameFlowers')).toBe('Flowers 0');
-    expect(await textOf(page, '#gameSub')).toBe('Five more matches to bloom.');
+    expect(await textOf(page, '#gameSub')).toBe('Ten more suns to bloom.');
+    // The goal under the board: a sun tile and how many are left, named for a screen reader.
+    expect(await textOf(page, '#gameGoalLeft')).toBe('10');
+    expect(await textOf(page, '#gameGoal')).toBe('Suns to match:10');
+    expect(await page.$eval('#gameGoal .gd-mini', (n) => [n.className, getComputedStyle(n).backgroundColor])).toEqual(['gd-mini k0', 'rgb(255, 210, 63)']);
     expect(await page.getAttribute('#pipBtn', 'aria-label')).toBe('Pip');
     // Four colours, each with its own picture.
     const colours = await page.$$eval('.gd-tile', (ts) => [...new Set(ts.map((t) => getComputedStyle(t).backgroundColor))].sort());
@@ -196,80 +228,86 @@ describe("Pip's Garden", () => {
     await drag(page, a, b);
     await expect.poll(() => count(page, '#gameMoves'), { timeout: 10_000 }).toBe(14);
     await expect.poll(() => count(page, '#gameFlowers'), { timeout: 10_000 }).toBeGreaterThanOrEqual(30);
-    // A long chain can make all five matches at once and finish the level.
-    expect(['Nice move!', 'Wow, a chain!', 'No moves left. New tiles!', 'The garden bloomed!']).toContain(await textOf(page, '#gameSay'));
-    expect(await textOf(page, '#gameSub')).toMatch(/^(One|Two|Three|Four) more match(es)? to bloom\.$|^Level 1 done\.$/);
+    // Only the suns the swap itself matched count (at most 9), so one move never finishes the level. A swap
+    // that matched no sun has Pip point at them.
+    expect(['Nice move!', 'Wow, a chain!', 'No moves left. New tiles!', 'Match the suns!']).toContain(await textOf(page, '#gameSay'));
+    expect(await textOf(page, '#gameSub')).toMatch(/^(One more sun|(Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten) more suns) to bloom\.$/);
+    expect(await count(page, '#gameGoalLeft')).toBeGreaterThanOrEqual(1);
     const after = await boardOf(page);
     expect(G.findRuns(after)).toEqual([]);
     expect(G.hasMove(after)).toBe(true);
     // The tiles on show are the board the cells say.
     await expect.poll(() => page.$$eval('.gd-tile:not(.gone)', (ts) => ts.length)).toBe(25);
     await shot(page, 'game-412x915-mid.png');
-    // The progress is kept: a reload opens the same level and flowers.
+    // The progress is kept: a reload opens the same board, moves, goal and flowers.
     const flowers = await count(page, '#gameFlowers');
-    // On a lucky board that one move made all five matches: the level is done, and what is kept is the
-    // next level, with its own board and moves.
-    const bloomed = (await textOf(page, '#gameSub')) === 'Level 1 done.';
+    const left = await textOf(page, '#gameGoalLeft');
     await page.reload();
     await onGame(page);
     expect(await count(page, '#gameFlowers')).toBe(flowers);
-    if (bloomed) {
-      expect(await count(page, '#gameLevel')).toBe(2);
-      expect(await count(page, '#gameMoves')).toBe(15);
-    } else {
-      expect(await count(page, '#gameMoves')).toBe(14);
-      expect(await boardOf(page)).toEqual(after);
-    }
+    expect(await count(page, '#gameMoves')).toBe(14);
+    expect(await textOf(page, '#gameGoalLeft')).toBe(left);
+    expect(await boardOf(page)).toEqual(after);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
 
-  it('a level is done when its matches are made, and out of moves offers Play again', async () => {
+  it("a level is done when its tiles are matched, and out of moves offers Play again", async () => {
     const { ctx, page, errors } = await phone();
-    // Four of level 1's five matches made already, and one move left.
-    const board = G.newBoard(Math.random);
-    await page.evaluate(async (game) => {
-      const db: IDBDatabase = await new Promise((r) => (indexedDB.open('forge2', 1).onsuccess = (e: any) => r(e.target.result)));
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put(game, 'game');
-      await new Promise((r) => (tx.oncomplete = r));
-      db.close();
-    }, { v: 1, level: 1, flowers: 120, moves: 1, made: 4, board });
+    // Nine of level 1's ten suns matched already, one move left, and a board with a sun to match.
+    const { board, swap } = goalBoard(G.goalFor(1).kind);
+    await keepGame(page, { v: 2, level: 1, flowers: 120, moves: 1, got: 9, board });
     await page.reload();
     await onGame(page);
-    expect(await textOf(page, '#gameSub')).toBe('One more match to bloom.');
-    const [a, b] = G.findMove(board);
-    await drag(page, a, b);
+    expect(await textOf(page, '#gameSub')).toBe('One more sun to bloom.');
+    expect(await textOf(page, '#gameGoalLeft')).toBe('1');
+    await drag(page, ...swap);
     await page.waitForSelector('#gameNext');
     expect(await textOf(page, '#gameSay')).toBe('The garden bloomed!');
     expect(await textOf(page, '#gameSub')).toBe('Level 1 done.');
+    expect(await textOf(page, '#gameGoalLeft')).toBe('0');
     await shot(page, 'game-412x915-level-done.png');
     await page.click('#gameNext');
     await expect.poll(() => textOf(page, '#gameLevel')).toBe('Level 2');
     expect(await textOf(page, '#gameMoves')).toBe('Moves 15');
-    expect(await textOf(page, '#gameSub')).toBe('Six more matches to bloom.');
+    expect(await textOf(page, '#gameSub')).toBe('11 more leaves to bloom.');
+    expect(await page.getAttribute('#gameGoal .gd-mini', 'class')).toBe('gd-mini k1');
 
-    // Out of moves at level 2.
+    // Out of moves at level 2: its last move cannot match eleven leaves.
     const b2 = await boardOf(page);
-    await page.evaluate(async (game) => {
-      const db: IDBDatabase = await new Promise((r) => (indexedDB.open('forge2', 1).onsuccess = (e: any) => r(e.target.result)));
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put(game, 'game');
-      await new Promise((r) => (tx.oncomplete = r));
-      db.close();
-    }, { v: 1, level: 2, flowers: 300, moves: 1, made: 0, board: b2 });
+    await keepGame(page, { v: 2, level: 2, flowers: 300, moves: 1, got: 0, board: b2 });
     await page.reload();
     await onGame(page);
     const [c, d] = G.findMove(b2);
     await drag(page, c, d);
-    // One move can chain into several matches: if it made all six, the level is done instead.
-    await page.waitForSelector('#gameAgain, #gameNext');
-    if ((await textOf(page, '#gameSay')) !== 'The garden bloomed!') {
-      expect(await textOf(page, '#gameSay')).toBe('Out of moves.');
-      await page.click('#gameAgain');
-      await expect.poll(() => textOf(page, '#gameMoves')).toBe('Moves 15');
-      expect(await textOf(page, '#gameLevel')).toBe('Level 2');
-    }
+    await page.waitForSelector('#gameAgain');
+    expect(await textOf(page, '#gameSay')).toBe('Out of moves.');
+    expect(await textOf(page, '#gameSub')).toBe('Try this level again.');
+    const kept = await count(page, '#gameFlowers');
+    expect(kept).toBeGreaterThan(300);
+    await page.click('#gameAgain');
+    await expect.poll(() => textOf(page, '#gameMoves')).toBe('Moves 15');
+    expect(await textOf(page, '#gameLevel')).toBe('Level 2');
+    expect(await textOf(page, '#gameGoalLeft')).toBe('11');
+    // The flowers are kept.
+    expect(await count(page, '#gameFlowers')).toBe(kept);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  it('a game kept under the first rules opens at its level with its flowers, on a new board', async () => {
+    const { ctx, page, errors } = await phone();
+    // The first rules' record: level 4, 1,080 flowers, matches made.
+    await keepGame(page, { v: 1, level: 4, flowers: 1080, moves: 9, made: 3, board: G.newBoard(seeded(5)) });
+    await page.reload();
+    await onGame(page);
+    expect(await textOf(page, '#gameLevel')).toBe('Level 4');
+    expect(await textOf(page, '#gameFlowers')).toBe('Flowers 1080');
+    expect(await textOf(page, '#gameMoves')).toBe('Moves 15');
+    expect(await textOf(page, '#gameSub')).toBe('13 more drops to bloom.');
+    const b = await boardOf(page);
+    expect(G.findRuns(b)).toEqual([]);
+    expect(G.hasMove(b)).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
@@ -396,7 +434,7 @@ describe("Pip's Garden", () => {
     it(`fits ${viewport.width} by ${viewport.height}: the whole board and Pip in view, 48 px targets, nothing scrolls`, async () => {
       const { ctx, page, errors } = await phone({ viewport });
       await page.evaluate(() => document.fonts.ready);
-      for (const sel of ['.gd-title', '#gameLevel', '#gameBoard', '#gameMoves', '#gameFlowers', '#pipBtn', '.gd-card']) expect(await inView(page, sel), sel).toBe(true);
+      for (const sel of ['.gd-title', '#gameLevel', '#gameBoard', '#gameMoves', '#gameGoal', '#gameFlowers', '#pipBtn', '.gd-card']) expect(await inView(page, sel), sel).toBe(true);
       const sizes = await page.$$eval('.gd-cell, #pipBtn', (n) => n.map((x) => Math.min(x.getBoundingClientRect().width, x.getBoundingClientRect().height)));
       expect(Math.min(...sizes)).toBeGreaterThanOrEqual(48);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight)).toBe(true);
@@ -406,17 +444,22 @@ describe("Pip's Garden", () => {
         await drag(page, a, b);
         await expect.poll(() => count(page, '#gameMoves'), { timeout: 10_000 }).toBe(14);
         await shot(page, `game-${viewport.width}x${viewport.height}-mid.png`);
-        await page.evaluate(async (game) => {
-          const db: IDBDatabase = await new Promise((r) => (indexedDB.open('forge2', 1).onsuccess = (e: any) => r(e.target.result)));
-          const tx = db.transaction('kv', 'readwrite');
-          tx.objectStore('kv').put(game, 'game');
-          await new Promise((r) => (tx.oncomplete = r));
-          db.close();
-        }, { v: 1, level: 7, flowers: 340, moves: 12, made: 10, board: await boardOf(page) });
+        // A late level, as it opens, with a six-figure score: the three counts still fit on one line.
+        await keepGame(page, { v: 2, level: 18, flowers: 123450, moves: 15, got: 0, board: G.newBoard(seeded(18)) });
         await page.reload();
         await onGame(page);
-        const [c, d] = G.findMove(await boardOf(page));
-        await drag(page, c, d);
+        expect(await textOf(page, '#gameSub')).toBe('24 more leaves to bloom.');
+        expect(await page.$eval('.gd-stats', (n) => n.scrollWidth <= n.clientWidth)).toBe(true);
+        for (const sel of ['#gameMoves', '#gameGoal', '#gameFlowers']) expect(await inView(page, sel), sel).toBe(true);
+        await shot(page, `game-${viewport.width}x${viewport.height}-level-18.png`);
+        // The design's middle level, Level 7 with 12 moves left, one flower short of its goal.
+        const { board, swap } = goalBoard(G.goalFor(7).kind);
+        await keepGame(page, { v: 2, level: 7, flowers: 340, moves: 12, got: G.goalFor(7).count - 1, board });
+        await page.reload();
+        await onGame(page);
+        for (const sel of ['#gameBoard', '#gameGoal', '#pipBtn', '.gd-card']) expect(await inView(page, sel), sel).toBe(true);
+        await shot(page, `game-${viewport.width}x${viewport.height}-level-7.png`);
+        await drag(page, ...swap);
         await page.waitForSelector('#gameNext');
         await shot(page, `game-${viewport.width}x${viewport.height}-level-done.png`);
         await holdPip(page, 3200);
@@ -446,8 +489,7 @@ describe("Pip's Garden", () => {
     await expect.poll(() => textOf(page, '#gameLive')).toMatch(/picked\. Choose a tile next to it/);
     await page.keyboard.press(dir);
     await expect.poll(() => count(page, '#gameMoves'), { timeout: 10_000 }).toBe(14);
-    // A long chain can even finish the level.
-    await expect.poll(() => textOf(page, '#gameLive'), { timeout: 10_000 }).toMatch(/to bloom\.|New tiles|Level 1 done/);
+    await expect.poll(() => textOf(page, '#gameLive'), { timeout: 10_000 }).toMatch(/more suns? to bloom\. Flowers \d+\.$/);
     // Escape puts a picked tile down.
     await page.focus(cell(12));
     await page.keyboard.press(' ');
@@ -488,10 +530,9 @@ describe("Pip's Garden", () => {
         db.close();
         return v;
       });
-    // The move is kept (a lucky board finishes level 1 with it, and then the next level is what is kept).
+    // The move is kept.
     const saved: any = await kept();
-    expect(saved?.v).toBe(1);
-    expect([1, 2]).toContain(saved.level);
+    expect(saved).toMatchObject({ v: 2, level: 1, moves: 14 });
     expect(await page.evaluate(() => localStorage.getItem('forge2.cover'))).toContain("Pip's Garden");
     await page.evaluate(() => {
       const p = document.querySelector('#pipBtn') as HTMLElement;

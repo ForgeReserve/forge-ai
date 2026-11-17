@@ -4,13 +4,26 @@
 //
 // A board is a flat array of SIZE * SIZE tile kinds (0 to KINDS - 1), row by row from the top. Every
 // function that needs chance takes rand(), any function that returns a number from 0 up to 1 (Math.random
-// in the app). A game is {level, flowers, moves, made, board}: the level, the flowers grown in all (the
-// score), the moves left in this level, the matches made in it, and the board.
+// in the app). A game is {level, flowers, moves, got, board}: the level, the flowers grown in all (the
+// score), the moves left in this level, the tiles of the level's kind the player has matched in it, and
+// the board.
+//
+// Each level asks for so many tiles of one kind ("Match ten suns") within MOVES moves. Only the tiles the
+// player's own swap matches count; a chain after it grows flowers but not the goal. One swap can match at
+// most 2 * SIZE - 1 tiles of a kind (a row and a column through the cell it moved a tile to: 9), and every
+// goal is 10 or more, so no level is won in one move. GOALS sets how hard each level is: scripts/garden-sim.ts measures
+// it, and test/unit/v2/garden.test.ts keeps it in its bands (docs/PLAYFUL.md, Tuning the difficulty).
 
 /** Tiles on a side. A builder can make the board bigger or smaller here: the screen follows it. */
 export const SIZE = 5;
 /** Tile kinds: sun, leaf, flower and drop (yellow, green, coral and sky on the screen). */
 export const KINDS = 4;
+/** Moves in every level. */
+export const MOVES = 15;
+/** Tiles of the level's kind to match, level by level from level 1; the levels after keep the last. */
+export const GOALS = [10, 11, 12, 13, 15, 16, 17, 19, 20, 22, 22, 23, 23, 23, 24];
+/** The shape of the game kept on the phone. 1 was the first rules' (a count of matches, chains too). */
+export const VERSION = 2;
 /** The shortest run that matches. */
 export const RUN = 3;
 /** Flowers for each tile cleared, and the extra for each tile past three in one run. */
@@ -168,48 +181,53 @@ export function flowersFor(runs, chain = 1) {
   return runs.reduce((sum, r) => sum + r.cells.length * PER_TILE + Math.max(0, r.cells.length - RUN) * LONG_RUN, 0) * chain;
 }
 
-/**
- * A level's goal: so many matches (each run counts one, chains too) within so many moves. It grows by
- * one match a level, from five at level 1, to at most 24; there are 15 moves, and one more every fifth
- * level.
- */
+/** A level's goal: the kind to match (sun, leaf, flower, drop, then round again), how many, and the moves. */
 export function goalFor(level) {
   const n = Math.max(1, Math.floor(level) || 1);
-  return { matches: Math.min(24, 4 + n), moves: 15 + Math.floor(n / 5) };
+  return { kind: (n - 1) % KINDS, count: GOALS[Math.min(n, GOALS.length) - 1], moves: MOVES };
+}
+
+/** How many cells of `kind` these runs hold (a tile in two runs counts once). */
+export function goalTiles(runs, kind) {
+  const cells = new Set();
+  for (const r of runs) if (r.kind === kind) for (const c of r.cells) cells.add(c);
+  return cells.size;
 }
 
 /** A new game at `level`, with the flowers grown so far. */
 export function newGame(level = 1, flowers = 0, rand = Math.random, size = SIZE, kinds = KINDS) {
   const lv = Math.max(1, Math.floor(level) || 1);
-  return { level: lv, flowers: Math.max(0, Math.floor(flowers) || 0), moves: goalFor(lv).moves, made: 0, board: newBoard(rand, size, kinds) };
+  return { level: lv, flowers: Math.max(0, Math.floor(flowers) || 0), moves: goalFor(lv).moves, got: 0, board: newBoard(rand, size, kinds) };
 }
 
-/** Matches still to make in this level (0 once it is done). */
-export const toGo = (game) => Math.max(0, goalFor(game.level).matches - game.made);
+/** Tiles still to match in this level (0 once it is done). */
+export const toGo = (game) => Math.max(0, goalFor(game.level).count - game.got);
 
-/** 'won' once the level's matches are made, 'lost' when the moves ran out first, else null. */
+/** 'won' once the level's tiles are matched, 'lost' when the moves ran out first, else null. */
 export const outcome = (game) => (toGo(game) === 0 ? 'won' : game.moves <= 0 ? 'lost' : null);
 
 /**
  * One move: swap a and b. An invalid swap (not neighbours, no run, or the level is over) is {ok: false}
- * and costs nothing. A valid one clears its runs and the chain after them, takes a move, counts the
- * matches and the flowers, and reshuffles a board left with no move. Returns {ok, game (the new one),
- * steps (from settle), matches, flowers (grown by this move), shuffled (the board before the reshuffle,
- * or null), outcome}.
+ * and costs nothing. A valid one clears its runs and the chain after them, takes a move, counts the goal
+ * tiles its own runs matched and the flowers of every round, and reshuffles a board left with no move.
+ * Returns {ok, game (the new one), steps (from settle), got (goal tiles matched), flowers (grown by this
+ * move), shuffled (the board before the reshuffle, or null), outcome}.
  */
 export function move(game, a, b, rand = Math.random, size = SIZE, kinds = KINDS) {
   if (outcome(game) || !canSwap(game.board, a, b, size)) return { ok: false };
   const { board, steps } = settle(swapped(game.board, a, b), rand, size, kinds);
-  const matches = steps.reduce((n, s) => n + s.runs.length, 0);
+  const got = goalTiles(steps[0].runs, goalFor(game.level).kind);
   const grown = steps.reduce((n, s, k) => n + flowersFor(s.runs, k + 1), 0);
   const stuck = !hasMove(board, size);
-  const next = { ...game, moves: game.moves - 1, made: game.made + matches, flowers: game.flowers + grown, board: stuck ? reshuffle(board, rand, size, kinds) : board };
-  return { ok: true, game: next, steps, matches, flowers: grown, shuffled: stuck ? board : null, outcome: outcome(next) };
+  const next = { ...game, moves: game.moves - 1, got: game.got + got, flowers: game.flowers + grown, board: stuck ? reshuffle(board, rand, size, kinds) : board };
+  return { ok: true, game: next, steps, got, flowers: grown, shuffled: stuck ? board : null, outcome: outcome(next) };
 }
 
 /**
- * A game kept on the phone, checked: the shape, the numbers and the board (the right size, kinds in
- * range, no run, a move). A game that does not pass starts again at its level, or at level 1.
+ * A game kept on the phone, checked: the version, the shape, the numbers and the board (the right size,
+ * kinds in range, no run, a move). One kept under the first rules (no `v: 2`) keeps its level and flowers
+ * and gets a new board under these rules; anything else that does not pass starts its level again, or
+ * level 1.
  */
 export function restore(saved, rand = Math.random, size = SIZE, kinds = KINDS) {
   if (!saved || typeof saved !== 'object') return newGame(1, 0, rand, size, kinds);
@@ -219,7 +237,7 @@ export function restore(saved, rand = Math.random, size = SIZE, kinds = KINDS) {
   const b = saved.board;
   const boardOk = Array.isArray(b) && b.length === size * size && b.every((k) => Number.isInteger(k) && k >= 0 && k < kinds) && !findRuns(b, size).length && hasMove(b, size);
   const movesOk = Number.isInteger(saved.moves) && saved.moves >= 1 && saved.moves <= goal.moves;
-  const madeOk = Number.isInteger(saved.made) && saved.made >= 0 && saved.made < goal.matches;
-  if (!boardOk || !movesOk || !madeOk) return newGame(level, flowers, rand, size, kinds);
-  return { level, flowers, moves: saved.moves, made: saved.made, board: b.slice() };
+  const gotOk = Number.isInteger(saved.got) && saved.got >= 0 && saved.got < goal.count;
+  if (saved.v !== VERSION || !boardOk || !movesOk || !gotOk) return newGame(level, flowers, rand, size, kinds);
+  return { level, flowers, moves: saved.moves, got: saved.got, board: b.slice() };
 }
