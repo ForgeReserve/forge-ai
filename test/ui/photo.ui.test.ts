@@ -437,6 +437,91 @@ describe('Share unseen', () => {
     await ctx.close();
   }, 120_000);
 
+  it('each cover has a cross to take it away by touch, and taps and drags add covers by touch', async () => {
+    const { ctx, page, errors } = await phone();
+    const cdp = await ctx.newCDPSession(page);
+    const touch = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    await pick(page, 'IMG_2041.jpg', CREW);
+    // The hint says it in few words, after a cross like the ones on the covers.
+    expect(await page.textContent('#photoHint .say-head')).toBe('Tap the cross to take a block away.');
+    expect(await page.locator('#photoHint > svg').count()).toBe(1);
+    // The covers keep their names for a screen reader; the crosses are only for the eye and the finger.
+    expect(await page.getAttribute('#coverLayer .cover-box[data-kind=face]', 'aria-label')).toBe('Take this block away. It covers a face.');
+    expect(await page.getAttribute('#coverLayer .cover-box[data-kind=writing]', 'aria-label')).toBe('Take this block away. It covers writing.');
+    const crosses = () =>
+      page.locator('#coverLayer .cover-x').evaluateAll((n) => {
+        const stage = document.querySelector('#photoStage')!.getBoundingClientRect();
+        return n.map((x) => {
+          const r = x.getBoundingClientRect();
+          const d = x.querySelector('.cover-x-dot')!.getBoundingClientRect();
+          // top: nothing lies over the cross's middle, so a finger there touches this cross.
+          const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('.cover-x') === x;
+          return { id: x.getAttribute('data-cover')!, hidden: x.getAttribute('aria-hidden'), top, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, dot: Math.max(d.width, d.height), inStage: r.left >= stage.left - 0.5 && r.right <= stage.right + 0.5 && r.top >= stage.top - 0.5 && r.bottom <= stage.bottom + 0.5 };
+        });
+      });
+    const ids = async () => (await blocks(page)).map((c) => c.id).sort();
+    let all = await crosses();
+    expect(all.map((c) => c.id).sort()).toEqual(await ids());
+    // Each is a touch area of at least 48 px inside the photo, round a mark no wider than 28 px, even on
+    // the smallest cover.
+    for (const c of all) {
+      expect(c.w >= 48 && c.h >= 48 && c.inStage, JSON.stringify(c)).toBe(true);
+      expect(c.dot).toBeLessThanOrEqual(28);
+      expect(c.hidden).toBe('true');
+    }
+    // A touch on a writing cover's cross takes that cover away, and only it.
+    const crossOf = async (kind: string) => {
+      const on = await crosses();
+      const c = (await blocks(page)).filter((b) => b.kind === kind).find((b) => on.find((x) => x.id === b.id)?.top)!;
+      return { cover: c, cross: on.find((x) => x.id === c.id)! };
+    };
+    const { cover: writing, cross: wx } = await crossOf('writing');
+    const before = await ids();
+    let cross = wx;
+    await page.touchscreen.tap(cross.x, cross.y);
+    await expect.poll(ids).toEqual(before.filter((id) => id !== writing.id));
+    // A touch on a face's cross takes the face cover away, and the list says so.
+    const { cover: face, cross: fx } = await crossOf('face');
+    cross = fx;
+    await page.touchscreen.tap(cross.x, cross.y);
+    await expect.poll(async () => (await ids()).includes(face.id)).toBe(false);
+    expect(await changes(page)).toContainEqual(['1 face block you took away', 'uncovered']);
+    // A tap adds a cover there, and a drag adds one over the area, both by touch.
+    const mine = () => page.locator('#coverLayer .cover-box[data-kind=mine]').count();
+    await page.locator('#photoCanvas').scrollIntoViewIfNeeded();
+    const tap = (await clearSpot(page))!;
+    await page.touchscreen.tap(tap.x, tap.y);
+    await expect.poll(mine).toBe(1);
+    const from = (await clearSpot(page))!;
+    const to = { x: from.x + 70, y: from.y + 50 };
+    await touch('touchStart', from.x, from.y);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+    await touch('touchEnd');
+    await expect.poll(mine).toBe(2);
+    expect(await changes(page)).toContainEqual(['2 blocks you added', 'covered']);
+    // The cross of an added cover takes it away too.
+    const { cover: added, cross: ax } = await crossOf('mine');
+    await page.touchscreen.tap(ax.x, ax.y);
+    await expect.poll(mine).toBe(1);
+    expect((await ids()).includes(added.id)).toBe(false);
+    // Covers taken away stay away: after Before and After, and in the file.
+    await page.click('#photo-before');
+    await page.click('#photo-after');
+    const now = await blocks(page);
+    expect(now.map((c) => c.id)).not.toContain(face.id);
+    expect(now.map((c) => c.id)).not.toContain(writing.id);
+    await page.click('#photoShare');
+    await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    const out: number[] = await page.evaluate(() => (window as any).__shared[0].bytes);
+    // The file is what is painted for the covers left, the added one in its own flat colour, with no outline.
+    const px = await painted(page, out, CREW, now);
+    expect(px.flat.every(Boolean)).toBe(true);
+    expect(px.inner).toBeLessThan(3);
+    expect(px.edge).toBeLessThan(12);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
   it('Ask about it adds the protected photo to the next question', async () => {
     const { ctx, page } = await phone();
     const token = await mintToken(MINT_A, 'usd', 200);
@@ -611,11 +696,14 @@ const reframed = async (page: Page, how: 'portrait' | 'tall') =>
     ),
   );
 
-/** A point on the photo (page pixels) clear of every block and its touch area (48 px at least), the leftmost first. */
+/**
+ * A point on the photo (page pixels) clear of every block, its cross and their touch areas (48 px at
+ * least), the leftmost first. A finger near one is taken as a touch on it.
+ */
 const clearSpot = (page: Page) =>
   page.evaluate(() => {
     const c = document.querySelector('#photoCanvas')!.getBoundingClientRect();
-    const boxes = [...document.querySelectorAll('#coverLayer .cover-box')].map((b) => b.getBoundingClientRect());
+    const boxes = [...document.querySelectorAll('#coverLayer .cover-box, #coverLayer .cover-x')].map((b) => b.getBoundingClientRect());
     for (let x = c.left + 8; x < c.right - 8; x += 8)
       for (let y = c.top + 8; y < c.bottom - 8; y += 8) if (boxes.every((b) => x < b.left - 32 || x > b.right + 32 || y < b.top - 32 || y > b.bottom + 32)) return { x, y };
     return null;

@@ -69,7 +69,7 @@ Optional. Starts slow work early, such as loading a model. The app calls it once
 1. The registry calls `create(inputs)` once when the app starts.
 2. Share unseen opens: after 300 ms the app calls `prepare()` on every filter that has one.
 3. The person picks or takes a photo, or shares one in from another app. The app runs `analyse(photo)` on each filter in turn, through `runFilters` in [`public/v2/core/filters.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js), and shows each step as it runs.
-4. The person sees the photo before and after, with every cover. They can take a cover away with a tap on it, and add their own by tapping or dragging on the photo.
+4. The person sees the photo before and after, with every cover. They can take a cover away with the cross on its corner, or a tap on it, and add their own by tapping or dragging on the photo.
 5. Share, Save or Ask about it: the app paints the covers into a new JPEG, calls each `finish(bytes)` in turn, and checks that the file holds no hidden details before it goes anywhere.
 
 ## How covers are painted
@@ -80,7 +80,7 @@ Optional. Starts slow work early, such as loading a model. The app calls it once
 - Each cover is one flat colour: the middle value of red, green and blue over a thin ring of pixels just outside it (about 4 pixels wide on a 1,000 pixel photo), counting only pixels under no cover. So it reads as a smudge, not a black bar, and the colour is made only of pixels the new file shows anyway.
 - A cover is never blurred or pixelated: a blurred face or line of writing can be sharpened or matched. Nothing under a cover reaches the new file in any form; a test changes every pixel under the covers and gets the same file, byte for byte.
 
-On the screen each cover also has a gold outline. The file has none.
+On the screen each cover also has a gold outline and a cross on its corner to take it away. The file has neither.
 
 The face filter fits an ellipse round each face: it reaches half the detector's box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus two of the detector's pixels, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter's height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.
 

@@ -155,7 +155,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     drawCovered(photo, covers, view);
     stage.dataset.view = 'after';
     stage.setAttribute('aria-label', t('photo.afterLabel'));
-    say(hint, t('photo.hint'), '', 'hand');
+    say(hint, t('photo.hint'), '', 'xCircle');
     // One button per cover, its outline over the painted cover: tap (or Enter) takes it away.
     const pc = (v, of) => `${(v / of) * 100}%`;
     layer.replaceChildren(
@@ -168,6 +168,16 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
         const o = c.shape === 'ellipse' ? { x: c.cx - c.rx, y: c.cy - c.ry, w: 2 * c.rx, h: 2 * c.ry } : c;
         Object.assign(btn.style, { left: pc(o.x, photo.width), top: pc(o.y, photo.height), width: pc(o.w, photo.width), height: pc(o.h, photo.height) });
         return btn;
+      }),
+      // A cross on each cover's top right edge, over every cover: a 48 px touch area round a small mark,
+      // kept inside the photo (style.css). Letting go on it takes the cover away (the pointer handlers
+      // below). Its button above is what a screen reader offers.
+      ...covers.map((c) => {
+        const at = c.shape === 'ellipse' ? { x: c.cx + c.rx * Math.SQRT1_2, y: c.cy - c.ry * Math.SQRT1_2 } : { x: c.x + c.w, y: c.y };
+        const mark = el('span', { class: 'cover-x', 'data-cover': c.id, 'aria-hidden': 'true' }, el('span', { class: 'cover-x-dot' }, icon('x', 14, 3)));
+        mark.style.setProperty('--mx', pc(at.x, photo.width));
+        mark.style.setProperty('--my', pc(at.y, photo.height));
+        return mark;
       }),
     );
     stage.dataset.covers = String(covers.length);
@@ -198,20 +208,27 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     const r = view.getBoundingClientRect();
     return { x: ((e.clientX - r.left) / r.width) * photo.width, y: ((e.clientY - r.top) / r.height) * photo.height, scale: photo.width / r.width };
   };
-  // A finger's tap that adds a block is followed by a click, and Chrome sends it to whatever is under the
-  // finger by then: the new block, whose click takes it away again. That one click is let go.
+  // A finger's tap that adds a block, or takes one away with its cross, is followed by a click, and Chrome
+  // sends it to whatever is under the finger by then: a block, whose click takes it away. That one click is
+  // let go.
   let skipClickUntil = 0;
   stage.addEventListener(
     'click',
     (e) => {
-      if (performance.now() < skipClickUntil && e.target.closest('.cover-box')) e.stopPropagation();
+      if (performance.now() < skipClickUntil && e.target.closest('.cover-box, .cover-x')) e.stopPropagation();
       skipClickUntil = 0;
     },
     true,
   );
+  // A cross takes its cover away when the finger or mouse lets go on it, by pointer events as for taps on
+  // the photo: after a drag a phone's browser does not always send the click that follows a touch.
+  let crossDown = null;
   stage.addEventListener('pointerdown', (e) => {
     skipClickUntil = 0;
-    if (showing !== 'after' || !photo || e.target.closest('.cover-box') || e.button > 0) return;
+    crossDown = null;
+    const cross = e.target.closest('.cover-x');
+    if (cross && e.button <= 0) crossDown = { id: cross.dataset.cover, pointer: e.pointerId, cx: e.clientX, cy: e.clientY };
+    if (showing !== 'after' || !photo || e.target.closest('.cover-box, .cover-x') || e.button > 0) return;
     press = { ...toPhoto(e), cx: e.clientX, cy: e.clientY, moved: false, id: e.pointerId };
     stage.setPointerCapture?.(e.pointerId);
     e.preventDefault();
@@ -243,8 +260,17 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     skipClickUntil = performance.now() + 800;
     addCover(tapBox(p.x, p.y, photo.width, photo.height));
   };
-  stage.addEventListener('pointerup', (e) => endPress(e, false));
-  stage.addEventListener('pointercancel', (e) => endPress(e, true));
+  stage.addEventListener('pointerup', (e) => {
+    const d = crossDown;
+    crossDown = null;
+    if (d && d.pointer === e.pointerId && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) <= 24) {
+      // The click that may follow lands on whatever is under the finger once the cover is gone.
+      skipClickUntil = performance.now() + 800;
+      return removeCover(d.id);
+    }
+    endPress(e, false);
+  });
+  stage.addEventListener('pointercancel', (e) => ((crossDown = null), endPress(e, true)));
 
   const addBlock = el('button', { type: 'button', class: 'btn small', id: 'photoAddBlock', onclick: () => addCover(tapBox(photo.width / 2, photo.height / 2, photo.width, photo.height)) }, icon('plus', 18), el('span', { text: t('photo.addBlock') }));
   const status = msgLine();
