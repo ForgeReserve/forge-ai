@@ -16,7 +16,7 @@ const brokenBody = async () =>
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 
-// Red-team finding 7: a non-stream body read that failed after 200 headers skipped settlement and left the
+// The fault this guards against: a non-stream body read that failed after 200 headers skipped settlement and left the
 // request running, its reservation held and its change unavailable until a restart.
 describe.skipIf(!up)('non-stream upstream body failures', () => {
   let g: Gateway;

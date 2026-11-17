@@ -48,7 +48,7 @@ describe('fetchWithRetry', () => {
     expect(hits).toBe(1);
   });
 
-  // Red-team finding 6: two 503s then a 200 produced three identical upstream bodies.
+  // The fault this guards against: two 503s then a 200 produced three identical upstream bodies.
   it('does not resend a sent request after a retryable status when the supplier takes no idempotency key', async () => {
     const bodies: string[] = [];
     const url = await listen(async (req, res) => {

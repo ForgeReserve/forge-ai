@@ -27,7 +27,7 @@ async function changeFor(g: Gateway, id: string): Promise<Response> {
   throw new Error(`change for ${id} never settled`);
 }
 
-// Red-team finding 8: every HTTP attempt drew a fresh random request id, so change from a paid retry (and
+// The fault this guards against: every HTTP attempt drew a fresh random request id, so change from a paid retry (and
 // from error or startup recovery after a disconnect) sat under an id the payer had never seen; the id
 // from the 402 answered 404.
 describe.skipIf(!up)('change is findable by the id from the 402', () => {

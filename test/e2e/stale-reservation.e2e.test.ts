@@ -5,7 +5,7 @@ import { chatBody, expectedMsub, type Gateway, mintsUp, readSse, startGateway } 
 
 const up = await mintsUp();
 
-// Red-team finding 1: the stale-reservation sweep released the reservation of a stream that was
+// The fault this guards against: the stale-reservation sweep released the reservation of a stream that was
 // still running, and the stream then settled for nothing.
 describe.skipIf(!up)('stale reservations and active streams', () => {
   let g: Gateway;
