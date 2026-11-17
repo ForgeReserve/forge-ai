@@ -207,11 +207,19 @@ describe("Pip's Garden", () => {
     await shot(page, 'game-412x915-mid.png');
     // The progress is kept: a reload opens the same level and flowers.
     const flowers = await count(page, '#gameFlowers');
+    // On a lucky board that one move made all five matches: the level is done, and what is kept is the
+    // next level, with its own board and moves.
+    const bloomed = (await textOf(page, '#gameSub')) === 'Level 1 done.';
     await page.reload();
     await onGame(page);
     expect(await count(page, '#gameFlowers')).toBe(flowers);
-    expect(await count(page, '#gameMoves')).toBe(14);
-    expect(await boardOf(page)).toEqual(after);
+    if (bloomed) {
+      expect(await count(page, '#gameLevel')).toBe(2);
+      expect(await count(page, '#gameMoves')).toBe(15);
+    } else {
+      expect(await count(page, '#gameMoves')).toBe(14);
+      expect(await boardOf(page)).toEqual(after);
+    }
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
@@ -480,7 +488,10 @@ describe("Pip's Garden", () => {
         db.close();
         return v;
       });
-    expect(await kept()).toMatchObject({ level: 1, moves: 14 });
+    // The move is kept (a lucky board finishes level 1 with it, and then the next level is what is kept).
+    const saved: any = await kept();
+    expect(saved?.v).toBe(1);
+    expect([1, 2]).toContain(saved.level);
     expect(await page.evaluate(() => localStorage.getItem('forge2.cover'))).toContain("Pip's Garden");
     await page.evaluate(() => {
       const p = document.querySelector('#pipBtn') as HTMLElement;
