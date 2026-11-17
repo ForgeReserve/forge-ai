@@ -82,9 +82,10 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
 /**
  * look: 'midnight' by default (the owner, 2026-11-15), 'light' or 'dark'. lookPicked: true once the
  * person picked a look in More, Mode and look. mode: the home and answer screens' mode module ('default',
- * or 'playful': docs/PLAYFUL.md), chosen in the same place.
+ * or 'playful': docs/PLAYFUL.md), chosen in the same place. gameFirst: a mode with a cover game (Playful)
+ * opens on the game, its helper behind it; on by default, turned off in the same place.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default' });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
 
 /**
  * The mode to draw the home and the answer with: the chosen one when it can be drawn now (`ready`, the

@@ -1,6 +1,6 @@
 # Mode modules
 
-A mode module draws the two screens a person sees most: the home and the answer. The rest of the app (Type, Funds, Add money, More and its screens) stays the same in every mode. The person picks a mode in More, Mode and look. The app ships with two: Default, with the rings, and Playful, with Pip.
+A mode module draws the two screens a person sees most: the home and the answer. It may also draw a cover, a game the app opens on with the home behind it. The rest of the app (Type, Funds, Add money, More and its screens) stays the same in every mode. The person picks a mode in More, Mode and look. The app ships with two: Default, with the rings, and Playful, with Pip and its cover game, Pip's Garden.
 
 Read [the overview](README.md) first. The bundled modes are in [`public/v2/modules/mode/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode) and described in the [module list](list.md#mode). Playful is described in full in [`docs/PLAYFUL.md`](https://github.com/ForgeReserve/forge-ai/blob/main/docs/PLAYFUL.md).
 
@@ -17,7 +17,7 @@ mode: ['t', 'ui', 'state', 'nav', 'actions', 'format'],
 // PROJECTIONS
 mode: {
   state: ['view', 'subscribe'],
-  actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow'],
+  actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow', 'coverProgress', 'saveCoverProgress'],
 },
 ```
 
@@ -71,10 +71,11 @@ The fields of `view()`, from `view()` in [`public/v2/app.js`](https://github.com
 | `answerModel` | The model that wrote the answer on show: `{id, name, private, speed}`, or `null`. |
 | `fastModel` | A fast model the slow-answer note can switch to, or `null`. |
 | `freeModels` | `true` when the engine lists free models. |
+| `cover` | `true` when the app opens on this mode's cover (it has `cover()` and "Open as a game first" is on). Playful shows its game button then. |
 
 ### `nav`
 
-`nav(name, params = {}, {replace = false})` opens a screen by its route name from `ROUTES` in [`public/v2/core/router.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/router.js): `home`, `type`, `answer`, `add`, `more`, `funds`, `addFunds`, `model`, `voice`, `history`, `photo`, and the others there. `replace` replaces the current history entry instead of adding one.
+`nav(name, params = {}, {replace = false})` opens a screen by its route name from `ROUTES` in [`public/v2/core/router.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/router.js): `home`, `game`, `type`, `answer`, `add`, `more`, `funds`, `addFunds`, `model`, `voice`, `history`, `photo`, and the others there. `replace` replaces the current history entry instead of adding one. While the cover is on, `nav('game')` goes back to the cover at the start of the history, and `nav('home')` goes back to the home just above it, so Back from the home shows the game and Back from the game never shows the home.
 
 ### `actions`
 
@@ -95,6 +96,8 @@ The answer and voice actions. None of them takes money out.
 | `useFastModel()` | Switches a slow answer to a fast model and asks again there. |
 | `getNaturalVoice()` | Downloads the natural voice, then reads the answer. |
 | `naturalNotNow()` | Stops offering the natural voice on this phone. |
+| `coverProgress()` | The cover game's own record on this phone (whatever it saved last), or `null`. |
+| `saveCoverProgress(data)` | Keeps the cover game's record, in the app's database beside the settings. Erase everything removes it. |
 
 ### `format`
 
@@ -113,6 +116,10 @@ Required. Draws the home. `options` is `{sheet, open}` when the person opened th
 ### `answer()`
 
 Required. Draws the answer screen for the open conversation. Returns a screen.
+
+### `cover()`
+
+Optional. Draws the cover: a game the app opens on, with the home behind it ([`docs/PLAYFUL.md`](https://github.com/ForgeReserve/forge-ai/blob/main/docs/PLAYFUL.md), The cover game). Returns a screen, which shows at the route `game`. A mode with a cover opens on it while "Open as a game first" is on (on by default; More, Mode and look shows the switch for Playful): fresh, after a reload, and whenever the app comes back from the background. The cover goes to the home with `nav('home')`. While it shows it should show nothing of the app: Playful's sets the page's title and icon to the game's and holds the app's short messages until the home opens.
 
 ### `ready()`
 
@@ -133,7 +140,7 @@ Optional. Loads what the mode's screens need. The app calls it before it first d
 
 1. The registry calls `create(inputs)` once when the app starts, with the looks, before the first screen is drawn.
 2. A chosen mode other than Default: the app calls `ready()` before the first frame.
-3. On every navigation to the home, the Add or More menu, or the answer, the app calls `home(options)` or `answer()` again and calls `destroy()` on the screen before.
+3. On every navigation to the home, the Add or More menu, the answer or the cover, the app calls `home(options)`, `answer()` or `cover()` again and calls `destroy()` on the screen before.
 4. While a screen shows, the app calls its `update()` after every change of state.
 
 ## Errors
@@ -220,4 +227,4 @@ To try it, copy the folder to `public/v2/modules/mode/plain/`, add `{ kind: 'mod
 
 ## Tests
 
-[`test/unit/v2/playful.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/playful.test.ts) tests Playful's pure rules; [`test/ui/playful.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/playful.ui.test.ts) picks Playful in Chrome and walks its home and answer.
+[`test/unit/v2/playful.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/playful.test.ts) tests Playful's pure rules and [`test/unit/v2/garden.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/garden.test.ts) its cover game's; [`test/ui/playful.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/playful.ui.test.ts) picks Playful in Chrome and walks its home and answer, and [`test/ui/game.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/game.ui.test.ts) plays the cover game and opens the helper behind it.

@@ -1,0 +1,75 @@
+/* Pip's Garden (docs/PLAYFUL.md, The cover game; the design's KidsCover). Loaded with Playful's screens
+   (../../index.js ready()), so Default never fetches it. Everything is under .gd, the game's own root, on
+   the Playful ground (.pf). The tiles move with transform and opacity only. */
+.gd {
+  --gd-yellow: #FFD23F; --gd-green: #3DDC97; --gd-coral: #FF8A7A; --gd-sky: #7FD4FF; --gd-panel: #3A30A6; --gd-ink: #1B1440; --gd-ink-2: #4A4470;
+  --gap: 10px;
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px;
+}
+.gd-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.gd-title { margin: 0; font-family: var(--pf-display); font-size: 26px; font-weight: 800; line-height: 1.1; }
+.gd-level { margin: 0; min-height: 44px; display: flex; align-items: center; padding: 0 14px; border-radius: 22px; background: #FFFFFF; color: var(--gd-ink); font-size: 15px; font-weight: 800; white-space: nowrap; }
+.gd-how { margin: 0; font-size: 16px; font-weight: 700; }
+
+/* The board: a darker panel, the tiles under a grid of see-through buttons of the same size. Its side is
+   the width, or less on a short phone, so the board, the counts and Pip's card always fit. */
+.gd-board {
+  position: relative; align-self: center; box-sizing: border-box; width: min(100%, max(260px, calc(100dvh - 352px))); aspect-ratio: 1;
+  padding: 14px; border-radius: 28px; background: var(--gd-panel); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.gd-tiles { position: absolute; inset: 14px; }
+.gd-tile {
+  position: absolute; top: 0; left: 0; width: calc((100% - (var(--size) - 1) * var(--gap)) / var(--size)); aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center; border-radius: 28%; box-shadow: inset 0 -4px 0 rgba(27,20,64,0.16);
+  transform: translate(calc(var(--c) * (100% + var(--gap))), calc(var(--r) * (100% + var(--gap)))) scale(var(--s, 1));
+  transition: transform var(--slide, 180ms) cubic-bezier(.3, .7, .4, 1), opacity 200ms ease; will-change: transform;
+}
+.gd-tile.k0 { background: var(--gd-yellow); }
+.gd-tile.k1 { background: var(--gd-green); }
+.gd-tile.k2 { background: var(--gd-coral); }
+.gd-tile.k3 { background: var(--gd-sky); }
+.gd-shape { width: 58%; height: 58%; }
+.gd-tile.picked { --s: 1.1; box-shadow: 0 0 0 4px #FFFFFF; z-index: 1; }
+.gd-tile.gone { --s: 0.3; opacity: 0; }
+.gd-tile.fresh { opacity: 0; }
+.gd-cells { position: absolute; inset: 14px; display: grid; grid-template-columns: repeat(var(--size), 1fr); grid-template-rows: repeat(var(--size), 1fr); gap: var(--gap); }
+.gd-cell { min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 28%; background: transparent; touch-action: none; -webkit-touch-callout: none; }
+.gd-cell:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 2px; }
+
+/* Moves and Flowers. */
+.gd-stats { display: flex; justify-content: space-between; font-family: var(--pf-display); font-size: 18px; font-weight: 700; }
+.gd-stat-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.gd-mark { flex: none; }
+
+/* Pip's card: Pip (held three seconds, the helper opens; nothing on screen says so), the line and the one under it. */
+.gd-card { margin-top: auto; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 24px; background: #FFFFFF; color: var(--gd-ink); --focus: var(--gd-ink); }
+.gd-pip { flex: none; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 32px; background: transparent; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.gd-pip .pip { width: 56px; height: 56px; }
+.gd-pip:active { transform: scale(0.96); }
+.gd-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gd-say { margin: 0; font-family: var(--pf-display); font-size: 18px; font-weight: 700; line-height: 1.2; }
+.gd-sub { margin: 0; font-size: 14px; font-weight: 700; color: var(--gd-ink-2); }
+.gd-go:empty { display: none; }
+.gd-btn { min-height: 48px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px 3px; border: 0; border-radius: 16px; background: var(--gd-yellow); color: var(--gd-ink); box-shadow: inset 0 -5px 0 rgba(27,20,64,0.18); font-family: var(--pf-display); font-size: 17px; font-weight: 800; white-space: nowrap; }
+.gd-btn:active { transform: translateY(2px); }
+
+/* The cover screen holds only the game, one screen high. */
+.pf-cover { flex: none; height: 100dvh; min-height: 0; overflow: hidden; padding-left: 20px; padding-right: 20px; }
+
+/* Short phones (360 by 640): tighter, so the whole board and Pip stay in view. */
+@media (max-height: 700px) {
+  .gd { gap: 10px; --gap: 8px; }
+  .gd-board { padding: 10px; width: min(100%, max(240px, calc(100dvh - 300px))); }
+  .gd-tiles, .gd-cells { inset: 10px; }
+  .gd-title { font-size: 23px; }
+  .gd-card { padding: 8px 12px; gap: 10px; }
+  .gd-pip { width: 56px; height: 56px; }
+  .gd-pip .pip { width: 48px; height: 48px; }
+  .gd-say { font-size: 17px; }
+  .gd-sub { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gd-tile { transition: none; }
+  .gd-pip:active, .gd-btn:active { transform: none; }
+}

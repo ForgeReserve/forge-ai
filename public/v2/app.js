@@ -55,6 +55,8 @@ const MODELS_CACHE = 'forge2.models';
 const LOOK_CACHE = 'forge2.look';
 // The mode in use when it is not Default, read by index.html to paint its ground before the app loads.
 const MODE_CACHE = 'forge2.mode';
+// The cover game's name while the mode opens on it (docs/PLAYFUL.md), for index.html's first frame and title.
+const COVER_CACHE = 'forge2.cover';
 
 // ------------------------------------------------------------------ storage that survives a reload
 
@@ -104,6 +106,8 @@ const store = createStore({
   freeTotal: 0,
   free: null,
   online: navigator.onLine !== false,
+  // The cover game's own record (docs/PLAYFUL.md): read at start, kept in the database beside the settings.
+  game: null,
 });
 const S = store.S;
 
@@ -241,6 +245,8 @@ function view() {
     fastModel: fastModelNow(model),
     // Free models this engine lists, whatever Private only hides: the Free questions state on Funds.
     freeModels: S.models.some((m) => isFreeModel(m) && !m.uncensored),
+    // The mode opens on its cover game (docs/PLAYFUL.md): its screens show the way back to the game.
+    cover: coverOn(),
   };
 }
 
@@ -465,6 +471,16 @@ async function prepareMode(id) {
 function keepMode() {
   const id = modeNow().id;
   keep(MODE_CACHE, id === 'default' ? null : id);
+  if (!coverOn()) keep(COVER_CACHE, null);
+}
+
+/**
+ * The cover (docs/PLAYFUL.md): the mode in use has a cover game (its cover()) and "Open as a game first"
+ * is on. Then the game is the first screen: opened fresh, back from the background, and under the
+ * helper's home, so Back from the home shows it and Back from it never shows the helper.
+ */
+function coverOn() {
+  return !!registry && S.settings.gameFirst !== false && typeof modeNow().cover === 'function';
 }
 // In the Android app the phone's bars follow the page's colour (core/native.js followBars).
 if (native) followBars(native.bars);
@@ -1382,6 +1398,21 @@ const actions = {
     saveSettings();
     store.set({});
   },
+  /** Mode and look: "Open as a game first" for a mode with a cover game (docs/PLAYFUL.md). */
+  setGameFirst: (on) => {
+    S.settings.gameFirst = !!on;
+    keepMode();
+    saveSettings();
+    store.set({});
+  },
+  /** The cover game's own record on this phone, or null. */
+  coverProgress: () => S.game ?? null,
+  /** Keeps the cover game's record beside the settings; Erase everything removes it with them. */
+  saveCoverProgress: (data) => {
+    if (erased) return;
+    S.game = data ?? null;
+    kv.put('game', S.game).catch(() => {});
+  },
   /** Mode and look: the mode that draws the home and the answer. Its screens load first; then it is saved. */
   setMode: async (id) => {
     if (!(await prepareMode(id))) return ui.toast(t('look.modeFailed'), 4000);
@@ -1534,6 +1565,12 @@ const trail = [];
 const depth = () => history.state?.forge2 ?? 0;
 
 function nav(name, params = {}, { replace = false } = {}) {
+  // With the cover on: the game is always the first entry, so Back from it never reaches the helper, and
+  // the helper's home is the one just above it, so Back from the home shows the game.
+  if (!replace && coverOn()) {
+    if (name === 'game') return leave('game');
+    if (name === 'home') for (let i = depth() - 1; i >= 0; i--) if (trail[i] === 'home') return history.go(i - depth());
+  }
   const h = href(name, params);
   if (h === location.hash || (h === '#/' && !location.hash)) return render();
   if (replace) history.replaceState({ forge2: depth() }, '', h);
@@ -1574,11 +1611,20 @@ function onPop() {
     const name = afterPop;
     afterPop = null;
     history.replaceState({ forge2: 0 }, '', href(name));
+  } else if (currentName === 'game' && coverOn() && parse(location.hash).name !== 'game') {
+    // Back (or Forward) from the cover game never shows the helper: the game stays. On a page reloaded
+    // deep in the helper, older entries are still behind it.
+    history.replaceState({ forge2: 0 }, '', href('game'));
   }
   render();
 }
 
 // ------------------------------------------------------------------ event links (core/join.js)
+
+// A file or photo picker is up (the cover waits for it; see start()).
+let picking = false;
+/** The routes a photo shared in from another app opens: the cover does not take their place at start. */
+const SHARED_IN = ['photoShared', 'photoMissed', 'photoNone', 'photoSent'];
 
 // Set by joinWith for the Start free screen it opens: that screen starts on the question.
 let joinAsk = false;
@@ -1687,6 +1733,8 @@ function screenFor(name, params) {
       return mode.home({ sheet: moreSheet(ctx), open: 'more' });
     case 'answer':
       return mode.answer();
+    case 'game':
+      return coverOn() ? mode.cover() : mode.home();
     case 'type':
       return typeScreen(ctx);
     case 'funds':
@@ -1789,6 +1837,13 @@ function render() {
     if (fk || vault.incoming().some((x) => x.via === 'free' && x.state === 'pending' && !x.code)) retryAll().then(() => refreshBalance());
   }
   const { name, params } = parse(location.hash);
+  // The helper's home with nothing under it while the cover is on (the cover just turned on, a first run
+  // left for the home): the game goes under it, so Back shows the game.
+  if (name === 'home' && depth() === 0 && coverOn()) {
+    history.replaceState({ forge2: 0 }, '', href('game'));
+    trail[0] = 'game';
+    history.pushState({ forge2: 1 }, '', href('home'));
+  }
   unsub?.();
   current?.destroy?.();
   currentName = name;
@@ -1797,6 +1852,8 @@ function render() {
   current = screenFor(name, params);
   root.replaceChildren(current.node);
   root.dataset.route = name;
+  // The cover game's name and icon, for index.html's first frame next time.
+  if (name === 'game' && coverOn()) keep(COVER_CACHE, JSON.stringify({ title: document.title, icon: new URL(document.querySelector('link[rel="icon"]')?.href ?? '/', location.href).pathname }));
   // index.html's first frame in a mode's ground (data-boot-mode) is over: the screen draws its own.
   delete document.documentElement.dataset.bootMode;
   unsub = store.subscribe(() => current?.update?.());
@@ -1843,7 +1900,7 @@ function halt() {
   for (const x of registry?.list('voice-out') ?? []) x.instance.forget?.();
   unsub?.();
   current?.destroy?.();
-  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, freeKey: null, freeMsub: null, freeTotal: 0, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '' });
+  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, freeKey: null, freeMsub: null, freeTotal: 0, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '', game: null });
 }
 
 /**
@@ -1893,7 +1950,8 @@ function stylesReady() {
 
 async function start() {
   if (reloadForIsolation({ native, isolated: globalThis.crossOriginIsolated === true, session: sessionStorage })) return location.reload();
-  document.title = t('app.name');
+  // index.html titled the first frame with the cover game's name (docs/PLAYFUL.md): the game keeps it.
+  if (!document.documentElement.dataset.bootCover) document.title = t('app.name');
   // The visible height above a phone keyboard, for Type (core/viewport.js).
   watchViewport();
   // Erase everything in another tab clears localStorage there (key null) and deletes the database.
@@ -1901,6 +1959,8 @@ async function start() {
   addEventListener('storage', (e) => e.key === null && e.storageArea === localStorage && erasedElsewhere());
   const saved = await kv.get('settings').catch(() => null);
   S.settings = loadedSettings(saved);
+  // The cover game's own record (its level, flowers and board), kept beside the settings.
+  S.game = (await kv.get('game').catch(() => null)) ?? null;
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   S.key = ui.load(keyStore());
   S.freeKey = ui.load(freeKeyStore());
@@ -1956,6 +2016,15 @@ async function start() {
   // A mode other than Default: its screens, styles and fonts before the first frame (else Default draws).
   if (S.settings.mode && S.settings.mode !== 'default') await prepareMode(S.settings.mode);
   keepMode();
+  // The cover: opened fresh, the app shows the game, never the helper. A photo shared in from another app
+  // still opens Share unseen, and the first run its own steps.
+  const opening = parse(location.hash).name;
+  if (coverOn() && !SHARED_IN.includes(opening) && stepOfRoute(opening) === null) history.replaceState({ forge2: 0 }, '', href('game'));
+  // No cover after all (its mode could not load offline, say): the app's own title again.
+  if (!coverOn() && document.documentElement.dataset.bootCover) {
+    delete document.documentElement.dataset.bootCover;
+    document.title = t('app.name');
+  }
   await stylesReady();
 
   addEventListener('popstate', onPop);
@@ -1974,6 +2043,15 @@ async function start() {
   // (timers sleep while a phone screen is off). "On close" starts removing everything as the page goes.
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !erased && sweeper.sweep());
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && retryMethods());
+  // The cover: the app put away shows the game when it comes back (and in the phone's list of open apps),
+  // whatever screen was open. Not while a file or photo picker the person opened is up: the file comes back
+  // to the screen that asked for it.
+  document.addEventListener('click', (e) => e.target instanceof HTMLInputElement && e.target.type === 'file' && (picking = true), true);
+  addEventListener('focus', () => (picking = false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') picking = false;
+    else if (!picking && !erased && currentName !== 'game' && coverOn()) leave('game');
+  });
   addEventListener('pagehide', () => S.settings.autoDelete === 'close' && !erased && burnEverything());
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();

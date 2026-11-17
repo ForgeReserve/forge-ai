@@ -26,7 +26,8 @@ export const INPUTS = {
 /**
  * Inputs a kind gets only part of. A mode draws the screens: it gets the view (what the screens show,
  * never the balance key) and the answer and voice actions, never the app's raw state or an action that
- * takes money out. Burn (remove this conversation from the phone) is one of the answer actions.
+ * takes money out. Burn (remove this conversation from the phone) is one of the answer actions. A mode
+ * with a cover game also gets the game's own record on the phone (coverProgress, saveCoverProgress).
  * A voice module gets the engine's audio calls for its direction only, which the app makes with the
  * balance key the module never sees. A voice-in module also gets the phone's on-device recogniser in the
  * Android app (core/native.js nativeSpeech: available and start only; empty on the website) and Forge
@@ -37,7 +38,7 @@ export const INPUTS = {
 export const PROJECTIONS = {
   mode: {
     state: ['view', 'subscribe'],
-    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow'],
+    actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow', 'coverProgress', 'saveCoverProgress'],
   },
   'voice-in': { audio: ['model', 'price', 'transcribe'], speech: ['available', 'start'], asr: ['available', 'start'] },
   'voice-out': { audio: ['model', 'price', 'speak'], phonon: ['available', 'download', 'load', 'native', 'nativeFailed', 'voice', 'paceKey', 'pace', 'notePace', 'preferNatural'] },

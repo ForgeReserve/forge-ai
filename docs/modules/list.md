@@ -312,11 +312,11 @@ The rings home, with the funds and memory rings around the talk button, and the 
 
 ### Playful
 
-Pip, bright colours and big buttons on the home and the answer screen, for people who read poorly and for children.
+Pip, bright colours and big buttons on the home and the answer screen, for people who read poorly and for children. It opens on a cover game, Pip's Garden, with the helper behind it: hold Pip 3 seconds to open the helper. "Open as a game first" in Mode and look turns the game off.
 
 - **Id:** `forge.mode.playful`, known in the app as `playful`.
 - **Folder:** [`public/v2/modules/mode/playful/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/mode/playful)
-- **Needs:** the same inputs as Default. Its `ready()` loads its screens, `playful.css` and two typefaces, Baloo 2 and Nunito, from `public/v2/vendor/`, once Playful is chosen.
+- **Needs:** the same inputs as Default, and the game's record (`coverProgress`, `saveCoverProgress`). Its `ready()` loads its screens, the game, `playful.css`, the game's stylesheet and two typefaces, Baloo 2 and Nunito, from `public/v2/vendor/`, once Playful is chosen.
 - **Works on:** the website and both apps. Offline, it opens only once it has been loaded before.
 - **Costs:** nothing. Questions asked from it cost what the model costs.
 - **Private:** yes. It draws on the phone.

@@ -1,5 +1,5 @@
-// Parts shared by Playful mode's home and answer (docs/PLAYFUL.md): the top chips (Private and the star),
-// the bottom bar, Pip's messages in place of the toasts, and the phone's bar colour.
+// Parts shared by Playful mode's home and answer (docs/PLAYFUL.md): the top chips (the game, Private and
+// the star), the bottom bar, Pip's messages in place of the toasts, and the phone's bar colour.
 import { el, headOf, icon } from '../../../core/ui.js';
 import { bottomRow } from '../../../screens/parts.js';
 import { starLevel } from './logic.js';
@@ -17,13 +17,22 @@ function star(size) {
   return s;
 }
 
+/** The game button's picture: four tiles in the game's colours. */
+function tiles(size) {
+  const s = document.createElementNS(NS, 'svg');
+  for (const [k, v] of Object.entries({ width: size, height: size, viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'ico' })) s.setAttribute(k, String(v));
+  s.innerHTML = '<rect x="2.5" y="2.5" width="8.5" height="8.5" rx="2.6" fill="#FFD23F"/><rect x="13" y="2.5" width="8.5" height="8.5" rx="2.6" fill="#3DDC97"/><rect x="2.5" y="13" width="8.5" height="8.5" rx="2.6" fill="#FF8A7A"/><rect x="13" y="13" width="8.5" height="8.5" rx="2.6" fill="#7FD4FF"/>';
+  return s;
+}
+
 /**
- * The top row: Private (or Standard) on the left, as the Default status bar says it, and the star chip on
- * the right in place of the money chip: how much is left in a few words, never a price (logic.js
- * starLevel). The star opens Funds and memory, as the money chip does; with no balance key on a free
- * model it opens Start free.
+ * The top row: the game button (while "Open as a game first" is on: puts the game back on the screen at
+ * once), Private (or Standard), as the Default status bar says it, and the star chip on the right in
+ * place of the money chip: how much is left in a few words, never a price (logic.js starLevel). The star
+ * opens Funds and memory, as the money chip does; with no balance key on a free model it opens Start free.
  */
 export function chips({ t, state, nav }) {
+  const game = el('button', { type: 'button', class: 'pf-chip pf-game', id: 'gameBtn', 'aria-label': t('playful.toGame'), title: t('playful.toGame'), onclick: () => nav('game') }, tiles(26));
   const pill = el('div', { class: 'pf-chip pf-private', id: 'privacyPill' });
   const words = el('span', { id: 'starWords' });
   const go = () => {
@@ -34,6 +43,7 @@ export function chips({ t, state, nav }) {
   const starBtn = el('button', { type: 'button', class: 'pf-chip pf-stars', id: 'starChip', onclick: go }, star(20), words);
   const update = () => {
     const v = state.view();
+    game.hidden = !v.cover;
     pill.replaceChildren(icon(v.private ? 'lock' : 'unlock', 18, 2.4), el('span', { text: v.private ? t('status.private') : t('status.standard') }));
     pill.dataset.kind = v.private ? 'private' : 'standard';
     pill.setAttribute('title', v.private ? t('status.privateLabel') : t('status.standardLabel'));
@@ -44,7 +54,7 @@ export function chips({ t, state, nav }) {
     starBtn.setAttribute('aria-label', t('playful.starLabel', { words: words.textContent }));
   };
   update();
-  return { node: el('div', { class: 'pf-top' }, pill, starBtn), update };
+  return { node: el('div', { class: 'pf-top' }, el('div', { class: 'pf-top-start' }, game, pill), starBtn), update };
 }
 
 /** The bottom bar: the app's Type, Add and More (screens/parts.js), as the design's three coloured buttons. */

@@ -26,6 +26,8 @@
     /* Playful mode (docs/PLAYFUL.md): its purple ground and ring tracks at once, until the app draws. */
     :root[data-boot-mode="playful"] body { background: #4B3FC9; }
     :root[data-boot-mode="playful"] .boot circle { stroke: #3A30A6; }
+    /* Playful opening on its cover game: no rings on the first frame, only the game's ground. */
+    :root[data-boot-cover] .boot svg { visibility: hidden; }
     /* A phone that has not seen the first run opens on it (core/firstrun.js shouldShow): its dark ground at once. */
     :root.fr-boot { --bg: #0B0D10; color-scheme: dark; }
     .fr-boot .boot svg { visibility: hidden; }
@@ -50,6 +52,17 @@
         if (localStorage.getItem('forge2.mode') === 'playful') {
           root.dataset.bootMode = 'playful';
           bar.setAttribute('content', '#4B3FC9');
+          // Opening on the cover game (app.js COVER_CACHE): the game's name and icon at once.
+          var cover = JSON.parse(localStorage.getItem('forge2.cover') || 'null');
+          if (cover && typeof cover.title === 'string') {
+            root.dataset.bootCover = '1';
+            document.title = cover.title;
+            var icon = document.querySelector('link[rel="icon"]');
+            if (/^\/v2\/[a-z0-9/._-]+\.svg$/.test(cover.icon)) {
+              icon.dataset.appIcon = icon.getAttribute('href');
+              icon.setAttribute('href', cover.icon);
+            }
+          }
         }
       }
     } catch (e) {} })();

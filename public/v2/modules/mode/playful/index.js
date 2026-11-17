@@ -4,21 +4,22 @@
 // wallet, storage, the microphone itself or an action that takes money out.
 //
 // Nothing of Playful loads with the app: this file has no imports, so a phone in Default mode fetches
-// only it. ready() loads the screens, the stylesheet and the two typefaces (public/v2/vendor/baloo-2 and
+// only it. ready() loads the screens, the stylesheets and the two typefaces (public/v2/vendor/baloo-2 and
 // nunito), and the app calls it before it draws a Playful screen: once Playful is chosen, and at start on
-// a phone where it is.
+// a phone where it is. The screens are the home, the answer and the cover: the game Playful opens on
+// while "Open as a game first" is on (cover.js, games/garden/).
 let screens = null;
 let loading = null;
 
-/** Puts the Playful stylesheet in the page once; resolves when it is in. */
-function styles() {
-  const href = new URL('./playful.css', import.meta.url).href;
+/** Puts a stylesheet (`path`, from this folder, or a whole address) in the page once; resolves when it is in. */
+function styles(path) {
+  const href = new URL(path, import.meta.url).href;
   const there = [...document.querySelectorAll('link[rel="stylesheet"]')].find((l) => l.href === href);
   if (there?.sheet) return Promise.resolve();
   const link = there ?? Object.assign(document.createElement('link'), { rel: 'stylesheet', href });
   const done = new Promise((resolve, reject) => {
     link.addEventListener('load', resolve, { once: true });
-    link.addEventListener('error', () => reject(new Error('playful.css did not load')), { once: true });
+    link.addEventListener('error', () => reject(new Error(`${path} did not load`)), { once: true });
   });
   // After the app's stylesheet (in the body), so Playful's rules win over the ones they restyle.
   if (!there) document.body.append(link);
@@ -37,10 +38,10 @@ export function create(inputs) {
   return {
     id: 'playful',
     ready: () =>
-      (loading ??= Promise.all([import('./home.js'), import('./answer.js'), styles()])
-        .then(async ([h, a]) => {
+      (loading ??= Promise.all([import('./home.js'), import('./answer.js'), import('./cover.js').then((c) => styles(c.GAME.styles).then(() => c)), styles('./playful.css')])
+        .then(async ([h, a, c]) => {
           await fonts();
-          screens = { home: h.home, answer: a.answer };
+          screens = { home: h.home, answer: a.answer, cover: c.cover };
         })
         .catch((e) => {
           loading = null; // offline and not kept yet: try again when it is chosen again
@@ -48,5 +49,6 @@ export function create(inputs) {
         })),
     home: (opts) => screens.home(inputs, opts),
     answer: () => screens.answer(inputs),
+    cover: () => screens.cover(inputs),
   };
 }
