@@ -11,7 +11,7 @@ Every module that ships with the Forge app, grouped by kind. Within a kind they 
 | `fund` | `forge.fund.free` | Free questions | Yes | Yes | Yes | Free | No name or email |
 | `fund` | `forge.fund.invite` | Start free | By address | By address | By address | Free | Free models are Standard |
 | `fund` | `forge.fund.note` | Scan a note | Yes | Yes | Yes | The note's value | Cannot be linked to you |
-| `fund` | `forge.fund.card` | Tap a Cashu card | Points to the app | Yes | Hidden | The amount taken, fee shown | Cannot be linked to you |
+| `fund` | `forge.fund.card` | Tap a Cashu card | Points to the app | Yes | Yes, press then tap | The amount taken, fee shown | Cannot be linked to you |
 | `fund` | `forge.fund.fedimint` | Tap a Fedimint card | Points to the app | Yes, with a till | Hidden | The amount, till fee shown | The till sees the payment |
 | `fund` | `forge.fund.ecash` | eCash | Yes | Yes | Yes | The token's value | Cannot be linked to you |
 | `fund` | `forge.fund.lightning` | Lightning | Yes | Yes | Yes | The invoice | Your wallet sees it |
@@ -77,7 +77,7 @@ Takes eCash off a Cashu card held to the phone. The card proves its key, the per
 - **Id:** `forge.fund.card`, known in the app as `card`.
 - **Folder:** [`public/v2/modules/fund/card/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/card)
 - **Needs:** `nfc` (a card reader); `card.load()`, whose flow uses the [Cashu card relay](../API.md#cashu-card-relay); `wallet.topup`, `vault`, `open('othermint', {token})`.
-- **Works on:** the Android app. The website lists it and says it needs the Android app (`usable()` is false). The iPhone app leaves it out: there is no reader there yet.
+- **Works on:** the Android and iPhone apps. On the iPhone each step with the card is a press, then a tap on iOS's NFC sheet: the read, then Move or Finish. The website lists it and says it needs the app (`usable()` is false).
 - **On Add money:** the printed Cashu card, with the word Cashu. With Tap a Fedimint card there too, the two cards share one wallet card, Cards, side by side.
 - **Costs:** the amount taken off the card. Any fee and what goes back on the card are shown before the card signs.
 - **Private:** eCash, which the app marks as a way that cannot be linked to you.
@@ -89,7 +89,7 @@ Pays the engine's Lightning invoice from a Fedimint card, through a till. The en
 - **Id:** `forge.fund.fedimint`, known in the app as `fedimint`.
 - **Folder:** [`public/v2/modules/fund/fedimint/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/fedimint)
 - **Needs:** `nfc`; `till`, paired once by scanning the till's pay code with `scan`; `engine.fundLightning` for [`POST /v1/wallet/fund/lightning`](../API.md#post-v1-wallet-fund-lightning) and `engine.funding` for [`GET /v1/wallet/fund/{id}`](../API.md#get-v1-wallet-fund-id). Its payments are kept by [`public/v2/core/till.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js).
-- **Works on:** the Android app, with a paired till, while the engine has Lightning. The website lists it and says it needs the Android app. The iPhone app leaves it out.
+- **Works on:** the Android app, with a paired till, while the engine has Lightning. The website lists it and says it needs the Android app. The iPhone app leaves it out: it reads cards, but has no till.
 - **On Add money:** the printed Fedimint card, with the word Fedimint, beside the Cashu card on the Cards wallet card (a card of its own when Tap a Cashu card is not there).
 - **Costs:** the invoice, plus the till's fee and margin, shown before the tap. A failed payment offers the money back to the same card.
 - **Private:** the till sees the card and the payment; the engine sees a Lightning payment.

@@ -563,11 +563,11 @@ export default {
   'ways.card': 'card',
   'ways.info': 'About {name}',
   'ways.go': 'Open',
-  'ways.cardApp': 'Cards work in the Android app.',
+  'ways.cardApp': 'Cards work in the Forge app, Android or iPhone.',
   'ways.badge.unlinked': 'Cannot be linked to you',
   'ways.badge.seen': 'Others can see this payment',
   'ways.badge.free': 'No money needed',
-  'ways.badge.app': 'Android app',
+  'ways.badge.app': 'Forge app',
   'ways.start.word': 'Free',
   'ways.start.go': 'Start',
   'ways.note.word': 'Note',
@@ -626,10 +626,10 @@ export default {
   'fund.note.freeOne': '1 free question',
   'fund.note.freeFrom': 'Free questions. Not money.',
 
-  // Fund module: Tap a Cashu card (a Cashu eCash card, Android app only)
+  // Fund module: Tap a Cashu card (a Cashu eCash card, in the apps only)
   'fund.card.name': 'Tap a Cashu card',
   'fund.card.sub': 'Hold the card to the back of the phone. It cannot be linked to you.',
-  'fund.card.appOnly': 'Android app only. Cashu cards work in the Forge app for Android. A web page cannot talk to a card.',
+  'fund.card.appOnly': 'App only. Cashu cards work in the Forge app, Android or iPhone. A web page cannot talk to a card.',
   'fund.card.getApp': 'Get the app',
   'fund.card.what': 'No bank, no email, no name. The card holds eCash, like a prepaid card bought with cash.',
   'fund.card.nfcOff': 'NFC is off. Turn on NFC in the phone settings, then try again.',
@@ -690,6 +690,13 @@ export default {
   'fund.card.refused': 'Card mint refused it. The card mint refused this payment. Its details are kept on this phone.',
   'fund.card.notStored': 'Could not save it. This phone could not store the payment. Nothing was taken from the card.',
   'fund.card.failed': 'Card did not answer. The card did not answer as expected. Nothing was taken from it.',
+  // Tap a card in the iPhone app: the button that opens iOS's NFC sheet, and the sheet's own words
+  'fund.card.scan': 'Scan the card',
+  'fund.card.sheetHold': 'Hold the card to the top of the back of your iPhone.',
+  'fund.card.sheetKeep': 'Keep the card there.',
+  'fund.card.sheetDone': 'Done. You can take the card away.',
+  'fund.card.sheetLost': 'The card moved away. Scan it again in Forge.',
+  'fund.card.sheetOne': 'Hold one card at a time.',
   // Fund module: Tap a Fedimint card (slice A14). The card pays the engine's invoice through a till.
   'fund.fedimint.name': 'Tap a Fedimint card',
   'fund.fedimint.sub': 'A till takes the payment from the card and pays your funds.',

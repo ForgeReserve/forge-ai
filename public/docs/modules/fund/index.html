@@ -441,7 +441,7 @@
 </tr>
 </tbody></table></div>
 <h3 id="nfc"><code>nfc</code><a class="anchor" href="#nfc" aria-label="Link to this section">#</a></h3>
-<p>The card reader. In the Android app it is <code>nativeNfc</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js"><code>public/v2/core/native.js</code></a>; on the website a stand-in that cannot read cards; in the iPhone app <code>NO_READER</code>.</p>
+<p>The card reader. In the Android and iPhone apps it is <code>nativeNfc</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js"><code>public/v2/core/native.js</code></a> (the ForgeNfc plugin); on the website a stand-in that cannot read cards; in an iPhone app built before its reader, <code>NO_READER</code>.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -451,19 +451,23 @@
 </thead>
 <tbody><tr>
 <td><code>supported()</code></td>
-<td><code>true</code> only in the Android app.</td>
+<td><code>true</code> in the apps.</td>
 </tr>
 <tr>
 <td><code>listed()</code></td>
-<td>Only on the iPhone app&#39;s reader, where it returns <code>false</code>: leave card ways out there. Missing elsewhere.</td>
+<td>Only on <code>NO_READER</code>, where it returns <code>false</code>: leave card ways out there. Missing elsewhere.</td>
 </tr>
 <tr>
 <td><code>status()</code></td>
-<td>Resolves <code>{available, enabled}</code>: the phone has a reader, and it is on.</td>
+<td>Resolves <code>{available, enabled}</code>: the phone has a reader, and it is on. An iPhone that cannot read tags, and the iOS Simulator, say <code>false</code> to both.</td>
 </tr>
 <tr>
-<td><code>start(onCard)</code></td>
-<td>Listens for cards. <code>onCard</code> gets <code>{transceive(bytes), close()}</code> for each card held to the phone (<code>transceive</code> resolves the card&#39;s answer as bytes), or <code>null</code> for one that is not a smart card. Returns <code>{started, stop()}</code>.</td>
+<td><code>start(onCard, words)</code></td>
+<td>Listens for cards. <code>onCard</code> gets <code>{transceive(bytes), close()}</code> for each card held to the phone (<code>transceive</code> resolves the card&#39;s answer as bytes), or <code>null</code> for one that is not a smart card. Returns <code>{started, stop()}</code>, and on the iPhone also <code>again()</code>. <code>words</code> is for the iPhone&#39;s NFC sheet only.</td>
+</tr>
+<tr>
+<td><code>sheet</code></td>
+<td><code>true</code> on the iPhone (not a function). There the phone reads only while iOS&#39;s NFC sheet is up, and a press opens it: <code>start</code> opens it, each card&#39;s sheet closes once <code>onCard</code> has finished with that card, and <code>again()</code> opens the next one from a press. On Android reading stays on while the screen is open.</td>
 </tr>
 </tbody></table></div>
 <h3 id="card"><code>card</code><a class="anchor" href="#card" aria-label="Link to this section">#</a></h3>
@@ -652,15 +656,15 @@
 </tr>
 <tr>
 <td><code>nfc</code></td>
-<td><code>supported()</code> false: card ways are listed and say they need the Android app</td>
+<td><code>supported()</code> false: card ways are listed and say they need the app</td>
 <td>Reads cards (ForgeNfc)</td>
-<td><code>listed()</code> false: card ways are left out</td>
+<td>Reads cards (ForgeNfc), a press then a tap (<code>sheet</code>)</td>
 </tr>
 <tr>
 <td><code>till</code></td>
 <td><code>supported()</code> false</td>
 <td>Pairs and pays (ForgeTill)</td>
-<td><code>supported()</code> false</td>
+<td><code>supported()</code> false: no till yet, so Fedimint cards are left out</td>
 </tr>
 </tbody></table></div>
 <p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a Cashu card does.</p>

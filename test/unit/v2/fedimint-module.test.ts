@@ -39,9 +39,13 @@ describe('the Tap a Fedimint card module', () => {
     expect(app.sub()).toBe('fund.fedimint.subNoTill');
     settings.paired('https://till.example.org');
     expect(app.sub()).toBe('fund.fedimint.sub');
-    // The iPhone app has no reader yet: the row is left out, Lightning or not.
-    const ios = M.create({ t, nfc: NATIVE.NO_READER, till: { ...ADAPTERS.adapters.till, settings } });
+    expect(app.available({ lightning: { enabled: true } })).toBe(true);
+    // The iPhone app reads cards but has no till (ForgeTill is Android's): the row is left out, Lightning
+    // or not, as in an iPhone app with no reader at all.
+    const ios = M.create({ t, nfc: NATIVE.nativeNfc(async () => ({}), () => ({}), { sheet: true }), till: { ...ADAPTERS.adapters.till, settings } });
     expect(ios.available({ lightning: { enabled: true } })).toBe(false);
+    const old = M.create({ t, nfc: NATIVE.NO_READER, till: { ...ADAPTERS.adapters.till, settings } });
+    expect(old.available({ lightning: { enabled: true } })).toBe(false);
   });
 
   it('says what the till refused in plain words, with the PIN tries left', () => {

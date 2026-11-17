@@ -27,12 +27,44 @@ function fakeCapacitor(answers: Record<string, (opts: any) => any> = {}) {
   return { win: { Capacitor }, calls, listeners };
 }
 
-/** The bridge as the iPhone app has it: Capacitor says 'ios'. */
-function iosCapacitor() {
-  const f = fakeCapacitor();
+/**
+ * The bridge as the iPhone app has it: Capacitor says 'ios', and lists the plugins the app registered
+ * under Capacitor.Plugins (ForgeBars, and ForgeNfc from the build that has it).
+ */
+function iosCapacitor(answers: Record<string, (opts: any) => any> = {}, plugins: string[] = ['ForgeBars']) {
+  const f = fakeCapacitor(answers);
   (f.win.Capacitor as any).getPlatform = () => 'ios';
+  (f.win.Capacitor as any).Plugins = Object.fromEntries(plugins.map((p) => [p, {}]));
   return f;
 }
+
+/** The iPhone app's ForgeNfc, as NfcPlugin.swift answers: one sheet, one numbered card in it. */
+function iosNfc() {
+  const sheet = { open: false, card: 0 };
+  const f = iosCapacitor(
+    {
+      'ForgeNfc.status': () => ({ available: true, enabled: true }),
+      'ForgeNfc.start': () => void (sheet.open = true),
+      'ForgeNfc.transceive': (o) => {
+        if (!sheet.open || o.id !== sheet.card) throw Object.assign(new Error('The card is gone.'), { code: 'tag_gone' });
+        return { data: '02019000' };
+      },
+      'ForgeNfc.close': (o) => void (o.id === sheet.card && (sheet.open = false)),
+      'ForgeNfc.stop': () => void (sheet.open = false),
+    },
+    ['ForgeBars', 'ForgeNfc'],
+  );
+  /** A card is held to the open sheet. */
+  const tap = (isoDep = true) => {
+    if (!sheet.open) return false;
+    if (isoDep) sheet.card += 1;
+    for (const [plugin, event, fn] of f.listeners) if (plugin === 'ForgeNfc' && event === 'card') (fn as any)(isoDep ? { id: sheet.card, isoDep: true } : { id: 0, isoDep: false });
+    return true;
+  };
+  return { ...f, sheet, tap };
+}
+
+const settle = () => new Promise((r) => setTimeout(r, 0));
 
 describe('the native bridge', () => {
   it('is there only inside the app', () => {
@@ -361,17 +393,21 @@ describe('the iPhone app (ios/, docs/IOS.md)', () => {
     expect(N.defaultEngine(N.createNative(iosCapacitor().win))).toBe('https://ai.forge-reserve.com');
   });
 
-  it('has only ForgeBars: every other part is left to the website ways', async () => {
-    const { win, calls } = iosCapacitor();
+  it('has ForgeBars and ForgeNfc: every other part is left to the website ways', async () => {
+    const { win, calls } = iosCapacitor({}, ['ForgeBars', 'ForgeNfc']);
     const nat = N.createNative(win);
     expect(nat.platform).toBe('ios');
     expect(nat.isolated).toBe(false);
     for (const k of ['share', 'shareIn', 'forget', 'join', 'till', 'voice', 'speech', 'asr']) expect(nat[k], k).toBeNull();
+    expect(nat.nfc.supported()).toBe(true);
+    expect(nat.nfc.sheet).toBe(true);
+    // Listed: the card way is offered (Tap a card's available()).
+    expect(nat.nfc.listed).toBeUndefined();
     await nat.bars('#0B0D10');
     expect(calls).toEqual([['ForgeBars', 'set', { color: '#0B0D10' }]]);
   });
 
-  it('has no card reader, and says to leave the card ways out', async () => {
+  it('a build without ForgeNfc has no card reader, and says to leave the card ways out', async () => {
     const { win, calls } = iosCapacitor();
     const nfc = N.createNative(win).nfc;
     expect(nfc).toBe(N.NO_READER);
@@ -382,6 +418,100 @@ describe('the iPhone app (ios/, docs/IOS.md)', () => {
     expect(await r.started).toBe(false);
     r.stop();
     expect(calls).toEqual([]);
+  });
+
+  it("reports the iPhone's reader as the plugin does: none in the Simulator or on an iPhone that cannot read tags", async () => {
+    const off = iosCapacitor({ 'ForgeNfc.status': () => ({ available: false, enabled: false }) }, ['ForgeBars', 'ForgeNfc']);
+    expect(await N.createNative(off.win).nfc.status()).toEqual({ available: false, enabled: false });
+    const on = iosCapacitor({ 'ForgeNfc.status': () => ({ available: true, enabled: true }) }, ['ForgeBars', 'ForgeNfc']);
+    expect(await N.createNative(on.win).nfc.status()).toEqual({ available: true, enabled: true });
+    // A plugin that fails to answer is no reader, never an error for the page.
+    const broken = iosCapacitor({ 'ForgeNfc.status': () => Promise.reject(new Error('no')) }, ['ForgeBars', 'ForgeNfc']);
+    expect(await N.createNative(broken.win).nfc.status()).toEqual({ available: false, enabled: false });
+  });
+
+  it('press, then tap: start opens the sheet with its words, the card is let go (closing the sheet) once the page is done with it, and again() opens the next', async () => {
+    const f = iosNfc();
+    const nfc = N.createNative(f.win).nfc;
+    const words = { hold: 'Hold it.', keep: 'Keep it.', done: 'Done.', lost: 'Gone.', notCard: 'Not one.', one: 'One.' };
+    let finish: () => void = () => {};
+    const seen: any[] = [];
+    const answers: any[] = [];
+    const reader = nfc.start(async (c: any) => {
+      seen.push(c);
+      if (!c) return;
+      answers.push(await c.transceive([0x00, 0xa4, 0x04, 0x00]));
+      await new Promise<void>((r) => (finish = r));
+    }, words);
+    await reader.started;
+    expect(f.calls.find((c) => c[1] === 'start')).toEqual(['ForgeNfc', 'start', words]);
+    expect(f.sheet.open).toBe(true);
+
+    expect(f.tap()).toBe(true);
+    await settle();
+    expect(answers).toEqual([[0x02, 0x01, 0x90, 0x00]]);
+    expect(f.calls.find((c) => c[1] === 'transceive')).toEqual(['ForgeNfc', 'transceive', { id: 1, apdu: '00a40400' }]);
+    // While the page works with the card, its sheet stays up and again() opens nothing.
+    reader.again();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'start')).toHaveLength(1);
+    expect(f.sheet.open).toBe(true);
+    finish();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'close')).toEqual([['ForgeNfc', 'close', { id: 1 }]]);
+    expect(f.sheet.open).toBe(false);
+    // The card is gone with its sheet: a command for it is refused.
+    await expect(seen[0].transceive([0x00, 0xb0, 0x00, 0x00])).rejects.toMatchObject({ code: 'tag_gone' });
+    // No sheet, no tap.
+    expect(f.tap()).toBe(false);
+
+    // A press opens the next sheet; its card has a new number.
+    reader.again();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'start')).toHaveLength(2);
+    expect(f.calls.filter((c) => c[1] === 'start')[1]).toEqual(['ForgeNfc', 'start', words]);
+    f.tap();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'transceive').at(-1)).toEqual(['ForgeNfc', 'transceive', { id: 2, apdu: '00a40400' }]);
+    finish();
+    await settle();
+
+    // A tag that is not a smart card: null, and nothing to let go of (the plugin ends that sheet itself).
+    reader.again();
+    await settle();
+    const closes = f.calls.filter((c) => c[1] === 'close').length;
+    f.tap(false);
+    await settle();
+    expect(seen.at(-1)).toBeNull();
+    expect(f.calls.filter((c) => c[1] === 'close')).toHaveLength(closes);
+
+    reader.stop();
+    await settle();
+    expect(f.calls.at(-1)).toEqual(['ForgeNfc', 'stop', {}]);
+    // Stopped: a late press opens nothing.
+    const starts = f.calls.filter((c) => c[1] === 'start').length;
+    reader.again();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'start')).toHaveLength(starts);
+  });
+
+  it('lets the card go even when the page fails with it, and a sheet that cannot open is not an error for the page', async () => {
+    const f = iosNfc();
+    const nfc = N.createNative(f.win).nfc;
+    const reader = nfc.start(async () => {
+      throw new Error('the page broke');
+    }, {});
+    await reader.started;
+    f.tap();
+    await settle();
+    await settle();
+    expect(f.calls.filter((c) => c[1] === 'close')).toEqual([['ForgeNfc', 'close', { id: 1 }]]);
+
+    const refusing = iosCapacitor({ 'ForgeNfc.start': () => Promise.reject(Object.assign(new Error('This phone cannot read cards.'), { code: 'no_nfc' })) }, ['ForgeBars', 'ForgeNfc']);
+    const r = N.createNative(refusing.win).nfc.start(() => {}, {});
+    await expect(r.started).rejects.toMatchObject({ code: 'no_nfc' });
+    r.again();
+    await settle();
   });
 
   it('a bridge that refuses ForgeBars is not an error for the page', async () => {
