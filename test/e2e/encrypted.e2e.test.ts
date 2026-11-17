@@ -130,7 +130,7 @@ describe.skipIf(!up)('EHBP encrypted pass-through (fake enclave)', () => {
     expect(row.charged_msub).toBe(expectedMsub(50, 7));
   });
 
-  // Red-team finding 7, encrypted path: a non-stream enclave body that failed after 200 headers settled as
+  // The fault this guards against, on the encrypted path: a non-stream enclave body that failed after 200 headers settled as
   // 'partial' (charging the input estimate, or the whole flat schedule) and then threw a bare 502 that
   // carried no charge or change headers.
   describe('non-stream enclave body that fails after 200 headers', () => {

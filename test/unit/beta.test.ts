@@ -23,7 +23,7 @@ describe('beta waitlist contact', () => {
     expect(parseContact('ana@example.xn--p1ai')?.kind).toBe('email');
   });
   it('rejects anything a mailto URI would read as a delimiter, escape or header (finding 11)', () => {
-    // The red-team input: a query after the domain that a mail client reads as a Bcc header.
+    // The hostile input: a query after the domain that a mail client reads as a Bcc header.
     expect(parseContact('victim@example.com?bcc=thief%40evil.net&x=.org')).toBeNull();
     for (const bad of [
       'a?b@example.org',
