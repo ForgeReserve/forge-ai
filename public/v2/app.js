@@ -1566,21 +1566,49 @@ let rendered = false;
 let unsub = null;
 
 // The routes on the in-app history stack, by depth, so Done can go back to a screen instead of
-// stacking a new copy of it.
+// stacking a new copy of it. Each entry the app makes keeps the routes under it (its state's trail), and
+// the trail is read back from it whenever an entry is shown: Back and Forward over entries the app did not
+// make (an address typed or pasted, a link, the hash set by hand: no depth, so a new first entry) never
+// leave it holding routes of other entries.
 const trail = [];
 const depth = () => history.state?.forge2 ?? 0;
+/** The state of an entry at depth `d`, with the routes under it. */
+const entry = (d) => ({ forge2: d, trail: trail.slice(0, d) });
+
+// Each screen drawn has its own number. A click whose press began on an earlier screen is dropped: the
+// finger that held Pip or Burn is still down when the next screen is drawn, and lifting it must not press
+// what is now under it (holding Pip opens the helper with Type where Pip was).
+let screenNo = 0;
+let pressedOn = -1;
+function guardPresses() {
+  addEventListener('pointerdown', () => (pressedOn = screenNo), true);
+  addEventListener(
+    'click',
+    (e) => {
+      // detail 0: a click with no press (a key, a screen reader), always for the screen it is on.
+      if (e.detail === 0 || pressedOn === screenNo) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    },
+    true,
+  );
+}
 
 function nav(name, params = {}, { replace = false } = {}) {
   // With the cover on: the game is always the first entry, so Back from it never reaches the helper, and
-  // the helper's home is the one just above it, so Back from the home shows the game.
+  // the helper's home is the one just above it, so Back from the home shows the game. With no home under
+  // this screen (it was opened by an address), the first entry becomes the home, the game put under it.
   if (!replace && coverOn()) {
     if (name === 'game') return leave('game');
-    if (name === 'home') for (let i = depth() - 1; i >= 0; i--) if (trail[i] === 'home') return history.go(i - depth());
+    if (name === 'home' && currentName !== 'game' && currentName !== 'home') {
+      for (let i = depth() - 1; i >= 0; i--) if (trail[i] === 'home') return history.go(i - depth());
+      return leave('home');
+    }
   }
   const h = href(name, params);
   if (h === location.hash || (h === '#/' && !location.hash)) return render();
-  if (replace) history.replaceState({ forge2: depth() }, '', h);
-  else history.pushState({ forge2: depth() + 1 }, '', h);
+  if (replace) history.replaceState(entry(depth()), '', h);
+  else history.pushState(entry(depth() + 1), '', h);
   render();
 }
 
@@ -1710,6 +1738,8 @@ function introAddMoney() {
 
 /** Goes back to the nearest earlier `name` on the stack, or replaces this screen with it. */
 function backTo(name) {
+  // With the cover on, the helper's home is only ever the one just above the game (nav).
+  if (name === 'home' && coverOn()) return nav('home');
   for (let i = depth() - 1; i >= 0; i--) if (trail[i] === name) return history.go(i - depth());
   nav(name, {}, { replace: true });
 }
@@ -1848,11 +1878,14 @@ function render() {
   if (name === 'home' && depth() === 0 && coverOn()) {
     history.replaceState({ forge2: 0 }, '', href('game'));
     trail[0] = 'game';
-    history.pushState({ forge2: 1 }, '', href('home'));
+    history.pushState(entry(1), '', href('home'));
   }
   unsub?.();
   current?.destroy?.();
   currentName = name;
+  screenNo++;
+  const below = history.state?.trail;
+  if (Array.isArray(below)) trail.splice(0, trail.length, ...below);
   trail[depth()] = name;
   trail.length = depth() + 1;
   current = screenFor(name, params);
@@ -1932,6 +1965,7 @@ async function erasedElsewhere() {
 function showErased(ok) {
   current = erasedScreen({ t, ok });
   currentName = 'erased';
+  screenNo++;
   root.replaceChildren(current.node);
   root.dataset.route = 'erased';
   // The address no longer points at a screen of the app that was.
@@ -2034,6 +2068,7 @@ async function start() {
   await stylesReady();
 
   addEventListener('popstate', onPop);
+  guardPresses();
   native?.shareIn?.onShared(() => !erased && nav('photoShared'));
   native?.join?.onJoin(() => !erased && live && joinFromApp());
   addEventListener('online', () => {

@@ -94,7 +94,8 @@ async function choose(page: Page, mode: string) {
   await page.goto(`${g.url}/v2/#/more/look`);
   await page.waitForSelector('[data-screen=look]');
   await page.click(`#mode-${mode}`);
-  await expect.poll(() => page.getAttribute(`#mode-${mode}`, 'aria-checked')).toBe('true');
+  // On only once the mode's screens, styles and typefaces are in (Playful waits up to 1.5 s for its typefaces).
+  await expect.poll(() => page.getAttribute(`#mode-${mode}`, 'aria-checked'), { timeout: 10_000 }).toBe('true');
   if (mode === 'playful' && (await page.getAttribute('#gameFirst', 'aria-checked')) === 'true') {
     await page.click('#gameFirst');
     await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
@@ -288,8 +289,9 @@ describe('Playful mode', () => {
     await expect.poll(() => pipText(page, '#pipLine')).toBe('Copied');
     expect(await page.$eval('#toast', (n) => n.classList.contains('show') && /Copied/.test(n.textContent ?? '')).catch(() => false)).toBe(false);
 
-    // Burn: a tap only says to hold it; held, the conversation burns and Pip says so on the home.
-    await page.click('#burnBtn');
+    // Burn: a tap (a finger's, real touch input) only says to hold it; held, the conversation burns and
+    // Pip says so on the home.
+    await page.tap('#burnBtn');
     await expect.poll(() => pipText(page, '#pipLine')).toMatch(/^Hold to burn/);
     expect(await page.isVisible('[data-screen=answer]')).toBe(true);
     const b = (await page.locator('#burnBtn').boundingBox())!;

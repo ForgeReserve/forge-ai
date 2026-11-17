@@ -24,16 +24,20 @@
 body:has(> #app > .pf) { background: #4B3FC9; }
 .pf-card, .pf-bubble, .pf-chip { --focus: var(--pf-ink); }
 
-/* Top: Private and the star chip, white pills. */
+/* Top: Private and the star chip, white pills. Their words are never cut: on a phone set to larger text
+   the star chip's words go onto two lines (Free to / ask) before the row runs out of room. Private (or
+   Standard) is one word and keeps its width. */
 .pf-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .pf-chip { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 0 16px; border: 0; border-radius: 24px; background: #FFFFFF; color: var(--pf-ink); font-family: var(--pf-text); font-size: 15px; font-weight: 800; white-space: nowrap; }
-.pf-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.pf-stars { min-width: auto; justify-content: center; text-align: left; }
+.pf-stars > span { white-space: normal; text-wrap: balance; line-height: 1.2; }
 .pf-stars:active { transform: translateY(1px); background: var(--pf-lilac); }
-/* The game button: back to the cover game in one tap (docs/PLAYFUL.md). Shown while the game opens first. */
-.pf-top-start { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* The game button: back to the cover game in one tap (docs/PLAYFUL.md). Shown while the game opens first.
+   With it in the row the chips sit a little closer in, so the words keep their room at 360 px. */
+.pf-top-start { flex: none; display: flex; align-items: center; gap: 8px; }
 .pf-game { flex: none; width: 48px; padding: 0; justify-content: center; }
 .pf-game:active { transform: translateY(1px); background: var(--pf-lilac); }
-@media (max-width: 380px) { .pf-top:has(.pf-game:not([hidden])) .pf-chip:not(.pf-game) { padding: 0 12px; } }
+.pf-top:has(.pf-game:not([hidden])) .pf-chip:not(.pf-game) { gap: 6px; padding: 0 12px; }
 
 /* Home: Pip and the bubble over the rings. */
 .pf-stage { flex: 1; min-height: 0; gap: 10px; }

@@ -77,7 +77,8 @@ async function phone({ viewport = PHONE.viewport, playful = true, reduce = false
     await page.goto(`${g.url}/v2/#/more/look`);
     await page.waitForSelector('[data-screen=look]');
     await page.click('#mode-playful');
-    await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked')).toBe('true');
+    // On only once Playful's screens, styles and typefaces are in (the typefaces are waited up to 1.5 s).
+    await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked'), { timeout: 10_000 }).toBe('true');
     await page.goto(`${g.url}/v2/#/`);
     await page.reload();
     await onGame(page);
@@ -141,6 +142,22 @@ async function holdPip(page: Page, ms: number) {
   await page.mouse.down();
   await page.waitForTimeout(ms);
   await page.mouse.up();
+}
+/** Holds Pip down with a finger for `ms` (real touch input), as a phone does. */
+async function fingerHoldPip(page: Page, ms: number) {
+  const r = (await page.locator('#pipBtn').boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
+  await page.waitForTimeout(ms);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+/** The screen shown now (its data-screen). */
+const screenOf = (page: Page) => page.evaluate(() => document.querySelector('main')?.dataset.screen ?? '');
+/** Sets the address's hash by hand, as a typed address or a test driver does: an entry the app did not make. */
+async function rawHash(page: Page, hash: string, screen: string) {
+  await page.evaluate((h) => (location.hash = h), hash);
+  await expect.poll(() => screenOf(page)).toBe(screen);
 }
 /** The app put away and brought back, as a phone does (the page hidden, then shown). */
 async function awayAndBack(page: Page) {
@@ -379,6 +396,153 @@ describe("Pip's Garden", () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  // A finger lifted after the hold must not press what the helper's home has under it (Type sits where Pip
+  // was), and entries the app did not make (an address typed, the hash set by hand) must not move the game
+  // or the helper's home from their places.
+  it('Pip held with a finger opens the helper, after addresses set by hand and taps in any order; Back from it shows the game', async () => {
+    const { ctx, page, errors } = await phone({ viewport: { width: 395, height: 811 } });
+    const orders: Array<Array<() => Promise<unknown>>> = [
+      [() => rawHash(page, '#/type', 'type'), () => rawHash(page, '#/more/history', 'history'), () => page.click('.back-head button.round'), () => rawHash(page, '#/', 'home')],
+      [() => page.click('#btn-type'), () => rawHash(page, '#/funds', 'funds'), () => rawHash(page, '#/', 'home'), () => page.click('#btn-more'), () => rawHash(page, '#/more/model', 'model'), () => rawHash(page, '#/', 'home')],
+      [() => rawHash(page, '#/funds', 'funds'), () => page.click('.back-head button.round'), () => rawHash(page, '#/type', 'type'), () => page.goBack(), () => page.click('#btn-type'), () => page.goBack()],
+      [() => rawHash(page, '#/more', 'home'), () => page.click('#btn-more'), () => rawHash(page, '#/type', 'type'), () => rawHash(page, '#/game', 'game')],
+      // More by hand, closed with its button: Back from the helper's home still shows the game.
+      [() => rawHash(page, '#/more', 'home'), () => page.click('#btn-more'), () => page.waitForSelector('#moreSheet', { state: 'detached' }), () => page.goBack(), () => onGame(page)],
+    ];
+    for (const [n, steps] of orders.entries()) {
+      await onGame(page);
+      await fingerHoldPip(page, 3300);
+      await onHelper(page);
+      for (const step of steps) {
+        await step();
+        await page.waitForTimeout(150);
+      }
+      // To the game: the game button, unless the order ended on it.
+      if ((await screenOf(page)) !== 'game') {
+        await onHelper(page);
+        await page.click('#gameBtn');
+      }
+      await onGame(page);
+      await fingerHoldPip(page, 3300);
+      await onHelper(page);
+      // Give a click the finger's lift might make the time to land: the helper's home stays.
+      await page.waitForTimeout(500);
+      expect(await screenOf(page), `order ${n}`).toBe('home');
+      // Back from the helper's home shows the game.
+      await page.goBack();
+      await onGame(page);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('Default: Done and Back go where they went, also after Back over addresses set by hand', async () => {
+    const { ctx, page, errors } = await phone({ playful: false });
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    const sheetOpen = () => page.$('#moreSheet').then(Boolean);
+    // Choose a model from More, an address set by hand on top, then Back: a choice still goes home.
+    await page.click('#btn-more');
+    await page.click('#moreModel');
+    await page.waitForSelector('[data-screen=model]');
+    await rawHash(page, '#/type', 'type');
+    await page.goBack();
+    await expect.poll(() => screenOf(page)).toBe('model');
+    await page.click('[data-model="mock-echo"]');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(false);
+    // More opened by hand, History from it, the home's address on top, then Back: Ask a question goes home.
+    await rawHash(page, '#/more', 'home');
+    await page.click('#moreHistory');
+    await page.waitForSelector('[data-screen=history]');
+    await rawHash(page, '#/', 'home');
+    await page.goBack();
+    await expect.poll(() => screenOf(page)).toBe('history');
+    await page.click('#historyAsk');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(false);
+    // A screen opened by hand is a first entry, as before: its Back goes to the screen it belongs to.
+    await rawHash(page, '#/more/look', 'look');
+    await page.click('.back-head button.round');
+    await expect.poll(() => screenOf(page)).toBe('home');
+    expect(await sheetOpen()).toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 90_000);
+
+  // The helper's top row with the game button: each chip's words in full, on the home and the answer, at
+  // 360 px wide and up. A phone set to larger text scales the words and not the boxes: text-size-adjust
+  // does the same here, and at 130 % gives the Pixel's measured chips (Standard 140 px, the star 159 px).
+  it('the top row: the game button, Private or Standard and every star word in full from 360 px, with larger text too', async () => {
+    const { ctx, page, errors } = await phone({ viewport: { width: 412, height: 915 } });
+    const EN: Record<string, string> = (await import('../../public/v2/strings/en.js' as string)).default;
+    const word = (k: string): string => EN[k] ?? k;
+    const pills = [word('status.private'), word('status.standard')];
+    const stars = [...['lots', 'little', 'some', 'none', 'free', 'start'].map((k) => word(`playful.star.${k}`)), word('status.offline')];
+    await page.evaluate(() => document.fonts.ready);
+    const bigText = (pct: number) =>
+      page.evaluate((p) => {
+        document.getElementById('textScale')?.remove();
+        const s = Object.assign(document.createElement('style'), { id: 'textScale', textContent: `html { -webkit-text-size-adjust: ${p}%; text-size-adjust: ${p}%; }` });
+        document.head.append(s);
+      }, pct);
+    /** Puts the words in the chips and measures the row at once, before the screen can draw them again. */
+    const fit = (pill: string, star: string) =>
+      page.evaluate(
+        ([pill, star]) => {
+          const pillWords = document.querySelector('#privacyPill span') as HTMLElement;
+          const starWords = document.querySelector('#starWords') as HTMLElement;
+          pillWords.textContent = pill;
+          starWords.textContent = star;
+          const chips = ['#gameBtn', '#privacyPill', '#starChip'].map((s) => document.querySelector(s) as HTMLElement);
+          const [g, p, s] = chips.map((n) => n.getBoundingClientRect()) as [DOMRect, DOMRect, DOMRect];
+          const inside = (a: DOMRect, b: DOMRect) => a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5 && a.left >= b.left - 0.5 && a.right <= b.right + 0.5;
+          return {
+            // Cut short: wider than its box (an ellipsis), or its lines outside its white pill.
+            cut: [pillWords, starWords, ...chips]
+              .filter((n) => n.scrollWidth > n.clientWidth || (n.parentElement!.closest('.pf-chip') && !inside(n.getBoundingClientRect(), n.parentElement!.closest('.pf-chip')!.getBoundingClientRect())))
+              .map((n) => n.id || n.textContent),
+            overlap: g.right > p.left || p.right > s.left,
+            outside: [g, p, s].some((b) => b.left < 0 || b.right > innerWidth),
+            sideways: document.documentElement.scrollWidth > innerWidth,
+            small: [g, p, s].some((b) => b.height < 48) || g.width < 48,
+          };
+        },
+        [pill, star] as [string, string],
+      );
+    const check = async (where: string) => {
+      for (const width of [360, 384, 395, 412]) {
+        await page.setViewportSize({ width, height: 915 });
+        for (const pct of [100, 130]) {
+          await bigText(pct);
+          for (const pill of pills)
+            for (const star of stars) {
+              const r = await fit(pill, star);
+              expect(r, `${where} ${width} px, text ${pct} %, ${pill} | ${star}`).toEqual({ cut: [], overlap: false, outside: false, sideways: false, small: false });
+            }
+        }
+        if (width === 395 || width === 360) {
+          await fit(word('status.standard'), word('playful.star.free'));
+          await shot(page, `top-row-${where}-${width}-130.png`);
+        }
+      }
+      await bigText(100);
+    };
+    await holdPip(page, 3200);
+    await onHelper(page);
+    await page.waitForSelector('#gameBtn:not([hidden])');
+    await check('home');
+    await page.setViewportSize({ width: 412, height: 915 });
+    await page.click('#btn-type');
+    await page.fill('#question', 'Why is the sky dark at night?');
+    await page.click('#sendBtn');
+    await page.waitForSelector('[data-screen=answer][data-mode=playful] #burnBtn', { timeout: 20_000 });
+    await page.waitForSelector('#gameBtn:not([hidden])');
+    await check('answer');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
   it("holds the app's messages while the game shows, and Pip says them once the helper opens", async () => {
     const { ctx, page, errors } = await phone();

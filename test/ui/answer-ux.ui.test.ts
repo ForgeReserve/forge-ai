@@ -7,8 +7,9 @@ import { selection, wordAt } from './select.ts';
 
 // The answer screen's UX pass (owner, 2026-11-15): the wait shows it is working, then offers a fast model;
 // the model picker's speed groups (rabbits and turtles); Listen and the bottom row pinned under a long
-// answer; Burn held, never one tap; a new model starts a new conversation and each answer names its
-// model; and Funds says free questions work at $0 when a paid model is chosen.
+// answer, with Copy, Ask again and Burn never left half under them; Burn held, never one tap, and a quick
+// touch on it says so; a new model starts a new conversation and each answer names its model; and Funds
+// says free questions work at $0 when a paid model is chosen.
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 
 let g: Gateway;
@@ -207,6 +208,136 @@ describe('Choose a model by speed', () => {
   }, 60_000);
 });
 
+/**
+ * Answers of `n` times the mock's words (12 words at n = 1) for the 'plain-free' model, from now on: the
+ * engine's own stream with each word said n times. Returns a setter for n.
+ */
+async function answerLength(page: Page): Promise<(n: number) => void> {
+  let times = 1;
+  await page.route('**/v1/chat/completions', async (route) => {
+    if (JSON.parse(route.request().postData() ?? '{}').model !== 'plain-free') return route.continue();
+    const r = await route.fetch();
+    await route.fulfill({ response: r, body: (await r.text()).replaceAll('"content":" word"', `"content":"${' word'.repeat(times)}"`) });
+  });
+  return (n) => (times = n);
+}
+
+/** Asks a follow-up from the answer screen (or a first question from the home) and waits until it is in. */
+async function askAgain(page: Page, q: string) {
+  await page.click('#btn-type');
+  await page.waitForSelector('[data-screen=type]');
+  await page.fill('#question', q);
+  await page.click('#sendBtn');
+  await page.waitForSelector('[data-screen=answer] #burnBtn', { timeout: 20_000 });
+}
+
+/**
+ * Where each of Copy, Ask again and Burn rests: 'above' (wholly above the dock's top edge, and the tile is
+ * what a finger at its middle presses) or 'below' (wholly below the screen); anything else says how it is cut.
+ */
+const rowRests = (page: Page) =>
+  page.evaluate(() => {
+    const dockTop = document.querySelector('#answerDock')!.getBoundingClientRect().top;
+    const tiles = [...document.querySelectorAll('.action-tiles > button')];
+    const where = tiles.map((b) => {
+      const r = b.getBoundingClientRect();
+      if (r.top >= innerHeight) return 'below';
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return r.bottom <= dockTop + 0.5 && b.contains(hit) ? 'above' : `${b.id} cut at ${Math.round(r.top)} to ${Math.round(r.bottom)}, the dock from ${Math.round(dockTop)}`;
+    });
+    return tiles.length && where.every((w) => w === 'above' || w === 'below') ? 'ok' : where.join('; ') || 'no row';
+  });
+/** Waits for the row to come to rest clear of the dock (a smooth scroll may still be bringing it up). */
+const restsClear = (page: Page, what: string) => expect.poll(() => rowRests(page), { message: what, timeout: 4000 }).toBe('ok');
+
+describe('the action row and the dock', () => {
+  // Medium answers from 2 to 9 times the words: their rows land in every place across the dock's height.
+  const LENGTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 40];
+  it.each([
+    [360, 640],
+    [395, 811],
+    [412, 915],
+  ])('Copy, Ask again and Burn are never left half under the dock at %ix%i; Burn held in view burns', async (vw, vh) => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: vw, height: vh } } });
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    const words = await answerLength(page);
+    for (const n of LENGTHS) {
+      words(n);
+      await askAgain(page, `How long? ${n}`);
+      await restsClear(page, `${n} times the words`);
+    }
+    // A medium answer, then Burn held with a real pointer where it rests.
+    words(4);
+    await askAgain(page, 'Burn this one?');
+    await restsClear(page, 'before the burn');
+    const box = (await page.locator('#burnBtn').boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(vh);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForSelector('[data-screen=home]', { timeout: 6000 });
+    await page.mouse.up();
+    await expect.poll(() => conversations(page)).toBe(0);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('holds still while the answer streams; the keyboard and a kept answer opened from History leave the row clear too', async () => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 } } });
+    await zeroBalance(page);
+    await useModel(page, 'fast-two'); // mock-slow: 200 words, 20 ms apart
+    await page.click('#btn-type');
+    await page.fill('#question', 'Tell me a lot, slowly.');
+    await page.click('#sendBtn');
+    await page.waitForSelector('#answerText p, #answerText .plain', { timeout: 20_000 });
+    // While the words come in, the page does not move under the reader's eyes.
+    const tops: number[] = [];
+    while (!(await page.$('#burnBtn'))) {
+      tops.push(await page.evaluate(() => scrollY));
+      await page.waitForTimeout(100);
+    }
+    expect(tops.length).toBeGreaterThan(5);
+    expect(new Set(tops).size).toBe(1);
+    // A long answer: the row is below the screen. The keyboard's way to Burn brings it up above the dock.
+    await restsClear(page, 'the long answer');
+    expect(await rowRests(page)).toBe('ok');
+    await page.focus('#burnBtn');
+    await restsClear(page, 'Burn focused');
+    expect(await page.evaluate(() => document.querySelector('#burnBtn')!.getBoundingClientRect().top < innerHeight)).toBe(true);
+    // A kept medium answer opened from History, on screens of many heights: clear of the dock each time.
+    await useModel(page, 'plain-free');
+    const words = await answerLength(page);
+    words(5);
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await askAgain(page, 'Keep this one.');
+    for (let vh = 640; vh <= 920; vh += 40) {
+      await page.setViewportSize({ width: 395, height: vh });
+      await page.goto(`${g.url}/v2/#/more/history`);
+      await page.waitForSelector('.hist-open');
+      await page.click('.hist-card:first-child .hist-open');
+      await page.waitForSelector('[data-screen=answer] #burnBtn');
+      await restsClear(page, `opened from History at 395x${vh}`);
+    }
+    expect(errors.filter((e) => !/status of 40[13]/.test(e))).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('with reduced motion, the row is put clear of the dock without a glide', async () => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 }, reducedMotion: 'reduce' } });
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    const words = await answerLength(page);
+    for (const n of LENGTHS) {
+      words(n);
+      await askAgain(page, `How long, still? ${n}`);
+      await restsClear(page, `${n} times the words`);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+});
+
 describe('a long answer', () => {
   it.each([
     [390, 844],
@@ -274,6 +405,85 @@ describe('Burn, held', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
+
+  // On the phones a quick touch on Burn showed no hint: where the answer left Burn half under the dock, the
+  // finger at its middle touched the dock, not Burn. Real touch input here, as a phone sends it.
+  it('a quick touch on Burn says to hold, once, wherever the answer leaves it; a held touch burns, one slid off does not', async () => {
+    const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 } } });
+    await zeroBalance(page);
+    await useModel(page, 'plain-free');
+    const words = await answerLength(page);
+    const cdp = await ctx.newCDPSession(page);
+    const touch = async (x: number, y: number, ms: number, to?: { x: number; y: number }) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      if (to) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
+      await page.waitForTimeout(ms);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    // How many messages the toast has shown since it was last emptied.
+    await page.evaluate(() => {
+      (window as any).toasts = 0;
+      new MutationObserver((recs) => recs.forEach((r) => (r.target as HTMLElement).id === 'toast' && r.addedNodes.length && (window as any).toasts++)).observe(document.body, { subtree: true, childList: true });
+    });
+    const emptyToast = () =>
+      page.evaluate(() => {
+        document.getElementById('toast')?.replaceChildren();
+        (window as any).toasts = 0;
+      });
+    const middle = async (sel: string) => {
+      const b = (await page.locator(sel).boundingBox())!;
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    };
+    // Answers of many lengths: wherever Burn comes to rest in view, a quick touch at its middle says to hold.
+    for (const n of [2, 3, 4, 5, 6, 7, 8, 9]) {
+      words(n);
+      await askAgain(page, `Touch it? ${n}`);
+      // The row comes to rest (it may glide up above the dock), as a person waits for it.
+      await page.waitForTimeout(700);
+      const m = await middle('#burnBtn');
+      if (m.y >= 811) continue; // below the screen: nothing to touch until it is scrolled to
+      await emptyToast();
+      await touch(m.x, m.y, 60);
+      await expect.poll(() => page.textContent('#toast'), { message: `${n} times the words` }).toMatch(/^Hold to burn\./);
+      await page.waitForTimeout(600);
+      expect(await page.evaluate(() => (window as any).toasts), `${n} times the words`).toBe(1);
+      expect(await page.isVisible('[data-screen=answer]')).toBe(true);
+    }
+    expect(await conversations(page)).toBe(1);
+    // Touched, slid off and let go before the end: nothing burns.
+    const m = await middle('#burnBtn');
+    await touch(m.x, m.y, 500, { x: m.x, y: m.y - 200 });
+    await page.waitForFunction(() => !document.querySelector('.answer-card.burning'), null, { timeout: 3000 });
+    expect(await page.isVisible('[data-screen=answer]')).toBe(true);
+    expect(await conversations(page)).toBe(1);
+    // Held to the end: it burns, and the home it lands on takes nothing from the finger's lift.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [m] });
+    await page.waitForSelector('[data-screen=home]', { timeout: 6000 });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(() => conversations(page)).toBe(0);
+    await page.waitForTimeout(400);
+    expect(await page.isVisible('[data-screen=home]')).toBe(true);
+    // History's flame and Burn all: a quick touch says to hold there too.
+    words(1);
+    await askAgain(page, 'Keep me for History.');
+    await page.goto(`${g.url}/v2/#/more/history`);
+    await page.waitForSelector('.burn-one');
+    for (const sel of ['.burn-one', '#burnAllYes']) {
+      if (sel === '#burnAllYes') {
+        await page.click('#burnAll');
+        await page.waitForSelector('#burnAllYes');
+      }
+      await emptyToast();
+      const t = await middle(sel);
+      await touch(t.x, t.y, 60);
+      await expect.poll(() => page.textContent('#toast'), { message: sel }).toMatch(/^Hold to burn\./);
+      await page.waitForTimeout(600);
+      expect(await page.evaluate(() => (window as any).toasts), sel).toBe(1);
+    }
+    expect(await conversations(page)).toBe(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
   it("a screen reader's activation cannot hold: the first says to press again, the second burns, and a late second starts over", async () => {
     const { ctx, page, errors } = await phone();
