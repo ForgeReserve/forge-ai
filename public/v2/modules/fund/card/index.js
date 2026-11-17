@@ -3,10 +3,13 @@
 // by default), the card signs one swap at its own mint, and the eCash that comes back is added to the
 // funds. The work is core/card/flow.js; this file is the screen.
 //
-// Only the Android app can read these cards (the nfc input is its reader). On the website the row says
-// so and points to the app. The card can stay on the phone for the whole thing: read, PIN and amount,
-// signature, swap and the card's change. If it leaves early, the screen asks for it again and goes on
-// from where it was; what the card already signed is kept on the phone and finished then (flow.js).
+// Only the apps can read these cards (the nfc input is their reader). On the website the row says so
+// and points to the app. On Android the card can stay on the phone for the whole thing: read, PIN and
+// amount, signature, swap and the card's change. If it leaves early, the screen asks for it again and
+// goes on from where it was; what the card already signed is kept on the phone and finished then
+// (flow.js). On the iPhone the phone reads only while iOS's NFC sheet is up (nfc.sheet), and the sheet
+// covers the screen: each step with the card is a press, then a tap (the read, then Move or Finish), and
+// the sheet closes in between, while the person types the PIN and the amount.
 //
 // Where the eCash goes: a card from the engine's own mint tops up the funds through the vault (stored
 // first, removed once credited). A card from another mint the engine takes through other-mint funding:
@@ -83,8 +86,8 @@ export function create(inputs) {
     id: 'card',
     group: 'unlinked',
     icon: 'card',
-    // Listed on the website and in the Android app: on the website the row says cards need the app.
-    // Not in the iPhone app, which has no reader yet and no app to point to (core/native.js NO_READER).
+    // Listed on the website and in the apps: on the website the row says cards need the app. Not in an
+    // iPhone app built before its reader, which has no app to point to (core/native.js NO_READER).
     // Usable only where there is a reader, so How you pay shows a card only in the app.
     available: () => nfc?.listed?.() !== false,
     usable: () => !!nfc?.supported?.(),
@@ -130,7 +133,10 @@ export function create(inputs) {
 
       const hold = (line = t('fund.card.keep')) => {
         body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'card-hold', id: 'cardHold' }, t('fund.card.hold')), ui.sayEl('p', { class: 'note', id: 'cardHoldLine' }, line), msg, failedList()));
-        foot.replaceChildren();
+        // The iPhone: waiting for the card is the NFC sheet. It opens now (this follows a press) unless a
+        // card is being handled, whose sheet closes when it is done; Scan opens it again.
+        foot.replaceChildren(...kids(nfc.sheet && btn({ class: 'btn primary block', id: 'cardScan', onclick: () => reader?.again() }, 'nfc', t('fund.card.scan'))));
+        if (nfc.sheet) reader?.again();
       };
 
       /**
@@ -196,6 +202,8 @@ export function create(inputs) {
           else await read();
         } finally {
           busy = false;
+          // The iPhone lets the card go with its sheet once this is done: the next step needs a new tap.
+          if (nfc.sheet) current = null;
         }
       };
 
@@ -215,8 +223,18 @@ export function create(inputs) {
         if (gone) return;
         hold();
         reader?.stop();
-        reader = nfc.start((c) => onCard(c));
+        reader = nfc.start((c) => onCard(c), nfc.sheet ? sheetWords() : undefined);
       };
+
+      /** The words on the iPhone's NFC sheet (ios/App/App/NfcPlugin.swift). */
+      const sheetWords = () => ({
+        hold: t('fund.card.sheetHold'),
+        keep: t('fund.card.sheetKeep'),
+        done: t('fund.card.sheetDone'),
+        lost: t('fund.card.sheetLost'),
+        notCard: t('fund.card.notEcash'),
+        one: t('fund.card.sheetOne'),
+      });
 
       /** A card this engine cannot take from: said once, nothing asked of the card. */
       const refuse = (text) => {

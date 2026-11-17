@@ -30,6 +30,16 @@
 	<string>If you pick the phone's speech recognition in Voice, Apple turns a question you speak into words.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Forge saves a photo to your library only when you pick Save.</string>
+	<key>NFCReaderUsageDescription</key>
+	<string>Forge reads an eCash card only when you hold it to the phone to add money.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>F043415348554341524401</string>
+		<string>F0434153485543415244</string>
+		<string>D2760000850102</string>
+		<string>D276000085010201</string>
+		<string>F0464F585943415244</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

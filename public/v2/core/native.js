@@ -1,7 +1,7 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
-// The iPhone app (ios/, docs/IOS.md) has the same bridge but only ForgeBars: everything else there is
-// the website's own way of doing it, or hidden as on the website (createNative).
+// The iPhone app (ios/, docs/IOS.md) has the same bridge with ForgeBars and ForgeNfc: everything else
+// there is the website's own way of doing it, or hidden (createNative).
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
@@ -57,9 +57,10 @@ const fileData = async (file) => bytesToBase64(new Uint8Array(await file.arrayBu
  *   shareIn: a photo shared in from another app.
  *   forget(): removes the photo files the app wrote to storage and the web view's cache.
  *   isolated: the page is served cross-origin isolated (reloadForIsolation).
- * The iPhone app has none of the Android plugins but ForgeBars, so there every other part is null and
- * the page does what it does in Safari on an iPhone: the share sheet through navigator.share, Hold to
- * talk through the browser's own ways, no card taps and no till (they need a Swift port first).
+ * The iPhone app has two of the Android plugins, ForgeBars and ForgeNfc (card taps, through the
+ * iPhone's NFC sheet), so there every other part is null and the page does what it does in Safari on an
+ * iPhone: the share sheet through navigator.share, Hold to talk through the browser's own ways, and no
+ * till (ForgeTill needs a Swift port first).
  */
 export function createNative(win = globalThis) {
   const bridge = nativeBridge(win);
@@ -67,7 +68,9 @@ export function createNative(win = globalThis) {
   const { call, on } = bridge;
   const bars = (color) => call('ForgeBars', 'set', { color }).catch(() => {});
   if (bridge.platform === 'ios') {
-    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc: NO_READER, till: null, voice: null, speech: null, asr: null, bars };
+    // An app built before ForgeNfc has no reader: the card ways are left out there, as before.
+    const nfc = hasPlugin(win, 'ForgeNfc') ? nativeNfc(call, on, { sheet: true }) : NO_READER;
+    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc, till: null, voice: null, speech: null, asr: null, bars };
   }
   return {
     platform: 'android',
@@ -131,10 +134,13 @@ export function createNative(win = globalThis) {
   };
 }
 
+/** Whether the app registered this plugin (Capacitor iOS lists each one under Capacitor.Plugins). */
+const hasPlugin = (win, name) => !!win?.Capacitor?.Plugins?.[name];
+
 /**
- * The iPhone app's card reader: none yet. The website lists the card ways and points to the Android
- * app; the iPhone app has nowhere to point, so listed() says to leave them out (modules/fund/card and
- * fedimint).
+ * An iPhone app with no card reader (built before ForgeNfc). The website lists the card ways and points
+ * to the app; such an app has nowhere to point, so listed() says to leave them out (modules/fund/card
+ * and fedimint).
  */
 export const NO_READER = Object.freeze({
   supported: () => false,
@@ -390,27 +396,65 @@ const unhex = (h) => {
  * Card taps through ForgeNfc, as the nfc adapter (core/adapters.js) describes it. Each card that comes
  * into the field is numbered by the app; its transceiver sends that number with every command, so a
  * command meant for one card never reaches the next.
+ *
+ * sheet: the iPhone app (ios/App/App/NfcPlugin.swift). There the phone reads only while iOS's own NFC
+ * sheet is up, and the sheet opens only when the app asks, after a press: start(onCard, words) opens it
+ * with words for it ({hold, keep, done, lost, notCard, one}, Android takes none), the sheet holds the
+ * one card that is tapped, and once onCard has finished with that card it is let go (close), which
+ * closes the sheet. again() opens the sheet for the next tap, from a press; it does nothing while a card
+ * is being handled, as that sheet is still up. On Android reading stays on while the screen is open.
  */
-export function nativeNfc(call, on) {
+export function nativeNfc(call, on, { sheet = false } = {}) {
   return {
     supported: () => true,
+    ...(sheet ? { sheet: true } : {}),
     async status() {
       const r = await call('ForgeNfc', 'status').catch(() => null);
       return { available: r?.available === true, enabled: r?.enabled === true };
     },
-    start(onCard) {
+    start(onCard, words) {
+      let handling = false;
       const handle = on('ForgeNfc', 'card', (ev) => {
         if (ev?.isoDep === false) return onCard(null);
         const id = ev?.id;
-        onCard({
+        const card = {
           transceive: async (apdu) => unhex((await call('ForgeNfc', 'transceive', { id, apdu: hex(apdu) }))?.data),
           close: () => call('ForgeNfc', 'close', { id }).catch(() => {}),
-        });
+        };
+        if (!sheet) return onCard(card);
+        handling = true;
+        Promise.resolve()
+          .then(() => onCard(card))
+          .catch(() => {})
+          .finally(() => {
+            handling = false;
+            card.close();
+          });
       });
-      const started = call('ForgeNfc', 'start');
+      if (!sheet) {
+        const started = call('ForgeNfc', 'start');
+        return {
+          started,
+          stop() {
+            Promise.resolve(handle)
+              .then((h) => h?.remove?.())
+              .catch(() => {});
+            call('ForgeNfc', 'stop').catch(() => {});
+          },
+        };
+      }
+      const open = () => call('ForgeNfc', 'start', { ...(words ?? {}) });
+      const started = open();
+      // Nothing waits on it: a sheet that could not open leaves the screen's Scan button to try again.
+      started.catch(() => {});
+      let stopped = false;
       return {
         started,
+        again() {
+          if (!handling && !stopped) open().catch(() => {});
+        },
         stop() {
+          stopped = true;
           Promise.resolve(handle)
             .then((h) => h?.remove?.())
             .catch(() => {});

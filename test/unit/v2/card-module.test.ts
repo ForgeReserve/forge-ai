@@ -38,7 +38,17 @@ describe('the Tap a card module', () => {
     expect(M.create({ t, nfc: { supported: () => true } }).usable()).toBe(true);
   });
 
-  it('is not listed in the iPhone app, which has no reader and no app to point to', () => {
+  it('is listed and usable in the iPhone app, whose reader is the NFC sheet', () => {
+    const ios = M.create({ t, nfc: NATIVE.nativeNfc(async () => ({}), () => ({}), { sheet: true }) });
+    expect(ios.available()).toBe(true);
+    expect(ios.usable()).toBe(true);
+    for (const k of ['scan', 'sheetHold', 'sheetKeep', 'sheetDone', 'sheetLost', 'sheetOne']) {
+      expect(en[`fund.card.${k}`], k).toBeTruthy();
+      expect(en[`fund.card.${k}`], k).not.toMatch(/[—–]/);
+    }
+  });
+
+  it('is not listed in an iPhone app built before its reader, which has no app to point to', () => {
     const ios = M.create({ t, nfc: NATIVE.NO_READER });
     expect(ios.available()).toBe(false);
     expect(ios.usable()).toBe(false);

@@ -2085,7 +2085,7 @@ async function start() {
 /** The engine as fund modules see it: always the current engine object. */
 const engineProxy = new Proxy({}, { get: (_, k) => engine[k] });
 
-/** Card taps: the Android app's reader, or the website's stand-in that says a page cannot read cards. */
+/** Card taps: the app's reader (Android or iPhone), or the website's stand-in that says a page cannot read cards. */
 const nfc = native?.nfc ?? adapters.nfc;
 /**
  * Taking eCash off a Cashu card (core/card/flow.js), with the card's mint reached through the current

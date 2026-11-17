@@ -15,7 +15,13 @@ const plistString = (key: string) => plist.match(new RegExp(`<key>${key}</key>\\
 
 describe('iPhone app project', () => {
   it('is com.forgereserve.ai, named Forge, at the version in package.json, iPhone only', () => {
-    expect(project.match(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)).toEqual(['PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai;', 'PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai;']);
+    // The app, Debug and Release, and its unit tests' bundle (AppTests).
+    expect(project.match(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)).toEqual([
+      'PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai;',
+      'PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai;',
+      'PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai.tests;',
+      'PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai.tests;',
+    ]);
     expect(plistString('CFBundleDisplayName')).toBe('Forge');
     const version = JSON.parse(read('package.json')).version;
     expect(project.match(/MARKETING_VERSION = ([^;]+);/g)).toEqual([`MARKETING_VERSION = ${version};`, `MARKETING_VERSION = ${version};`]);
@@ -29,7 +35,7 @@ describe('iPhone app project', () => {
   });
 
   it('says plainly why it asks for the camera, the microphone and speech recognition, with no em dash', () => {
-    for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSSpeechRecognitionUsageDescription', 'NSPhotoLibraryAddUsageDescription']) {
+    for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSSpeechRecognitionUsageDescription', 'NSPhotoLibraryAddUsageDescription', 'NFCReaderUsageDescription']) {
       const s = plistString(key);
       expect(s, key).toBeTruthy();
       expect(s!.length, key).toBeLessThan(120);
@@ -37,6 +43,7 @@ describe('iPhone app project', () => {
     }
     expect(plistString('NSCameraUsageDescription')).toMatch(/read a code/);
     expect(plistString('NSMicrophoneUsageDescription')).toMatch(/question you speak/);
+    expect(plistString('NFCReaderUsageDescription')).toMatch(/reads an eCash card only when you hold it to the phone/);
   });
 
   it('opens dark: Midnight behind the web view and the launch screen, light status bar text', () => {
@@ -48,11 +55,54 @@ describe('iPhone app project', () => {
     expect(read('ios/App/App/Base.lproj/LaunchScreen.storyboard')).toContain('red="0.043137254901960784" green="0.050980392156862744" blue="0.062745098039215685"');
   });
 
-  it("registers its one plugin, ForgeBars, as the page calls it", () => {
+  it('registers its plugins, ForgeBars and ForgeNfc, as the page calls them', () => {
     expect(read('ios/App/App/BarsPlugin.swift')).toContain('public let jsName = "ForgeBars"');
     expect(read('ios/App/App/ForgeViewController.swift')).toContain('registerPluginInstance(BarsPlugin())');
+    expect(read('ios/App/App/ForgeViewController.swift')).toContain('registerPluginInstance(NfcPlugin())');
     expect(read('ios/App/App/Base.lproj/Main.storyboard')).toContain('customClass="ForgeViewController" customModule="App"');
-    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift']) expect(project).toContain(`${f} in Sources`);
+    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift', 'NfcPlugin.swift', 'NfcRules.swift']) expect(project).toContain(`${f} in Sources`);
+  });
+
+  it("ForgeNfc has the Android plugin's methods, event and error codes", () => {
+    const swift = read('ios/App/App/NfcPlugin.swift');
+    const kotlin = read('android/app/src/main/java/com/forgereserve/ai/NfcPlugin.kt');
+    expect(swift).toContain('public let jsName = "ForgeNfc"');
+    expect(kotlin).toContain('@CapacitorPlugin(name = "ForgeNfc")');
+    const kotlinMethods = [...kotlin.matchAll(/@PluginMethod\s+fun (\w+)/g)].map((m) => m[1]).sort();
+    const swiftMethods = [...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1]).sort();
+    expect(swiftMethods).toEqual(kotlinMethods);
+    for (const m of swiftMethods) expect(swift).toContain(`@objc func ${m}(_ call: CAPPluginCall)`);
+    const codes = (src: string) => [...new Set([...src.matchAll(/reject\("[^"]+", "(\w+)"\)/g)].map((m) => m[1]))].sort();
+    // Two of Android's never happen on an iPhone: nfc_off (no switch for NFC alone) and short_answer
+    // (CoreNFC hands the status word apart, so every answer has one).
+    expect(codes(swift)).toEqual(codes(kotlin).filter((c) => c !== 'nfc_off' && c !== 'short_answer'));
+    expect(swift).toContain('notifyListeners("card", data: ["id": 0, "isoDep": false])');
+    expect(swift).toContain('notifyListeners("card", data: ["id": self.currentId, "isoDep": true])');
+    expect(read('ios/App/App/NfcRules.swift')).toContain('static let timeoutMs = 5000');
+  });
+
+  it('may read tags, and selects exactly the card applets the page selects, the applet first', async () => {
+    for (const config of project.match(/buildSettings = \{[^}]*PRODUCT_BUNDLE_IDENTIFIER = com\.forgereserve\.ai;[^}]*\}/g) ?? []) {
+      expect(config).toContain('CODE_SIGN_ENTITLEMENTS = App/App.entitlements;');
+    }
+    expect(project).toContain('App.entitlements */ = {isa = PBXFileReference;');
+    const ent = read('ios/App/App/App.entitlements');
+    expect(ent).toMatch(/<key>com\.apple\.developer\.nfc\.readersession\.formats<\/key>\s*<array>\s*<string>TAG<\/string>\s*<\/array>/);
+    const aids = [...(plist.match(/<key>com\.apple\.developer\.nfc\.readersession\.iso7816\.select-identifiers<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1] ?? '').matchAll(/<string>([0-9A-F]+)<\/string>/g)].map((m) => m[1]);
+    const apdu: any = await import('../../public/v2/core/card/apdu.js' as string);
+    const hexOf = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+    expect(aids).toEqual([apdu.APPLET_AID, apdu.PACKAGE_AID, ...apdu.LEGACY_AIDS].map(hexOf));
+    // Not the NDEF application: a tag with it would come as a card.
+    expect(aids).not.toContain('D2760000850101');
+    // NFC is not required to install the app.
+    expect(plist).not.toMatch(/<string>nfc<\/string>/);
+  });
+
+  it('tests NfcRules in a unit test bundle of its own, with no team', () => {
+    expect(project).toContain('productType = "com.apple.product-type.bundle.unit-test";');
+    expect(project).toContain('NfcRulesTests.swift in Sources');
+    expect(project.match(/NfcRules\.swift in Sources/g)).toHaveLength(4);
+    expect(read('ios/App/AppTests/NfcRulesTests.swift')).toContain('final class NfcRulesTests: XCTestCase');
   });
 
   it('bundles the web app on every build, before the files are copied in', () => {

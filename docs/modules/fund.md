@@ -142,14 +142,15 @@ Drawing QR codes ([`public/js/qr.js`](https://github.com/ForgeReserve/forge-ai/b
 
 ### `nfc`
 
-The card reader. In the Android app it is `nativeNfc` in [`public/v2/core/native.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js); on the website a stand-in that cannot read cards; in the iPhone app `NO_READER`.
+The card reader. In the Android and iPhone apps it is `nativeNfc` in [`public/v2/core/native.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/native.js) (the ForgeNfc plugin); on the website a stand-in that cannot read cards; in an iPhone app built before its reader, `NO_READER`.
 
 | Function | What it does |
 | - | - |
-| `supported()` | `true` only in the Android app. |
-| `listed()` | Only on the iPhone app's reader, where it returns `false`: leave card ways out there. Missing elsewhere. |
-| `status()` | Resolves `{available, enabled}`: the phone has a reader, and it is on. |
-| `start(onCard)` | Listens for cards. `onCard` gets `{transceive(bytes), close()}` for each card held to the phone (`transceive` resolves the card's answer as bytes), or `null` for one that is not a smart card. Returns `{started, stop()}`. |
+| `supported()` | `true` in the apps. |
+| `listed()` | Only on `NO_READER`, where it returns `false`: leave card ways out there. Missing elsewhere. |
+| `status()` | Resolves `{available, enabled}`: the phone has a reader, and it is on. An iPhone that cannot read tags, and the iOS Simulator, say `false` to both. |
+| `start(onCard, words)` | Listens for cards. `onCard` gets `{transceive(bytes), close()}` for each card held to the phone (`transceive` resolves the card's answer as bytes), or `null` for one that is not a smart card. Returns `{started, stop()}`, and on the iPhone also `again()`. `words` is for the iPhone's NFC sheet only. |
+| `sheet` | `true` on the iPhone (not a function). There the phone reads only while iOS's NFC sheet is up, and a press opens it: `start` opens it, each card's sheet closes once `onCard` has finished with that card, and `again()` opens the next one from a press. On Android reading stays on while the screen is open. |
 
 ### `card`
 
@@ -268,8 +269,8 @@ Add these to [`public/v2/strings/en.js`](https://github.com/ForgeReserve/forge-a
 | - | - | - | - |
 | `engine` | The page's own origin | `https://ai.forge-reserve.com` until the person sets another | The same as Android |
 | `scan` | The browser's camera | The camera, through the web view | The camera, through the web view |
-| `nfc` | `supported()` false: card ways are listed and say they need the Android app | Reads cards (ForgeNfc) | `listed()` false: card ways are left out |
-| `till` | `supported()` false | Pairs and pays (ForgeTill) | `supported()` false |
+| `nfc` | `supported()` false: card ways are listed and say they need the app | Reads cards (ForgeNfc) | Reads cards (ForgeNfc), a press then a tap (`sheet`) |
+| `till` | `supported()` false | Pairs and pays (ForgeTill) | `supported()` false: no till yet, so Fedimint cards are left out |
 
 A module that needs a card or a till returns `usable()` false where it cannot work, and its `view` says so in one line with a link to `/download`, as Tap a Cashu card does.
 

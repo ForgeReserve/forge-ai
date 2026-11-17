@@ -12,6 +12,10 @@
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		F0A9E0012E00000100000001 /* ForgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000002 /* ForgeViewController.swift */; };
 		F0A9E0012E00000100000003 /* BarsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000004 /* BarsPlugin.swift */; };
+		F0A9E0012E00000100000006 /* NfcPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000007 /* NfcPlugin.swift */; };
+		F0A9E0012E00000100000008 /* NfcRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000009 /* NfcRules.swift */; };
+		F0A9E0012E0000010000000B /* NfcRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000009 /* NfcRules.swift */; };
+		F0A9E0012E0000010000000C /* NfcRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E0000010000000D /* NfcRulesTests.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -26,6 +30,11 @@
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		F0A9E0012E00000100000002 /* ForgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeViewController.swift; sourceTree = "<group>"; };
 		F0A9E0012E00000100000004 /* BarsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarsPlugin.swift; sourceTree = "<group>"; };
+		F0A9E0012E00000100000007 /* NfcPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcPlugin.swift; sourceTree = "<group>"; };
+		F0A9E0012E00000100000009 /* NfcRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcRules.swift; sourceTree = "<group>"; };
+		F0A9E0012E0000010000000A /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		F0A9E0012E0000010000000D /* NfcRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcRulesTests.swift; sourceTree = "<group>"; };
+		F0A9E0012E0000010000000E /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -45,6 +54,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F0A9E0012E00000100000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -60,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3061FED79650016851F /* App */,
+				F0A9E0012E0000010000000F /* AppTests */,
 				504EC3051FED79650016851F /* Products */,
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
@@ -70,6 +87,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				F0A9E0012E0000010000000E /* AppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,6 +99,9 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				F0A9E0012E00000100000002 /* ForgeViewController.swift */,
 				F0A9E0012E00000100000004 /* BarsPlugin.swift */,
+				F0A9E0012E00000100000007 /* NfcPlugin.swift */,
+				F0A9E0012E00000100000009 /* NfcRules.swift */,
+				F0A9E0012E0000010000000A /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -98,6 +119,14 @@
 				AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */,
 			);
 			name = Pods;
+			sourceTree = "<group>";
+		};
+		F0A9E0012E0000010000000F /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				F0A9E0012E0000010000000D /* NfcRulesTests.swift */,
+			);
+			path = AppTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -122,6 +151,22 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F0A9E0012E00000100000012 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0A9E0012E00000100000013 /* Build configuration list for PBXNativeTarget "AppTests" */;
+			buildPhases = (
+				F0A9E0012E00000100000010 /* Sources */,
+				F0A9E0012E00000100000011 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AppTests;
+			productName = AppTests;
+			productReference = F0A9E0012E0000010000000E /* AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -155,6 +200,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				F0A9E0012E00000100000012 /* AppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -235,6 +281,17 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				F0A9E0012E00000100000001 /* ForgeViewController.swift in Sources */,
 				F0A9E0012E00000100000003 /* BarsPlugin.swift in Sources */,
+				F0A9E0012E00000100000006 /* NfcPlugin.swift in Sources */,
+				F0A9E0012E00000100000008 /* NfcRules.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0A9E0012E00000100000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F0A9E0012E0000010000000B /* NfcRules.swift in Sources */,
+				F0A9E0012E0000010000000C /* NfcRulesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,6 +429,7 @@
 			baseConfigurationReference = FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
@@ -393,6 +451,7 @@
 			baseConfigurationReference = AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
@@ -401,6 +460,36 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		F0A9E0012E00000100000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F0A9E0012E00000100000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.forgereserve.ai.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
@@ -425,6 +514,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F0A9E0012E00000100000013 /* Build configuration list for PBXNativeTarget "AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F0A9E0012E00000100000014 /* Debug */,
+				F0A9E0012E00000100000015 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
