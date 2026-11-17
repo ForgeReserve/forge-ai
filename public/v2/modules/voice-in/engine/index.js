@@ -10,6 +10,15 @@ import { concat, encodeWav, level, resample, TARGET_RATE } from '../../../core/w
  */
 export const MIN_SEND_SECONDS = 0.5;
 
+/**
+ * A recording with no voice in it is not sent either: nothing is paid for, and no model is left to
+ * guess words out of silence. A chunk counts as voice at this level or louder (core/wav.js level: a
+ * quiet room stays well under it, speech near the phone is several times over it), and a recording
+ * needs this much voice in all.
+ */
+export const VOICE_LEVEL = 0.05;
+export const MIN_VOICE_SECONDS = 0.1;
+
 export function create({ mic, audio }) {
   const model = () => audio.model('transcription');
   return {
@@ -23,10 +32,13 @@ export function create({ mic, audio }) {
       const rec = await mic.open();
       let chunks = [];
       let samples = 0;
+      let voiced = 0; // samples in chunks loud enough to be a voice
       rec.onData((buf) => {
         chunks.push(buf);
         samples += buf.length;
-        onLevel(level(buf));
+        const l = level(buf);
+        if (l >= VOICE_LEVEL) voiced += buf.length;
+        onLevel(l);
       });
       return {
         seconds: () => samples / rec.sampleRate,
@@ -35,7 +47,7 @@ export function create({ mic, audio }) {
           const pcm = resample(concat(chunks), rec.sampleRate, TARGET_RATE);
           chunks = [];
           const seconds = pcm.length / TARGET_RATE;
-          if (seconds < MIN_SEND_SECONDS) return { text: '', chargedMsub: 0, balanceMsub: null };
+          if (seconds < MIN_SEND_SECONDS || voiced / rec.sampleRate < MIN_VOICE_SECONDS) return { text: '', chargedMsub: 0, balanceMsub: null };
           const wav = encodeWav(pcm, TARGET_RATE);
           return audio.transcribe(wav, { seconds, signal });
         },
