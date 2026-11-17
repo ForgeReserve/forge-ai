@@ -209,6 +209,8 @@ describe('hold to talk', () => {
         // The helper's home, not the cover game it opens on by default (docs/PLAYFUL.md).
         await page.click('#gameFirst');
         await expect.poll(() => page.getAttribute('#gameFirst', 'aria-checked')).toBe('false');
+        // The settings are written to IndexedDB without waiting: give the write a moment before the page goes.
+        await page.waitForTimeout(500);
         await page.goto(`${g.url}/v2/#/`);
         await page.reload();
         await page.waitForSelector('[data-screen=home][data-mode=playful]');
