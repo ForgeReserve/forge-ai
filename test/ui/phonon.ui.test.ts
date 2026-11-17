@@ -6,6 +6,7 @@ import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { fakePhoneVoice } from './phonevoice.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { micArgs } from './mic.ts';
 
 // The natural voice made on the phone (Phonon 31m through the vendored phonon-tts), in a phone-sized
 // Chrome against a local gateway that serves the model from its own origin. The page is cross-origin
@@ -24,7 +25,7 @@ beforeAll(async () => {
   browser = await chromium.launch({
     channel: 'chrome',
     headless: true,
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: micArgs(),
   });
 }, 60_000);
 

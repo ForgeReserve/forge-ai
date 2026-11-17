@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { micArgs } from './mic.ts';
 
 // Playful mode (docs/PLAYFUL.md) in a phone-sized Chrome: chosen in Mode and look and kept after a reload,
 // its home (Pip, the rings, the coloured bar) and its answer (a streamed answer in the card, Again, Share,
@@ -27,7 +28,7 @@ beforeAll(async () => {
   browser = await chromium.launch({
     channel: 'chrome',
     headless: true,
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: micArgs(),
   });
   if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 }, 60_000);
