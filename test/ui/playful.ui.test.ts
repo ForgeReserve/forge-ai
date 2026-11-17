@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { selection, wordAt } from './select.ts';
 import { micArgs } from './mic.ts';
 
 // Playful mode (docs/PLAYFUL.md) in a phone-sized Chrome: chosen in Mode and look and kept after a reload,
@@ -303,6 +304,30 @@ describe('Playful mode', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  it('a long press selects none of Pip’s screens, only the answer and the question asked', async () => {
+    const { ctx, page, errors } = await phone();
+    await playfulHome(page);
+    const check = async (where: string) => {
+      const s = await selection(page);
+      expect(s.selectable, `${where}: interface that can be selected`).toEqual([]);
+      expect(s.unselectable, `${where}: content that cannot be selected`).toEqual([]);
+      expect(s.chrome, `${where}: interface parts looked at`).toBeGreaterThan(2);
+      return s;
+    };
+    await check('home');
+    await page.click('#btn-add');
+    await page.waitForSelector('.float-card');
+    await check('home with Add open');
+    await page.click('#btn-add');
+    await page.waitForSelector('.float-card', { state: 'detached' });
+    await askTyped(page, 'Why is the sky blue?');
+    expect((await check('answer')).content).toBeGreaterThan(1);
+    expect(await wordAt(page, '#answerText')).not.toBe('');
+    expect(await wordAt(page, '#shareBtn')).toBe('');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
 
   it('Hold to talk records with Pip listening, and sliding off cancels with Pip saying so', async () => {
     const { ctx, page, errors, asked } = await phone();

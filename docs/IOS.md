@@ -150,6 +150,8 @@ On an iPhone 17 simulator (iOS 26.5), with a probe in the installed copy only th
 
 A swipe that was not quite straight moved a screen's scrolling part 10 px to the left and left it there (seen on Share unseen; History had the same overflow): an info button sits 10 px past the edge of its line. Measured in the Simulator with Maestro swipes, before and after the fix in `style.css` (`.scroll`).
 
+A long press on a control selected its words and brought up Copy, Look Up and Translate (Add, Photo). The interface's words are not selectable now, on every platform (`style.css`, "What a person can select"); an answer, the question asked, `.mono` lines and fields still are. In the Simulator: a long press on Add, Photo selects nothing; the Type field takes typing, a caret and a paste from the edit menu; answer text selects a word with the Copy menu.
+
 ## Not verified
 
 - A real card tap: the Simulator has no NFC. Nothing in `NfcPlugin.swift` past `status` and the refusals has run: the sheet, a card's connection, a command, the 5 second limit, a card lost mid-command, the sheet's words.

@@ -878,3 +878,15 @@ button.funds-ring { padding: 0; border: 0; border-radius: 50%; background: trans
    10 px into the screen's padding on each side, with its content where it was, so the button fits inside
    it; anything else that would stick out is cut off rather than scrolled to. */
 .scroll { margin-inline: -10px; padding-inline: 10px; overflow-x: hidden; }
+
+/* What a person can select (iPhone rehearsal: a long press on Add, Photo selected the word and brought
+   up Copy, Look Up and Translate). The app is driven by long presses, so its own words never are: no
+   selection and no phone menu on a long press, anywhere. The content can be selected and copied: an
+   answer with its code and links, the question asked, an address or code shown on its own line (.mono,
+   the download page's .hash), and every field (WebKit takes no typing in a field it cannot select).
+   A mode with its own answer screen gives its text the same in its own stylesheet. */
+*, *::before, *::after { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable]:not([contenteditable="false"]),
+.answer-body, .answer-body *, .asked, .mono, .hash { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* A code block's head in an answer (its language and Copy) is a control, not the code. */
+.answer-body button, .answer-body .code-head, .answer-body .code-head * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

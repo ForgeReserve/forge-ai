@@ -140,3 +140,8 @@ body:has(> #app > .pf) { background: #4B3FC9; }
   .pf-rest { font-size: 16px; }
   .pf-answer { gap: 10px; }
 }
+
+/* What a person can select (style.css, "What a person can select"): Pip's answer and the question
+   asked, as on Default; a code block's head stays a control. */
+.pf-text, .pf-text *, .pf-asked { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+.pf-text button, .pf-text .code-head, .pf-text .code-head * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
