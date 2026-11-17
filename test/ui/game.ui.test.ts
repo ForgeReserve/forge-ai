@@ -380,6 +380,79 @@ describe("Pip's Garden", () => {
     await ctx.close();
   }, 90_000);
 
+  // The helper's top row with the game button: each chip's words in full, on the home and the answer, at
+  // 360 px wide and up. A phone set to larger text scales the words and not the boxes: text-size-adjust
+  // does the same here, and at 130 % gives the Pixel's measured chips (Standard 140 px, the star 159 px).
+  it('the top row: the game button, Private or Standard and every star word in full from 360 px, with larger text too', async () => {
+    const { ctx, page, errors } = await phone({ viewport: { width: 412, height: 915 } });
+    const EN: Record<string, string> = (await import('../../public/v2/strings/en.js' as string)).default;
+    const word = (k: string): string => EN[k] ?? k;
+    const pills = [word('status.private'), word('status.standard')];
+    const stars = [...['lots', 'little', 'some', 'none', 'free', 'start'].map((k) => word(`playful.star.${k}`)), word('status.offline')];
+    await page.evaluate(() => document.fonts.ready);
+    const bigText = (pct: number) =>
+      page.evaluate((p) => {
+        document.getElementById('textScale')?.remove();
+        const s = Object.assign(document.createElement('style'), { id: 'textScale', textContent: `html { -webkit-text-size-adjust: ${p}%; text-size-adjust: ${p}%; }` });
+        document.head.append(s);
+      }, pct);
+    /** Puts the words in the chips and measures the row at once, before the screen can draw them again. */
+    const fit = (pill: string, star: string) =>
+      page.evaluate(
+        ([pill, star]) => {
+          const pillWords = document.querySelector('#privacyPill span') as HTMLElement;
+          const starWords = document.querySelector('#starWords') as HTMLElement;
+          pillWords.textContent = pill;
+          starWords.textContent = star;
+          const chips = ['#gameBtn', '#privacyPill', '#starChip'].map((s) => document.querySelector(s) as HTMLElement);
+          const [g, p, s] = chips.map((n) => n.getBoundingClientRect()) as [DOMRect, DOMRect, DOMRect];
+          const inside = (a: DOMRect, b: DOMRect) => a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5 && a.left >= b.left - 0.5 && a.right <= b.right + 0.5;
+          return {
+            // Cut short: wider than its box (an ellipsis), or its lines outside its white pill.
+            cut: [pillWords, starWords, ...chips]
+              .filter((n) => n.scrollWidth > n.clientWidth || (n.parentElement!.closest('.pf-chip') && !inside(n.getBoundingClientRect(), n.parentElement!.closest('.pf-chip')!.getBoundingClientRect())))
+              .map((n) => n.id || n.textContent),
+            overlap: g.right > p.left || p.right > s.left,
+            outside: [g, p, s].some((b) => b.left < 0 || b.right > innerWidth),
+            sideways: document.documentElement.scrollWidth > innerWidth,
+            small: [g, p, s].some((b) => b.height < 48) || g.width < 48,
+          };
+        },
+        [pill, star] as [string, string],
+      );
+    const check = async (where: string) => {
+      for (const width of [360, 384, 395, 412]) {
+        await page.setViewportSize({ width, height: 915 });
+        for (const pct of [100, 130]) {
+          await bigText(pct);
+          for (const pill of pills)
+            for (const star of stars) {
+              const r = await fit(pill, star);
+              expect(r, `${where} ${width} px, text ${pct} %, ${pill} | ${star}`).toEqual({ cut: [], overlap: false, outside: false, sideways: false, small: false });
+            }
+        }
+        if (width === 395 || width === 360) {
+          await fit(word('status.standard'), word('playful.star.free'));
+          await shot(page, `top-row-${where}-${width}-130.png`);
+        }
+      }
+      await bigText(100);
+    };
+    await holdPip(page, 3200);
+    await onHelper(page);
+    await page.waitForSelector('#gameBtn:not([hidden])');
+    await check('home');
+    await page.setViewportSize({ width: 412, height: 915 });
+    await page.click('#btn-type');
+    await page.fill('#question', 'Why is the sky dark at night?');
+    await page.click('#sendBtn');
+    await page.waitForSelector('[data-screen=answer][data-mode=playful] #burnBtn', { timeout: 20_000 });
+    await page.waitForSelector('#gameBtn:not([hidden])');
+    await check('answer');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
   it("holds the app's messages while the game shows, and Pip says them once the helper opens", async () => {
     const { ctx, page, errors } = await phone();
     // The app's own toast, as a top-up finishing would send it.
