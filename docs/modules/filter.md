@@ -95,6 +95,8 @@ There is no setting to turn a filter off. A filter added after these runs last.
 
 Share unseen works the same on the website, in the Android app and in the iPhone app. A filter sees only the photo object. The photo comes from the camera or the gallery, or from another app's share sheet: through the web app's share target on the website, and through the app itself on Android.
 
+The iPhone app serves its files from `capacitor://localhost`, not from an `https://` address. A filter that loads a file of its own, such as a model, makes its address with `new URL(name, import.meta.url)` and hands it to `fetch` whole. Do not let a library rebuild the address: face-api's `loadFromUri` keeps only `http://` and `https://` addresses whole, so in the iPhone app it asked for `capacitor:/localhost/...` and the face check never ran. The face filter fetches its model's manifest itself and hands the weights to face-api (`loadModel` in `cover-faces/index.js`).
+
 ## A minimal filter
 
 This filter covers the orange date some cameras print on a photo. It is [`docs/modules/examples/filter/date-stamp/`](https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/filter/date-stamp), and [Write your first module](first-module.md#a-filter-cover-a-date-stamp) builds it step by step. Its `manifest.json`:
@@ -131,4 +133,4 @@ export function create() {
 
 ## Tests
 
-[`test/unit/v2/photo.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts) tests the filter chain with fake filters, the writing finder and the details reader on real camera files in `test/unit/fixtures/photos/`. [`test/ui/photo.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts) picks a photo in Chrome and checks the blocks and the list of changes.
+[`test/unit/v2/photo.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts) tests the filter chain with fake filters, the writing finder and the details reader on real camera files in `test/unit/fixtures/photos/`. [`test/ui/photo.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts) picks a photo in Chrome and checks the blocks and the list of changes. [`test/unit/v2/face-model.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/face-model.test.ts) loads the face model with the real face-api from the website's, the Android app's and the iPhone app's addresses, and [`test/unit/ios.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/ios.test.ts) checks that the iPhone app carries every file the filters load.

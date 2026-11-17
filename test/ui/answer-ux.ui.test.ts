@@ -3,6 +3,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from 'playwrig
 import { createInvite, type Gateway, mintsUp, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 import { fakePhoneVoice } from './phonevoice.ts';
+import { selection, wordAt } from './select.ts';
 
 // The answer screen's UX pass (owner, 2026-11-15): the wait shows it is working, then offers a fast model;
 // the model picker's speed groups (rabbits and turtles); Listen and the bottom row pinned under a long
@@ -486,4 +487,70 @@ describe('money at $0 with free models', () => {
     expect(errors.filter((e) => !/status of 40[13]/.test(e))).toEqual([]);
     await ctx.close();
   }, 60_000);
+});
+
+describe('a long press never selects the interface', () => {
+  // iPhone rehearsal: a long press on the Add sheet selected "Photo" and brought up Copy, Look Up and
+  // Translate. The app is driven by long presses, so its own words are never selectable; an answer, its
+  // code, the question and what is typed are (style.css, "What a person can select").
+  it('buttons, labels, tabs, chips, cards and headings are not selectable on any main screen; the answer and fields are', async () => {
+    const { ctx, page, errors } = await phone({ context: { permissions: ['clipboard-read', 'clipboard-write'] } });
+    await zeroBalance(page);
+    const check = async (where: string) => {
+      const s = await selection(page);
+      expect(s.selectable, `${where}: interface that can be selected`).toEqual([]);
+      expect(s.unselectable, `${where}: content that cannot be selected`).toEqual([]);
+      expect(s.chrome, `${where}: interface parts looked at`).toBeGreaterThan(2);
+      return s;
+    };
+    await check('home');
+    for (const sheet of ['#btn-add', '#btn-more']) {
+      await page.click(sheet);
+      await page.waitForSelector('.float-card');
+      await check(`home with ${sheet} open`);
+      await page.click(sheet);
+      await page.waitForSelector('.float-card', { state: 'detached' });
+    }
+    for (const route of ['funds', 'funds/add', 'more/look', 'more/model', 'more/voice', 'more/history', 'photo']) {
+      await page.goto(`${g.url}/v2/#/${route}`);
+      await page.waitForSelector('main .scroll, .way-track');
+      await page.waitForLoadState('networkidle');
+      await check(route);
+    }
+    // A heading is not selected by a double click either (a desktop's word select).
+    await page.goto(`${g.url}/v2/#/more/look`);
+    await page.waitForSelector('main h1');
+    expect(await wordAt(page, 'main h1')).toBe('');
+
+    // Type: the field takes typing, a caret placed in the middle, and a paste.
+    await useModel(page, 'plain-free');
+    await page.click('#btn-type');
+    await page.waitForSelector('#question');
+    expect((await check('type')).content).toBeGreaterThan(0);
+    await page.click('#question');
+    await page.keyboard.type('What rain');
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft');
+    await page.keyboard.type('is ');
+    await page.evaluate(() => navigator.clipboard.writeText(' today'));
+    await page.keyboard.press('End');
+    await page.keyboard.press('ControlOrMeta+V');
+    expect(await page.inputValue('#question')).toBe('What is rain today');
+    await page.click('#sendBtn');
+    await page.waitForSelector('[data-screen=answer]');
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+
+    // The answer: its text, a code block in it and the question asked can be selected; its controls cannot.
+    // A code block as the answer's renderer makes it (public/js/markdown.js), with its Copy button.
+    await page.evaluate(() =>
+      document.querySelector('#answerText')!.insertAdjacentHTML('beforeend', '<div class="code"><div class="code-head"><span>js</span><button type="button" class="btn copy-code">Copy</button></div><pre><code id="code1">let a = 1;</code></pre></div>'),
+    );
+    const a = await check('answer');
+    expect(a.content).toBeGreaterThan(2);
+    expect(await wordAt(page, '#answerText p')).not.toBe('');
+    expect(await wordAt(page, '#code1')).not.toBe('');
+    expect(await wordAt(page, '.copy-code')).toBe('');
+    expect(await wordAt(page, '#copyBtn')).toBe('');
+    expect(errors.filter((e) => !/status of 40[13]/.test(e))).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 });

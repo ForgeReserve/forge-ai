@@ -1,8 +1,8 @@
 // The iPhone app (ios/, docs/IOS.md): the Xcode project's identity and permissions, what stays out of
 // git, and the web bundle it carries (the APK's, through scripts/lib/android-web.ts).
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bundleFiles, readConfig, writeBundle } from '../../scripts/lib/android-web.ts';
 
@@ -188,5 +188,51 @@ describe('the web bundle in the iPhone app', () => {
     expect(cfg).toMatchObject({ appId: 'com.forgereserve.ai', appName: 'Forge', packageClassList: [] });
     expect(cfg.webDir).toBeUndefined();
     expect(existsSync(join(dir, 'capacitor.plugins.json'))).toBe(false);
+  });
+});
+
+describe('the Share unseen filters in the iPhone app', () => {
+  /**
+   * Every file a filter module loads, as paths under public/: its manifest and entry, what they import,
+   * what they open with new URL(..., import.meta.url) (a folder: each file in it, and for a model, each
+   * file its weights manifest names), followed through every module found.
+   */
+  function loads(folder: string): Set<string> {
+    const out = new Set<string>([`${folder}/manifest.json`]);
+    const todo = [`${folder}/index.js`];
+    while (todo.length) {
+      const f = todo.pop()!;
+      if (out.has(f)) continue;
+      out.add(f);
+      const src = read(`public/${f}`);
+      const here = posix.dirname(f);
+      for (const [, ref = ''] of src.matchAll(/(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s+'([^']+)'/g)) {
+        todo.push(posix.join(here, ref));
+      }
+      for (const [, ref = ''] of src.matchAll(/new URL\('([^']+)', import\.meta\.url\)/g)) {
+        const p = posix.join(here, ref);
+        if (!ref.endsWith('/')) {
+          todo.push(p);
+          continue;
+        }
+        for (const name of readdirSync(join(ROOT, 'public', p))) {
+          out.add(posix.join(p, name));
+          if (name.endsWith('-weights_manifest.json'))
+            for (const group of JSON.parse(read(`public/${p}${name}`))) for (const w of group.paths) out.add(posix.join(p, w));
+        }
+      }
+    }
+    return out;
+  }
+
+  it('carries every file the three filters load: their modules, face-api and its model', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'forge-ios-filters-'));
+    writeBundle(join(ROOT, 'public'), dir, readConfig(join(ROOT, 'capacitor.config.json')), 'ios');
+    const all = new Set<string>();
+    for (const f of ['strip-details', 'cover-faces', 'cover-numbers']) for (const p of loads(`v2/modules/filter/${f}`)) all.add(p);
+    // The walk found the detector and its model, so it would see them go missing.
+    for (const p of ['vendor/face-api/face-api.js', 'vendor/face-api/model/tiny_face_detector_model-weights_manifest.json', 'vendor/face-api/model/tiny_face_detector_model.bin', 'v2/core/covers.js', 'v2/core/photometa.js', 'v2/modules/filter/cover-numbers/textfind.js']) expect(all, p).toContain(p);
+    const missing = [...all].filter((p) => !existsSync(join(dir, 'public', p)));
+    expect(missing).toEqual([]);
   });
 });
