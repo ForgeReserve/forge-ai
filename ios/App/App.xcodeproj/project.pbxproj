@@ -17,6 +17,7 @@
 		F0A9E0012E0000010000000B /* NfcRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000009 /* NfcRules.swift */; };
 		F0A9E0012E0000010000000C /* NfcRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E0000010000000D /* NfcRulesTests.swift */; };
 		F0A9E0012E00000100000016 /* SpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000017 /* SpeechPlugin.swift */; };
+		F0A9E0012E0000010000001D /* SharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E0000010000001E /* SharePlugin.swift */; };
 		F0A9E0012E00000100000018 /* SpeechRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000019 /* SpeechRules.swift */; };
 		F0A9E0012E0000010000001A /* SpeechRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E00000100000019 /* SpeechRules.swift */; };
 		F0A9E0012E0000010000001B /* SpeechRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9E0012E0000010000001C /* SpeechRulesTests.swift */; };
@@ -39,6 +40,7 @@
 		F0A9E0012E0000010000000A /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		F0A9E0012E0000010000000D /* NfcRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcRulesTests.swift; sourceTree = "<group>"; };
 		F0A9E0012E00000100000017 /* SpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPlugin.swift; sourceTree = "<group>"; };
+		F0A9E0012E0000010000001E /* SharePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePlugin.swift; sourceTree = "<group>"; };
 		F0A9E0012E00000100000019 /* SpeechRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRules.swift; sourceTree = "<group>"; };
 		F0A9E0012E0000010000001C /* SpeechRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRulesTests.swift; sourceTree = "<group>"; };
 		F0A9E0012E0000010000000E /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -108,6 +110,7 @@
 				F0A9E0012E00000100000004 /* BarsPlugin.swift */,
 				F0A9E0012E00000100000007 /* NfcPlugin.swift */,
 				F0A9E0012E00000100000009 /* NfcRules.swift */,
+				F0A9E0012E0000010000001E /* SharePlugin.swift */,
 				F0A9E0012E00000100000017 /* SpeechPlugin.swift */,
 				F0A9E0012E00000100000019 /* SpeechRules.swift */,
 				F0A9E0012E0000010000000A /* App.entitlements */,
@@ -293,6 +296,7 @@
 				F0A9E0012E00000100000003 /* BarsPlugin.swift in Sources */,
 				F0A9E0012E00000100000006 /* NfcPlugin.swift in Sources */,
 				F0A9E0012E00000100000008 /* NfcRules.swift in Sources */,
+				F0A9E0012E0000010000001D /* SharePlugin.swift in Sources */,
 				F0A9E0012E00000100000016 /* SpeechPlugin.swift in Sources */,
 				F0A9E0012E00000100000018 /* SpeechRules.swift in Sources */,
 			);

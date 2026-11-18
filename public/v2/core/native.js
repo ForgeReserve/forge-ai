@@ -1,7 +1,7 @@
 // The Android app's native side, as the web app sees it (android/, docs/ANDROID.md). In the app,
 // Capacitor puts a bridge on window.Capacitor; on the website there is none and nothing here is used.
-// The iPhone app (ios/, docs/IOS.md) has the same bridge with ForgeBars, ForgeNfc and ForgeSpeech:
-// everything else there is the website's own way of doing it, or hidden (createNative).
+// The iPhone app (ios/, docs/IOS.md) has the same bridge with ForgeBars, ForgeNfc, ForgeSpeech and
+// ForgeShare's Save: everything else there is the website's own way of doing it, or hidden (createNative).
 // The bridge carries calls to the app's plugins: ForgeShare (the share sheet, Save, and removing the
 // photo files the app wrote), ForgeShareIn (a photo shared in from another app), ForgeNfc (card taps:
 // the bytes of each card command and the card's answer), ForgeTill (the till a Fedimint card pays
@@ -60,9 +60,11 @@ const fileData = async (file) => bytesToBase64(new Uint8Array(await file.arrayBu
  *   isolated: the page is served cross-origin isolated (reloadForIsolation).
  * The iPhone app has three of the Android plugins, ForgeBars, ForgeNfc (card taps, through the
  * iPhone's NFC sheet) and ForgeSpeech (Hold to talk heard by Apple's recogniser on the phone itself,
- * SpeechPlugin.swift), so there every other part is null and the page does what it does in Safari on an
- * iPhone: the share sheet through navigator.share, Hold to talk through the engine or the browser's own
- * recogniser where the phone cannot hear it itself, and no till (ForgeTill needs a Swift port first).
+ * SpeechPlugin.swift), and ForgeShare's Save (to Photos, SharePlugin.swift). There share holds save
+ * only: the page keeps the share sheet it has in Safari (navigator.share), and app.js puts this save over
+ * it. Every other part is null and the page does what it does in Safari on an iPhone: Hold to talk
+ * through the engine or the browser's own recogniser where the phone cannot hear it itself, and no till
+ * (ForgeTill needs a Swift port first).
  */
 export function createNative(win = globalThis) {
   const bridge = nativeBridge(win);
@@ -74,7 +76,9 @@ export function createNative(win = globalThis) {
     const nfc = hasPlugin(win, 'ForgeNfc') ? nativeNfc(call, on, { sheet: true }) : NO_READER;
     // An app built before ForgeSpeech: the engine hears Hold to talk, as before.
     const speech = hasPlugin(win, 'ForgeSpeech') ? nativeSpeech(call, on) : null;
-    return { platform: 'ios', isolated: false, share: null, shareIn: null, forget: null, join: null, nfc, till: null, voice: null, speech, asr: null, bars };
+    // An app built before ForgeShare: Save is the website's download, as before.
+    const share = hasPlugin(win, 'ForgeShare') ? { save: (file) => photosSave(call, file) } : null;
+    return { platform: 'ios', isolated: false, share, shareIn: null, forget: null, join: null, nfc, till: null, voice: null, speech, asr: null, bars };
   }
   return {
     platform: 'android',
@@ -136,6 +140,17 @@ export function createNative(win = globalThis) {
      */
     bars,
   };
+}
+
+/**
+ * Save in the iPhone app: the file into the Photos library through ForgeShare (SharePlugin.swift), as
+ * its exact bytes. Resolves {saved: true, to: 'photos'} only once Photos has it. Rejects with {code}:
+ * denied (adding to Photos is not allowed), save_failed, bad_type or bad_file.
+ */
+async function photosSave(call, file) {
+  const r = await call('ForgeShare', 'save', { name: file.name, mime: file.type, data: await fileData(file) });
+  if (r?.saved !== true) throw Object.assign(new Error('not saved'), { code: 'save_failed' });
+  return { saved: true, to: 'photos' };
 }
 
 /** Whether the app registered this plugin (Capacitor iOS lists each one under Capacitor.Plugins). */

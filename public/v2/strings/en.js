@@ -249,7 +249,11 @@ export default {
   'photo.ask': 'Ask about it',
   'photo.save': 'Save',
   'photo.shared': 'Shared',
-  'photo.saved': 'Saved to this phone',
+  'photo.saved': 'Saved',
+  'photo.savedPhotos': 'Saved to Photos',
+  'photo.downloading': 'Download started. Look in your downloads.',
+  'photo.saveDenied': 'Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share.',
+  'photo.saveFailed': 'Not saved. Try again, or tap Share.',
 
   // More sheet
   'more.title': 'More',

@@ -345,6 +345,9 @@ describe('Share unseen', () => {
     for (const id of ['#photoShare', '#photoSave']) {
       const [download] = await Promise.all([page.waitForEvent('download'), page.click(id)]);
       expect(download.suggestedFilename()).toBe('photo.jpg');
+      // A page is never told where a download went: it says only that it started.
+      await expect.poll(() => page.textContent('#toast')).toBe('Download started. Look in your downloads.');
+      await page.evaluate(() => document.getElementById('toast')!.textContent = '');
       const out = new Uint8Array(readFileSync((await download.path())!));
       expect(META.readDetails(out).found).toEqual([]);
       expect(META.leftDetails(out)).toEqual([]);
@@ -518,6 +521,75 @@ describe('Share unseen', () => {
     expect(px.flat.every(Boolean)).toBe(true);
     expect(px.inner).toBeLessThan(3);
     expect(px.edge).toBeLessThan(12);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('in the iPhone app, Save puts the clean file in Photos and says Saved only once it is there', async () => {
+    // The iPhone app's bridge: ForgeShare's save as SharePlugin.swift answers it, by __photos.mode.
+    const ctx = await browser.newContext({ ...PHONE, serviceWorkers: 'block' });
+    await pastFirstRun(ctx);
+    await ctx.addInitScript(() => {
+      const w = window as any;
+      w.__photos = { mode: 'ok', saved: [] as number[][], calls: 0 };
+      w.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+        Plugins: { ForgeBars: {}, ForgeShare: {} },
+        nativePromise: async (plugin: string, method: string, opts: any) => {
+          if (plugin !== 'ForgeShare' || method !== 'save') return undefined;
+          w.__photos.calls += 1;
+          if (w.__photos.mode === 'denied') throw Object.assign(new Error('Forge may not add to Photos.'), { code: 'denied' });
+          if (w.__photos.mode === 'failed') throw Object.assign(new Error('The photo could not be saved.'), { code: 'save_failed' });
+          w.__photos.saved.push(Array.from(atob(opts.data), (c) => c.charCodeAt(0)));
+          return { saved: true };
+        },
+        addListener: () => ({ remove: async () => {} }),
+      };
+      // The web view's own share sheet, as in Safari on an iPhone.
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: (d: any) => Array.isArray(d?.files) && d.files.length > 0 });
+      Object.defineProperty(navigator, 'share', { configurable: true, value: async () => {} });
+    });
+    // Nothing reaches Forge's own engine (the app's default): the local one is set in More, Engine.
+    await ctx.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => route.abort('blockedbyclient'));
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => m.type() === 'error' && !/Failed to load resource|ERR_BLOCKED_BY_CLIENT/.test(m.text()) && errors.push(m.text()));
+    await page.goto(`${g.url}/v2/#/more/engine`);
+    await page.waitForSelector('[data-screen=engine]');
+    await page.fill('#engineAddress', `${g.url}/`);
+    await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
+    await page.waitForSelector('[data-screen=home]');
+    await pick(page, 'IMG_2041.jpg', CREW);
+    const photos = () => page.evaluate(() => (window as any).__photos);
+    const toastText = () => page.evaluate(() => document.getElementById('toast')?.textContent ?? '');
+
+    // Refused: nothing is said to be saved, and the line says what to do.
+    await page.evaluate(() => ((window as any).__photos.mode = 'denied'));
+    await page.click('#photoSave');
+    await page.waitForSelector('#photoStatus.err');
+    expect(await page.textContent('#photoStatus')).toBe('Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share.');
+    expect(await toastText()).not.toMatch(/Saved/);
+
+    // Failed: the same, with its own words.
+    await page.evaluate(() => ((window as any).__photos.mode = 'failed'));
+    await page.click('#photoSave');
+    await expect.poll(() => page.evaluate(() => (window as any).__photos.calls)).toBe(2);
+    await expect.poll(() => page.textContent('#photoStatus')).toBe('Not saved. Try again, or tap Share.');
+    expect(await toastText()).not.toMatch(/Saved/);
+
+    // Allowed: Photos has the file, then the toast says so, and the line is clear.
+    await page.evaluate(() => ((window as any).__photos.mode = 'ok'));
+    await page.click('#photoSave');
+    await expect.poll(() => page.textContent('#toast')).toBe('Saved to Photos');
+    expect(await page.textContent('#photoStatus')).toBe('');
+    const { saved } = await photos();
+    expect(saved).toHaveLength(1);
+    // What went to Photos is the clean file, with no hidden details: never a download.
+    const out = new Uint8Array(saved[0]);
+    expect(META.readDetails(out).found).toEqual([]);
+    expect(META.leftDetails(out)).toEqual([]);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

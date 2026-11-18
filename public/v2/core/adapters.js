@@ -379,7 +379,8 @@ const defaults = {
   /**
    * The phone's share sheet, for a file made on the phone (Share unseen). files(list) opens the sheet
    * and resolves once the person picked an app or closed it (an AbortError when closed). save(file)
-   * hands the file to the browser as a download, where there is no share sheet or for Save.
+   * hands the file to the browser as a download, where there is no share sheet or for Save, and resolves
+   * {started: true}: a page is never told whether the download finished or where it went.
    */
   share: {
     canShareFiles: (files) => typeof navigator !== 'undefined' && typeof navigator.share === 'function' && !!navigator.canShare?.({ files }),
@@ -395,6 +396,7 @@ const defaults = {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return { started: true };
     },
   },
 

@@ -123,9 +123,10 @@ const S = store.S;
 
 // Inside the Android app (core/native.js): its share sheet, photos shared in, and Forge's engine as the
 // default, since the app's own origin (https://localhost) has no engine. null on the website. The iPhone
-// app (capacitor://localhost) has Forge's engine as the default and the website's share sheet.
+// app (capacitor://localhost) has Forge's engine as the default and the website's share sheet, with Save
+// to Photos in place of the download.
 const native = createNative();
-if (native?.share) setAdapter('share', native.share);
+if (native?.share) setAdapter('share', { ...adapters.share, ...native.share });
 
 const engineBase = () => S.settings.engine || defaultEngine(native);
 
