@@ -2,10 +2,12 @@
 // /v1/wallet/topup through wallet.topup, which stores the token on the phone before sending it and
 // removes it only after the engine confirms the credit (core/vault.js).
 //
-// eCash from the engine's own mint in the unit these funds do not hold (sats for dollar funds, or the
-// reverse) is not added as it is: when the engine changes it (methods.convert), the price comes first
-// (the other-mint quote, kit.js foreignQuote), with Yes and No. The phone reads the token's unit before
-// sending it; a top-up the engine refuses with wrong_unit and a pointer to the change gets the same offer.
+// eCash goes to the balance of its own unit, as it is: sats to the sat balance, dollars to the dollar
+// one, the second balance opened with the first one's key (docs/PAYMENTS.md, Two balances). Only where
+// that balance cannot be opened (an engine without two balances) is eCash in the other unit changed:
+// when the engine changes it (methods.convert), the price comes first (the other-mint quote, kit.js
+// foreignQuote), with Yes and No. The phone reads the token's unit before sending it; a top-up the
+// engine refuses with wrong_unit and a pointer to the change gets the same offer.
 // A token handed over by another fund module (a scanned note, a card tap) fills the box and is sent at once.
 import { noteVerdict, readNote } from '../../../core/note.js';
 import { foreignQuote, inviteField, tokenBox } from '../kit.js';
@@ -31,8 +33,8 @@ export function create(inputs) {
       const foot = ui.el('div', { class: 'foot' }, add);
       let quote = null;
 
-      /** The engine changes eCash from its own mint into the unit of the funds on this phone. */
-      const canConvert = () => !!wallet.key() && !!wallet.unit() && !!wallet.methods()?.convert?.units?.includes(wallet.unit());
+      /** The engine changes eCash from its own mint into `unit`, a balance this phone has. */
+      const canConvert = (unit) => !!unit && !!(wallet.keyFor ? wallet.keyFor(unit) : wallet.key()) && !!wallet.methods()?.convert?.units?.includes(unit);
       /** No: back to the box with the token in it, nothing sent and nothing kept. */
       const keep = () => {
         quote?.stop();
@@ -43,7 +45,7 @@ export function create(inputs) {
       };
       const convert = async (token, unit) => {
         msg.set(t('fund.othermint.checking'));
-        const r = await engine.foreignQuote(wallet.key(), { token, unit, pubkey: wallet.lockKey() || undefined });
+        const r = await engine.foreignQuote(wallet.keyFor ? wallet.keyFor(unit) : wallet.key(), { token, unit, pubkey: wallet.lockKey() || undefined });
         if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
         msg.set('');
         quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added, onNo: keep });
@@ -55,9 +57,11 @@ export function create(inputs) {
         if (!/^cashu[AB]/.test(token)) return msg.set(t('fund.ecash.bad'), 'err');
         add.disabled = true;
         try {
-          // Read before sending: from the engine's own mint, in the other unit, goes to the price.
+          // Read before sending: from the engine's own mint, in a unit no balance here takes as it is
+          // (wallet.landsIn names another), goes to the price.
           const note = readNote(token);
-          if (note.ok && canConvert() && noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.unit(), convert: true }) === 'convert') return await convert(token, wallet.unit());
+          const to = note.ok ? (wallet.landsIn ? wallet.landsIn(note.unit) : wallet.unit()) : null;
+          if (note.ok && canConvert(to) && noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: to, convert: true }) === 'convert') return await convert(token, to);
           if (invite.missing(msg)) return;
           msg.set(t('fund.ecash.sending'));
           const r = await wallet.topup(token, invite.value());

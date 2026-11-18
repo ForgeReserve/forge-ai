@@ -72,13 +72,17 @@ The engine client from `createEngine` in [`public/v2/core/engine.js`](https://gi
 
 ### `wallet`
 
-The balance as a fund module sees it, from [`public/v2/app.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js).
+The balances as a fund module sees them, from [`public/v2/app.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js). The phone holds up to two, one per unit, each with its own key ([Two balances](https://github.com/ForgeReserve/forge-ai/blob/main/docs/PAYMENTS.md#two-balances)).
 
 | Function | What it does |
 | - | - |
-| `key()` | The balance key, or `null`. |
-| `setKey(k)` | Keeps a new balance key on the phone. Call it at once when an engine answer carries `body.key`. |
-| `unit()` | The balance's unit, `'usd'` or `'sat'`, or `null`. |
+| `key()` | The key of the home balance (dollars first), or `null` with no balance. While it is set, no invite is needed. |
+| `keyFor(unit)` | The key of the balance in `unit`, or `null`. Ask about a funding with the key of its own unit. |
+| `setKey(k, unit)` | Keeps a new balance key on the phone, with its unit. Call it at once when an engine answer carries `body.key`. |
+| `unit()` | The home balance's unit, `'usd'` or `'sat'`, or `null`. |
+| `landsIn(unit)` | The unit money in `unit` is added to: its own, unless the engine cannot open that balance beside the one the phone has (then units are changed, price first). |
+| `fundingFor(unit)` | Resolves `{key}` of the balance in `unit`, or, with none, `{key: null, sibling}`: the other balance's key, sent in `X-Forge-Sibling` to open this one (the engine client's funding calls take it last). `kit.js` `fundIn` does this for a funding call. |
+| `siblingRefused()` | The engine refused `X-Forge-Sibling`: from then on money in that unit goes the way an engine without two balances takes it. |
 | `inviteOnly()` | `true` when the engine opens new balances only with an invite code. |
 | `invite()`, `setInvite(v)` | The invite code typed so far on this phone. |
 | `refresh()` | Reads the balance again from the engine. Resolves when done. |
@@ -89,7 +93,7 @@ The balance as a fund module sees it, from [`public/v2/app.js`](https://github.c
 | `lockKey()` | The public key the person locks payouts to, or `''`. |
 | `privateOnly()` | Whether Private only is on. |
 | `useFreeModels()` | Turns Private only off and chooses a free model. Returns the model, or `null`. Only after the person said yes. |
-| `topup(token, invite)` | Adds eCash. Stores the token on the phone first ([the vault](#vault)), sends it, and removes it only once the engine credits it. Resolves `{credited, unit, replay}`, with `free: true` for a voucher of free questions. Throws `EngineError`; when `retryable` is true the token stays on the phone and is sent again later. |
+| `topup(token, invite)` | Adds eCash to the balance of its unit (`landsIn`), opening that balance when the phone has none. Stores the token on the phone first ([the vault](#vault)), sends it, and removes it only once the engine credits it. Resolves `{credited, unit, replay}`, with `free: true` for a voucher of free questions. Throws `EngineError`; when `retryable` is true the token stays on the phone and is sent again later. |
 | `topupFree(token)` | The same for a voucher of free questions, onto the free balance. |
 | `isCredit(mint)` | `true` for the engine's credit mint, whose eCash is free questions. |
 | `open(invite)` | Opens a balance with an invite code and nothing on it, for the free models. Resolves `{created, freeShown}`. |

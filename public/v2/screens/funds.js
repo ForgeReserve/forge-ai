@@ -45,6 +45,10 @@ export function fundsScreen(ctx) {
   const items = el('ul', { class: 'held', id: 'heldItems' });
   // Take funds out: an icon button on the funds card (its screen is unchanged).
   const outBtn = el('button', { type: 'button', class: 'round funds-out', id: 'takeOutBtn', 'aria-label': t('out.title'), title: t('out.title'), onclick: () => nav('takeOut') }, icon('takeout', 22));
+  // With money in both balances (dollars and sats), each is a row under the ring with its own Take out;
+  // the ring shows their total. With one, there are no rows: the card is as it always was.
+  const rows = el('ul', { class: 'held fund-rows', id: 'fundRows', hidden: true });
+  let rowsKey = '';
   const vaultBox = el('div', { class: 'vault-box', id: 'vaultBox' });
   // Ask now, on a free model at $0: questions are free, so the next thing is to ask.
   const askBtn = el('button', { type: 'button', class: 'funds-ask', id: 'fundsAsk', hidden: true, onclick: () => nav('home') }, el('span', { class: 'funds-ask-ico' }, icon('mic', 34, 1.8)), el('span', { text: t('funds.ask') }));
@@ -56,6 +60,7 @@ export function fundsScreen(ctx) {
     el('div', { class: 'funds-top' }, el('h2', { class: 'caps gold', id: 'fundsCap', text: t('funds.funds') }), outBtn),
     ringBox,
     el('div', { class: 'funds-notes' }, fundsNote, freeState, freeModels, refundable, freeNote, freeModel),
+    rows,
   );
   const memCard = el(
     'section',
@@ -69,7 +74,7 @@ export function fundsScreen(ctx) {
       el('button', { type: 'button', class: 'btn primary', id: 'startFresh', onclick: () => (actions.startFresh(), toast(t('funds.started'))) }, icon('trash', 20), el('span', { text: t('funds.startFresh') })),
     ),
   );
-  const listen = listenButton({ t, reader, id: 'fundsListen', pieces: () => [added?.words ?? '', amount.textContent, freeTag.hidden ? '' : t('funds.freeTag'), said ?? '', fundsNote.textContent, freeNote.hidden ? '' : freeNote.textContent] });
+  const listen = listenButton({ t, reader, id: 'fundsListen', pieces: () => [added?.words ?? '', amount.textContent, freeTag.hidden ? '' : t('funds.freeTag'), said ?? '', ...(rows.hidden ? [] : state.view().balances.map((b) => t(`funds.row.${b.unit}`, { amount: b.text }))), fundsNote.textContent, freeNote.hidden ? '' : freeNote.textContent] });
   const main = el('main', { class: 'screen sub funds', 'data-screen': 'funds' }, listenHeader(t('funds.title'), back, t('common.back'), listen.node), el('div', { class: 'scroll' }, ...(done ? [done, askBtn, vaultBox, fundsCard] : [vaultBox, fundsCard, askBtn]), stack.node, memCard));
 
   const vaultRows = () => {
@@ -132,9 +137,30 @@ export function fundsScreen(ctx) {
     vaultBox.hidden = !rows.length;
   };
 
+  /** The two balances' rows: the unit's sign, the amount in its own unit, and its own Take out. */
+  const drawRows = (v) => {
+    const two = v.balances.length > 1;
+    rows.hidden = !two;
+    const k = two ? v.balances.map((b) => `${b.unit}:${b.text}`).join('|') : '';
+    if (k === rowsKey) return;
+    rowsKey = k;
+    rows.replaceChildren(
+      ...(two ? v.balances : []).map((b) =>
+        el(
+          'li',
+          { class: 'held-item fund-row', 'data-unit': b.unit },
+          el('span', { class: 'tile-ico small tint-gold', 'aria-hidden': 'true' }, icon(b.unit === 'usd' ? 'dollar' : 'sats', 20)),
+          // The sign is a picture; a screen reader hears the unit's name with the amount.
+          el('span', { class: 'held-text' }, el('span', { class: 'sr-only', text: t(`unit.${b.unit}`) }), el('b', { class: 'fund-row-amount', text: b.text })),
+          el('button', { type: 'button', class: 'round small', id: `takeOut-${b.unit}`, 'aria-label': t('funds.rowOut', { amount: b.text }), title: t('out.title'), onclick: () => nav('takeOutUnit', { unit: b.unit }) }, icon('takeout', 20)),
+        ),
+      ),
+    );
+  };
+
   const update = () => {
     const v = state.view();
-    amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
+    amount.textContent = v.balanceText ?? format.units(0, v.unit);
     // A free model at $0: the ring's centre is teal and says FREE, and Ask now leads.
     const freeZero = v.modelFree && !(v.balanceMsub > 0);
     fr.set(v.fundsFraction, v.freeFraction, freeZero);
@@ -153,10 +179,13 @@ export function fundsScreen(ctx) {
     freeNote.hidden = !(v.freeLeft > 0) && v.fundsBlock !== 'freeOut';
     freeNote.textContent = v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'funds.freeLeftOne' : 'funds.freeLeft', { count: v.freeLeft }) : v.fundsBlock === 'freeOut' ? t('funds.freeUsed') : '';
     freeModel.hidden = v.fundsBlock !== 'freeModel';
-    refundable.textContent = v.refundable > 0 ? t('funds.refundable', { amount: format.units(v.refundable, S.unit) }) : '';
+    const one = v.balances.length === 1 ? v.balances[0] : null;
+    refundable.textContent = one?.refundable > 0 ? t('funds.refundable', { amount: format.units(one.refundable, one.unit) }) : '';
     refundable.hidden = !refundable.textContent;
-    // With nothing to take out and nothing waiting to be saved, there is no dead button.
-    outBtn.hidden = !(v.refundable > 0) && !vault.outgoing().length;
+    drawRows(v);
+    // With nothing to take out and nothing waiting to be saved, there is no dead button. With two
+    // balances, each row has its own, and this one only shows eCash waiting to be saved.
+    outBtn.hidden = !(one?.refundable > 0) && !vault.outgoing().length;
     stack.update();
     listen.update();
     mr.set(v.memory.free, v.memory.low ? 'low' : 'memory');
@@ -257,14 +286,28 @@ export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { 
   return { node: main, update: () => (view.update?.(), panel?.setBalance(balanceNow()), listen.update()), destroy: () => (watch.disconnect(), view.destroy?.(), listen.destroy()), focus: main.querySelector('h1') };
 }
 
-export function takeOutScreen({ t, state, back, actions, format, vault, qr, wallet, reader }) {
-  const S = state.S;
+/**
+ * Take funds out of one balance, as eCash in its unit. params.unit: the balance (a row on Funds); with
+ * none, the one balance with money. With two balances and no unit, only the eCash kept here is shown.
+ */
+export function takeOutScreen({ t, state, back, actions, format, vault, qr, wallet, reader }, params = {}) {
+  // Read again on every draw: a screen opened before the balances were read learns its unit then.
+  const unitNow = () => {
+    const v = state.view();
+    return params.unit ?? (v.balances.length === 1 ? v.balances[0].unit : v.balances.length ? null : v.unit);
+  };
+  // What this balance can give now (0 once it is empty, or with no balance chosen).
+  const refundableNow = () => {
+    const u = unitNow();
+    return u ? (state.view().balances.find((b) => b.unit === u)?.refundable ?? 0) : 0;
+  };
   const msg = msgLine();
   const out = el('div', { class: 'token-out', id: 'tokenOut' });
   const input = el('input', { id: 'outAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('out.amountLabel') });
   // The unit in the field, as Lightning's amount has it: "$" before dollars, "sat" after sats.
-  const usd = (S.unit ?? 'usd') === 'usd';
-  const amountField = el('div', { class: 'amount-field' }, usd ? el('span', { class: 'amount-unit before', 'aria-hidden': 'true', text: '$' }) : null, input, usd ? null : el('span', { class: 'amount-unit after', 'aria-hidden': 'true', text: 'sat' }));
+  const before = el('span', { class: 'amount-unit before', 'aria-hidden': 'true', text: '$' });
+  const after = el('span', { class: 'amount-unit after', 'aria-hidden': 'true', text: 'sat' });
+  const amountField = el('div', { class: 'amount-field' }, before, input, after);
   const go = el('button', { type: 'button', class: 'btn primary block', id: 'outBtn' }, icon('takeout', 20), el('span', { text: t('out.create') }));
   const lock = wallet.lockKey();
   const form = el(
@@ -301,7 +344,10 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
   };
   let shown = null;
   const draw = () => {
-    const v = state.view();
+    const unit = unitNow();
+    const refundable = refundableNow();
+    before.hidden = unit === 'sat';
+    after.hidden = unit !== 'sat';
     const kept = vault.outgoing();
     // Rebuild the codes only when the kept tokens change, not on every balance update.
     const ids = kept.map((o) => o.id).join(',');
@@ -310,7 +356,7 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
       stopPlayers();
       out.replaceChildren(...kept.map(showToken));
     }
-    const can = v.refundable > 0;
+    const can = refundable > 0;
     form.hidden = !can;
     go.hidden = !can;
     // While eCash waits to be saved, its code is the thing to see: the hero steps down to a band.
@@ -318,8 +364,8 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     // One lit button: while eCash waits to be saved, I saved it is the one; Take out waits beside it.
     go.classList.toggle('primary', !kept.length);
     if (can) {
-      form.querySelector('#outAll').textContent = t('out.all', { amount: format.units(v.refundable, S.unit) });
-      if (!input.value) input.value = format.plain(v.refundable, S.unit);
+      form.querySelector('#outAll').textContent = t('out.all', { amount: format.units(refundable, unit) });
+      if (!input.value) input.value = format.plain(refundable, unit);
     }
     if (!can && !kept.length) {
       shown = null;
@@ -327,13 +373,14 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     }
   };
   go.addEventListener('click', async () => {
-    const v = state.view();
-    const n = format.parse(input.value, S.unit);
-    if (!Number.isInteger(n) || n < 1 || n > v.refundable) return msg.set(t('out.bad', { min: format.units(1, S.unit), max: format.units(v.refundable, S.unit) }), 'err');
+    const unit = unitNow();
+    const refundable = refundableNow();
+    const n = format.parse(input.value, unit);
+    if (!Number.isInteger(n) || n < 1 || n > refundable) return msg.set(t('out.bad', { min: format.units(1, unit), max: format.units(refundable, unit) }), 'err');
     go.disabled = true;
     msg.set(t('out.creating'));
     try {
-      const r = await actions.takeOut(n);
+      const r = await actions.takeOut(n, unit);
       msg.set(r.later ? t('out.later') : '');
       input.value = '';
       draw();

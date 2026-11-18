@@ -85,7 +85,7 @@ export function answer({ t, ui, state, nav, actions, format }) {
     acts.querySelector('#shareBtn')?.setAttribute('aria-expanded', String(on));
   };
   const drawTray = (v, retry) => {
-    const p = priceLine(v.againMsub, v.talk.unit, v.free);
+    const p = priceLine(v.againMsub, v.againUnit ?? v.talk.unit, v.free);
     tray.replaceChildren(
       ...[
         canShare ? tile('shareSend', 'share', t('playful.send'), () => navigator.share({ text: shareText() }).catch(() => {}), null, { 'aria-label': t('playful.sendLabel') }) : null,
@@ -261,7 +261,7 @@ export function answer({ t, ui, state, nav, actions, format }) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       retry = ev.next === 'retry';
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
-      const p = priceLine(v.againMsub, v.talk.unit, v.free);
+      const p = priceLine(v.againMsub, v.againUnit ?? v.talk.unit, v.free);
       showError(`a|${a.meta.error.code}|${a.meta.error.message}|${t(p.key, p)}`, [
         sayEl('p', { id: 'answerErrorText' }, t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, a.meta.unit) : '' }), 'err'),
         nextBtn(ev.next, go),

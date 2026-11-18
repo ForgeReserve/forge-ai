@@ -2,6 +2,9 @@ import type { Unit } from './config.ts';
 import { type DB, tx } from './db.ts';
 import { type Account, type Invites, isApiKeyShape, type Ledger, LedgerError, newApiKey, type Pass, type Passes } from './ledger.ts';
 
+/** The header a phone sends to open its balance in the other unit, carrying the key of a balance it holds. */
+export const SIBLING_HEADER = 'X-Forge-Sibling';
+
 /** Funding states that may still credit the balance. */
 export const OPEN_FUNDING_STATES = ['quoted', 'receiving', 'melting', 'pending', 'minting'] as const;
 
@@ -25,10 +28,15 @@ export interface OpenedAccount {
  * passes: given only by POST /v1/wallet/open (a balance at 0 for the free models). There, a code that is
  * not an invite may be an event pass, which counts one use instead of being redeemed. Every other caller
  * leaves it out, so a pass never opens a balance for a funded top-up.
+ *
+ * sibling: the key of a paid balance the caller already holds (X-Forge-Sibling, docs/PAYMENTS.md, Two
+ * balances). While invite-only, it opens the balance in the other unit in place of an invite or a pass
+ * (siblingProof). The new balance stores the id of the one that proved it (accounts.sibling_of); nothing
+ * else links them. A refused sibling key with an invite beside it falls back to the invite.
  */
 export function openAccount(
   d: { db: DB; ledger: Ledger; invites: Invites; inviteOnly: boolean; passes?: Passes },
-  p: { key?: string; invite?: string; unit: Unit; free?: boolean },
+  p: { key?: string; invite?: string; unit: Unit; free?: boolean; sibling?: string },
 ): OpenedAccount {
   const { db, ledger, invites } = d;
   const free = !!p.free;
@@ -48,7 +56,16 @@ export function openAccount(
     if (!isApiKeyShape(p.key)) throw new LedgerError('invalid_key', 'unknown balance key', 401);
   }
   let pass: Pass | undefined;
-  if (d.inviteOnly && !free) {
+  let proof: Account | undefined;
+  if (d.inviteOnly && !free && p.sibling) {
+    try {
+      proof = siblingProof(db, ledger, p.sibling, p.unit);
+    } catch (e) {
+      // A refused sibling key with an invite beside it: the invite opens the balance, as it would alone.
+      if (!p.invite) throw e;
+    }
+  }
+  if (d.inviteOnly && !free && !proof) {
     const inv = p.invite ? invites.lookup(p.invite) : undefined;
     pass = !inv && p.invite && d.passes ? d.passes.lookup(p.invite) : undefined;
     if (pass) {
@@ -62,8 +79,18 @@ export function openAccount(
   }
   const key = p.key ?? newApiKey();
   const account = tx(db, () => {
+    if (proof) siblingProof(db, ledger, p.sibling!, p.unit); // again inside the transaction: two opens at once
     const a = ledger.createAccountRaw(key, p.unit, null, free);
-    if (pass) {
+    if (proof) {
+      try {
+        db.prepare('UPDATE accounts SET sibling_of = ? WHERE id = ?').run(proof.id, a.id);
+      } catch (e) {
+        // The unique index caught a second balance opened with the same key (a writer the checks above
+        // did not see): the same refusal, and the transaction undoes the new balance.
+        if (/UNIQUE/i.test(String((e as Error)?.message))) throw new LedgerError('sibling_refused', `this key cannot open a balance in ${p.unit}: it opened its balance in the other unit already`, 403);
+        throw e;
+      }
+    } else if (pass) {
       // Counted in the same transaction: at the cap, the balance is not created either.
       d.passes!.useRaw(pass.id);
       db.prepare('UPDATE accounts SET pass_id = ? WHERE id = ?').run(pass.id, a.id);
@@ -77,9 +104,32 @@ export function openAccount(
 }
 
 /**
+ * The balance whose key proves that a phone may open its balance in the other unit without an invite,
+ * or throws 403 sibling_refused. It must be a paid balance (a free one proves nothing), not frozen, in
+ * the other unit, in use (a ledger line, so releaseIfEmpty never deletes it and gives its invite or pass
+ * use back), not itself opened this way, and with no balance opened this way yet. So each balance opened
+ * with an invite or a pass use gains at most one more, and that one gains none: a key in the other unit
+ * never takes an invite nobody spent. A sibling released empty (its first funding failed) frees the place.
+ */
+export function siblingProof(db: DB, ledger: Ledger, key: string, unit: Unit): Account {
+  const refuse = (why: string) => new LedgerError('sibling_refused', `this key cannot open a balance in ${unit}: ${why}`, 403);
+  const a = ledger.findByKey(key);
+  if (!a) throw refuse('unknown balance key');
+  if (a.free) throw refuse('a free-question balance proves nothing');
+  if (ledger.isFrozen(a.id)) throw refuse('the balance is frozen');
+  if (a.unit === unit) throw refuse(`the balance is in ${unit} already`);
+  const row = db.prepare('SELECT sibling_of FROM accounts WHERE id = ?').get(a.id) as { sibling_of: string | null };
+  if (row.sibling_of) throw refuse('it was opened this way itself');
+  if (!db.prepare('SELECT 1 FROM ledger WHERE account_id = ? LIMIT 1').get(a.id)) throw refuse('the balance has not been used yet');
+  if (db.prepare('SELECT 1 FROM accounts WHERE sibling_of = ? LIMIT 1').get(a.id)) throw refuse('it opened its balance in the other unit already');
+  return a;
+}
+
+/**
  * Deletes a balance that never received anything, was never used, and has nothing in flight, and reopens
  * its invite, or gives its event pass its use back. Used when the first funding of a new balance fails or
- * expires.
+ * expires. A balance opened with a sibling key (siblingProof) has no invite or pass use of its own: deleting
+ * it gives nothing back, and lets the balance that proved it open one again.
  */
 export function releaseIfEmpty(db: DB, accountId: string): boolean {
   return tx(db, () => {

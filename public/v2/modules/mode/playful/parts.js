@@ -46,7 +46,7 @@ export function chips({ t, state, nav, actions }) {
     const v = state.view();
     game.hidden = !v.cover;
     pill.update();
-    const level = v.online || v.balanceText ? starLevel({ model: v.model, unit: v.talk.unit, balanceMsub: v.balanceMsub, freeLeft: v.freeLeft, fundsBlock: v.fundsBlock }) : 'offline';
+    const level = v.online || v.balanceText ? starLevel({ model: v.model, unit: v.unit ?? v.talk.unit, balanceMsub: v.balanceMsub, freeLeft: v.freeLeft, fundsBlock: v.fundsBlock }) : 'offline';
     starBtn.dataset.level = level;
     words.textContent = level === 'offline' ? t('status.offline') : t(`playful.star.${level}`);
     starBtn.setAttribute('aria-label', t('playful.starLabel', { words: words.textContent }));

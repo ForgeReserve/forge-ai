@@ -206,6 +206,7 @@ While a gateway is invite-only, opening a new balance needs an invite code (`inv
 - Opening a balance redeems the invite and binds it to that balance. One invite opens one balance. A used one answers `403 invite_used`.
 - When a top-up or funding opens a balance and that first funding fails or expires before anything is credited, the empty balance is removed and its invite opens again.
 - `POST /v1/wallet/open` always needs an invite, even on a gateway that is not invite-only, because it opens a balance for the free models.
+- A client that holds a paid balance opens its balance in the other unit without an invite: see [A second balance](#a-second-balance).
 
 ### Event passes
 
@@ -288,6 +289,16 @@ Add `X-Cashu-Pubkey` to lock the change to your own key (see [Lock payouts to yo
 - `POST /v1/wallet/open` with an invite code or event pass opens a balance at 0. It can use the free models at once and take funds later.
 - `POST /v1/wallet/topup` with a token, and the funding routes, open a balance on first use too (with an invite while invite-only).
 - Send an existing key as the bearer to add to that balance instead.
+
+### A second balance
+
+A balance has one unit for life. A client that holds a paid balance in one unit can open its balance in the other unit without an invite, so that sat eCash lands in sats and dollar eCash in dollars, with no change of units. Send the key of the balance it holds in the `X-Forge-Sibling` header, and no bearer (or a new key of your choice), on the request that opens the new balance: `POST /v1/wallet/topup`, `POST /v1/wallet/fund/lightning`, `POST /v1/wallet/fund/onchain` or `POST /v1/wallet/fund/foreign/quote`. `sibling` in `GET /v1/wallet/fund/methods` says the gateway offers this.
+
+- The key proves something only when its balance is a paid balance (a free-question balance proves nothing), not frozen, in the other unit, already used (funded, or opened with an invite or pass), and not itself opened this way. Each such balance opens one balance in the other unit, once. Anything else answers `403 sibling_refused`, and a token sent with it is left untouched.
+- No invite is redeemed and no pass use is counted. If that first funding fails or expires, the new balance is removed, and the key can open one again.
+- Choose the new balance's key yourself and send it as the bearer with the header, keeping it before you send: if the answer is lost, the same key, header and token sent again find the balance that was opened, where a key the gateway made would be lost with the answer.
+- An `invite` sent beside the header is used when the key is refused.
+- The new balance stores the id of the balance whose key opened it, so the gateway can tell that the two belong together. The header is read only while the gateway is invite-only; elsewhere a new balance needs nothing, and nothing is stored.
 
 ### Top up with eCash
 
@@ -617,14 +628,14 @@ Adds an eCash token to a balance, or opens one with it.
 | `token` | Required. A `cashuB` token from an accepted mint |
 | `invite` | For a new balance while invite-only. Also accepted as `X-Forge-Invite` |
 
-Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made.
+Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made. `X-Forge-Sibling`: in place of an invite, the key of the client's balance in the other unit ([A second balance](#a-second-balance)).
 
 ```json
 { "key": "sk-forge-...", "account_id": "acct_...", "unit": "usd", "free": false, "credited": 500,
   "replay": false, "balance_msub": 500000, "balance": 500 }
 ```
 
-`credited` is in whole units, after the mint's input fees. Errors: the token errors, `409 wrong_balance`, `400 wrong_unit` (the balance has another unit; with `convert` when the token can be changed, see [Change units](#change-units)), `403 invite_required`, `503 topup_pending` (retry with the returned `key` and the same token).
+`credited` is in whole units, after the mint's input fees. Errors: the token errors, `409 wrong_balance`, `400 wrong_unit` (the balance has another unit; with `convert` when the token can be changed, see [Change units](#change-units)), `403 invite_required`, `403 sibling_refused`, `503 topup_pending` (retry with the returned `key` and the same token).
 
 ### `GET /v1/wallet`
 
@@ -668,7 +679,7 @@ Bearer key required. Every token issued to this key, so none is lost: `{"data": 
 
 ## Funding
 
-Every funding route returns a funding object. The routes that create a funding also open a balance on first use: send `invite` in the body for a new balance while invite-only (these routes read the invite from the body only), and the answer carries `key` once when the gateway made it.
+Every funding route returns a funding object. The routes that create a funding also open a balance on first use: send `invite` in the body for a new balance while invite-only (these routes read the invite from the body only), or the key of the client's balance in the other unit in `X-Forge-Sibling` ([A second balance](#a-second-balance)), and the answer carries `key` once when the gateway made it.
 
 ```json
 {
@@ -720,11 +731,12 @@ What this gateway can take now. No key needed.
   "invite_only": true,
   "free_voice": { "enabled": true, "per_day": 20 },
   "free": { "enabled": false, "questions": null },
-  "open": { "enabled": true, "free_models": ["..."] }
+  "open": { "enabled": true, "free_models": ["..."] },
+  "sibling": { "enabled": true, "header": "X-Forge-Sibling" }
 }
 ```
 
-The figures above were read from the hosted gateway on 16 November 2026 (`convert` added since). `usd` limits are in cents. `convert.units`: the balance units eCash from the gateway's own mints can be changed into ([Change units](#change-units)).
+The figures above were read from the hosted gateway on 16 November 2026 (`convert` added since). `usd` limits are in cents. `convert.units`: the balance units eCash from the gateway's own mints can be changed into ([Change units](#change-units)). `sibling`: the header that opens a client's balance in the other unit with the key of the one it holds ([A second balance](#a-second-balance)); a gateway without it needs an invite for every new balance.
 
 ### `GET /v1/wallet/fund/mints`
 
@@ -879,6 +891,7 @@ Every error from an API route has the same shape:
 | 403 | `invite_required` | An invite code is needed |
 | 403 | `invite_used`, `invite_invalid` | The invite was already redeemed, or is not valid |
 | 403 | `pass_expired`, `pass_used_up` | The event pass is past its expiry or its uses |
+| 403 | `sibling_refused` | The `X-Forge-Sibling` key cannot open a balance in the other unit |
 | 403 | `balance_key_required` | A free model with a free-question balance key |
 | 403 | `account_frozen` | The operator froze this balance. Refunds still work |
 | 403 | `not_free_model`, `web_search_not_free` | A free-question balance used outside its rules |

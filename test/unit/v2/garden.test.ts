@@ -352,7 +352,7 @@ describe('the record kept on the phone', () => {
     expect(app).toMatch(/kv\.put\('game', S\.game\)/);
     expect(app).toMatch(/S\.game = \(await kv\.get\('game'\)/);
     // Erase everything wipes it from memory too, and no write follows an erase.
-    expect(app).toMatch(/Object\.assign\(S, \{ key: null,.*game: null \}\)/);
+    expect(app).toMatch(/Object\.assign\(S, \{ keys: \[null, null\],.*game: null \}\)/);
     expect(app).toMatch(/saveCoverProgress: \(data\) => \{\s*if \(erased\) return;/);
     expect(R.PROJECTIONS.mode.actions).toEqual(expect.arrayContaining(['coverProgress', 'saveCoverProgress']));
   });

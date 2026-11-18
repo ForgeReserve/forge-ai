@@ -46,7 +46,9 @@ The fields of `view()`, from `view()` in [`public/v2/app.js`](https://github.com
 | `private` | `true` when that model is private (with no model, when Private only is on). The chip at the top left shows it, and `togglePrivate()` switches it. |
 | `online` | `false` while the phone is offline. |
 | `hasKey` | `true` when the phone has a balance key. |
-| `balanceMsub`, `balanceText` | The balance in msub and in words, or `null`. |
+| `balanceMsub`, `balanceText` | The total in msub and in words, or `null`: one balance in its own unit, both in dollars ([Two balances](https://github.com/ForgeReserve/forge-ai/blob/main/docs/PAYMENTS.md#two-balances)). |
+| `unit` | The total's unit. |
+| `balances` | The balances with money in them, dollars first: `{unit, balanceMsub, text, refundable}` each. |
 | `fundsFraction`, `freeFraction` | How full the gold ring is: the paid part and the free questions part, 0 to 1. |
 | `freeLeft`, `freeTotal` | Free questions left, and how many there were. |
 | `fundsBlock` | What stops a question for lack of funds: `null`, or a reason such as `'needKey'` or `'freeOut'`. |
@@ -54,8 +56,8 @@ The fields of `view()`, from `view()` in [`public/v2/app.js`](https://github.com
 | `startFree` | `true` when the engine has free models a balance opened with an invite code can use. |
 | `noFunds` | `true` with no balance and no free questions. |
 | `scanNote` | `true` when the home should invite a paper note scan. |
-| `refundable` | What can be taken out, in the balance's unit. |
-| `questionsLeft` | About how many questions the balance pays for. |
+| `refundable` | What can be taken out of the one balance with money, in its unit (0 with two: each has its own). |
+| `questionsLeft` | About how many questions the balances pay for, together. |
 | `memory`, `held` | How much of the model's memory the conversation uses (`memory.free`, `memory.low`, `memory.percentFree`, ...), and what is held for the next question. |
 | `pendingCount` | Files and photos waiting for the next question. |
 | `lastExchange` | The last question and its answer: `{question, answer}`, where `answer` has `content` and `meta`. `meta.error` is set when it failed. `null` before any question. |
@@ -65,7 +67,7 @@ The fields of `view()`, from `view()` in [`public/v2/app.js`](https://github.com
 | `talk` | The talk button: `available`, `phase` (`idle`, `recording`, `sending`), `seconds`, `level`, `inside`, `text`, `error`, `maxSeconds`, `priceMsub`, `route`, `freeOk`, `freeVoice`, `freeVoiceOut`, `unit`. |
 | `search` | Search the web: `{available, on}`. |
 | `speak` | Listen: `available`, `state`, `progress`, `current`, `viaEngine`, `priceMsub`, `offer`. |
-| `againMsub` | The most Ask again can cost, or `null`. |
+| `againMsub`, `againUnit` | The most Ask again can cost, or `null`, in the unit of the balance that would pay it. |
 | `free` | `true` on a free model, `{left, total}` when the next question uses a free question, else `null`. |
 | `historyVersion` | Goes up when conversations are burned. |
 | `answerModel` | The model that wrote the answer on show: `{id, name, private, speed}`, or `null`. |

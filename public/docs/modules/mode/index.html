@@ -137,7 +137,15 @@
 </tr>
 <tr>
 <td><code>balanceMsub</code>, <code>balanceText</code></td>
-<td>The balance in msub and in words, or <code>null</code>.</td>
+<td>The total in msub and in words, or <code>null</code>: one balance in its own unit, both in dollars (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PAYMENTS.md#two-balances">Two balances</a>).</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>The total&#39;s unit.</td>
+</tr>
+<tr>
+<td><code>balances</code></td>
+<td>The balances with money in them, dollars first: <code>{unit, balanceMsub, text, refundable}</code> each.</td>
 </tr>
 <tr>
 <td><code>fundsFraction</code>, <code>freeFraction</code></td>
@@ -169,11 +177,11 @@
 </tr>
 <tr>
 <td><code>refundable</code></td>
-<td>What can be taken out, in the balance&#39;s unit.</td>
+<td>What can be taken out of the one balance with money, in its unit (0 with two: each has its own).</td>
 </tr>
 <tr>
 <td><code>questionsLeft</code></td>
-<td>About how many questions the balance pays for.</td>
+<td>About how many questions the balances pay for, together.</td>
 </tr>
 <tr>
 <td><code>memory</code>, <code>held</code></td>
@@ -212,8 +220,8 @@
 <td>Listen: <code>available</code>, <code>state</code>, <code>progress</code>, <code>current</code>, <code>viaEngine</code>, <code>priceMsub</code>, <code>offer</code>.</td>
 </tr>
 <tr>
-<td><code>againMsub</code></td>
-<td>The most Ask again can cost, or <code>null</code>.</td>
+<td><code>againMsub</code>, <code>againUnit</code></td>
+<td>The most Ask again can cost, or <code>null</code>, in the unit of the balance that would pay it.</td>
 </tr>
 <tr>
 <td><code>free</code></td>

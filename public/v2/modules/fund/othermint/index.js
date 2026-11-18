@@ -6,7 +6,8 @@
 // (unused fees, or the token's value when the payment fails) is kept on the phone until the person
 // saves it. Its amount is not known here, so it is shown without one. A token handed over by another
 // fund module (a scanned paper note) fills the box and is checked at once.
-import { foreignQuote, inviteField, tokenBox } from '../kit.js';
+import { isNoteUnit, readNote } from '../../../core/note.js';
+import { foreignQuote, fundIn, inviteField, tokenBox } from '../kit.js';
 
 export function create(inputs) {
   const { t, ui, engine, wallet } = inputs;
@@ -17,8 +18,14 @@ export function create(inputs) {
     available: (methods) => !!methods?.foreign?.enabled,
     view({ done, added, open, token: given }) {
       // The unit is read when the price is asked for: a screen opened before the balance was read
-      // (the app opened on this address) still asks in the balance's unit.
-      const unitNow = () => wallet.unit() ?? (wallet.methods()?.lightning?.units ?? ['usd', 'sat'])[0];
+      // (the app opened on this address) still asks in the balance's unit. eCash in sats goes to the sat
+      // balance and eCash in dollars to the dollar one (wallet.landsIn), the second opened with the
+      // first one's key.
+      const unitNow = (token) => {
+        const note = readNote(token);
+        if (note.ok && isNoteUnit(note.unit) && wallet.landsIn) return wallet.landsIn(note.unit);
+        return wallet.unit() ?? (wallet.methods()?.lightning?.units ?? ['usd', 'sat'])[0];
+      };
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
       const check = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignCheck' }, ui.icon('swap', 20), ui.el('span', { text: t('fund.othermint.check') }));
@@ -40,8 +47,10 @@ export function create(inputs) {
         onward.hidden = true;
         msg.set(t('fund.othermint.checking'));
         try {
-          const r = await engine.foreignQuote(wallet.key(), { token, unit: unitNow(), invite: invite.value(), pubkey: wallet.lockKey() || undefined, ...(acceptUnlisted ? { accept_unlisted: true } : {}) });
-          if (r.body?.key) wallet.setKey(r.body.key);
+          const unit = unitNow(token);
+          const r = await fundIn(wallet, unit, invite.value(), (key, code, sibling) => engine.foreignQuote(key, { token, unit, invite: code, pubkey: wallet.lockKey() || undefined, ...(acceptUnlisted ? { accept_unlisted: true } : {}) }, sibling));
+          // The engine would not open that balance: the price again, in the unit the phone holds.
+          if (r.body?.error?.code === 'sibling_refused') return quote(token, acceptUnlisted);
           if (!r.ok) {
             const code = r.body?.error?.code;
             if (code === 'mint_unlisted') {

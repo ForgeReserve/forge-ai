@@ -311,7 +311,9 @@ export function create(inputs) {
           summary = e?.code === 'empty' ? summary : null;
           return failed(e);
         }
-        const balanceUnit = wallet.key() ? wallet.unit() : null;
+        // A card's eCash goes to the balance of its unit (wallet.landsIn), the second opened with the
+        // first one's key; only where that cannot be, the balance the phone has, changed price first.
+        const balanceUnit = wallet.landsIn ? wallet.landsIn(summary.unit) : wallet.key() ? wallet.unit() : null;
         route = routeFor(info, { unit: summary.unit, units: wallet.units(), balanceUnit, otherMint: !!wallet.methods()?.foreign?.enabled, convert: !!balanceUnit && !!wallet.methods()?.convert?.units?.includes(balanceUnit) });
         if (route === 'wrong_unit') return refuse(t('fund.card.wrongUnit', { unit: t(UNIT_WORD[summary.unit] ?? 'unit.other') }));
         if (route === 'wrong_mint') return refuse(t('fund.card.wrongMint'));
@@ -490,6 +492,8 @@ export function create(inputs) {
         }
         // The engine's own eCash in the other unit: the eCash module shows the price to change it.
         if (r.route === 'othermint') return open(info?.trusted ? 'ecash' : 'othermint', { token: job.token });
+        // The engine would not open the balance of the card's unit: its eCash is changed, price first.
+        if (r.error?.code === 'wrong_unit' && r.error.body?.convert) return open('ecash', { token: job.token });
         await wallet.refresh();
         if (r.error) return failed({ code: 'mint_unavailable', kept: true });
         const words = r.replay ? t('fund.ecash.replay') : t('fund.card.added', { amount: format.units(r.credited, r.unit) });

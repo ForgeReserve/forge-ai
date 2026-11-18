@@ -83,7 +83,7 @@ describe('prices before sending', () => {
 describe('routes', () => {
   it('parses and formats every route', () => {
     for (const name of Object.keys(ROUTER.ROUTES)) {
-      const params = name === 'fund' ? { id: 'ecash' } : {};
+      const params = name === 'fund' ? { id: 'ecash' } : name === 'takeOutUnit' ? { unit: 'sat' } : {};
       expect(ROUTER.parse(ROUTER.href(name, params)), name).toEqual({ name, params });
     }
     expect(ROUTER.parse('')).toEqual({ name: 'home', params: {} });

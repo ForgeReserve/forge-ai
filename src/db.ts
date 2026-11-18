@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   balance_msub INTEGER NOT NULL DEFAULT 0 CHECK (balance_msub >= 0),
   invite_id TEXT,
   pass_id TEXT,                     -- the event pass that opened it (passes), if any
+  sibling_of TEXT,                  -- the balance in the other unit whose key opened it (X-Forge-Sibling), if any
   created_at INTEGER NOT NULL,
   frozen_at INTEGER,                -- set by the operator: spending blocked, refunds allowed
   free INTEGER NOT NULL DEFAULT 0   -- 1: a free balance, funded with credits (docs/FREE-TIER.md); never money
@@ -274,6 +275,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['accounts', 'free', 'INTEGER NOT NULL DEFAULT 0'],
   ['reservations', 'shortfall_msub', 'INTEGER'],
   ['accounts', 'pass_id', 'TEXT'],
+  ['accounts', 'sibling_of', 'TEXT'],
 ];
 
 export type DB = DatabaseSync;
@@ -287,6 +289,8 @@ export function openDb(path: string): DB {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
   }
+  // After the columns: one balance opened with a sibling key per balance that proved it (src/accounts.ts).
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS accounts_sibling ON accounts(sibling_of)');
   return db;
 }
 

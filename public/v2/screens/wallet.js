@@ -213,7 +213,7 @@ export function walletScreen(ctx) {
 
   const update = () => {
     const v = state.view();
-    amount.textContent = v.balanceText ?? format.units(0, S.unit ?? 'usd');
+    amount.textContent = v.balanceText ?? format.units(0, v.unit);
     ring.classList.toggle('empty', !(v.balanceMsub > 0));
     const next = waysNow(ctx);
     const k = (w) => `${w.cards.join(',')}|${w.more.join(',')}`;

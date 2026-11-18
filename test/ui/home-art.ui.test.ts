@@ -88,7 +88,7 @@ async function withKey(page: Page, key: string, model = 'mock-echo') {
   await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toMatch(/^\$/);
 }
 
-/** Sets the balance's peak (the gold ring's full mark) to `times` the balance, as after spending. */
+/** Sets the balances' peaks (the gold ring's full mark, one per unit) to `times` the balance, as after spending. */
 async function spendDown(page: Page, times: number) {
   await page.evaluate(async (times) => {
     const db: IDBDatabase = await new Promise((res, rej) => {
@@ -101,13 +101,14 @@ async function spendDown(page: Page, times: number) {
       const q = store().getAllKeys();
       q.onsuccess = () => res(q.result);
     });
-    for (const k of keys.filter((k) => String(k).startsWith('peak:'))) {
-      const v: number = await new Promise((res) => {
+    for (const k of keys.filter((k) => String(k).startsWith('peaks:'))) {
+      const v: Record<string, number | null> = await new Promise((res) => {
         const q = store().get(k);
         q.onsuccess = () => res(q.result);
       });
+      const next = Object.fromEntries(Object.entries(v).map(([u, x]) => [u, x == null ? x : Math.round(x * times)]));
       await new Promise((res) => {
-        const q = store().put(Math.round(v * times), k);
+        const q = store().put(next, k);
         q.onsuccess = res;
       });
     }

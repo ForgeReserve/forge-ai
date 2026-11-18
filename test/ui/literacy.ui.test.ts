@@ -350,7 +350,8 @@ describe('reading load on every screen', () => {
     await page.waitForSelector('[data-fund=ecash] .msg.err');
     await check(page, 'fund-ecash-error');
     await go(page, 'funds/add/lightning', '[data-fund=lightning]');
-    await page.fill('#lnAmount', '1.00');
+    // In sats: Lightning lands in the sat balance (docs/PAYMENTS.md, Two balances).
+    await page.fill('#lnAmount', '1000');
     await page.click('#lnCreate');
     await page.waitForSelector('[data-fund=lightning] .qr', { timeout: 20_000 }).catch(() => {});
     await check(page, 'fund-lightning-invoice');

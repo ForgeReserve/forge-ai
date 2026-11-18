@@ -713,6 +713,10 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .funds-free-tag { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: #0D7A69; }
 .funds-notes { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
 .funds-notes .note { margin: 0; }
+/* Two balances (core/balances.js): one row each under the ring, the unit's sign, the amount in its own
+   unit, and its own Take out. */
+.fund-rows { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.fund-row .held-text b { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .funds-ask { min-height: 104px; display: flex; align-items: center; gap: 18px; padding: 0 22px; border: 0; border-radius: 28px; background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary), 0 10px 24px rgba(20,22,26,0.18); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; text-align: left; }
 .funds-ask-ico { flex: none; width: 72px; height: 72px; border-radius: 36px; background: color-mix(in srgb, currentColor 10%, transparent); display: flex; align-items: center; justify-content: center; }
 .card-stack { position: relative; flex: none; height: 196px; display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; padding: 18px; border: 0; border-radius: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-raised); overflow: hidden; text-align: left; }

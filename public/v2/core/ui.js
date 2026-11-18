@@ -31,6 +31,9 @@ const PATHS = {
   card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>',
   nfc: '<path d="M7 9a4.5 4.5 0 0 1 0 6"/><path d="M10.5 6.5a8 8 0 0 1 0 11"/><path d="M14 4a11.5 11.5 0 0 1 0 16"/>',
   qr: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2M20 14v6h-6"/>',
+  // A balance's unit, on its row in Funds: dollars, and sats (the bitcoin sign).
+  dollar: '<path d="M12 3v18"/><path d="M16.5 7.5c-.8-1.3-2.4-2-4.5-2-2.6 0-4.5 1.3-4.5 3.2 0 4.3 9 2.2 9 6.6 0 2-2 3.2-4.5 3.2-2.2 0-3.9-.8-4.8-2.3"/>',
+  sats: '<path d="M8 5v14"/><path d="M6 5h7.5a3.5 3.5 0 0 1 0 7H8"/><path d="M8 12h6.5a3.5 3.5 0 0 1 0 7H6"/><path d="M10 3v2M13 3v2M10 19v2M13 19v2"/>',
   coins: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
   bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
   chain: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',

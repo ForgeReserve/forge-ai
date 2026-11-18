@@ -184,7 +184,8 @@ async function pairAndPrice(page: Page) {
   await page.click('#fedUseTill');
   await page.waitForSelector('#fedGetPrice');
   expect(await page.textContent('#fedTillUrl')).toBe(till.url);
-  expect(await page.inputValue('#fedAmount')).toBe('5.00');
+  // The till pays a Lightning invoice, in sats for the sat balance (docs/PAYMENTS.md, Two balances).
+  expect(await page.inputValue('#fedAmount')).toBe('5000');
   await page.click('#fedGetPrice');
   await page.waitForSelector('#fedPrice', { timeout: 20_000 });
   const [rec] = await tillPays(page);
@@ -221,7 +222,7 @@ describe('Tap a Fedimint card', () => {
     const { ctx, page, errors } = await appWithCard(card);
     const rec = await pairAndPrice(page);
     // The price: what reaches the funds, the most the card pays, and the till's part, before the tap.
-    expect(await page.textContent('#fedYouGet')).toBe('You get $5.00.');
+    expect(await page.textContent('#fedYouGet')).toBe('You get 5,000 sat.');
     const most = Math.ceil(rec.mostMsat / 1000).toLocaleString('en-US');
     // A fresh pairing: the till's margin is not known yet, so the price says it may come on top.
     expect(await page.textContent('#fedCardPays')).toBe(`Card pays ${most} sat, plus margin. The card pays ${most} sat, plus the till's margin if its owner set one.`);
@@ -240,10 +241,10 @@ describe('Tap a Fedimint card', () => {
     await page.fill('#fedPin', '1234');
     await page.click('#fedPay');
     await page.waitForSelector('[data-screen=funds]', { timeout: 30_000 });
-    await expect.poll(() => page.textContent('#fundsAmount'), { timeout: 20_000 }).toBe('$5.00');
+    await expect.poll(() => page.textContent('#fundsAmount'), { timeout: 20_000 }).toBe('5,000 sat');
     // Funds says it in the success panel, with Ask now under it.
-    expect(await page.textContent('#fundsAdded .added-amount')).toBe('+$5.00');
-    expect(await page.textContent('#fundsAddedText')).toBe('Added $5.00.');
+    expect(await page.textContent('#fundsAdded .added-amount')).toBe('+5,000 sat');
+    expect(await page.textContent('#fundsAddedText')).toBe('Added 5,000 sat.');
     expect(await page.isVisible('#fundsAsk')).toBe(true);
     expect(card.balanceMsat).toBe(50_000_000 - (rec.invoiceMsat + rec.maxFeeMsat));
     // Both tries carried the same client_ref and the PIN typed for them, with the card link.
@@ -286,7 +287,7 @@ describe('Tap a Fedimint card', () => {
     await till.settle(held.payId, 'paid');
     settled = true;
     await page.waitForSelector('[data-screen=funds]', { timeout: 30_000 });
-    await expect.poll(() => page.textContent('#fundsAmount'), { timeout: 20_000 }).toBe('$5.00');
+    await expect.poll(() => page.textContent('#fundsAmount'), { timeout: 20_000 }).toBe('5,000 sat');
     // One charge, one POST; the rest was asked with GET and the pay's own client_ref.
     expect(till.log.filter((l) => l.path === '/v1/pay')).toHaveLength(1);
     expect(till.log.filter((l) => l.method === 'GET').every((l) => l.path === `/v1/pay/${held.payId}?client_ref=${rec.clientRef}`)).toBe(true);
