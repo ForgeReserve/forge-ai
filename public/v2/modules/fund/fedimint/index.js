@@ -9,7 +9,7 @@
 //
 // Every payment is stored on the phone before the till hears of it, and stays until the engine
 // credited it or the till gave the card its money back. A failed payment is listed with Get it back.
-import { inviteField, poll } from '../kit.js';
+import { fundIn, inviteField, lightningUnit, poll } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
 import { wayHero } from '../../../screens/wallet-art.js';
 import { tillLabel } from '../../../core/till.js';
@@ -303,7 +303,8 @@ export function create(inputs) {
       const settle = async (id, { quiet = false } = {}) => {
         let rec = pays.get(id);
         if (!rec) return null;
-        const key = wallet.key();
+        // The payment's funding is the balance's in its unit.
+        const key = (wallet.keyFor && rec.unit ? wallet.keyFor(rec.unit) : null) ?? wallet.key();
         if (key && rec.fundingId && rec.state !== 'ready') {
           const f = await engine.funding(key, rec.fundingId).catch(() => null);
           if (f?.ok && f.body?.state === 'done') {
@@ -336,8 +337,9 @@ export function create(inputs) {
         want = null;
         msg.set('');
         const L = wallet.methods()?.lightning ?? {};
-        const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (L.units ?? ['usd']);
-        let unit = wallet.unit() ?? (units.includes('usd') ? 'usd' : units[0]);
+        // The till pays a Lightning invoice: in sats, for the sat balance, as Lightning is (kit.js lightningUnit).
+        const units = [lightningUnit(wallet)];
+        let unit = units[0];
         const invite = inviteField(inputs);
         const input = ui.el('input', { id: 'fedAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('fund.fedimint.amountLabel') });
         const seg = ui.el('div', { class: 'seg', role: 'group', 'aria-label': t('fund.fedimint.amountLabel') });
@@ -405,11 +407,12 @@ export function create(inputs) {
       const newInvoice = async ({ amount, unit, invite }) => {
         let r;
         try {
-          r = await engine.fundLightning(wallet.key(), { amount, unit, invite });
+          r = await fundIn(wallet, unit, invite, (key, code, sibling) => engine.fundLightning(key, { amount, unit, invite: code }, sibling));
         } catch (e) {
           return msg.set(t('fund.failed', { message: e?.message ?? String(e) }), 'err');
         }
-        if (r.body?.key) wallet.setKey(r.body.key);
+        // The engine would not open the sat balance: the amount again, in the unit the phone holds.
+        if (r.body?.error?.code === 'sibling_refused') return home();
         if (!r.ok || !r.body?.request) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
         const f = r.body;
         let rec;

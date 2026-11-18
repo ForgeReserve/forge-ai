@@ -110,15 +110,18 @@ export function create(inputs) {
           const onward = kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null;
           foot.replaceChildren(...(onward ? [onward, again] : [againOnly()]));
         };
-        // The engine's own eCash in the unit these funds do not hold: changed through eCash, price first.
-        const canConvert = !!wallet.key() && !!wallet.unit() && !!methods?.convert?.units?.includes(wallet.unit());
+        // The balance this note's money goes to: its own unit's, the second balance opened with the first
+        // one's key. Only on an engine that cannot open it, the balance the phone has, where the engine
+        // changes it through eCash, price first.
+        const to = wallet.landsIn ? wallet.landsIn(note.unit) : wallet.key() ? wallet.unit() : null;
+        const canConvert = !!to && !!(wallet.keyFor ? wallet.keyFor(to) : wallet.key()) && !!methods?.convert?.units?.includes(to);
         const offerConvert = () => {
           body.replaceChildren(...head, ui.sayEl('p', { class: 'note', id: 'noteResult', role: 'status' }, t('fund.note.convert', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }), '', 'swap'));
           foot.replaceChildren(btn({ class: 'btn primary block', id: 'noteConvert', onclick: () => open('ecash', { token: note.token }) }, 'swap', t('fund.note.seePrice')), again);
         };
         if (!known) return refused('wrong_unit');
         // Free questions go on their own balance, so the paid balance's unit and the invite do not apply.
-        const verdict = credit ? 'add' : noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled, convert: canConvert });
+        const verdict = credit ? 'add' : noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: to, otherMint: !!methods?.foreign?.enabled, convert: canConvert });
         if (verdict === 'convert') return offerConvert();
         if (verdict !== 'add') return refused(verdict);
 

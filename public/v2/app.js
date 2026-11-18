@@ -27,10 +27,11 @@ import { watchViewport } from './core/viewport.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
 import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
-import { audioModels, audioMsub, CHARS_PER_SECOND } from './core/voice.js';
+import { audioModels, audioMsub, CHARS_PER_SECOND, transcribeMsub } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
+import { homeTotal, key2Name, keysByUnit, landsIn, OTHER, payUnit, questionsOver, UNITS, unitsPending, withKey, withoutKey } from './core/balances.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
-import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
+import { fundsSegments, nextPeak } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createUpdater } from './core/updates.js';
 import { choiceOf, createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, kindSwitch, loadedSettings, pickMode, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
@@ -79,11 +80,18 @@ const vault = createVault(storage);
 // ------------------------------------------------------------------ state
 
 const store = createStore({
-  key: null,
-  unit: null,
-  balanceMsub: null,
-  availableMsub: null,
-  peakMsub: null,
+  // The paid balances (core/balances.js): up to two keys, one per unit, as kept on the phone (the two
+  // storage names, in order), each key's unit once the engine said it, and each unit's balance:
+  // {balanceMsub, availableMsub, freeVoice}. The gold ring's full mark is kept per unit (peaks).
+  keys: [null, null],
+  keyUnits: {},
+  bal: { usd: null, sat: null },
+  peaks: { usd: null, sat: null },
+  // Free voice questions left today on the home balance (the one a free voice question goes on).
+  freeVoice: null,
+  // The engine refused to open the second balance with the first one's key this session: money in that
+  // unit is changed into the balance the phone has instead, as on an engine without two balances.
+  siblingRefused: false,
   models: [],
   audioModels: [],
   // Search the web, for the next question only: off by default, and off again once a question is sent.
@@ -148,7 +156,61 @@ const phonon = createPhonon({
 });
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
+const keyStore2 = () => key2Name(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
+
+// ------------------------------------------------------------------ the two balances (core/balances.js)
+
+/** The balance key in each unit, as the engine said it: {usd, sat}, a key or null. */
+const keys = () => keysByUnit(S.keys, S.keyUnits);
+const keyFor = (unit) => keys()[unit] ?? null;
+/** True when the phone keeps a paid balance key, read from the engine yet or not. */
+const anyKey = () => S.keys.some(Boolean);
+/** A unit's balance as the engine last said it, or null when the phone has none in that unit (or it was not read yet). */
+const balOf = (unit) => (keyFor(unit) && S.bal[unit]) || null;
+/** What a balance can pay now (the funds not held already), or null without one. */
+const availOf = (unit) => {
+  const b = balOf(unit);
+  return b ? (b.availableMsub ?? b.balanceMsub ?? null) : null;
+};
+/** The home's one total (core/balances.js homeTotal), or null before any balance was read. */
+const total = () => {
+  const one = (u) => (balOf(u) ? { balanceMsub: balOf(u).balanceMsub, peakMsub: S.peaks[u] } : null);
+  return homeTotal({ usd: one('usd'), sat: one('sat'), btcUsd: S.btcUsd });
+};
+/** The unit the home speaks in: the total's, else the balance kept first (dollars first), else dollars. */
+const homeUnit = () => total()?.unit ?? UNITS.find((u) => keyFor(u)) ?? 'usd';
+/** The key of the home's balance: the one a question no balance can pay is sent with (the engine says it is short). */
+const homeKey = () => keyFor(homeUnit()) ?? S.keys.find(Boolean) ?? null;
+
+/**
+ * The balance that pays a request whose hold in a unit is holdIn(unit) (core/balances.js payUnit): dollars
+ * first, sats when dollars cannot cover it, and sats only with a BTC/USD rate. When neither covers it
+ * alone, pays is false and the home's balance stands in, so the price is shown in its unit.
+ * Returns {unit, key, costMsub, pays}.
+ */
+function payerFor(holdIn) {
+  const raw = { usd: holdIn('usd'), sat: holdIn('sat') };
+  const unit = payUnit({ available: { usd: availOf('usd'), sat: availOf('sat') }, hold: { usd: raw.usd, sat: S.btcUsd > 0 ? raw.sat : null } });
+  const shown = unit ?? homeUnit();
+  return { unit: shown, key: keyFor(shown) ?? homeKey(), costMsub: raw[shown], pays: !!unit };
+}
+
+/** The unit prices are shown in before a question is written: the balance that would pay a typical one. */
+function priceUnit(model) {
+  return model ? payerFor((u) => perQuestion(model, u)).unit : homeUnit();
+}
+
+/**
+ * The paid balances Funds lists, each as its own row with its own Take out: those with money in them,
+ * dollars first. {unit, balanceMsub, text, refundable}.
+ */
+function fundsRows() {
+  return UNITS.filter((u) => balOf(u)?.balanceMsub > 0).map((u) => {
+    const b = balOf(u);
+    return { unit: u, balanceMsub: b.balanceMsub, text: fmtBalance(b.balanceMsub, u), refundable: Math.floor((b.availableMsub ?? b.balanceMsub ?? 0) / 1000) };
+  });
+}
 
 // ------------------------------------------------------------------ derived view
 
@@ -169,12 +231,13 @@ function memoryNow(model) {
 }
 
 let againMemo = { k: '', models: null, audioModels: null, v: null };
-/** What Ask again would cost now, or null while an answer streams or with nothing to ask again. */
+/** What Ask again would cost now ({msub, unit}), or null while an answer streams or with nothing to ask again. */
 function againNow(model) {
   if (S.streaming || !model) return null;
   const msgs = S.conv.messages;
   const voice = msgs.findLast?.((m) => m.role === 'user')?.meta?.voice ? 'v' : '';
-  const k = `${S.conv.id}|${msgs.length}|${model.id}|${S.unit}|${msgs.at(-1)?.meta?.error ? 'e' : ''}|${voice}|${voiceOut()?.id ?? ''}|${leavingConv()}`;
+  // What each balance can pay is part of the key: it decides which one pays, and so the unit.
+  const k = `${S.conv.id}|${msgs.length}|${model.id}|${availOf('usd')}|${availOf('sat')}|${S.btcUsd}|${msgs.at(-1)?.meta?.error ? 'e' : ''}|${voice}|${voiceOut()?.id ?? ''}|${leavingConv()}`;
   // The price lists are part of the key by identity: the cached list is replaced by the live one (new
   // prices under the same model id) when the engine answers.
   if (againMemo.k !== k || againMemo.models !== S.models || againMemo.audioModels !== S.audioModels) againMemo = { k, models: S.models, audioModels: S.audioModels, v: estimateAgain(model) };
@@ -190,22 +253,30 @@ function freeNow(model, inputTokens = 0) {
 
 function view() {
   const model = pickModel(S.models, S.settings);
-  const unit = S.unit ?? 'usd';
+  // One total for the home (core/balances.js homeTotal): one balance in its own unit, both in dollars.
+  const tot = total();
+  const unit = tot?.unit ?? homeUnit();
   const mem = memoryNow(model);
-  const hasKey = !!S.key;
+  const hasKey = anyKey();
   const fr = freeNow(model);
-  const paidNone = !hasKey || S.balanceMsub === 0;
+  const paidNone = !hasKey || tot?.balanceMsub === 0;
   // A free model (core/price.js isFreeModel): nothing to pay, but the engine wants a balance key.
   const modelFree = isFreeModel(model);
-  const seg = fundsSegments({ balanceMsub: hasKey ? S.balanceMsub : 0, peakMsub: S.peakMsub, freeLeft: fr.left, freeTotal: fr.total, perQuestionMsub: perQuestion(model, unit) });
+  // The gold ring is the total over the full marks of both balances, in the total's unit.
+  const seg = fundsSegments({ balanceMsub: hasKey ? (tot?.balanceMsub ?? null) : 0, peakMsub: tot?.peakMsub ?? null, freeLeft: fr.left, freeTotal: fr.total, perQuestionMsub: perQuestion(model, unit) });
+  const rows = fundsRows();
+  const again = againNow(model);
   return {
     model,
     // With no model to use, Private only still decides: nothing is sent to a standard model.
     private: model ? isPrivate(model) : !!S.settings.privateOnly,
     online: S.online,
     hasKey,
-    balanceMsub: hasKey ? S.balanceMsub : null,
-    balanceText: hasKey && S.balanceMsub != null ? fmtBalance(S.balanceMsub, S.unit) : null,
+    balanceMsub: hasKey ? (tot?.balanceMsub ?? null) : null,
+    balanceText: hasKey && tot?.balanceMsub != null ? fmtBalance(tot.balanceMsub, unit) : null,
+    // The total's unit, and the paid balances that hold money, each a row on Funds (two when both do).
+    unit,
+    balances: rows,
     // The gold ring: free questions as a lighter segment first, then the paid balance (core/rings.js).
     fundsFraction: seg.paid,
     freeFraction: seg.free,
@@ -213,7 +284,7 @@ function view() {
     freeTotal: fr.total,
     // What stops a question for lack of funds, if anything (core/free.js fundsBlock). Never funds on a free
     // model: only the balance key it needs ('needKey').
-    fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : S.balanceMsub, freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use, freeModel: modelFree, hasKey }),
+    fundsBlock: fundsBlock({ paidMsub: paidNone ? 0 : (tot?.balanceMsub ?? null), freeLeft: fr.left, freeTotal: fr.total, freeUsable: fr.use, freeModel: modelFree, hasKey }),
     modelFree,
     // Start free (screens/startfree.js): this engine has free models, which a $0 balance opened with an
     // invite code can use. Offered while there is no key or the balance is at 0 on a paid model.
@@ -222,20 +293,23 @@ function view() {
     // show their empty state, and the gold ring invites a paper note scan.
     noFunds: paidNone && fr.left === 0,
     scanNote: paidNone && fr.left === 0 && !!registry?.list('fund').some((x) => x.instance.id === 'note'),
-    refundable: hasKey ? Math.floor((S.availableMsub ?? S.balanceMsub ?? 0) / 1000) : 0,
-    questionsLeft: hasKey ? questionsLeft(S.balanceMsub, perQuestion(model, unit)) : 0,
+    // What can be taken out of the one balance with money (Take out; with two, each row has its own).
+    refundable: rows.length === 1 ? rows[0].refundable : 0,
+    // Questions left over both balances, each paying whole questions; the sats only with a rate.
+    questionsLeft: hasKey ? questionsOver({ usd: balOf('usd')?.balanceMsub, sat: balOf('sat')?.balanceMsub }, { usd: perQuestion(model, 'usd'), sat: perQuestion(model, 'sat') }, S.btcUsd > 0) : 0,
     memory: mem,
     held: mem.held,
     pendingCount: S.pending.length,
     lastExchange: lastExchange(S.conv.messages),
     streaming: S.streaming,
     hiddenCount: hiddenCount(S.models, S.settings),
-    talk: talkView(model, unit),
+    talk: talkView(model, priceUnit(model)),
     // Search the web: offered when the model can search; on for the next question only.
     search: { available: canSearch(model), on: searchOn(model) },
     speak: speakView(),
-    // The most Ask again can cost, shown on the button before it is pressed.
-    againMsub: againNow(model),
+    // The most Ask again can cost, shown on the button before it is pressed, in the unit of the balance that pays it.
+    againMsub: again?.msub ?? null,
+    againUnit: again?.unit ?? unit,
     // A free question in place of the balance: the price lines read "Free, 2 of 3 left". A free model: "Free".
     free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
     // Goes up whenever conversations are burned, so an open History screen reads the list again.
@@ -263,7 +337,7 @@ function answerModelOf(a) {
 
 /** The fast model the slow note offers: a free one, or a paid one when there is money for it. */
 function fastModelNow(model) {
-  const m = fastPick(S.models, S.settings, { current: model, paid: !!(S.key && S.balanceMsub > 0) });
+  const m = fastPick(S.models, S.settings, { current: model, paid: total()?.balanceMsub > 0 });
   return m ? { id: m.id, name: m.name ?? m.id } : null;
 }
 
@@ -312,29 +386,38 @@ const reader = {
  */
 const audio = {
   model: (kind) => audioModels(S.audioModels, S.settings)[kind] ?? null,
-  price: (kind, usage) => audioMsub(audio.model(kind), S.unit ?? 'usd', usage),
+  price: (kind, usage, unit = priceUnit(pickModel(S.models, S.settings))) => audioMsub(audio.model(kind), unit, usage),
   async transcribe(wav, { seconds, signal } = {}) {
     const m = audio.model('transcription');
     if (!m) throw new EngineError('model_not_found', 'No speech to text model.');
-    return engine.transcribe(S.key, { model: m.id, audio: wav, seconds, signal });
+    // Paid by the balance that covers it (dollars first); one that none covers goes on the home balance,
+    // where the engine may take it as a free voice question.
+    const p = payerFor((u) => transcribeMsub(m, u, Math.max(seconds ?? 0, 0.5)));
+    audioUnit = p.unit;
+    return engine.transcribe(p.key, { model: m.id, audio: wav, seconds, signal });
   },
   async speak(input, { signal } = {}) {
     const m = audio.model('speech');
     if (!m) throw new EngineError('model_not_found', 'No voice model.');
-    return engine.speech(S.key, { model: m.id, input, voice: m.voices?.[0], signal });
+    const p = payerFor((u) => audioMsub(m, u, { requests: 1, chars: input.length }));
+    return engine.speech(p.key, { model: m.id, input, voice: m.voices?.[0], signal });
   },
 };
+// The unit of the balance the last recording was sent on, so the balance the engine reports after it
+// lands on that one (talkctl's balanceAfter).
+let audioUnit = null;
 
 /**
  * The most a voice question can cost, for a recording of `seconds`: turning it into text, the question
  * it becomes (about CHARS_PER_SECOND characters a second) and, when the engine reads it aloud, the
  * longest part of the answer that is read. null when a part has no price.
  */
-function talkPrice(seconds, inMod, freeVoice = false) {
+function talkPrice(seconds, inMod, freeVoice = false, unit = 'usd') {
   // A free voice question: turning it into text costs nothing.
   const toText = freeVoice ? 0 : inMod.price(seconds);
-  const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND)), { voice: true }).costMsub;
-  const reading = readingPrice();
+  // In the unit the line is shown in (talkView): the balance that would pay a typical question.
+  const question = estimateFor('x'.repeat(Math.ceil(Math.max(1, seconds) * CHARS_PER_SECOND)), { voice: true, unit }).costMsub;
+  const reading = readingPrice(unit);
   if (question == null || reading == null || (toText == null && inMod.id === 'engine')) return null;
   return (toText ?? 0) + question + reading;
 }
@@ -346,10 +429,11 @@ function talkPrice(seconds, inMod, freeVoice = false) {
  */
 function freeVoiceNow(inMod, seconds = 0) {
   const fv = S.freeVoice;
-  if (!inMod || inMod.id !== 'engine' || !S.key || !fv?.enabled) return { use: false, out: false };
-  const price = inMod.price(Math.max(seconds, 0.5));
-  const funds = S.availableMsub ?? S.balanceMsub ?? 0;
-  if (price == null || funds >= price) return { use: false, out: false };
+  if (!inMod || inMod.id !== 'engine' || !anyKey() || !fv?.enabled) return { use: false, out: false };
+  const m = audio.model('transcription');
+  // A balance that can pay for it pays; the home balance's free voice questions count only when none can.
+  const p = m ? payerFor((u) => transcribeMsub(m, u, Math.max(seconds, 0.5))) : null;
+  if (!p || p.costMsub == null || p.pays) return { use: false, out: false };
   return { use: fv.left > 0, out: !(fv.left > 0) };
 }
 
@@ -372,7 +456,7 @@ function talkView(model, unit) {
     error: tk.error ?? null,
     unit,
     maxSeconds: inMod?.maxSeconds() ?? 60,
-    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod, fv.use) : null,
+    priceMsub: inMod && tk.phase === 'recording' ? talkPrice(tk.seconds ?? 0, inMod, fv.use, unit) : null,
     // Where the sound goes, for the line under the button: phone, engine-private, engine-standard or device.
     // Forge Private Voice's own speech to text is On this phone too.
     route: !inMod ? null : onPhone(inMod) ? 'phone' : inMod.id === 'device' ? 'device' : inMod.private() ? 'engine-private' : 'engine-standard',
@@ -490,15 +574,52 @@ if (native) followBars(native.bars);
 
 // ------------------------------------------------------------------ balance
 
-function setKey(k) {
-  S.key = k || null;
-  keep(keyStore(), S.key);
-  if (!S.key) Object.assign(S, { unit: null, balanceMsub: null, availableMsub: null, peakMsub: null });
+/**
+ * Keeps a new paid balance key (core/balances.js withKey): in the first of the two storage names that is
+ * empty, never over a key already kept. unit: the key's unit when the engine said it with the key.
+ */
+/** The storage name of the first (0) or second (1) balance key. */
+const slotName = (i) => (i ? keyStore2() : keyStore());
+
+function setKey(k, unit = null) {
+  if (!k) return;
+  if (unit) S.keyUnits = { ...S.keyUnits, [k]: unit };
+  // A key stored since this page read them (the Classic page in another tab, say) is taken in first,
+  // so it is never written over.
+  S.keys = S.keys.map((x, i) => x ?? ui.load(slotName(i)) ?? null);
+  const next = withKey(S.keys, k);
+  if (!next) {
+    // Both names hold a key already: the phone never asks for a third (core/balances.js landsIn), so
+    // this one is only kept aside, with any other kept so.
+    let aside = [];
+    try {
+      aside = JSON.parse(ui.load('forge2.extraKeys') ?? '[]');
+    } catch {
+      /* unreadable: start the list again */
+    }
+    if (!aside.includes(k)) keep('forge2.extraKeys', JSON.stringify([...aside, k]));
+    return;
+  }
+  const i = next.findIndex((x, j) => x !== S.keys[j]);
+  S.keys = next;
+  if (i >= 0) keep(slotName(i), k);
+  store.set({});
+}
+
+/** Lets a key go (the engine no longer knows it); the other key stays where it is. */
+function dropKey(k) {
+  const i = S.keys.indexOf(k);
+  if (i < 0) return;
+  const unit = S.keyUnits[k];
+  S.keys = withoutKey(S.keys, k);
+  // Only a name that still holds this very key is emptied.
+  if (ui.load(slotName(i)) === k) keep(slotName(i), null);
+  if (unit && !keyFor(unit)) S.bal = { ...S.bal, [unit]: null };
   store.set({});
 }
 
 async function savePeak() {
-  await kv.put(`peak:${engine.base}`, S.peakMsub).catch(() => {});
+  await kv.put(`peaks:${engine.base}`, S.peaks).catch(() => {});
 }
 
 function setFreeKey(k) {
@@ -531,26 +652,44 @@ async function refreshFree() {
   }
 }
 
+// The gold ring's full mark as kept before two balances (one number, for the one key): it becomes the
+// mark of that key's unit once the engine says which unit that is.
+let legacyPeak = null;
+
+/**
+ * Reads every paid balance the phone keeps: each key's unit and balance. A key the engine no longer knows
+ * is let go: with a toast when it was the only one, as before two balances. With two, the one let go is
+ * an empty balance whose first funding failed (the engine deletes only those), and it goes without a word.
+ */
 async function refreshBalance() {
   await refreshFree();
-  if (!S.key) return store.set({});
-  try {
-    const w = await engine.wallet(S.key);
-    S.unit = w.unit;
-    S.balanceMsub = w.balance_msub;
-    S.availableMsub = w.available_msub;
-    // Free voice questions left today (docs/PAYMENTS.md): speech to text the operator pays for.
-    S.freeVoice = w.free_voice ?? null;
-    S.peakMsub = nextPeak(S.peakMsub, w.balance_msub);
-    await savePeak();
-  } catch (e) {
-    if (e instanceof EngineError && e.status === 401) {
-      // The engine no longer knows this key. Keep a copy aside, as v1 does, then start over.
-      keep('forge.unrecognizedKey', S.key);
-      setKey(null);
-      ui.toast(t('error.key'));
+  if (!anyKey()) return store.set({});
+  for (const k of S.keys) {
+    if (!k) continue;
+    try {
+      const w = await engine.wallet(k);
+      S.keyUnits = { ...S.keyUnits, [k]: w.unit };
+      if (keyFor(w.unit) !== k) continue;
+      if (k === S.keys[0]) {
+        if (legacyPeak != null && S.peaks[w.unit] == null) S.peaks = { ...S.peaks, [w.unit]: legacyPeak };
+        legacyPeak = null;
+      }
+      // Free voice questions left today (docs/PAYMENTS.md): speech to text the operator pays for.
+      S.bal = { ...S.bal, [w.unit]: { balanceMsub: w.balance_msub, availableMsub: w.available_msub, freeVoice: w.free_voice ?? null } };
+      S.peaks = { ...S.peaks, [w.unit]: nextPeak(S.peaks[w.unit], w.balance_msub) };
+    } catch (e) {
+      if (e instanceof EngineError && e.status === 401) {
+        // The engine no longer knows this key. Keep a copy aside, as v1 does, then let it go.
+        const alone = S.keys.filter(Boolean).length === 1;
+        keep(alone ? 'forge.unrecognizedKey' : 'forge2.unrecognizedKey2', k);
+        dropKey(k);
+        if (alone) ui.toast(t('error.key'));
+      }
     }
   }
+  // The free voice questions of the home balance, the one a recording no balance can pay goes on.
+  S.freeVoice = balOf(homeUnit())?.freeVoice ?? null;
+  await savePeak();
   store.set({});
 }
 
@@ -605,11 +744,42 @@ async function topupFree(token) {
   return { ...r, free: true };
 }
 
+/**
+ * Where money in `unit` goes (core/balances.js landsIn): its own balance, made now if the phone has none
+ * (the second one opened with the first one's key where the engine offers that), or, on an engine that
+ * does not, the balance the phone has, where the engine changes units after showing the price.
+ */
+const landing = (unit) => landsIn(unit, { held: { usd: !!keyFor('usd'), sat: !!keyFor('sat') }, siblings: siblingsOn(), inviteOnly: S.inviteOnly });
+/** The engine opens the second balance with the first one's key (methods.sibling), and has not refused it here. */
+const siblingsOn = () => !!S.methods?.sibling?.enabled && !S.siblingRefused;
+/**
+ * What money in `unit` is sent with: {key} of the balance in that unit, or, with none, {sibling}: the
+ * key of the balance in the other unit, which opens this one with no invite.
+ */
+function fundingFor(unit) {
+  const key = keyFor(unit);
+  if (key) return { key };
+  const other = keyFor(OTHER[unit]);
+  return { key: null, sibling: other && siblingsOn() ? other : undefined };
+}
+/** The unit a token the phone can read goes to; a token it cannot read goes to the home balance, as before. */
+const landingOf = (token) => {
+  const n = readNote(token);
+  return n.ok ? landing(n.unit) : homeUnit();
+};
+
+/** Waits for the engine to say which unit each kept key is, so money is never sent as if a balance were missing. */
+async function unitsKnown() {
+  if (unitsPending(S.keys, S.keyUnits)) await refreshBalance();
+}
+
 /** Sends every voucher and token still waiting on the phone: free ones on the free balance. One run at a time. */
 let retrying = null;
 function retryAll() {
   retrying ??= (async () => {
-    const paid = await retryPending({ engine, vault, getKey: () => S.key, invite: S.invite, setKey, setFreeKey });
+    await unitsKnown();
+    // Each token to the balance of its unit (landingOf), opening it with the other key when it is the second.
+    const paid = await retryPending({ engine, vault, getKey: (token) => fundingFor(landingOf(token)).key, getSibling: (token) => fundingFor(landingOf(token)).sibling, invite: S.invite, setKey, setFreeKey });
     const free = await retryPending({ engine, vault, getKey: () => S.freeKey, setKey: setFreeKey, via: 'free' });
     return paid + free;
   })().finally(() => (retrying = null));
@@ -617,9 +787,26 @@ function retryAll() {
 }
 
 const wallet = {
-  key: () => S.key,
+  /** The key of the home balance: whether the phone has a paid balance at all (no invite is asked then). */
+  key: () => homeKey(),
+  /** The key of the balance in a unit, or null. */
+  keyFor,
+  /** Keeps a new balance key, with its unit when the engine said it. */
   setKey,
-  unit: () => S.unit,
+  /** The home balance's unit, or null with no balance read yet. */
+  unit: () => (anyKey() ? (total()?.unit ?? UNITS.find((u) => keyFor(u)) ?? null) : null),
+  /** The unit money in this unit is added to (landing). */
+  landsIn: (unit) => landing(unit),
+  /** {key} or {sibling} to send money in a unit with (fundingFor), once the kept keys' units are known. */
+  fundingFor: async (unit) => (await unitsKnown(), fundingFor(unit)),
+  /**
+   * After the engine refused to open the second balance with the first one's key (sibling_refused): money
+   * in that unit goes the way an engine without two balances takes it, changed into the balance the phone has.
+   */
+  siblingRefused: () => {
+    S.siblingRefused = true;
+    store.set({});
+  },
   inviteOnly: () => S.inviteOnly,
   invite: () => S.invite,
   setInvite: (v) => (S.invite = v),
@@ -641,14 +828,29 @@ const wallet = {
   topup: async (token, invite) => {
     const note = readNote(token);
     if (note.ok && isCreditMint(S.free, note.mint)) return topupFree(token);
-    // The engine may still find a voucher here (the credit mint was not known yet): its free balance
-    // key then goes to the free slot, never the paid one.
-    const r = await topupWithVault({ engine, vault, token, key: S.key, invite, setKey, setFreeKey });
-    if (r.free) {
-      await refreshFree();
-      store.set({});
+    await unitsKnown();
+    // To the balance of the token's unit, no change of units and no fee (landing): a second balance is
+    // opened with the first one's key.
+    const unit = landingOf(token);
+    const f = fundingFor(unit);
+    try {
+      // The engine may still find a voucher here (the credit mint was not known yet): its free balance
+      // key then goes to the free slot, never the paid one.
+      const r = await topupWithVault({ engine, vault, token, key: f.key, sibling: f.sibling, invite, setKey, setFreeKey });
+      if (r.free) {
+        await refreshFree();
+        store.set({});
+      }
+      return r;
+    } catch (e) {
+      // The engine would not open the second balance: from now on this unit is changed into the balance
+      // the phone has, and this token is offered that way now, price first (as a wrong_unit top-up is).
+      if (e?.code !== 'sibling_refused' || !note.ok) throw e;
+      wallet.siblingRefused();
+      const to = landing(note.unit);
+      if (to === note.unit || !S.methods?.convert?.units?.includes(to)) throw e;
+      throw new EngineError('wrong_unit', e.message, { status: 400, body: { convert: { quote: '/v1/wallet/fund/foreign/quote', unit: to, token_unit: note.unit } } });
     }
-    return r;
   },
   /** Adds a voucher of free questions, known to be one (the Free questions module), to the free balance. */
   topupFree,
@@ -662,9 +864,9 @@ const wallet = {
    * Resolves {created, freeShown}: freeShown is false when Private only hides every free model.
    */
   open: async (invite) => {
-    if (!S.key) {
+    if (!anyKey()) {
       const r = await engine.openBalance(invite);
-      if (r?.key) setKey(r.key);
+      if (r?.key) setKey(r.key, r.unit);
       S.invite = '';
       await refreshBalance();
     }
@@ -714,17 +916,19 @@ async function savePending() {
 }
 
 /**
- * The funds hold for a question with these API messages, in msub: exactly what the engine holds before
- * sending it on (core/price.js holdMsub), from the body generate() sends, encrypted for a private model.
- * Falls back to the per-token estimate when the engine lists no hold figures. null when unpriced.
+ * The funds hold for a question with these API messages, as a function of the unit, in msub: exactly
+ * what the engine holds before sending it on (core/price.js holdMsub), from the body generate() sends,
+ * encrypted for a private model. Falls back to the per-token estimate when the engine lists no hold
+ * figures. null when unpriced. A function, so the balance that pays it can be chosen (payerFor).
  */
 function questionHold(model, api, maxOut, inputTokens, search = false) {
-  const unit = S.unit ?? 'usd';
   const enc = isPrivate(model) ? { upstream: model.upstream_model } : null;
   const plain = new TextEncoder().encode(chatPayload(chatBody(model, api, maxOut, search), enc)).length;
-  const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd, search });
-  if (held != null || search) return held;
-  return estimate(model, unit, inputTokens, maxOut)?.max ?? null;
+  return (unit) => {
+    const held = holdMsub(model, unit, { bodyBytes: enc ? ehbpBytes(plain) : plain, maxOut, btcUsd: S.btcUsd, search });
+    if (held != null || search) return held;
+    return estimate(model, unit, inputTokens, maxOut)?.max ?? null;
+  };
 }
 
 /**
@@ -738,10 +942,13 @@ const searchOn = (model) => !!S.search && canSearch(model);
 /** The chat request body generate() sends, also used to price it. */
 const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: api, max_tokens: maxOut, ...(search ? SEARCH_FIELDS : {}) });
 
-function estimateFor(text, { voice = false } = {}) {
+/**
+ * The price of the next question with these words, and whether it can be paid. Priced in the unit of the
+ * balance that pays it (payerFor: dollars first, sats when the dollars are short), or in `unit` when given.
+ */
+function estimateFor(text, { voice = false, unit: asked = null } = {}) {
   const model = pickModel(S.models, S.settings);
-  const unit = S.unit ?? 'usd';
-  if (!model) return { costMsub: null, unit };
+  if (!model) return { costMsub: null, unit: asked ?? homeUnit() };
   const vision = !!model.capabilities?.vision;
   const next = pendingMessage(text, S.pending, { vision });
   if (voice) next.meta = { voice: true };
@@ -753,20 +960,25 @@ function estimateFor(text, { voice = false } = {}) {
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   const search = searchOn(model);
   const modelFree = isFreeModel(model);
-  const costMsub = questionHold(model, api, maxOut, tokens, search);
+  const holdIn = questionHold(model, api, maxOut, tokens, search);
+  const payer = payerFor(holdIn);
+  const unit = asked ?? payer.unit;
+  const costMsub = asked ? holdIn(asked) : payer.costMsub;
+  const money = total()?.balanceMsub > 0;
   // A search is never a free question: it is paid from the balance.
   const fr = search ? { ...freeNow(model, bodyTokens(bytes)), use: false } : freeNow(model, bodyTokens(bytes));
   return {
     costMsub,
     search,
     // The engine refuses a question whose hold is more than the funds not already held: say so first.
-    // A free model holds nothing, so it is never short.
-    short: !modelFree && !fr.use && !!S.key && costMsub != null && S.balanceMsub > 0 && costMsub > (S.availableMsub ?? S.balanceMsub),
+    // One balance pays a question in full, so it is short when neither covers it alone. A free model
+    // holds nothing, so it is never short.
+    short: !modelFree && !fr.use && anyKey() && payer.costMsub != null && money && !payer.pays,
     unit,
     // Paid with a free question: the price line reads "Free, 2 of 3 left". A free model: "Free".
     free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
     // Free questions left, but this one is too long for one, and there is no paid balance.
-    freeTooLong: !modelFree && !fr.use && fr.why === 'long' && !(S.key && S.balanceMsub > 0),
+    freeTooLong: !modelFree && !fr.use && fr.why === 'long' && !money,
     reading: S.pending.some((a) => a.status === 'reading'),
     overContext: !!model.context_length && tokens + maxOut > model.context_length,
     overBody: bytes > BODY_LIMIT * 0.98,
@@ -783,10 +995,10 @@ const bodyTokens = (bytes) => Math.ceil((bytes + 256) / 2);
  * The most the engine can charge to read up to SPEAK_MAX_CHARS of an answer aloud: 0 when the phone
  * reads it (or nothing does), null when the engine's voice has no price.
  */
-function readingPrice() {
+function readingPrice(unit) {
   const out = voiceOut();
   if (out?.id !== 'engine') return 0;
-  return audio.price('speech', { requests: Math.ceil(SPEAK_MAX_CHARS / out.pieceSize()), chars: SPEAK_MAX_CHARS });
+  return audio.price('speech', { requests: Math.ceil(SPEAK_MAX_CHARS / out.pieceSize()), chars: SPEAK_MAX_CHARS }, unit);
 }
 
 /**
@@ -796,7 +1008,6 @@ function readingPrice() {
  * no question to ask again, or a part has no price.
  */
 function estimateAgain(model) {
-  const unit = S.unit ?? 'usd';
   // After the Private chip switched the model, Ask again asks the question alone, in a new conversation.
   const history = leavingConv() ? againHistory(S.conv.messages).slice(-1) : againHistory(S.conv.messages);
   if (!history.length) return null;
@@ -804,10 +1015,10 @@ function estimateAgain(model) {
   const systemPrompt = promptFor(history);
   const tokens = tokensOf(history, { systemPrompt, vision });
   const maxOut = Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
-  const chat = questionHold(model, apiMessages(history, { systemPrompt, vision }), maxOut, tokens, searchOn(model));
-  const reading = history.at(-1).meta?.voice ? readingPrice() : 0;
-  if (chat == null || reading == null) return null;
-  return chat + reading;
+  const payer = payerFor(questionHold(model, apiMessages(history, { systemPrompt, vision }), maxOut, tokens, searchOn(model)));
+  const reading = history.at(-1).meta?.voice ? readingPrice(payer.unit) : 0;
+  if (payer.costMsub == null || reading == null) return null;
+  return { msub: payer.costMsub + reading, unit: payer.unit };
 }
 
 async function ask(text, meta = null) {
@@ -853,7 +1064,11 @@ async function makeAnswer() {
   if (S.search) S.search = false;
   // A free model is asked with the balance key: the engine never takes a free question (credit) for it.
   const useF = fr.use && !!S.freeKey && !search && !isFreeModel(model);
-  const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: S.unit } };
+  const maxTokens = useF ? freeMaxTokens(S.free, Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT)) : Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
+  // One balance pays the whole question: dollars first, sats when the dollars cannot cover its hold
+  // (payerFor). When neither can, it goes on the home balance and the engine says it is short.
+  const payer = payerFor(questionHold(model, api, maxTokens, tokensOf(history, { systemPrompt: promptFor(history), vision }), search));
+  const reply = { id: newId('m'), role: 'assistant', content: '', meta: { model: model.id, unit: payer.unit } };
   if (useF) reply.meta.free = true;
   // A free model: the note under the answer says it was free, never "That cost 0 cents".
   if (isFreeModel(model)) reply.meta.freeModel = true;
@@ -864,12 +1079,11 @@ async function makeAnswer() {
   const me = { controller, quiet: false };
   gen = me;
   store.set({ streaming: true, genStart: Date.now() });
-  const maxTokens = useF ? freeMaxTokens(S.free, Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT)) : Math.min(MAX_OUT, model.max_output_tokens ?? MAX_OUT);
   let forge = null;
   let failure = null;
   try {
     await engine.chat({
-      key: useF ? S.freeKey : S.key,
+      key: useF ? S.freeKey : payer.key,
       body: chatBody(model, api, maxTokens, search),
       encrypted: isPrivate(model) ? { upstream: model.upstream_model } : null,
       search,
@@ -902,7 +1116,7 @@ async function makeAnswer() {
   }
   if (forge?.balance_msub != null) {
     if (useF) S.freeMsub = forge.balance_msub;
-    else S.balanceMsub = forge.balance_msub;
+    else if (balOf(payer.unit)) S.bal = { ...S.bal, [payer.unit]: { ...S.bal[payer.unit], balanceMsub: forge.balance_msub } };
   }
   if (!useF && forge?.charged_msub != null && (!reply.meta.error || forge.charged_msub > 0)) reply.meta.cost = forge.charged_msub;
   if (useF && forge?.charged_msub > 0) reply.meta.freeLeft = freeLeft(forge.balance_msub ?? S.freeMsub);
@@ -1118,56 +1332,63 @@ async function removePending(id) {
   store.set({});
 }
 
-async function takeOut(amount) {
-  const r = await engine.refund(S.key, { amount, pubkey: lockKey() || undefined });
+/** Takes `amount` (whole units) out of the balance in `unit` as eCash, kept on the phone until saved. */
+async function takeOut(amount, unit = homeUnit()) {
+  const key = keyFor(unit);
+  if (!key) throw new EngineError('invalid_key', t('error.key'));
+  const r = await engine.refund(key, { amount, pubkey: lockKey() || undefined });
   if (!r.ok && r.status !== 202) throw new EngineError(r.body?.error?.code ?? `http_${r.status}`, r.body?.error?.message ?? `HTTP ${r.status}`, { status: r.status });
   if (r.body?.token) vault.keepRefund({ id: r.body.id, token: r.body.token, amount: r.body.amount, unit: r.body.unit });
   // Issued later: remember the id, so collectRefunds offers it whatever this phone saw before.
   else if (r.body?.id) {
-    const name = refundNames().awaited;
+    const name = refundNames(key).awaited;
     const list = (await kv.get(name).catch(() => null)) ?? [];
     if (!list.includes(r.body.id)) await kv.put(name, [...list, r.body.id]).catch(() => {});
   }
   await refreshBalance();
   // Taking money out lowers the full mark of the gold ring to what is left.
-  S.peakMsub = S.balanceMsub;
+  S.peaks = { ...S.peaks, [unit]: balOf(unit)?.balanceMsub ?? null };
   await savePeak();
   store.set({});
   return { later: !r.body?.token };
 }
 
-/** Where this balance's shown and awaited refund ids are stored (core/refunds.js). */
-const refundNames = () => ({ shown: `refundsShown:${S.key.slice(-12)}`, awaited: `refundsAwaited:${S.key.slice(-12)}` });
+/** Where a balance's shown and awaited refund ids are stored (core/refunds.js): per key, so per balance. */
+const refundNames = (key) => ({ shown: `refundsShown:${key.slice(-12)}`, awaited: `refundsAwaited:${key.slice(-12)}` });
 
 /**
- * Refunds the engine issued but this phone has not shown yet (a 202 earlier, or a closed tab). The first
- * time a balance is seen here, refunds already issued (in v1, say) are taken as shown, not offered again;
- * a refund this phone was told to collect later is always offered (core/refunds.js).
+ * Refunds the engine issued but this phone has not shown yet (a 202 earlier, or a closed tab), for each
+ * balance. The first time a balance is seen here, refunds already issued (in v1, say) are taken as
+ * shown, not offered again; a refund this phone was told to collect later is always offered (core/refunds.js).
  */
 async function collectRefunds() {
-  if (!S.key) return;
-  const names = refundNames();
-  try {
-    const before = await kv.get(names.shown);
-    const awaited = (await kv.get(names.awaited)) ?? [];
-    const list = await engine.refunds(S.key);
-    const r = refundsToOffer({ list: list.data, shownBefore: before, awaited, outgoing: vault.outgoing().map((o) => o.id) });
-    for (const x of r.keep) vault.keepRefund({ id: x.id, token: x.token, amount: x.amount, unit: x.unit });
-    await kv.put(names.shown, r.shown);
-    await kv.put(names.awaited, r.awaited);
-    if (r.keep.length) store.set({});
-  } catch {
-    /* offline */
+  for (const key of Object.values(keys())) {
+    if (!key) continue;
+    const names = refundNames(key);
+    try {
+      const before = await kv.get(names.shown);
+      const awaited = (await kv.get(names.awaited)) ?? [];
+      const list = await engine.refunds(key);
+      const r = refundsToOffer({ list: list.data, shownBefore: before, awaited, outgoing: vault.outgoing().map((o) => o.id) });
+      for (const x of r.keep) vault.keepRefund({ id: x.id, token: x.token, amount: x.amount, unit: x.unit });
+      await kv.put(names.shown, r.shown);
+      await kv.put(names.awaited, r.awaited);
+      if (r.keep.length) store.set({});
+    } catch {
+      /* offline */
+    }
   }
 }
 
 /**
  * Other-mint tokens still pending on this phone (the person left the fund screen before the outcome):
- * looks each funding up and settles it, so a token is never left waiting for a screen that is gone.
+ * looks each funding up and settles it, so a token is never left waiting for a screen that is gone. A
+ * funding belongs to one balance: each key asks about its own, and a 404 from the other key is no answer.
  */
 async function settleOtherMint() {
   try {
-    const n = await settlePendingForeign({ engine, vault, key: S.key });
+    let n = 0;
+    for (const key of Object.values(keys())) if (key) n += await settlePendingForeign({ engine, vault, key, mine: (e) => (e.unit ? keyFor(e.unit) === key : key === S.keys[0]) });
     if (n) {
       store.set({});
       await refreshBalance();
@@ -1205,7 +1426,7 @@ function openBalance() {
 function blocker() {
   if (!S.online) return { key: 'type.offline' };
   if (S.streaming) return { key: 'talk.busy' };
-  if (!S.key || S.balanceMsub === 0) {
+  if (!anyKey() || total()?.balanceMsub === 0) {
     const v = view();
     // A voice question the phone turns into words can be a free question; the engine's speech to text
     // is paid from the paid balance, or free while the balance has free voice questions left today.
@@ -1233,7 +1454,12 @@ const talk = createTalk({
   blocker,
   ask,
   refresh: () => refreshBalance(),
-  errorText: (err) => errorText(err, S.unit),
+  errorText: (err) => errorText(err, priceUnit(pickModel(S.models, S.settings))),
+  // The balance a transcription reports goes on the balance it was paid from (audio.transcribe).
+  balanceAfter: (msub) => {
+    const u = audioUnit ?? homeUnit();
+    if (balOf(u)) store.set({ bal: { ...S.bal, [u]: { ...S.bal[u], balanceMsub: msub } } });
+  },
   askDownload: (bytes) => askVoiceDownload(bytes),
   showDownload: (bytes) => showVoiceDownload(bytes),
   // Web Audio, and the phone's own voice, which iPhone Safari lets a page use only after it spoke in a tap.
@@ -1550,7 +1776,7 @@ const actions = {
   togglePrivate: async () => {
     if (askingKind) return;
     const toPrivate = !view().private;
-    let next = kindSwitch(S.models, S.settings, { toPrivate, unit: S.unit ?? 'usd' });
+    let next = kindSwitch(S.models, S.settings, { toPrivate, unit: homeUnit() });
     if (!next) return ui.toast(t(toPrivate ? 'privacy.noPrivate' : 'privacy.noStandard'), 3000);
     if (!toPrivate && !S.settings.standardOk) {
       askingKind = true;
@@ -1563,7 +1789,7 @@ const actions = {
       if (!yes) return;
       S.settings.standardOk = true;
       // The list may have changed while the question was open.
-      next = kindSwitch(S.models, S.settings, { toPrivate, unit: S.unit ?? 'usd' });
+      next = kindSwitch(S.models, S.settings, { toPrivate, unit: homeUnit() });
       if (!next) {
         saveSettings();
         return ui.toast(t('privacy.noStandard'), 3000);
@@ -1626,7 +1852,7 @@ const actions = {
 const format = {
   units: fmtUnits,
   int: fmtInt,
-  cost: (msub, unit) => fmtCost(msub, unit ?? S.unit ?? 'usd'),
+  cost: (msub, unit) => fmtCost(msub, unit ?? homeUnit()),
   plain: (n, unit) => (unit === 'usd' ? (n / 100).toFixed(2) : String(n)),
   parse: (s, unit) => {
     const v = String(s ?? '').replace(/[$,\s]/g, '');
@@ -1634,7 +1860,7 @@ const format = {
     return /^\d+$/.test(v) ? Number(v) : NaN;
   },
   modelPrice: (m) => {
-    const unit = S.unit ?? 'usd';
+    const unit = homeUnit();
     const p = unit === 'sat' && m.pricing?.sat_per_mtok ? m.pricing.sat_per_mtok : m.pricing?.usd_per_mtok;
     if (!p) return null;
     const f = (n) => (unit === 'sat' && m.pricing?.sat_per_mtok ? `${fmtInt(Math.round(n))} sat` : `$${n < 1 ? n.toFixed(2) : n.toFixed(n % 1 ? 2 : 0)}`);
@@ -1776,7 +2002,7 @@ let joinAsk = false;
  * phone goes on as on any first open: the first run, with its own Start free.
  *
  * One at a time: a pass that comes while one is being used (the QR code scanned twice on slow wifi, so
- * the app gets the link twice) is dropped, not queued. S.key is only set once wallet.open answers, so a
+ * the app gets the link twice) is dropped, not queued. The key is only kept once wallet.open answers, so a
  * second open would make a second balance, spend a second use of the pass and orphan the first key; and
  * once the first open is done, joinPlan keeps that key anyway.
  */
@@ -1791,7 +2017,7 @@ function joinWith(pass) {
 
 async function joinOnce(pass) {
   if (erased) return;
-  const plan = joinPlan({ pass, hasKey: !!S.key });
+  const plan = joinPlan({ pass, hasKey: anyKey() });
   if (plan !== 'open') return;
   ui.toast(t('fund.invite.opening'), 8000);
   try {
@@ -1893,7 +2119,8 @@ function screenFor(name, params) {
     case 'fund':
       return fundScreen(ctx, params);
     case 'takeOut':
-      return takeOutScreen(ctx);
+    case 'takeOutUnit':
+      return takeOutScreen(ctx, params);
     case 'freeOut':
       return freeOutScreen({ ...ctx, engine: engineProxy });
     case 'look':
@@ -1963,10 +2190,10 @@ function render() {
   // A new build took over while the person was busy: it loads now, on the way to the next screen.
   if (updater?.screenChanged()) return;
   // A balance key stored after this page read it (the Classic app in another tab, say) is picked up here.
-  if (!S.key && registry) {
-    const k = ui.load(keyStore());
-    if (k) {
-      S.key = k;
+  if (registry) {
+    const stored = [ui.load(keyStore()), ui.load(keyStore2())];
+    if (stored.some((k, i) => k && !S.keys[i])) {
+      S.keys = S.keys.map((k, i) => k ?? stored[i] ?? null);
       refreshBalance();
     }
   }
@@ -2009,7 +2236,7 @@ function render() {
     onArrival = null;
     say();
   }
-  if (name === 'takeOut' || name === 'funds') {
+  if (name === 'takeOut' || name === 'takeOutUnit' || name === 'funds') {
     collectRefunds();
     settleOtherMint();
     resumeCards();
@@ -2049,7 +2276,7 @@ function halt() {
   for (const x of registry?.list('voice-out') ?? []) x.instance.forget?.();
   unsub?.();
   current?.destroy?.();
-  Object.assign(S, { key: null, balanceMsub: null, availableMsub: null, freeKey: null, freeMsub: null, freeTotal: 0, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '', game: null });
+  Object.assign(S, { keys: [null, null], keyUnits: {}, bal: { usd: null, sat: null }, freeKey: null, freeMsub: null, freeTotal: 0, conv: { id: null, messages: [] }, pending: [], draft: '', invite: '', game: null });
 }
 
 /**
@@ -2112,10 +2339,13 @@ async function start() {
   // The cover game's own record (its level, flowers and board), kept beside the settings.
   S.game = (await kv.get('game').catch(() => null)) ?? null;
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
-  S.key = ui.load(keyStore());
+  // The two balance keys: the first where it always was (the Classic page's name), the second beside it.
+  S.keys = [ui.load(keyStore()) ?? null, ui.load(keyStore2()) ?? null];
   S.freeKey = ui.load(freeKeyStore());
   S.freeTotal = (await kv.get(`freeTotal:${engine.base}`).catch(() => null)) ?? 0;
-  S.peakMsub = (await kv.get(`peak:${engine.base}`).catch(() => null)) ?? null;
+  S.peaks = { usd: null, sat: null, ...((await kv.get(`peaks:${engine.base}`).catch(() => null)) ?? {}) };
+  // The one full mark kept before two balances: the first key's, once its unit is known (refreshBalance).
+  legacyPeak = (await kv.get(`peak:${engine.base}`).catch(() => null)) ?? null;
   S.pending = ((await kv.get('pending').catch(() => null)) ?? []).filter((a) => a.status === 'ready');
   S.draft = (await kv.get('draft').catch(() => null)) ?? '';
   // Auto-delete on open: what is past its time (or everything, with "on close") goes before anything is shown.
@@ -2136,7 +2366,7 @@ async function start() {
   if (native?.shareIn && (await native.shareIn.waiting())) history.replaceState(history.state, '', href('photoShared'));
   // First run: a phone that has not seen it opens on Welcome instead of the home (core/firstrun.js). A
   // pass that will open a balance decides instead (joinWith).
-  const joining = joinPlan({ pass: joinPass, hasKey: !!S.key }) === 'open';
+  const joining = joinPlan({ pass: joinPass, hasKey: anyKey() }) === 'open';
   if (!joining && shouldShow({ seen: ui.load(SEEN_KEY) === SEEN_VALUE, route: parse(location.hash).name })) history.replaceState(history.state, '', href(STEP_ROUTES.welcome));
   const cur = await kv.get('current').catch(() => null);
   if (cur) S.conv = (await chats.get(cur).catch(() => null)) ?? { id: null, messages: [] };
@@ -2276,12 +2506,14 @@ const till = {
  */
 async function resumeTillPays() {
   const list = tillPays.waiting().filter((p) => (p.engine ?? '') === (engine.base ?? ''));
-  if (!list.length || !S.key) return;
+  if (!list.length || !anyKey()) return;
   let credited = 0;
   for (const p of list) {
     try {
-      if (p.fundingId && p.state !== 'pay_failed') {
-        const f = await engine.funding(S.key, p.fundingId);
+      // A payment's funding is the balance's in its unit.
+      const key = (p.unit && keyFor(p.unit)) || homeKey();
+      if (key && p.fundingId && p.state !== 'pay_failed') {
+        const f = await engine.funding(key, p.fundingId);
         if (f.ok && f.body?.state === 'done') {
           tillPays.credited(p.id);
           credited++;

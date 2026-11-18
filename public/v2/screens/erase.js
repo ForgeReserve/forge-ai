@@ -26,12 +26,14 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, reade
     if (v.hasKey) {
       const known = v.balanceText != null;
       const zero = v.balanceMsub === 0;
-      const out = v.refundable > 0 ? format.units(v.refundable, S.unit) : null;
+      // One balance with money: its own Take out. Two: Funds, where each has its row and its Take out.
+      const one = v.balances.length === 1 ? v.balances[0] : null;
+      const out = one?.refundable > 0 ? format.units(one.refundable, one.unit) : null;
       const [head, sub] = zero ? [t('erase.moneyIncoming'), t('erase.moneyIncomingSub')] : known ? [t('erase.money', { amount: v.balanceText }), t('erase.moneySub')] : [t('erase.moneyUnknown'), t('erase.moneyUnknownSub')];
       money.replaceChildren(
         el('b', { id: 'eraseMoneyHead', text: head }),
         sayEl('p', { id: 'eraseMoneySub' }, sub, '', 'alert'),
-        el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav('takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })),
+        el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav(v.balances.length > 1 ? 'funds' : 'takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })),
       );
       money.hidden = false;
     } else money.hidden = true;

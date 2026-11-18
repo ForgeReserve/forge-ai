@@ -271,7 +271,7 @@ export function answer({ t, state, nav, actions, format }) {
     }
     // Asking again is a new paid question: its price shows before it is pressed.
     const againPrice = (() => {
-      const p = priceLine(v.againMsub, v.talk.unit, v.free);
+      const p = priceLine(v.againMsub, v.againUnit ?? v.talk.unit, v.free);
       return t(p.key, p);
     })();
     tiles.replaceChildren(...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []), tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice), burnTile());

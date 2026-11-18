@@ -1,7 +1,10 @@
 // Shared parts for the bundled fund modules. Every function takes the inputs a fund module was handed,
 // so a module that uses the kit still sees nothing beyond its kind's inputs.
 
-/** The invite code field, shown while the engine needs one to open a balance. */
+/**
+ * The invite code field, shown while the engine needs one to open a balance. A phone with a balance
+ * needs none: a second balance is opened with the first one's key, or the money goes on the first.
+ */
 export function inviteField({ t, ui, wallet }) {
   if (wallet.key() || !wallet.inviteOnly()) return { node: null, missing: () => false, value: () => undefined };
   const input = ui.el('input', { id: 'invite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
@@ -17,6 +20,33 @@ export function inviteField({ t, ui, wallet }) {
       return true;
     },
   };
+}
+
+/**
+ * The unit Lightning money is asked in (docs/PAYMENTS.md, Two balances): sats, so it lands in the sat
+ * balance, opened with the dollar balance's key when the phone has none. Dollars only where the engine
+ * takes no sats by Lightning, or cannot open a second balance and the phone holds dollars.
+ */
+export function lightningUnit(wallet) {
+  const units = wallet.methods()?.lightning?.units ?? ['usd'];
+  const want = units.includes('sat') ? 'sat' : units[0];
+  const to = wallet.landsIn ? wallet.landsIn(want) : (wallet.unit() ?? want);
+  return units.includes(to) ? to : want;
+}
+
+/**
+ * Sends a funding request for a balance in `unit`: with its key, or, when the phone has no balance in
+ * that unit, with the key of the other one (sibling), or the invite for a first balance. A key the engine
+ * makes is kept at once, with its unit. send(key, invite, sibling) makes the request. When the engine
+ * will not open the second balance (sibling_refused), the wallet is told, so the next try takes the way
+ * an engine without two balances offers. Returns the engine's answer.
+ */
+export async function fundIn(wallet, unit, invite, send) {
+  const f = wallet.fundingFor ? await wallet.fundingFor(unit) : { key: wallet.key() };
+  const r = await send(f.key, f.key || f.sibling ? undefined : invite, f.key ? undefined : f.sibling);
+  if (r.body?.key) wallet.setKey(r.body.key, r.body.unit ?? unit);
+  if (r.body?.error?.code === 'sibling_refused') wallet.siblingRefused?.();
+  return r;
 }
 
 /**
@@ -80,12 +110,14 @@ export function settleForeign(vault, entry, x) {
  * Looks up every other-mint token still pending on the phone and settles it (see settleForeign).
  * Returns how many entries changed. An unknown funding (404) means the engine never took the token.
  * Only entries sent to this engine are looked up: another engine does not know the funding, and its
- * 404 must never mark a token the first engine may still be working on (core/vault.js).
+ * 404 must never mark a token the first engine may still be working on (core/vault.js). For the same
+ * reason, with two balances, only the entries of the balance `key` opens (mine): a funding is one
+ * balance's, and the other key's 404 says nothing about it.
  */
-export async function settlePendingForeign({ engine, vault, key }) {
+export async function settlePendingForeign({ engine, vault, key, mine = () => true }) {
   if (!key) return 0;
   let n = 0;
-  for (const e of vault.incoming().filter((x) => x.via === 'othermint' && x.state === 'pending' && x.fundingId && (x.engine ?? '') === (engine?.base ?? ''))) {
+  for (const e of vault.incoming().filter((x) => x.via === 'othermint' && x.state === 'pending' && x.fundingId && (x.engine ?? '') === (engine?.base ?? '') && mine(x))) {
     let r;
     try {
       r = await engine.funding(key, e.fundingId);
@@ -172,9 +204,11 @@ export function foreignQuote(inputs, { body, foot, f, token, done, added, onNo }
     if (steps[x.state]) ui.say(st, t(steps[x.state]), 'wait');
     return false;
   };
+  // The funding is the balance's in its unit (f.unit): that key asks about it.
+  const keyNow = () => wallet.keyFor?.(f.unit) ?? wallet.key();
   const watch = (ms) =>
     (poller = poll(async () => {
-      const s = await engine.funding(wallet.key(), f.id);
+      const s = await engine.funding(keyNow(), f.id);
       return s.ok ? update(s.body) : false;
     }, ms));
   confirm.addEventListener('click', async () => {
@@ -182,10 +216,10 @@ export function foreignQuote(inputs, { body, foot, f, token, done, added, onNo }
     no?.remove();
     st.className = 'status-line';
     ui.say(st, t('fund.othermint.receiving'), 'wait');
-    // Tied to this engine: only it is asked about the funding later (settlePendingForeign).
-    held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
+    // Tied to this engine and this balance: only they are asked about the funding later (settlePendingForeign).
+    held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '', unit: f.unit });
     try {
-      const r = await engine.foreignConfirm(wallet.key(), { id: f.id, token, pubkey: wallet.lockKey() || undefined });
+      const r = await engine.foreignConfirm(keyNow(), { id: f.id, token, pubkey: wallet.lockKey() || undefined });
       if (!r.ok) {
         const message = r.body?.error?.message ?? `HTTP ${r.status}`;
         if (confirmOutcome(r.status, r.body) === 'refused') {

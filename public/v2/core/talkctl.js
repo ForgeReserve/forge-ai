@@ -11,7 +11,8 @@ const TICK_MS = 100;
 /**
  * deps: store ({S, set}), t, ui, nav, haptics, voiceIn() and voiceOut() (the chosen module instance or
  * null), blocker() (null, or {key, go} when a question cannot be asked now), ask(text, meta),
- * refresh() (the balance), errorText(err, unit), now(), askDownload(bytes) (resolves true when the
+ * refresh() (the balance), errorText(err, unit), balanceAfter(msub) (the balance a transcription
+ * left, on the balance that paid it; by default S.balanceMsub), now(), askDownload(bytes) (resolves true when the
  * person agrees to the one-time download a voice needs before its first use), showDownload(bytes) (opens the
  * download's progress and returns {progress(p), fail(message, retry) -> shown, close()}), and
  * unlockAudio(), called
@@ -26,7 +27,7 @@ const TICK_MS = 100;
  * under Listen), until the person gets it or says Not now. Only a phone with no voice of its own asks
  * before the download, as before.
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} }, voicesReady = async () => false, readAloudOff = () => false }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, balanceAfter = (balanceMsub) => store.set({ balanceMsub }), now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} }, voicesReady = async () => false, readAloudOff = () => false }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -133,7 +134,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     try {
       const out = await session.finish({ signal: ctrl.signal });
       sending = null;
-      if (out.balanceMsub != null) store.set({ balanceMsub: out.balanceMsub });
+      if (out.balanceMsub != null) balanceAfter(out.balanceMsub);
       // A free voice question: the engine says how many are left today.
       if (out.freeVoiceLeft != null && S.freeVoice) store.set({ freeVoice: { ...S.freeVoice, left: out.freeVoiceLeft } });
       const text = String(out.text ?? '').trim();

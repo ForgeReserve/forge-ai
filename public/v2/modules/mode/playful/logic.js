@@ -14,7 +14,8 @@ export const LOTS = 10;
  *   'little'  fewer than that, or a balance under one typical question;
  *   'some'    a paid balance on a model with no price in this unit (how many is not known);
  *   'none'    nothing to ask with.
- * The view's fields: model, unit (talk.unit), balanceMsub (null without a key), freeLeft, fundsBlock.
+ * The view's fields: model, unit (the unit of the total, view().unit), balanceMsub (the total of both
+ * balances, null without a key), freeLeft, fundsBlock.
  */
 export function starLevel({ model, unit, balanceMsub, freeLeft = 0, fundsBlock = null }) {
   if (fundsBlock === 'needKey') return 'start';

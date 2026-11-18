@@ -146,10 +146,11 @@ describe('Add money: one family', () => {
   it("Lightning: the success panel takes the paid invoice's place, with the funds now, Ask now and Done", async () => {
     const { ctx, page, errors } = await phone(await dollarKey());
     await openFund(page, 'lightning');
-    await page.fill('#lnAmount', '1.00');
+    // Lightning lands in sats, on the sat balance opened beside the dollars; the funds now are the total.
+    await page.fill('#lnAmount', '1000');
     await page.click('#lnCreate');
-    await panelHere(page, '$1.00', '$3.00');
-    expect(await page.textContent('#lnStatus')).toBe('Paid. Added $1.00.');
+    await panelHere(page, '1,000 sat', '$3.00');
+    expect(await page.textContent('#lnStatus')).toBe('Paid. Added 1,000 sat.');
     // The paid invoice is gone.
     expect(await page.locator('[data-fund=lightning] .qr').count()).toBe(0);
     expect((await look(page)).sideways).toBe(false);
@@ -160,36 +161,29 @@ describe('Add money: one family', () => {
     await ctx.close();
   }, 60_000);
 
-  it('Other mint and a change of units: the price as one card, then the success panel', async () => {
+  it('Other mint: the price as one card, then the success panel; sats from the engine go on as they are', async () => {
     const { ctx, page, errors } = await phone(await dollarKey());
     await openFund(page, 'othermint');
+    // Sats from another mint go to the sat balance (docs/PAYMENTS.md, Two balances), opened beside the dollars.
     await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 1000));
     await page.click('#foreignCheck');
     await page.waitForSelector('.price-card #foreignCredit', { timeout: 20_000 });
     expect((await look(page)).lit).toEqual(['foreignConfirm']);
     const credit = (await page.textContent('#foreignCredit'))!;
+    expect(credit).toMatch(/^\d+ sat$/);
     await page.click('#foreignConfirm');
-    await panelHere(page, credit, await (async () => {
-      const cents = 200 + Math.round(Number(credit.slice(1)) * 100);
-      return `$${(cents / 100).toFixed(2)}`;
-    })());
+    // The funds now are the total in dollars: $2.00 and the sats at $100,000 a bitcoin (0.1 cent a sat).
+    const total = 200_000 + Number(credit.split(' ')[0]) * 100;
+    await panelHere(page, credit, `$${(total / 100_000).toFixed(total % 1000 === 0 ? 2 : 3)}`);
     expect(await page.textContent('#foreignStatus')).toBe(`Added ${credit}.`);
 
-    // eCash in sats on dollar funds: the price with Keep my eCash beside it, then the same panel.
+    // eCash in sats from the engine's own mint on dollar funds: added to the sat balance as it is, no
+    // price to change it, and Funds says so in the same panel.
     await openFund(page, 'ecash');
     await page.fill('#ecashToken', await mintToken(MINT_A, 'sat', 1000));
     await page.click('#ecashAdd');
-    await page.waitForSelector('.price-card #convertWhat', { timeout: 20_000 });
-    expect((await look(page)).lit).toEqual(['foreignConfirm']);
-    const change = (await page.textContent('#foreignCredit'))!;
-    await page.click('#foreignConfirm');
-    await page.waitForSelector('#fundAdded', { timeout: 40_000 });
-    expect(await page.textContent('#fundAdded .added-amount')).toBe(`+${change}`);
-    expect((await look(page)).lit).toEqual(['fundAsk']);
-    // Done goes back to Funds, where nothing is said twice.
-    await page.click('#fundDone');
-    await page.waitForSelector('[data-screen=funds]');
-    expect(await page.locator('#fundsAdded').count()).toBe(0);
+    await panelOnFunds(page, '+1,000 sat', 'Added 1,000 sat.');
+    expect(await page.locator('.price-card').count()).toBe(0);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

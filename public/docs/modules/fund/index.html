@@ -251,7 +251,7 @@
 </tbody></table></div>
 <p><code>EngineError</code> has <code>code</code> (the engine&#39;s error code, or <code>offline</code>, <code>http_&lt;status&gt;</code>, <code>bad_answer</code>), <code>message</code>, <code>status</code> and <code>retryable</code>. <code>retryable</code> is true for a server error, a <code>429</code>, and codes such as <code>topup_pending</code> and <code>mint_unavailable</code>: the same request may work later.</p>
 <h3 id="wallet"><code>wallet</code><a class="anchor" href="#wallet" aria-label="Link to this section">#</a></h3>
-<p>The balance as a fund module sees it, from <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js"><code>public/v2/app.js</code></a>.</p>
+<p>The balances as a fund module sees them, from <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/app.js"><code>public/v2/app.js</code></a>. The phone holds up to two, one per unit, each with its own key (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PAYMENTS.md#two-balances">Two balances</a>).</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -261,15 +261,31 @@
 </thead>
 <tbody><tr>
 <td><code>key()</code></td>
-<td>The balance key, or <code>null</code>.</td>
+<td>The key of the home balance (dollars first), or <code>null</code> with no balance. While it is set, no invite is needed.</td>
 </tr>
 <tr>
-<td><code>setKey(k)</code></td>
-<td>Keeps a new balance key on the phone. Call it at once when an engine answer carries <code>body.key</code>.</td>
+<td><code>keyFor(unit)</code></td>
+<td>The key of the balance in <code>unit</code>, or <code>null</code>. Ask about a funding with the key of its own unit.</td>
+</tr>
+<tr>
+<td><code>setKey(k, unit)</code></td>
+<td>Keeps a new balance key on the phone, with its unit. Call it at once when an engine answer carries <code>body.key</code>.</td>
 </tr>
 <tr>
 <td><code>unit()</code></td>
-<td>The balance&#39;s unit, <code>&#39;usd&#39;</code> or <code>&#39;sat&#39;</code>, or <code>null</code>.</td>
+<td>The home balance&#39;s unit, <code>&#39;usd&#39;</code> or <code>&#39;sat&#39;</code>, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>landsIn(unit)</code></td>
+<td>The unit money in <code>unit</code> is added to: its own, unless the engine cannot open that balance beside the one the phone has (then units are changed, price first).</td>
+</tr>
+<tr>
+<td><code>fundingFor(unit)</code></td>
+<td>Resolves <code>{key}</code> of the balance in <code>unit</code>, or, with none, <code>{key: null, sibling}</code>: the other balance&#39;s key, sent in <code>X-Forge-Sibling</code> to open this one (the engine client&#39;s funding calls take it last). <code>kit.js</code> <code>fundIn</code> does this for a funding call.</td>
+</tr>
+<tr>
+<td><code>siblingRefused()</code></td>
+<td>The engine refused <code>X-Forge-Sibling</code>: from then on money in that unit goes the way an engine without two balances takes it.</td>
 </tr>
 <tr>
 <td><code>inviteOnly()</code></td>
@@ -313,7 +329,7 @@
 </tr>
 <tr>
 <td><code>topup(token, invite)</code></td>
-<td>Adds eCash. Stores the token on the phone first (<a href="#vault">the vault</a>), sends it, and removes it only once the engine credits it. Resolves <code>{credited, unit, replay}</code>, with <code>free: true</code> for a voucher of free questions. Throws <code>EngineError</code>; when <code>retryable</code> is true the token stays on the phone and is sent again later.</td>
+<td>Adds eCash to the balance of its unit (<code>landsIn</code>), opening that balance when the phone has none. Stores the token on the phone first (<a href="#vault">the vault</a>), sends it, and removes it only once the engine credits it. Resolves <code>{credited, unit, replay}</code>, with <code>free: true</code> for a voucher of free questions. Throws <code>EngineError</code>; when <code>retryable</code> is true the token stays on the phone and is sent again later.</td>
 </tr>
 <tr>
 <td><code>topupFree(token)</code></td>

@@ -225,7 +225,7 @@ describe('vouchers in the vault', () => {
     const setKey = vi.fn();
     const setFreeKey = vi.fn();
     const r = await V.topupWithVault({ engine, vault, token: 'cashuBmoney', key: null, setKey, setFreeKey });
-    expect(setKey).toHaveBeenCalledWith('sk-forge-paid');
+    expect(setKey).toHaveBeenCalledWith('sk-forge-paid', 'usd');
     expect(setFreeKey).not.toHaveBeenCalled();
     expect(r.free).toBeUndefined();
   });

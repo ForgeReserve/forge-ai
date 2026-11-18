@@ -91,10 +91,14 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
 
   const plain = (path, init) => f(url(path), init);
 
-  /** JSON call. Returns {status, ok, body}; never throws for an HTTP error, only when offline. */
-  async function call(path, { key, json, method, signal } = {}) {
+  /**
+   * JSON call. Returns {status, ok, body}; never throws for an HTTP error, only when offline.
+   * sibling: the key of a balance the phone has, which opens its balance in the other unit (docs/PAYMENTS.md, Two balances).
+   */
+  async function call(path, { key, json, method, signal, sibling } = {}) {
     const headers = {};
     if (key) headers.authorization = `Bearer ${key}`;
+    if (sibling) headers['x-forge-sibling'] = sibling;
     if (json !== undefined) headers['content-type'] = 'application/json';
     const res = await send(plain, path, { method: method ?? (json !== undefined ? 'POST' : 'GET'), headers, body: json !== undefined ? JSON.stringify(json) : undefined, signal, cache: 'no-store' });
     let body = null;
@@ -120,13 +124,13 @@ export function createEngine({ base = '', fetch: f = (...a) => globalThis.fetch(
     wallet: (key) => must('/v1/wallet', { key }),
     refunds: (key) => must('/v1/wallet/refunds', { key }),
     refund: (key, { amount, pubkey } = {}) => call('/v1/wallet/refund', { key, json: { amount, pubkey: pubkey || undefined } }),
-    topup: (key, token, invite) => call('/v1/wallet/topup', { key, json: { token, invite: invite || undefined } }),
+    topup: (key, token, invite, sibling) => call('/v1/wallet/topup', { key, sibling, json: { token, invite: invite || undefined } }),
     /** Opens a balance with an invite code and nothing on it (free models need one). Resolves {key, ...}. */
     openBalance: (invite, unit) => must('/v1/wallet/open', { json: { invite, unit: unit || undefined } }),
     fundMethods: () => must('/v1/wallet/fund/methods'),
-    fundLightning: (key, body) => call('/v1/wallet/fund/lightning', { key, json: body }),
-    fundOnchain: (key, body) => call('/v1/wallet/fund/onchain', { key, json: body }),
-    foreignQuote: (key, body) => call('/v1/wallet/fund/foreign/quote', { key, json: body }),
+    fundLightning: (key, body, sibling) => call('/v1/wallet/fund/lightning', { key, sibling, json: body }),
+    fundOnchain: (key, body, sibling) => call('/v1/wallet/fund/onchain', { key, sibling, json: body }),
+    foreignQuote: (key, body, sibling) => call('/v1/wallet/fund/foreign/quote', { key, sibling, json: body }),
     foreignConfirm: (key, body) => call('/v1/wallet/fund/foreign/confirm', { key, json: body }),
     foreignMints: (path = '/v1/wallet/fund/mints') => must(path),
     // A Cashu card's mint, reached through the engine (src/cardrelay.ts). No balance key goes with these.

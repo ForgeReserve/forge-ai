@@ -1,13 +1,15 @@
 import { getEncodedToken } from '@cashu/cashu-ts';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Gateway, MINT_A, mintProofs, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
+import { createInvite, type Gateway, MINT_A, mintProofs, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 
-// eCash from the engine's own mint in the unit the funds do not hold (sats on dollar funds): the eCash
-// screen shows the price to change it, a yes adds what the price said, a no leaves the token as it was
-// (docs/PAYMENTS.md, Changing units). The local mints pay every invoice without moving money.
+// eCash from the engine's own mint in the unit the funds do not hold (sats on dollar funds), on an engine
+// that cannot open the sat balance beside the dollar one (no `sibling` among its funding methods, and
+// invite-only): the eCash screen shows the price to change it, a yes adds what the price said, a no
+// leaves the token as it was (docs/PAYMENTS.md, Changing units). An engine that opens the second balance
+// takes such eCash as it is (two-balances.ui.test.ts). The local mints pay every invoice without moving money.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 
 let g: Gateway;
@@ -16,7 +18,7 @@ const open: Browser[] = [];
 
 beforeAll(async () => {
   if (!(await mintsUp())) throw new Error('The local test mints are not running. Start them with pnpm mint:up.');
-  g = await startGateway({ env: { FORGE_INVITE_ONLY: 'false' } });
+  g = await startGateway();
   plain = await chromium.launch({ channel: 'chrome', headless: true });
 }, 60_000);
 
@@ -37,7 +39,7 @@ async function api(path: string, body?: object, key?: string) {
 
 /** Dollar funds with $2.00 on them, opened through the API. */
 async function dollarKey(): Promise<string> {
-  const r = await api('/v1/wallet/topup', { token: await mintToken(MINT_A, 'usd', 200) });
+  const r = await api('/v1/wallet/topup', { token: await mintToken(MINT_A, 'usd', 200), invite: createInvite(g) });
   if (!r.body.key) throw new Error(`topup failed: ${JSON.stringify(r.body)}`);
   return r.body.key;
 }
@@ -50,6 +52,12 @@ async function phone(key: string, codes: string[] = []) {
   await pastFirstRun(ctx);
   if (codes.length) await ctx.grantPermissions(['camera'], { origin: g.url });
   await ctx.addInitScript((k) => localStorage.setItem('forge.balanceKey', k), key);
+  // An engine from before two balances: its funding methods do not offer to open the second one.
+  await ctx.route('**/v1/wallet/fund/methods', async (route) => {
+    const res = await route.fetch();
+    const { sibling: _, ...methods } = await res.json();
+    await route.fulfill({ response: res, json: methods });
+  });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -94,7 +102,7 @@ describe('eCash in the other currency', () => {
     // The token was taken (the vault let it go) and what the fees did not use is kept to save.
     expect((await vault(page)).in).toEqual([]);
     expect((await vault(page)).out.length).toBe(1);
-    expect((await api('/v1/wallet/topup', { token })).body.error.code).toBe('token_spent');
+    expect((await api('/v1/wallet/topup', { token, invite: createInvite(g) })).body.error.code).toBe('token_spent');
     await page.click('#fundDone');
     await page.waitForSelector('[data-screen=funds]');
     expect(errors).toEqual([]);
@@ -113,7 +121,7 @@ describe('eCash in the other currency', () => {
     expect((await vault(page)).in).toEqual([]);
     expect((await api('/v1/wallet', undefined, key)).body.balance_msub).toBe(200_000);
     // Unspent and usable: it opens sat funds of its own, all of it.
-    const sat = await api('/v1/wallet/topup', { token });
+    const sat = await api('/v1/wallet/topup', { token, invite: createInvite(g) });
     expect(sat.status).toBe(200);
     expect(sat.body).toMatchObject({ unit: 'sat', credited: 700 });
     expect(errors).toEqual([]);

@@ -248,14 +248,16 @@ describe('v2 in a phone-sized browser', () => {
     await openWay(page, 'lightning');
     await page.waitForSelector('[data-fund=lightning]');
     await page.fill('#invite', createInvite(g));
-    await page.fill('#lnAmount', '1.00');
+    // Lightning lands in the sat balance (docs/PAYMENTS.md, Two balances): the amount is in sats.
+    expect(await page.isVisible('.amount-unit.after')).toBe(true);
+    await page.fill('#lnAmount', '1000');
     await page.click('#lnCreate');
     await page.waitForSelector('.qr svg');
     // The local mint's fake Lightning backend pays at once; polling sees it and credits the balance.
-    await expect.poll(() => page.textContent('#lnStatus'), { timeout: 20_000 }).toBe('Paid. Added $1.00.');
+    await expect.poll(() => page.textContent('#lnStatus'), { timeout: 20_000 }).toBe('Paid. Added 1,000 sat.');
     await page.click('#fundDone');
     await page.waitForSelector('[data-screen=funds]');
-    await expect.poll(() => page.textContent('#fundsAmount')).toBe('$1.00');
+    await expect.poll(() => page.textContent('#fundsAmount')).toBe('1,000 sat');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
@@ -487,8 +489,19 @@ describe('v2 money paths in a phone-sized browser', () => {
       expect(errors).toEqual([]);
       await ctx.close();
 
-      // A balance in US dollars cannot take an on-chain deposit.
+      // A balance in US dollars cannot take an on-chain deposit on an engine that cannot open the sat
+      // balance beside it: invite-only, with no `sibling` among its ways to pay (docs/PAYMENTS.md, Two
+      // balances). An engine that opens it, or one that needs no invite, takes the deposit on sats.
       const usd = await phone();
+      await usd.page.route('**/v1/wallet/fund/methods', async (route) => {
+        const res = await route.fetch();
+        const { sibling: _, ...methods } = await res.json();
+        await route.fulfill({ response: res, json: { ...methods, invite_only: true } });
+      });
+      await usd.page.route('**/v1/models', async (route) => {
+        const res = await route.fetch();
+        await route.fulfill({ response: res, json: { ...(await res.json()), invite_only: true } });
+      });
       await usd.page.route('**/v1/wallet', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ unit: 'usd', balance_msub: 100_000, available_msub: 100_000 }) }));
       await usd.page.goto(`${go.url}/v2/`);
       await usd.page.evaluate(() => localStorage.setItem('forge.balanceKey', 'sk-forge-usd-test'));

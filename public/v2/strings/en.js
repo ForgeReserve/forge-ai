@@ -552,6 +552,10 @@ export default {
   'funds.modelFree': 'This model is free.',
   'funds.needKey': 'Free models are free to use. Start free with your invite code.',
   'funds.refundable': 'You can take out {amount}.',
+  // Funds with money in both balances: one row each, with its own Take out (core/balances.js).
+  'funds.row.usd': 'Dollars: {amount}',
+  'funds.row.sat': 'Sats: {amount}',
+  'funds.rowOut': 'Take out {amount}',
   'funds.add': 'Add',
   'funds.addMoney': 'Add money',
   'funds.ask': 'Ask now',

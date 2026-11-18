@@ -1,6 +1,7 @@
 // Fund module: on-chain bitcoin. Wraps POST /v1/wallet/fund/onchain and GET /v1/wallet/fund/:id, the
-// flow v1's wallet uses: a deposit address, credited to a sat balance once it confirms.
-import { inviteField, poll, requestQR } from '../kit.js';
+// flow v1's wallet uses: a deposit address, credited to a sat balance once it confirms. A phone with
+// only a dollar balance gets its sat balance for it, opened with the dollar balance's key.
+import { fundIn, inviteField, poll, requestQR } from '../kit.js';
 
 export function create(inputs) {
   const { t, ui, engine, wallet, format } = inputs;
@@ -11,8 +12,9 @@ export function create(inputs) {
     available: (methods) => !!methods?.onchain?.enabled,
     view({ done, added, open }) {
       const O = wallet.methods()?.onchain ?? {};
-      // A dollar balance cannot take a deposit in sats: say so, with the one way forward the engine has.
-      if (wallet.key() && wallet.unit() && wallet.unit() !== 'sat') {
+      // A dollar balance cannot take a deposit in sats, and an engine without two balances opens no sat
+      // balance beside it: say so, with the one way forward the engine has.
+      if ((wallet.landsIn ? wallet.landsIn('sat') : wallet.key() ? wallet.unit() : 'sat') !== 'sat') {
         const next = wallet.methods()?.lightning?.enabled ? ui.el('button', { type: 'button', class: 'btn primary block', id: 'onchainUseLightning', onclick: () => open('lightning') }, ui.icon('bolt', 20), ui.el('span', { text: t('fund.onchain.useLightning') })) : null;
         return { node: ui.el('div', { class: 'fund-view' }, ui.el('div', { class: 'scroll fund-body' }, ui.sayEl('p', {}, t('fund.onchain.satOnly'))), ui.el('div', { class: 'foot' }, next)) };
       }
@@ -35,8 +37,8 @@ export function create(inputs) {
         go.disabled = true;
         msg.set(t('fund.onchain.getting'));
         try {
-          const r = await engine.fundOnchain(wallet.key(), { invite: invite.value() });
-          if (r.body?.key) wallet.setKey(r.body.key);
+          const r = await fundIn(wallet, 'sat', invite.value(), (key, code, sibling) => engine.fundOnchain(key, { invite: code }, sibling));
+          if (r.body?.error?.code === 'sibling_refused') return open('onchain');
           if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           const f = r.body;
           const need = f.onchain?.confirmations_required ?? O.confirmations ?? 3;
@@ -65,7 +67,7 @@ export function create(inputs) {
           };
           if (!update(f))
             poller = poll(async () => {
-              const s = await engine.funding(wallet.key(), f.id);
+              const s = await engine.funding(wallet.keyFor?.('sat') ?? wallet.key(), f.id);
               return s.ok ? update(s.body) : false;
             }, 15000);
         } catch (e) {

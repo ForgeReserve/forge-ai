@@ -29,6 +29,7 @@
     "test/ui/privacy-toggle.ui.test.ts": 20,
     "test/ui/search.ui.test.ts": 4.7,
     "test/ui/talk-still.ui.test.ts": 20,
+    "test/ui/two-balances.ui.test.ts": 6,
     "test/ui/v2.ui.test.ts": 51.8,
     "test/ui/voice.ui.test.ts": 44
   }

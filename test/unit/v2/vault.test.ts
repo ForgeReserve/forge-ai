@@ -24,7 +24,8 @@ describe('vault', () => {
     });
     const r = await V.topupWithVault({ engine, vault, token: 'cashuBabc', key: null, invite: 'inv-1', setKey });
     expect(r).toEqual({ credited: 250, unit: 'usd', replay: false });
-    expect(setKey).toHaveBeenCalledWith('sk-forge-new');
+    // With its unit: the phone keeps one balance per unit (core/balances.js).
+    expect(setKey).toHaveBeenCalledWith('sk-forge-new', 'usd');
     expect(vault.incoming()).toEqual([]);
   });
 

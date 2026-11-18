@@ -1,6 +1,8 @@
 // Fund module: Lightning. Wraps POST /v1/wallet/fund/lightning and GET /v1/wallet/fund/:id, the flow
 // v1's wallet uses: choose an amount, pay the invoice from any Lightning wallet, the engine credits it.
-import { inviteField, poll, requestQR } from '../kit.js';
+// The invoice is in sats, for the sat balance (kit.js lightningUnit), opened with the dollar balance's
+// key when the phone has only that one.
+import { fundIn, inviteField, lightningUnit, poll, requestQR } from '../kit.js';
 
 export function create(inputs) {
   const { t, ui, engine, wallet, format } = inputs;
@@ -9,10 +11,10 @@ export function create(inputs) {
     group: 'depends',
     icon: 'bolt',
     available: (methods) => !!methods?.lightning?.enabled,
-    view({ added }) {
+    view({ added, open }) {
       const L = wallet.methods()?.lightning ?? {};
-      const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (L.units ?? ['usd']);
-      let unit = wallet.unit() ?? (units.includes('usd') ? 'usd' : units[0]);
+      const units = [lightningUnit(wallet)];
+      let unit = units[0];
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
       const input = ui.el('input', { id: 'lnAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('fund.lightning.amountLabel') });
@@ -48,8 +50,9 @@ export function create(inputs) {
         go.disabled = true;
         msg.set(t('fund.lightning.creating'));
         try {
-          const r = await engine.fundLightning(wallet.key(), { amount, unit, invite: invite.value() });
-          if (r.body?.key) wallet.setKey(r.body.key);
+          const r = await fundIn(wallet, unit, invite.value(), (key, code, sibling) => engine.fundLightning(key, { amount, unit, invite: code }, sibling));
+          // The engine would not open the sat balance: the screen again, in the unit the phone holds.
+          if (r.body?.error?.code === 'sibling_refused') return open('lightning');
           if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           const f = r.body;
           const st = ui.sayEl('p', { class: 'status-line', id: 'lnStatus', role: 'status' }, t('fund.lightning.waiting'), 'wait');
@@ -72,7 +75,7 @@ export function create(inputs) {
           };
           if (!update(f))
             poller = poll(async () => {
-              const s = await engine.funding(wallet.key(), f.id);
+              const s = await engine.funding(wallet.keyFor?.(f.unit) ?? wallet.key(), f.id);
               return s.ok ? update(s.body) : false;
             }, 2000);
         } catch (e) {
