@@ -994,7 +994,7 @@ describe("a phone recogniser that hears nothing", () => {
     expect(a.noted).toEqual([{ heard: false, noSpeech: true, holdMs: 3000, loud: 4 }]);
     expect(a.S.talk.error).toEqual({ key: 'talk.empty' });
     // Quiet readings are not sound.
-    const b = phoneTalk({ levels: [0, 0.05, 0.1, 0.14] });
+    const b = phoneTalk({ levels: [0, 0.05, 0.09] });
     await press(b, 3000);
     expect(b.noted[0].loud).toBe(0);
     // Live words came: heard.

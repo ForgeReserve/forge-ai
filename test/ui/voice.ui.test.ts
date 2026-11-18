@@ -401,7 +401,7 @@ async function appPhone({ onDevice, asr = false, ios = false, speech = true, sil
           const at = (ms: number, ev: any) => setTimeout(() => emit(opts.id, ev), ms);
           at(50, { type: 'started' });
           if (mode === 'deaf') loud = setInterval(() => emit(opts.id, { type: 'level', level: 0.45 }), 100);
-          else at(250, { type: 'level', level: 0.5 });
+          else at(250, { type: 'level', level: mode === 'silent' ? 0.02 : 0.5 });
           if (mode === 'words') at(300, { type: 'partial', text: 'What should' });
           if (mode === 'words') at(700, { type: 'partial', text: 'What should I bring' });
           return {};
