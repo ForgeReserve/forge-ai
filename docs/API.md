@@ -63,7 +63,7 @@ curl -s https://ai.forge-reserve.com/v1/wallet/fund/lightning \
   -d '{"amount": 100, "unit": "usd"}'
 ```
 
-A balance has one unit for life, set when it is opened: `usd` unless you send `"unit": "sat"` to `/v1/wallet/open`. A funding in another unit is refused with `wrong_unit`, so fund a `usd` balance in `usd` and a `sat` balance in `sat`.
+A balance has one unit for life, set when it is opened: `usd` unless you send `"unit": "sat"` to `/v1/wallet/open`. A funding in another unit is refused with `wrong_unit`, so fund a `usd` balance in `usd` and a `sat` balance in `sat`. eCash in the other unit can still be changed into the balance's unit, at a price you see first (see [Change units](#change-units)).
 
 Pay the `request` field (a BOLT11 invoice) from any Lightning wallet, then poll the funding until its `state` is `done`:
 
@@ -291,7 +291,7 @@ Add `X-Cashu-Pubkey` to lock the change to your own key (see [Lock payouts to yo
 
 ### Top up with eCash
 
-`POST /v1/wallet/topup` with a `cashuB` token from one of the accepted mints (`mints` in `GET /v1/models`, and `ecash.mints` in `GET /v1/wallet/fund/methods`). The token's unit must match the balance. Sending the same token again to the same key is safe: it answers `replay: true` and credits nothing more.
+`POST /v1/wallet/topup` with a `cashuB` token from one of the accepted mints (`mints` in `GET /v1/models`, and `ecash.mints` in `GET /v1/wallet/fund/methods`). The token's unit must match the balance; a token in the other unit answers `400 wrong_unit` and is left untouched (see [Change units](#change-units)). Sending the same token again to the same key is safe: it answers `replay: true` and credits nothing more.
 
 If the mint does not answer while a new balance is being opened, the answer is `503 topup_pending` with the new `key`. Retry with that key and the same token to finish.
 
@@ -310,7 +310,17 @@ A token from another Cashu mint can still fund a balance. The gateway melts it a
 1. `POST /v1/wallet/fund/foreign/quote` with the token. Nothing is spent. The answer shows `foreign.credit` (what the balance gets) and `foreign.fee_max` (the most the token's mint can keep in fees).
 2. `POST /v1/wallet/fund/foreign/confirm` with the funding `id` and the same token. The gateway receives it, melts it into the Forge invoice, then credits the balance. Unused fee reserve comes back as `foreign.change_token`. If the melt cannot go through, the token's value comes back as `foreign.refund_token` and the funding ends `refunded`.
 
-Which mints are accepted is listed at `GET /v1/wallet/fund/mints`. A mint off that list answers `409 mint_unlisted` with its lower cap; send the quote again with `"accept_unlisted": true` to go ahead at your own risk. A token from one of the gateway's own mints answers `use_topup`: add it with `POST /v1/wallet/topup`.
+Which mints are accepted is listed at `GET /v1/wallet/fund/mints`. A mint off that list answers `409 mint_unlisted` with its lower cap; send the quote again with `"accept_unlisted": true` to go ahead at your own risk. A token from one of the gateway's own mints in the balance's unit answers `use_topup`: add it with `POST /v1/wallet/topup`.
+
+### Change units
+
+eCash from one of the gateway's own mints in the other unit (sat eCash for a `usd` balance, or `usd` eCash for a `sat` balance) is changed through the same two calls, while `convert.enabled` in `GET /v1/wallet/fund/methods` is true and `convert.units` lists the balance's unit.
+
+- `POST /v1/wallet/topup` with such a token still answers `400 wrong_unit`, untouched, and adds `"convert": {"quote": "/v1/wallet/fund/foreign/quote", "unit": "usd", "token_unit": "sat"}` (`unit` is the balance's). A client that does not know `convert` sees the same error as before.
+- `POST /v1/wallet/fund/foreign/quote` with the token and the balance's `unit`. The gateway sets no exchange rate: the Forge mint makes an invoice in the balance's unit, and the token's mint says what paying it costs in the token's unit. The answer has `foreign.convert: true`, `foreign.credit` (what the balance gets, in its unit), `foreign.token_amount` and `foreign.fee_max` (the most the fees can take, in the token's unit). Nothing is spent.
+- `POST /v1/wallet/fund/foreign/confirm` as for another mint. What the fees do not use comes back as `foreign.change_token`, eCash in the token's unit.
+
+The other-mint list, caps and `accept_unlisted` do not apply to the gateway's own mints. The Lightning limits of the balance's unit do (`lightning.max`, `lightning.min`): a larger credit answers `400 amount_too_large`, a token too small for the fees `400 insufficient_amount`. A Lightning or on-chain funding asked in the other unit stays `400 wrong_unit`: ask for one in the balance's unit and pay it from any wallet.
 
 ### Read a balance
 
@@ -614,7 +624,7 @@ Bearer: an existing key to top up, a new key of the right shape to choose your o
   "replay": false, "balance_msub": 500000, "balance": 500 }
 ```
 
-`credited` is in whole units, after the mint's input fees. Errors: the token errors, `409 wrong_balance`, `400 wrong_unit` (the balance has another unit), `403 invite_required`, `503 topup_pending` (retry with the returned `key` and the same token).
+`credited` is in whole units, after the mint's input fees. Errors: the token errors, `409 wrong_balance`, `400 wrong_unit` (the balance has another unit; with `convert` when the token can be changed, see [Change units](#change-units)), `403 invite_required`, `503 topup_pending` (retry with the returned `key` and the same token).
 
 ### `GET /v1/wallet`
 
@@ -684,7 +694,7 @@ Every funding route returns a funding object. The routes that create a funding a
 | `request` | The invoice (Lightning) or address (on-chain) |
 | `credited` | Whole units credited so far |
 | `onchain` | On-chain only: `confirmations_required`, `paid_sat`, `seen_sat`, `confirmed_sat`, `confirmations`, `watch_until` |
-| `foreign` | Other-mint only: `mint`, `unlisted`, `unit`, `token_amount`, `credit`, `fee_max`, `change_token`, `refund_token`, `locked_to`, `payout_pending` |
+| `foreign` | Other-mint and change of units only: `mint`, `convert` (eCash from the gateway's own mint, changed from its unit), `unlisted`, `unit`, `token_amount`, `credit`, `fee_max`, `change_token`, `refund_token`, `locked_to`, `payout_pending` |
 | `error` | The last error while it was moving forward, if any |
 
 A balance can have a few unfinished fundings at once (5 by default); past that the answer is `429 too_many_pending`.
@@ -706,6 +716,7 @@ What this gateway can take now. No key needed.
     "mints_url": "/v1/wallet/fund/mints",
     "unlisted": { "enabled": true, "max": { "sat": 5000, "usd": 500 } }
   },
+  "convert": { "enabled": true, "units": ["sat", "usd"] },
   "invite_only": true,
   "free_voice": { "enabled": true, "per_day": 20 },
   "free": { "enabled": false, "questions": null },
@@ -713,7 +724,7 @@ What this gateway can take now. No key needed.
 }
 ```
 
-The figures above were read from the hosted gateway on 16 November 2026. `usd` limits are in cents.
+The figures above were read from the hosted gateway on 16 November 2026 (`convert` added since). `usd` limits are in cents. `convert.units`: the balance units eCash from the gateway's own mints can be changed into ([Change units](#change-units)).
 
 ### `GET /v1/wallet/fund/mints`
 
@@ -731,13 +742,13 @@ Body: `invite` (new balance), or nothing. Sat balances only: a `usd` key answers
 
 | Body field | Rule |
 | - | - |
-| `token` | Required. A `cashuB` token from another mint |
+| `token` | Required. A `cashuB` token from another mint, or from one of the gateway's own mints in the other unit |
 | `unit` | The balance unit. May differ from the token's |
 | `accept_unlisted` | `true` to use a mint off the accepted list, at the lower cap |
 | `pubkey` | Lock the change or refund to this key |
 | `invite` | For a new balance |
 
-Returns a funding in state `quoted`. Nothing is spent until confirm. Errors: `400 use_topup` (the token is from one of the gateway's own mints), `400 mint_not_allowed`, `409 mint_unlisted` (with `unlisted: {mint, max}`), `400 mint_check_failed`, `400 amount_too_large`, `400 insufficient_amount`, `400 foreign_mint_error`, `400 credits_not_money`, `400 method_unavailable`.
+Returns a funding in state `quoted`. Nothing is spent until confirm. Errors: `400 use_topup` (the token is from one of the gateway's own mints, in the balance's unit), `400 mint_not_allowed`, `409 mint_unlisted` (with `unlisted: {mint, max}`), `400 mint_check_failed`, `400 amount_too_large`, `400 insufficient_amount`, `400 foreign_mint_error`, `400 credits_not_money`, `400 method_unavailable`, `409 wrong_balance` (a free-question balance key), `503 rate_unavailable` (the units differ and the gateway has no BTC/USD rate to pick the first credit).
 
 ### `POST /v1/wallet/fund/foreign/confirm`
 
@@ -838,7 +849,7 @@ Every error from an API route has the same shape:
 | 400 | `invalid_amount` | An amount out of range |
 | 400 | `invalid_token` | Not a `cashuB` token, too large, empty, or not decodable |
 | 400 | `untrusted_mint` | The token's mint is not accepted here |
-| 400 | `wrong_unit` | The unit is not taken here, or does not match the balance or quote |
+| 400 | `wrong_unit` | The unit is not taken here, or does not match the balance or quote. A top-up whose eCash can be changed adds `convert` ([Change units](#change-units)) |
 | 400 | `insufficient_amount` | The token is worth less than needed, after fees |
 | 400 | `token_spent` | The token was already redeemed |
 | 400 | `invalid_pubkey` | The lock key is not a valid secp256k1 key or npub |

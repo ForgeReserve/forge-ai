@@ -74,6 +74,7 @@ Environment variables, validated with zod at startup. `src/config.ts` is the com
 | `FORGE_ONCHAIN_WATCH_DAYS` | `30` | How long an on-chain address is watched for deposits |
 | `FORGE_ESPLORA_URL` | unset | Optional Esplora API used to show unconfirmed deposits. Unset: the gateway asks only the mint |
 | `FORGE_FOREIGN_ENABLED` | `true` | Accept eCash from other mints (melted into a Forge Lightning quote) |
+| `FORGE_CONVERT_ENABLED` | `true` | Accept eCash from Forge's own mints in the other unit (a sat token for a usd balance, or the reverse): melted at its mint into a Forge Lightning quote in the balance's unit, at the mint's price, after the person sees the quote |
 | `FORGE_FOREIGN_POLICY` | `discovered` | Which other mints are accepted. `discovered`: the operator list (`FORGE_FOREIGN_ALLOW` and mints added on the admin page) plus mints found through NIP-87 reviews (below). `allowlist`: the operator list only. `any`: every https mint, limited to `FORGE_FOREIGN_ALLOW` when that is set. `FORGE_FOREIGN_DENY` always wins |
 | `FORGE_FOREIGN_ALLOW` / `FORGE_FOREIGN_DENY` | empty | Operator list of accepted mints (the admin page can add more), and mints never accepted |
 | `FORGE_FOREIGN_UNLISTED` | `true` | Under `discovered` and `allowlist`, let a customer fund from a mint that is not accepted after a warning (`mint_unlisted`, then `accept_unlisted: true`), with the lower cap below. `false`: such mints get `mint_not_allowed` |
