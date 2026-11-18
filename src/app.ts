@@ -829,7 +829,7 @@ export function createApp(d: Deps) {
 
     // 5. Settlement, exactly once per request.
     let settled: Promise<SettleResult> | undefined;
-    const settle = (usage: Usage | undefined, source: string, status: string): Promise<SettleResult> =>
+    const settle = (usage: Usage | undefined, source: string, status: string, reason?: string): Promise<SettleResult> =>
       (settled ??= (async () => {
         let nano = 0;
         if (alwaysFlat && usage) source = 'flat';
@@ -909,6 +909,9 @@ export function createApp(d: Deps) {
           unit,
           free: free || undefined,
           status,
+          // Why the supplier gave no answer or a cut-off one: its error text, the same the client is sent,
+          // on one line and short. Never the question or the answer.
+          reason: reason ? reason.replace(/\s+/g, ' ').slice(0, 200) : undefined,
           encrypted,
           stream,
           input_tokens: usage?.inputTokens,
@@ -953,7 +956,7 @@ export function createApp(d: Deps) {
       try {
         up = await supplier.forwardEncrypted!({ model, path: '/v1/chat/completions', enclaveUrl: c.req.header('x-tinfoil-enclave-url'), headers: fwd, body: raw, signal });
       } catch (e) {
-        const r = await settle(undefined, 'none', 'upstream_error');
+        const r = await settle(undefined, 'none', 'upstream_error', errText(e));
         const status = e instanceof UpstreamError && e.status < 500 && e.status !== 499 ? e.status : 502;
         return apiError(c, status, 'upstream_error', errText(e), resultHeaders(r));
       }
@@ -965,7 +968,7 @@ export function createApp(d: Deps) {
       const frames = new FrameCounter();
       const finish = async (complete: boolean) => {
         const reported = complete ? await up.usage : undefined;
-        if (!ok) return settle(undefined, 'none', 'upstream_error');
+        if (!ok) return settle(undefined, 'none', 'upstream_error', `upstream returned HTTP ${up.status}`);
         if (reported) return settle(reported, 'tinfoil-metrics', complete ? 'ok' : 'partial');
         // No usage count: a complete answer is charged the hold; a cut-off one the frames it carried.
         if (complete) return settle(worst, noUsage, 'ok');
@@ -978,7 +981,7 @@ export function createApp(d: Deps) {
         } catch (e) {
           // Same as the plaintext non-stream read: no response reached the client, so this settles as an
           // upstream failure (nothing charged, flat schedule included; reservation released; change owed).
-          const r = await settle(undefined, 'none', 'upstream_error');
+          const r = await settle(undefined, 'none', 'upstream_error', errText(e));
           return apiError(c, 502, 'upstream_error', `enclave response failed: ${errText(e)}. You were not charged.`, resultHeaders(r));
         }
         const r = await finish(true);
@@ -1017,7 +1020,7 @@ export function createApp(d: Deps) {
     try {
       res = await supplier.chat({ model, body: upstreamBody!, stream, signal });
     } catch (e) {
-      const r = await settle(undefined, 'none', 'upstream_error');
+      const r = await settle(undefined, 'none', 'upstream_error', errText(e));
       const status = e instanceof UpstreamError && e.status < 500 && e.status !== 499 ? e.status : 502;
       return apiError(c, status, 'upstream_error', errText(e), resultHeaders(r));
     }
@@ -1029,7 +1032,7 @@ export function createApp(d: Deps) {
       } catch {
         /* not JSON */
       }
-      const r = await settle(undefined, 'none', 'upstream_error');
+      const r = await settle(undefined, 'none', 'upstream_error', msg);
       const status = res.status >= 400 && res.status < 500 && res.status !== 429 ? res.status : 502;
       return apiError(c, status, 'upstream_error', msg + '. You were not charged.', resultHeaders(r));
     }
@@ -1041,7 +1044,7 @@ export function createApp(d: Deps) {
       try {
         text = await res.text();
       } catch (e) {
-        const r = await settle(undefined, 'none', 'upstream_error');
+        const r = await settle(undefined, 'none', 'upstream_error', errText(e));
         return apiError(c, 502, 'upstream_error', `upstream response failed: ${errText(e)}. You were not charged.`, resultHeaders(r));
       }
       let usage: Usage | undefined;
@@ -1113,7 +1116,7 @@ export function createApp(d: Deps) {
             const r = await settle(u, meter.usage ? 'upstream' : alwaysFlat ? 'flat' : 'estimate', 'ok');
             send(forgeEvent(r));
           } catch (e) {
-            const r = await settle(usageNow(), meter.usage ? 'upstream' : 'estimate', 'partial');
+            const r = await settle(usageNow(), meter.usage ? 'upstream' : 'estimate', 'partial', cancelled ? 'client disconnected' : errText(e));
             send(`data: ${JSON.stringify({ error: { message: cancelled ? 'client disconnected' : `upstream stream failed: ${errText(e)}`, type: 'upstream_error' } })}\n\n`);
             send(forgeEvent(r, { partial: true }));
           }

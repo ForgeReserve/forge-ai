@@ -138,6 +138,7 @@ export default {
   'error.offline': 'No connection. Forge cannot reach the engine.',
   'error.busy': 'Too busy. Too many questions at once. Wait a moment.',
   'error.model': 'No answer, not charged. The model did not answer, so you were not charged.',
+  'error.modelWhy': 'No answer, not charged. The model did not answer, so you were not charged. The reason given: {message}',
   'error.modelCharged': 'Stopped early, cost {amount}. The model stopped before the answer was done.',
   'error.modelUnknown': 'No answer. The model did not answer. Check your funds.',
   'error.gone': 'Model gone. This model is not available any more.',

@@ -191,7 +191,7 @@ describe('errors in plain words', () => {
     ['invalid_key', 'error.key', 'addFunds'],
     ['offline', 'error.offline', 'retry'],
     ['rate_limited', 'error.busy', 'retry'],
-    ['upstream_error', 'error.model', 'retry'],
+    ['upstream_error', 'error.modelWhy', 'retry'],
     ['model_not_found', 'error.gone', 'chooseModel'],
     ['request_too_large', 'error.tooLarge', 'startFresh'],
     ['encryption_unavailable', 'error.encryption', 'retry'],
@@ -204,10 +204,24 @@ describe('errors in plain words', () => {
     expect(ERR.errorView(code, 'm')).toMatchObject({ key, next });
   });
 
+  it("carries the engine's reason for a failed answer, short and on one line", () => {
+    expect(ERR.errorView('upstream_error', '', 0)).toEqual({ key: 'error.model', next: 'retry' });
+    expect(ERR.errorView('upstream_error', 'upstream returned HTTP 500: Cannot connect to host.\n. You were not charged.', 0)).toEqual({
+      key: 'error.modelWhy',
+      next: 'retry',
+      message: 'upstream returned HTTP 500: Cannot connect to host',
+    });
+    expect(ERR.reasonOf(undefined)).toBe('');
+    expect(ERR.reasonOf('x'.repeat(400))).toHaveLength(160);
+    // A charged or unknown failure keeps its own words.
+    expect(ERR.errorView('upstream_error', 'boom', 5).key).toBe('error.modelCharged');
+    expect(ERR.errorView('upstream_error', 'boom', null).key).toBe('error.modelUnknown');
+  });
+
   it('says "not charged" only when the engine charged nothing', async () => {
     const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
     const words = (code: string, forge: unknown, err: unknown) => {
-      const ev = ERR.errorView(code, 'm', ERR.chargedFor(forge, err));
+      const ev = ERR.errorView(code, '', ERR.chargedFor(forge, err));
       return { key: ev.key, text: en[ev.key]!.replace('{amount}', ev.charged > 0 ? `${ev.charged} msub` : '') };
     };
     const streamErr = { code: 'upstream_error' }; // a StreamError: no HTTP status
