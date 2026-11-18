@@ -17,13 +17,15 @@ export function create(inputs) {
     group: 'unlinked',
     icon: 'coins',
     available: () => true,
-    view({ done, token: given }) {
+    view({ done, open, token: given }) {
       const msg = ui.msgLine();
+      // A way on from a refusal: eCash from another mint goes to Other mint, with the token.
+      const onward = ui.el('div', { class: 'onward', hidden: true });
       const invite = inviteField(inputs);
       const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd' }, ui.icon('addMoney', 22), ui.el('span', { text: t('fund.ecash.add') }));
       const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click() });
       const mints = wallet.mints();
-      const form = [invite.node, box.node, msg, mints.length ? ui.sayEl('p', { class: 'note' }, t('fund.ecash.mints', { mints: mints.join(', ') })) : null].filter(Boolean);
+      const form = [invite.node, box.node, msg, onward, mints.length ? ui.sayEl('p', { class: 'note' }, t('fund.ecash.mints', { mints: mints.join(', ') })) : null].filter(Boolean);
       const body = ui.el('div', { class: 'scroll fund-body' }, ...form);
       const foot = ui.el('div', { class: 'foot' }, add);
       let quote = null;
@@ -48,6 +50,7 @@ export function create(inputs) {
 
       add.addEventListener('click', async () => {
         const token = box.value();
+        onward.hidden = true;
         if (!/^cashu[AB]/.test(token)) return msg.set(t('fund.ecash.bad'), 'err');
         add.disabled = true;
         try {
@@ -67,7 +70,13 @@ export function create(inputs) {
         } catch (e) {
           // The engine read it for the phone: its unit is not these funds', and it says it can change it.
           if (e?.code === 'wrong_unit' && e.body?.convert?.unit && wallet.key()) await convert(token, e.body.convert.unit).catch((x) => msg.set(t('fund.failed', { message: x?.message ?? String(x) }), 'err'));
-          else if (e?.code === 'untrusted_mint') msg.set(t('fund.ecash.otherMint'), 'err');
+          else if (e?.code === 'untrusted_mint') {
+            msg.set(t('fund.ecash.otherMint'), 'err');
+            if (wallet.methods()?.foreign?.enabled) {
+              onward.replaceChildren(ui.el('button', { type: 'button', class: 'btn block', id: 'ecashOtherMint', onclick: () => open('othermint', { token }) }, ui.icon('swap', 20), ui.el('span', { text: t('fund.note.useOtherMint') })));
+              onward.hidden = false;
+            }
+          }
           else if (e?.code === 'token_spent') msg.set(t('fund.ecash.spent'), 'err');
           else if (e?.retryable) msg.set(t('fund.ecash.kept'), 'err');
           else msg.set(t('fund.failed', { message: e?.message ?? String(e) }), 'err');

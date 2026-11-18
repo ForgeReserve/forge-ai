@@ -186,7 +186,13 @@ export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { 
   const entry = registry.list('fund').find((x) => x.instance.id === id);
   if (!entry || !entry.instance.available(state.S.methods)) {
     const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('ways.title'), back, t('common.back')), sayEl('p', { class: 'hint pad' }, t('addFunds.unavailable'), '', 'alert'));
-    return { node: main, focus: main.querySelector('h1') };
+    // Opened before the engine's ways or the fund modules arrived (the app opened on this address): the
+    // way's own screen once it is there.
+    const update = () => {
+      const now = registry.list('fund').find((x) => x.instance.id === id);
+      if (now?.instance.available(state.S.methods)) queueMicrotask(() => nav('fund', { id }, { replace: true }));
+    };
+    return { node: main, update, focus: main.querySelector('h1') };
   }
   const open = (to, { token } = {}) => {
     handoff = { id: to, token };

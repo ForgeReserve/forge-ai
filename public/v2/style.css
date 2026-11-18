@@ -813,9 +813,10 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .offer-text b { font-size: 15px; }
 .offer-size { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-2); }
 .btn.offer-get { min-height: 48px; padding: 0 14px; font-size: 15px; }
-/* On the answer, a message sits in the top bar, never over the words. */
-body:has(> #app[data-route="answer"]) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; transform: translate(-50%, -12px); min-height: 48px; display: flex; align-items: center; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
-body:has(> #app[data-route="answer"]) .toast.show { transform: translate(-50%, 0); }
+/* On the answer, a message sits in the top bar, never over the words. On the add money screens too: there
+   the bottom holds the pinned buttons, which a message must never cover. */
+body:has(> #app:is([data-route="answer"], [data-route="fund"], [data-route="addFunds"], [data-route="funds"], [data-route="takeOut"], [data-route="startFree"])) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; transform: translate(-50%, -12px); min-height: 48px; display: flex; align-items: center; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+body:has(> #app:is([data-route="answer"], [data-route="fund"], [data-route="addFunds"], [data-route="funds"], [data-route="takeOut"], [data-route="startFree"])) .toast.show { transform: translate(-50%, 0); }
 
 /* Hold to burn (screens/burn.js): the tile fills from the left as it is held; the card warms, tilts back
    and darkens as the fire climbs it (the fire itself is drawn on .burn-fx). */

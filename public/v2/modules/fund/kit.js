@@ -136,6 +136,11 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
   foot.replaceChildren(...[confirm, no].filter(Boolean));
   let held = null;
   let refreshed = false;
+  /** What went wrong, said as an error. */
+  const fail = (text) => {
+    st.className = 'status-line err';
+    ui.say(st, text, 'err');
+  };
   const finish = () => foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', id: 'fundDone', text: t('fund.done'), onclick: done }));
   const update = (x) => {
     const xf = x.foreign ?? q;
@@ -151,13 +156,13 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
       return r.final;
     }
     if (x.state === 'refunded') {
-      ui.say(st, xf.refund_token || xf.payout_pending ? t('fund.othermint.refunded') : t('fund.failed', { message: x.error ?? '' }));
+      fail(xf.refund_token || xf.payout_pending ? t('fund.othermint.refunded') : t('fund.failed', { message: x.error ?? '' }));
       if (xf.refund_token) returned.replaceChildren(ui.el('textarea', { class: 'field-input mono', readonly: true, rows: '3', text: xf.refund_token }));
       finish();
       return r.final;
     }
     if (x.state === 'failed' || x.state === 'expired') {
-      ui.say(st, x.state === 'expired' ? t('fund.othermint.expired') : t('fund.failed', { message: x.error ?? '' }));
+      fail(x.state === 'expired' ? t('fund.othermint.expired') : t('fund.failed', { message: x.error ?? '' }));
       finish();
       return true;
     }
@@ -172,6 +177,7 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
   confirm.addEventListener('click', async () => {
     confirm.disabled = true;
     no?.remove();
+    st.className = 'status-line';
     ui.say(st, t('fund.othermint.receiving'));
     // Tied to this engine: only it is asked about the funding later (settlePendingForeign).
     held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
@@ -182,7 +188,7 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
         if (confirmOutcome(r.status, r.body) === 'refused') {
           // Not taken: the eCash stays on the phone, listed under Funds as not added, so it can be copied.
           vault.refused(held.id, r.body?.error?.code ?? `http_${r.status}`, message);
-          ui.say(st, t('fund.failed', { message }));
+          fail(t('fund.failed', { message }));
           confirm.disabled = false;
           return;
         }

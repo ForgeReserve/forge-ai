@@ -15,23 +15,27 @@ export function create(inputs) {
     group: 'depends',
     icon: 'swap',
     available: (methods) => !!methods?.foreign?.enabled,
-    view({ done, token: given }) {
-      const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (wallet.methods()?.lightning?.units ?? ['usd', 'sat']);
-      const unit = wallet.unit() ?? units[0];
+    view({ done, open, token: given }) {
+      // The unit is read when the price is asked for: a screen opened before the balance was read
+      // (the app opened on this address) still asks in the balance's unit.
+      const unitNow = () => wallet.unit() ?? (wallet.methods()?.lightning?.units ?? ['usd', 'sat'])[0];
       const msg = ui.msgLine();
       const invite = inviteField(inputs);
       const check = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignCheck' }, ui.icon('swap', 20), ui.el('span', { text: t('fund.othermint.check') }));
       const box = tokenBox(inputs, { id: 'foreignToken', label: t('fund.othermint.label'), onScanned: () => check.click() });
       const unlisted = ui.el('div', { class: 'notice', hidden: true });
-      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.sayEl('p', {}, t('fund.othermint.what')), box.node, msg, unlisted);
+      // eCash from the engine's own mint goes to eCash, with the token.
+      const onward = ui.el('div', { class: 'onward', hidden: true });
+      const body = ui.el('div', { class: 'scroll fund-body' }, invite.node, ui.sayEl('p', {}, t('fund.othermint.what')), box.node, msg, onward, unlisted);
       const foot = ui.el('div', { class: 'foot' }, check);
       let poller = null;
 
       const quote = async (token, acceptUnlisted = false) => {
         check.disabled = true;
+        onward.hidden = true;
         msg.set(t('fund.othermint.checking'));
         try {
-          const r = await engine.foreignQuote(wallet.key(), { token, unit, invite: invite.value(), pubkey: wallet.lockKey() || undefined, ...(acceptUnlisted ? { accept_unlisted: true } : {}) });
+          const r = await engine.foreignQuote(wallet.key(), { token, unit: unitNow(), invite: invite.value(), pubkey: wallet.lockKey() || undefined, ...(acceptUnlisted ? { accept_unlisted: true } : {}) });
           if (r.body?.key) wallet.setKey(r.body.key);
           if (!r.ok) {
             const code = r.body?.error?.code;
@@ -40,7 +44,11 @@ export function create(inputs) {
               unlisted.hidden = false;
               return msg.set('');
             }
-            if (code === 'use_topup') return msg.set(t('fund.othermint.useEcash'), 'err');
+            if (code === 'use_topup') {
+              onward.replaceChildren(ui.el('button', { type: 'button', class: 'btn block', id: 'foreignUseEcash', onclick: () => open('ecash', { token }) }, ui.icon('coins', 20), ui.el('span', { text: t('fund.ecash.name') })));
+              onward.hidden = false;
+              return msg.set(t('fund.othermint.useEcash'), 'err');
+            }
             return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           }
           unlisted.hidden = true;
