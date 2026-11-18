@@ -129,7 +129,12 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * or 'playful': docs/PLAYFUL.md), chosen in the same place. gameFirst: a mode with a cover game (Playful)
  * opens on the game, its helper behind it; on by default, turned off in the same place.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', lastPrivate: '', lastStandard: '', standardOk: false, voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
+/**
+ * phoneOff: true once the phone's own recogniser heard nothing twice in a row while its level showed
+ * sound (core/talk.js), so the engine hears this phone (pickVoiceIn). phoneMisses: such presses in a row
+ * so far.
+ */
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', lastPrivate: '', lastStandard: '', standardOk: false, voiceIn: 'auto', phoneOff: false, phoneMisses: 0, voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
 
 /**
  * The mode to draw the home and the answer with: the chosen one when it can be drawn now (`ready`, the
@@ -145,13 +150,16 @@ export function pickMode(ready, settings) {
  * phone's own on-device recogniser (in the Android and iPhone apps) when it has the language; else the engine's. With
  * 'engine' chosen, the engine's first. The browser's recogniser is never used with Private only on,
  * since the browser may send the sound to its maker, and never unless chosen.
+ * phoneOff: the phone's recogniser heard nothing twice in a row while the sound was there (core/talk.js
+ * PHONE_MISSES), so the next way hears it, under the same Private only rule; the phone only when no
+ * other way can. Picking On this phone in More, Voice clears it.
  * mods: {bundled, phone, engine, device}, each a module instance or undefined.
  */
 export function pickVoiceIn(mods, settings) {
   const ok = (m) => !!m?.available() && (!settings.privateOnly || m.private());
   if (settings.voiceIn === 'device' && ok(mods.device)) return mods.device;
-  const order = settings.voiceIn === 'engine' ? [mods.engine, mods.bundled, mods.phone] : [mods.bundled, mods.phone, mods.engine];
-  return order.find(ok) ?? null;
+  const order = (settings.voiceIn === 'engine' ? [mods.engine, mods.bundled, mods.phone] : [mods.bundled, mods.phone, mods.engine]).filter(ok);
+  return (settings.phoneOff ? order.find((m) => m !== mods.phone) : null) ?? order[0] ?? null;
 }
 
 /**

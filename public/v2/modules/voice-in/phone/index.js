@@ -92,7 +92,8 @@ export function create({ speech: bridge = null }) {
           if (error && error !== 'no-speech' && error !== 'interrupted') {
             throw Object.assign(new Error(`The phone's recogniser failed: ${error}.`), { code: 'phone_speech', key: 'talk.phoneFailed' });
           }
-          return { text: error ? '' : (final ?? heard).trim(), chargedMsub: 0, balanceMsub: null };
+          // noSpeech: the recogniser said it heard nothing, which the app counts (core/talk.js phoneHeard).
+          return { text: error ? '' : (final ?? heard).trim(), chargedMsub: 0, balanceMsub: null, ...(error === 'no-speech' ? { noSpeech: true } : {}) };
         },
         cancel: () => s.cancel(),
       };

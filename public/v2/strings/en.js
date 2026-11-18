@@ -75,6 +75,7 @@ export default {
   'talk.routeStandard': 'Engine and provider hear it. It is sent to a standard model. The engine and the model provider can hear it.',
   'talk.routeDevice': 'Browser maker may hear. Your browser turns it into words. It may send your voice to its maker.',
   'talk.routePhone': 'Stays on this phone. This phone turns it into words. Your voice does not leave the phone.',
+  'talk.phoneOff': 'Nothing was heard. This phone did not hear you twice. Next time, your voice goes online to become words.',
   'talk.phoneFailed': 'Could not hear it. This phone could not turn your voice into words. Hold the button and try again, or type your question.',
   // Reading answers aloud
   'speak.listen': 'Listen',
@@ -375,6 +376,7 @@ export default {
   'voice.in.deviceSub': 'Free. Your browser may send your voice to its maker.',
   'voice.in.deviceOff': 'Off with Private only. Your browser may send your voice to its maker. Turn off Private only to use it.',
   'voice.in.none': 'No talking here yet. Talking is not available on this engine yet. Type your question instead.',
+  'voice.in.phoneOff': 'Phone did not hear you. It heard nothing twice, so your voice goes online now to become words. Tap On this phone to try the phone again.',
   'voice.out': 'Answers read aloud',
   'voice.out.phonon': 'Natural voice',
   'voice.out.phononSub': 'Free. Made on this phone, so the answer is not sent anywhere. Downloads once, the first time.',

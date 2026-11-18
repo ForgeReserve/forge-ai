@@ -24,6 +24,7 @@ import { SHARE_CACHE } from './core/photo.js';
 import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
+import { nextMisses, PHONE_MISSES } from './core/talk.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
 import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
@@ -1521,6 +1522,7 @@ const talk = createTalk({
   phoneVoice: () => reader.mod(),
   voicesReady: () => adapters.synth.ready?.(2000) ?? Promise.resolve(false),
   readAloudOff: () => S.settings.voiceOut === 'off',
+  notePhone: (session) => notePhone(session),
   naturalDeclined: {
     get: () => !!S.settings.naturalNotNow,
     set: () => {
@@ -1529,6 +1531,25 @@ const talk = createTalk({
     },
   },
 });
+
+/**
+ * Counts a press heard by the phone's own recogniser (core/talk.js). After PHONE_MISSES in a row that
+ * heard nothing while the sound was there, the engine hears this phone from now on (phoneOff, kept in the
+ * settings; More, Voice shows it and On this phone takes it back). Only when another way can hear it
+ * here, under the same Private only rule as a phone with no recogniser: otherwise the phone keeps
+ * listening. Returns true when this press made the switch.
+ */
+function notePhone(session) {
+  const was = S.settings.phoneMisses ?? 0;
+  const misses = nextMisses(was, session);
+  const off = misses >= PHONE_MISSES && pickVoiceIn(voiceMods('voice-in'), { ...S.settings, phoneOff: true })?.id !== 'phone';
+  if (misses === was && !off) return false;
+  S.settings.phoneMisses = off ? 0 : misses;
+  if (off) S.settings.phoneOff = true;
+  saveSettings();
+  if (off) store.set({});
+  return off;
+}
 
 /**
  * Asks once before the natural voice is downloaded, with its size. Resolves true for Download. While
@@ -1636,6 +1657,8 @@ const actions = {
   setVoiceIn: (id) => {
     S.settings.voiceIn = id;
     S.settings.voiceInPicked = true;
+    // On this phone, picked again after the phone heard nothing: it listens again, with a fresh count.
+    if (id === 'phone') Object.assign(S.settings, { phoneOff: false, phoneMisses: 0 });
     saveSettings();
     store.set({});
   },

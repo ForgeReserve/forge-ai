@@ -112,6 +112,7 @@ Pick an amount, pay the invoice from any Lightning wallet, and the engine credit
 - **Id:** `forge.fund.lightning`, known in the app as `lightning`.
 - **Folder:** [`public/v2/modules/fund/lightning/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/lightning)
 - **Needs:** `engine.fundLightning` for [`POST /v1/wallet/fund/lightning`](../API.md#post-v1-wallet-fund-lightning); `engine.funding` for [`GET /v1/wallet/fund/{id}`](../API.md#get-v1-wallet-fund-id), every 2 seconds until it is paid; `qr` for the invoice.
+- **The code:** `lightning:<invoice>` in lowercase, the same string as Open in wallet (`qrPayload` in `modules/fund/kit.js`). BOLT 11 suggests upper case for a smaller code, but Primal on the iPhone strips only a lowercase `lightning:` and reads `LIGHTNING:LNBC...` as an invalid checksum. The lowercase code is denser (65 modules for a 250-character invoice), so it is drawn up to 340 px wide: over 4 px a module at 360 px.
 - **Works on:** the website and both apps, while the engine has Lightning.
 - **Costs:** the invoice's amount, between the engine's least and most.
 - **Private:** no. The person's wallet sees a Lightning payment, and so does an exchange that knows their name.

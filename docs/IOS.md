@@ -137,7 +137,7 @@ Card taps need the **NFC Tag Reading** capability on the App ID `com.forgereserv
 
 - Camera: "Forge uses the camera to read a code, or to take a photo when you ask it to."
 - Microphone: "Forge uses the microphone only while you hold the talk button, to hear a question you speak."
-- Speech recognition: "Forge turns a question you speak into words on this phone. Your voice stays on it, unless you pick This browser." One permission covers both recognisers: ForgeSpeech, which hears on the phone, and WebKit's This browser in Voice, which may send the sound to Apple.
+- Speech recognition: "Forge turns a question you speak into words on this phone. Your voice stays on it, unless you pick This browser." One permission covers both recognisers: ForgeSpeech, which hears on the phone, and WebKit's This browser in Voice, which may send the sound to Apple. It speaks of the recognisers only: a recording the app sends to the engine (Online, picked, or chosen by the app after Apple's recogniser heard nothing in two presses in a row while there was sound, docs/VOICE.md) uses the microphone's permission, and the app says so on the answer screen and in More, Voice.
 - Adding to Photos: "Forge saves a photo to your library only when you pick Save."
 - NFC: "Forge reads an eCash card only when you hold it to the phone to add money." iOS shows no prompt for it: the NFC sheet itself is the permission.
 

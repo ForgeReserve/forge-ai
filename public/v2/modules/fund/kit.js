@@ -312,10 +312,19 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null })
   return { node, value: () => ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, ''), clear: () => (ta.value = ''), stop, input: ta };
 }
 
+/**
+ * What a payment request's QR code carries: the URI as given, and a Lightning one in lowercase, the same
+ * string as its Open link. Some wallets read only a lowercase `lightning:` (Primal on the iPhone strips
+ * only that prefix, so `LIGHTNING:LNBC...` fails its checksum), though BOLT 11 suggests upper case for
+ * its smaller code. Lowercase goes in byte mode (public/js/qr.js), so the code is denser.
+ */
+export const qrPayload = (uri) => (/^lightning:/i.test(uri) ? uri.toLowerCase() : uri);
+
 /** The QR code of a payment request, with Copy and an Open in wallet link. */
 export function requestQR({ t, ui, qr }, { uri, copyText, copyLabel, qrLabel, openLabel }) {
   const box = ui.el('div', { class: 'qr', role: 'img', 'aria-label': qrLabel });
-  qr.renderQR(box, uri.toUpperCase().startsWith('LIGHTNING:') ? uri.toUpperCase() : uri, 'M').catch(() => {});
+  uri = qrPayload(uri);
+  qr.renderQR(box, uri, 'M').catch(() => {});
   return ui.el(
     'div',
     { class: 'qr-block' },
