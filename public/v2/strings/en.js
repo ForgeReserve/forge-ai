@@ -1265,6 +1265,7 @@ export default {
   'model.slowSub': 'Slow to start. It can take a minute or more before the first words.',
   'model.fastSub': 'Fast. The first words come in a few seconds.',
   'model.chosenMark': 'Chosen',
+  'model.needsMoney': 'Add money first',
   // The first run's last step: Start free as a choice beside Start, and Scan for the code.
   'startFree.scanLabel': 'Scan the invite code with the camera',
   'home.modelChip': '{name} is chosen. Change the model',

@@ -138,6 +138,22 @@ export function payUnit({ available, hold }) {
 }
 
 /**
+ * Whether a short question to a model would stop for want of money once it is chosen, so the model list
+ * can say so first. The same rules as asking (app.js blocker and estimateFor): never for a free model or
+ * a question a free question pays (free, freeUse); with no paid balance, or one at 0 (paidMsub 0), yes;
+ * otherwise when neither balance covers the question's hold alone (payUnit: dollars first, the sats only
+ * with a BTC/USD rate) and the hold has a price. Before the balance is read (paidMsub null), no.
+ *   available: {usd, sat}, as for payUnit; hold: {usd, sat}, the short question's hold in each unit;
+ *   home: the unit a question no balance pays is priced in (the home's).
+ */
+export function cannotPay({ free = false, freeUse = false, paidMsub = null, available, hold, btcUsd = null, home = 'usd' }) {
+  if (free || freeUse || paidMsub == null) return false;
+  if (paidMsub <= 0) return true;
+  if (payUnit({ available, hold: { usd: hold.usd ?? null, sat: btcUsd > 0 ? (hold.sat ?? null) : null } })) return false;
+  return hold[home] != null;
+}
+
+/**
  * The home's one total and its unit. With money in one balance only, it is that balance in its own
  * unit. With money in both, it is dollars: the sats at the BTC/USD rate the app has, or, with no rate,
  * the dollar balance alone (Funds still shows the sats). With no money, the empty balance kept first.

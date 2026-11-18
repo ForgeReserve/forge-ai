@@ -245,3 +245,44 @@ describe('opening the second balance through the vault and the engine', () => {
     expect(B.asideKeys(null)).toEqual([]);
   });
 });
+
+// Choose a model marks a model the money on the phone cannot pay for (screens/settings.js), by the
+// rules asking uses (app.js blocker, estimateFor short), so the mark agrees with what a tap leads to.
+describe('a model the balance cannot pay for (cannotPay)', () => {
+  const hold = { usd: 2_000, sat: 20_000 }; // 2 cents, 20 sats
+  const ask = (o: object) => B.cannotPay({ free: false, freeUse: false, paidMsub: 100_000, available: { usd: null, sat: null }, hold, btcUsd: RATE, home: 'usd', ...o });
+
+  it('dollars that cover the hold pay; too few dollars do not', () => {
+    expect(ask({ available: { usd: 5_000, sat: null } })).toBe(false);
+    expect(ask({ available: { usd: 2_000, sat: null } })).toBe(false);
+    expect(ask({ paidMsub: 1_000, available: { usd: 1_000, sat: null } })).toBe(true);
+  });
+
+  it('sats pay only with a rate, and one balance pays in full, never split', () => {
+    expect(ask({ home: 'sat', available: { usd: null, sat: 50_000 } })).toBe(false);
+    expect(ask({ home: 'sat', available: { usd: null, sat: 50_000 }, btcUsd: null })).toBe(true);
+    // Dollars short, sats enough: the sats pay.
+    expect(ask({ available: { usd: 1_000, sat: 50_000 } })).toBe(false);
+    // Each short alone, enough together: still short.
+    expect(ask({ available: { usd: 1_500, sat: 10_000 } })).toBe(true);
+    // The same as the question asked: payUnit picks no balance exactly when this says true.
+    for (const available of [{ usd: 1_000, sat: 50_000 }, { usd: 1_500, sat: 10_000 }, { usd: 9_000, sat: null }]) {
+      const pays = B.payUnit({ available, hold });
+      expect(ask({ available })).toBe(!pays);
+    }
+  });
+
+  it('a free model, a free question, or an unpriced question are never marked', () => {
+    expect(ask({ free: true, paidMsub: 0 })).toBe(false);
+    expect(ask({ free: true, available: { usd: 0, sat: null } })).toBe(false);
+    expect(ask({ freeUse: true, paidMsub: 0 })).toBe(false);
+    expect(ask({ freeUse: true, available: { usd: 0, sat: null } })).toBe(false);
+    expect(ask({ available: { usd: 0, sat: null }, hold: { usd: null, sat: null } })).toBe(false);
+  });
+
+  it('with no paid balance (no key, or $0) every paid model is marked; before the balance is read, none', () => {
+    expect(ask({ paidMsub: 0 })).toBe(true);
+    expect(ask({ paidMsub: 0, hold: { usd: null, sat: null } })).toBe(true);
+    expect(ask({ paidMsub: null })).toBe(false);
+  });
+});

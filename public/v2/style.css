@@ -814,6 +814,9 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .model-name b { flex: 1; min-width: 0; }
 .model-on { flex: none; width: 28px; height: 28px; border-radius: 14px; background: var(--teal); color: var(--primary-ink); display: flex; align-items: center; justify-content: center; }
 .model-card.on { border-width: 2px; border-color: var(--teal); }
+/* A model the money on this phone cannot pay for (screens/settings.js): dimmed, with the Add money mark. */
+.model-card.poor > :not(.model-name), .model-card.poor .model-name b { opacity: 0.5; }
+.model-poor { flex: none; width: 28px; height: 28px; border-radius: 14px; background: var(--gold-tint); color: var(--gold-ink); display: flex; align-items: center; justify-content: center; }
 .tag.speed { background: var(--teal-tint); color: var(--teal); }
 .tag.slow { background: var(--surface-2); color: var(--text-2); border: 1px dashed var(--dash); }
 

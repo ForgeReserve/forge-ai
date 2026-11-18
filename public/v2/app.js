@@ -30,7 +30,7 @@ import { createClips } from './core/clips.js';
 import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND, transcribeMsub } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
-import { asideKeys, homeTotal, key2Name, keysByUnit, landsIn, newKey, newKeysName, payUnit, prepareFunding, questionsOver, UNITS, unitsPending, withAside, withKey, withoutKey } from './core/balances.js';
+import { asideKeys, cannotPay, homeTotal, key2Name, keysByUnit, landsIn, newKey, newKeysName, payUnit, prepareFunding, questionsOver, UNITS, unitsPending, withAside, withKey, withoutKey } from './core/balances.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
@@ -997,14 +997,18 @@ const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: a
 /**
  * The price of the next question with these words, and whether it can be paid. Priced in the unit of the
  * balance that pays it (payerFor: dollars first, sats when the dollars are short), or in `unit` when given.
+ * model: the question to that model as if it were chosen now (the model list), which starts a new
+ * conversation when it is not the one in use (modelChanged).
  */
-function estimateFor(text, { voice = false, unit: asked = null } = {}) {
-  const model = pickModel(S.models, S.settings);
+function estimateFor(text, { voice = false, unit: asked = null, model: chosen = null } = {}) {
+  const current = pickModel(S.models, S.settings);
+  const model = chosen ?? current;
   if (!model) return { costMsub: null, unit: asked ?? homeUnit() };
   const vision = !!model.capabilities?.vision;
   const next = pendingMessage(text, S.pending, { vision });
   if (voice) next.meta = { voice: true };
-  const msgs = [...S.conv.messages.filter((m) => !m.meta?.error), next];
+  const before = model.id === current?.id ? S.conv.messages.filter((m) => !m.meta?.error) : [];
+  const msgs = [...before, next];
   const systemPrompt = promptFor(msgs);
   const api = apiMessages(msgs, { systemPrompt, vision });
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
@@ -1026,6 +1030,9 @@ function estimateFor(text, { voice = false, unit: asked = null } = {}) {
     // One balance pays a question in full, so it is short when neither covers it alone. A free model
     // holds nothing, so it is never short.
     short: !modelFree && !fr.use && anyKey() && payer.costMsub != null && money && !payer.pays,
+    // Not enough money for even this question, with no paid balance or not enough in either (core/balances.js
+    // cannotPay): what the model list marks.
+    needsMoney: cannotPay({ free: modelFree, freeUse: fr.use, paidMsub: anyKey() ? (total()?.balanceMsub ?? null) : 0, available: { usd: availOf('usd'), sat: availOf('sat') }, hold: { usd: holdIn('usd'), sat: holdIn('sat') }, btcUsd: S.btcUsd, home: homeUnit() }),
     unit,
     // Paid with a free question: the price line reads "Free, 2 of 3 left". A free model: "Free".
     free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
@@ -1722,6 +1729,8 @@ const actions = {
   attachPhoto,
   removePending,
   estimate: estimateFor,
+  /** True when a short question to model m would stop for want of money once m is chosen (Choose a model's mark). */
+  needsMoney: (m) => !!estimateFor('', { model: m }).needsMoney,
   /** Search the web for the next question (off again once it is sent). */
   setSearch: (on) => {
     S.search = !!on;
