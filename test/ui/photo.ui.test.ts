@@ -629,7 +629,8 @@ describe('Share unseen', () => {
     await page.goto(`${g.url}/v2/#/more/model`);
     await page.waitForSelector('[data-model="tinfoil/enc-model"]');
     await page.click('[data-model="tinfoil/enc-model"]');
-    await page.waitForSelector('[data-screen=home]');
+    // No money on this phone: a marked model opens Add money once chosen.
+    await page.waitForSelector('[data-screen=addFunds]');
     await pick(page, 'sign.jpg', SIGN);
     await page.click('#photoAsk');
     await page.waitForSelector('#modelPhotoLead');

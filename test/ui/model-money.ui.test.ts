@@ -2,10 +2,12 @@ import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, PRICE_IN, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { openWay } from './ways.ts';
 
 // Choose a model shows first which models the money on the phone can pay for (screens/settings.js,
 // core/balances.js cannotPay): one a short question to it would stop for want of money is dimmed and
-// carries the Add money mark. Free models and models the balance covers look as before.
+// carries the Add money mark, and choosing it goes straight on to Add money. Free models and models the
+// balance covers look and behave as before.
 const PHONE = { viewport: { width: 412, height: 892 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 const MARK = 'Add money first';
 
@@ -80,33 +82,47 @@ async function marked(page: Page): Promise<string[]> {
 }
 
 describe('Choose a model, and what the balance can pay for', () => {
-  it('a small dollar balance: the cheap model and the free one as before, the dear one marked; tapping it still chooses it, and the mark goes once money is added', async () => {
+  it('a small dollar balance: the cheap model and the free one as before, the dear one marked; tapping it chooses it and opens Add money, and Ask now asks with it', async () => {
     const { page, errors, close } = await phone(await topup('usd', 100));
     await expect.poll(() => marked(page)).toEqual(['dear-echo']);
     expect(await page.locator('[data-model="mock-echo"] .model-poor').count()).toBe(0);
     expect(await page.locator('[data-model="free-echo"] .model-poor').count()).toBe(0);
     expect(Number(await page.locator('[data-model="mock-echo"] .model-name b').evaluate((b) => getComputedStyle(b).opacity))).toBe(1);
+    const chosen = () => page.evaluate(async (src) => (await new Function('s', 'return import(s)')(src)).kv.get('settings').then((x: any) => x?.model), '/v2/core/db.js');
 
-    // Tapping a marked model chooses it as before; asking then says there is not enough.
+    // Tapping a marked model chooses it and goes straight on to Add money.
     await page.locator('[data-model="dear-echo"]').tap();
-    await page.waitForSelector('[data-screen=model]', { state: 'detached' });
-    await page.goto(`${g.url}/v2/#/type`);
-    await page.waitForSelector('[data-screen=type]');
-    await page.fill('#question', 'Hi');
-    await expect.poll(() => page.textContent('#typeNotice')).toMatch(/^Not enough funds\./);
+    await page.waitForSelector('[data-screen=addFunds]');
+    await expect.poll(chosen).toBe('dear-echo');
+    // The list is not under Add money: Back goes where the list was opened from.
+    await page.goBack();
+    await page.waitForSelector('[data-screen=home]');
     await openList(page);
     await expect.poll(() => marked(page)).toEqual(['dear-echo']);
     expect(await page.getAttribute('[data-model="dear-echo"]', 'aria-checked')).toBe('true');
+    await page.locator('[data-model="dear-echo"]').tap();
 
-    // Money added (eCash, from Add money): the dear model can be paid for now.
-    await page.goto(`${g.url}/v2/#/funds/add/ecash`);
+    // Money added (eCash, from Add money): the success panel's Ask now goes home, with the dear model
+    // chosen, and a question to it can be paid for now.
+    await openWay(page, 'ecash');
     await page.waitForSelector('[data-fund=ecash] #ecashToken');
     await page.fill('#ecashToken', await mintToken(MINT_A, 'usd', 300));
     await page.click('#ecashAdd');
     await page.waitForSelector('#fundsAdded');
+    await page.click('#fundsAsk');
+    await page.waitForSelector('[data-screen=home]');
+    expect(await chosen()).toBe('dear-echo');
+    await page.goto(`${g.url}/v2/#/type`);
+    await page.waitForSelector('[data-screen=type]');
+    await page.fill('#question', 'Hi');
+    await expect.poll(() => page.isVisible('#typeNotice')).toBe(false);
+    expect(await page.isDisabled('#sendBtn')).toBe(false);
     await openList(page);
     await page.waitForSelector('[data-model="dear-echo"]');
     await expect.poll(() => marked(page)).toEqual([]);
+    // An unmarked model closes the list, as before.
+    await page.locator('[data-model="mock-echo"]').tap();
+    await page.waitForSelector('[data-screen=home]');
     expect(errors).toEqual([]);
     await close();
   }, 90_000);

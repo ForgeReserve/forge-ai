@@ -112,8 +112,9 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
  * then holds only the models that can, under one line saying so, and the one picked goes on to the
  * question with the photo (photo.chosen()). With Private only on and no private model that can, it says
  * so and offers Standard's question (photo.standard()).
+ * addMoney: where a model with the Add money mark goes once chosen (Add money, app.js); without it, done.
  */
-export function modelScreen({ t, state, back, actions, format, reader, done = back, photo = null }) {
+export function modelScreen({ t, state, back, actions, format, reader, done = back, addMoney = done, photo = null }) {
   const S = state.S;
   const canSee = (m) => !!m?.capabilities?.vision;
   const photoLead = photo ? sayEl('p', { class: 'lead', id: 'modelPhotoLead' }, t('model.photoLead'), '', 'image') : null;
@@ -134,13 +135,14 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
     const free = isFreeModel(m);
     const p = free ? null : format.modelPrice(m);
     // The money on this phone cannot pay a short question to it (app.js needsMoney): dimmed, with the
-    // Add money mark. It can still be chosen; asking then leads to Add money, as before.
+    // Add money mark. Choosing it goes straight on to Add money (for a photo, on to the question, which
+    // offers Add money at once).
     const poor = !free && !!actions.needsMoney?.(m);
     // The card: the name and its tags. What it costs, who can read it and how fast it is: behind its info
     // button. Choosing a model closes the list.
     const card = el(
       'button',
-      { type: 'button', class: `model-card${on ? ' on' : ''}${poor ? ' poor' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', ...(poor ? { 'data-poor': '' } : {}), onclick: () => (actions.chooseModel(m.id), photo ? photo.chosen() : done()) },
+      { type: 'button', class: `model-card${on ? ' on' : ''}${poor ? ' poor' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', ...(poor ? { 'data-poor': '' } : {}), onclick: () => (actions.chooseModel(m.id), photo ? photo.chosen() : poor ? addMoney() : done()) },
       el(
         'span',
         { class: 'model-name' },

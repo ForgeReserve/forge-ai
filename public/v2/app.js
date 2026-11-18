@@ -2299,10 +2299,12 @@ function screenFor(name, params) {
       // A model chosen closes the list: home when it was opened from the More menu (or by its address),
       // else back where it was opened (an error's Choose a model, say). Home is gone back to, not pushed
       // over the list, so the phone's Back does not open the More menu again.
-      return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? backTo('home') : back()) });
+      // A model with the Add money mark goes on to Add money in place of the list, so Back from there goes
+      // where the list was opened from; once money is in, Ask now goes home with that model chosen.
+      return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? backTo('home') : back()), addMoney: () => nav('addFunds', {}, { replace: true }) });
     case 'modelPhoto':
       // With no photo waiting (the page was opened again on this address), the plain list.
-      if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home') });
+      if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home'), addMoney: () => nav('addFunds', {}, { replace: true }) });
       return modelScreen({ ...ctx, photo: photoChoice });
     case 'voice':
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
