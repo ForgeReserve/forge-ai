@@ -550,7 +550,8 @@ function invoiceStep(f) {
   const actions = el('div', { class: 'row center' }, el('button', { class: 'btn', type: 'button', onclick: () => copyText(f.request, 'Invoice copied') }, icon('copy'), 'Copy invoice'));
   const open = el('a', { class: 'btn primary big block', href: uri }, icon('external'), 'Open in wallet');
   const foot = el('div', { style: 'display:contents' }, open);
-  renderQR(box, uri.toUpperCase(), 'L');
+  // Lowercase, as the Open link: some wallets strip only a lowercase lightning: from a scanned code.
+  renderQR(box, uri.toLowerCase(), 'L');
   announce(`Invoice ready for ${fmtUnits(f.amount, f.unit)}. Scan the code or open your wallet.`);
   let cd = { stop() {} };
   const update = (x) => {

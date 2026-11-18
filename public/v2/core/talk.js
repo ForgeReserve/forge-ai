@@ -69,12 +69,15 @@ export function clock(ms) {
 /**
  * The level that counts as sound. ForgeSpeech's level runs 0 to 0.6: on Android (rmsdB + 2) / 20, about
  * -2 dB in silence and up to 10 dB for a voice; on the iPhone (dBFS + 50) / 60, about -50 dBFS in a quiet
- * room and -14 for a voice. 0.2 is 4 dB over Android's silence and 12 dB over a quiet room on the iPhone,
+ * room and -14 for a voice. 0.15 is 3 dB over Android's silence and 9 dB over a quiet room on the iPhone,
  * well under a voice near the phone.
  */
-export const SOUND_LEVEL = 0.2;
-/** How many readings at SOUND_LEVEL or over a press needs. A level comes at most every 80 ms, so this is about a quarter second of sound. */
-export const SOUND_READINGS = 3;
+export const SOUND_LEVEL = 0.15;
+/**
+ * How many readings at SOUND_LEVEL or over a press needs. A level comes at most every 80 ms, but a
+ * phone that failed this way sent only about two a second (measured, 2026-11-18), so two must do.
+ */
+export const SOUND_READINGS = 2;
 /** The shortest press that counts. A tap or a quick press is shorter; the presses that failed were 2 to 6 s. */
 export const SOUND_HOLD_MS = 1500;
 /** Presses in a row that heard nothing while the sound was there, before the engine hears this phone. */
