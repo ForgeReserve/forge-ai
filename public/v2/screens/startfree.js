@@ -6,7 +6,7 @@
 // already (at $0) there is no invite field: the one button chooses a free model.
 import { codeFrom } from '../core/join.js';
 import { el, icon, say, toast } from '../core/ui.js';
-import { listenButton, listenHeader } from './parts.js';
+import { askSheet, listenButton, listenHeader } from './parts.js';
 import { cardArt } from './wallet-art.js';
 
 /** What a refused invite code (or event pass) means, in words. */
@@ -187,38 +187,16 @@ export function startFree({ t, state, actions, wallet, reader = null }, { id, fi
  * (privacy.ask). Resolves true for Use Standard; false for Keep Private, a tap beside the sheet, or Back.
  */
 export function askStandard({ t, reader, free }) {
-  return new Promise((resolve) => {
-    const text = t(free ? 'startFree.ask' : 'privacy.ask');
-    const listen = listenButton({ t, reader, id: 'kindAskListen', pieces: () => [text, t('privacy.use'), t('privacy.keep')] });
-    const useBtn = el('button', { type: 'button', class: 'btn primary block', id: 'kindUse' }, icon('unlock', 22), el('span', { text: t('privacy.use') }));
-    const keepBtn = el('button', { type: 'button', class: 'btn block', id: 'kindKeep' }, icon('lock', 20), el('span', { text: t('privacy.keep') }));
-    const sheet = el(
-      'div',
-      { class: 'sf-sheet' },
-      el('span', { class: 'sf-grabber', 'aria-hidden': 'true' }),
-      el('div', { class: 'sf-ask-head' }, el('p', { class: 'sf-callout', id: 'kindAskText', 'data-approved': '' }, icon('eye', 24), el('span', { text })), listen.node),
-      el('div', { class: 'foot' }, useBtn, keepBtn),
-    );
-    const dlg = el('dialog', { class: 'kind-ask', id: 'kindAsk', 'aria-labelledby': 'kindAskText' }, sheet);
-    const close = (yes) => {
-      listen.destroy();
-      dlg.close();
-      dlg.remove();
-      document.getElementById('privacyPill')?.focus();
-      resolve(yes);
-    };
-    useBtn.addEventListener('click', () => close(true));
-    keepBtn.addEventListener('click', () => close(false));
-    // A tap on the dim layer beside the sheet, or Back: nothing changes.
-    dlg.addEventListener('click', (e) => e.target === dlg && close(false));
-    dlg.addEventListener('cancel', (e) => {
-      e.preventDefault();
-      close(false);
-    });
-    document.body.append(dlg);
-    dlg.showModal();
-    // The safe answer has the focus: Enter alone never leaves Private.
-    keepBtn.focus();
+  return askSheet({
+    t,
+    reader,
+    id: 'kindAsk',
+    text: t(free ? 'startFree.ask' : 'privacy.ask'),
+    ico: 'eye',
+    approved: true,
+    yes: { id: 'kindUse', ico: 'unlock', text: t('privacy.use') },
+    no: { id: 'kindKeep', ico: 'lock', text: t('privacy.keep') },
+    back: () => document.getElementById('privacyPill'),
   });
 }
 

@@ -63,8 +63,9 @@ export function clock(ms) {
 // ---------------------------------------------------------------- a phone recogniser that hears nothing
 //
 // Owner, 2026-11-18: on a Galaxy A16 the phone's own recogniser opened the microphone and its level
-// showed sound, yet every press ended with no-speech. When that happens twice in a row, the engine hears
-// this phone from then on, as it hears a phone with no recogniser (core/state.js pickVoiceIn, phoneOff).
+// showed sound, yet every press ended with no-speech. When that happens twice in a row, the app asks
+// whether the voice may go online to become words (app.js askVoiceOnline). Privacy is the default: only
+// the person's yes switches this phone to the engine (phoneOff, core/state.js pickVoiceIn).
 
 /**
  * The level that counts as sound. ForgeSpeech's level runs 0 to 0.6: on Android (rmsdB + 2) / 20, about
@@ -81,7 +82,7 @@ export const SOUND_LEVEL = 0.1;
 export const SOUND_READINGS = 1;
 /** The shortest press that counts. A tap or a quick press is shorter; the presses that failed were 2 to 6 s. */
 export const SOUND_HOLD_MS = 1500;
-/** Presses in a row that heard nothing while the sound was there, before the engine hears this phone. */
+/** Presses in a row that heard nothing while the sound was there, before the app asks to go online. */
 export const PHONE_MISSES = 2;
 
 /**
@@ -102,5 +103,19 @@ export function nextMisses(misses, session) {
   return r === 'heard' ? 0 : r === 'missed' ? (misses ?? 0) + 1 : (misses ?? 0);
 }
 
-/** True when these presses, in order, end PHONE_MISSES or more misses in a row. */
-export const switchesToEngine = (sessions) => sessions.reduce(nextMisses, 0) >= PHONE_MISSES;
+/**
+ * After a press on the phone's recogniser: the misses in a row to keep, and whether to ask now if the
+ * voice may go online. It asks when this press makes PHONE_MISSES in a row, another way can hear this
+ * phone (otherWay: pickVoiceIn with phoneOff gives one, under the Private only rule), and the person was
+ * never asked (phoneAsked) and did not go online already (phoneOff). Once asked, nothing is counted.
+ * Nothing is switched here: only the person's yes sets phoneOff.
+ */
+export function afterPhonePress(settings, session, otherWay) {
+  if (settings?.phoneAsked || settings?.phoneOff) return { misses: settings.phoneMisses ?? 0, ask: false };
+  const misses = nextMisses(settings?.phoneMisses, session);
+  const ask = misses >= PHONE_MISSES && !!otherWay;
+  return { misses: ask ? 0 : misses, ask };
+}
+
+/** True when these presses, in order, end PHONE_MISSES or more misses in a row (where the app would ask). */
+export const asksToGoOnline = (sessions) => sessions.reduce(nextMisses, 0) >= PHONE_MISSES;

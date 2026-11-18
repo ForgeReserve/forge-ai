@@ -124,12 +124,21 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
     // A free model (core/price.js isFreeModel) shows Free in place of a price.
     const free = isFreeModel(m);
     const p = free ? null : format.modelPrice(m);
+    // The money on this phone cannot pay a short question to it (app.js needsMoney): dimmed, with the
+    // Add money mark. It can still be chosen; asking then leads to Add money, as before.
+    const poor = !free && !!actions.needsMoney?.(m);
     // The card: the name and its tags. What it costs, who can read it and how fast it is: behind its info
     // button. Choosing a model closes the list.
     const card = el(
       'button',
-      { type: 'button', class: `model-card${on ? ' on' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', onclick: () => (actions.chooseModel(m.id), done()) },
-      el('span', { class: 'model-name' }, el('b', { text: m.name ?? m.id }), on ? el('span', { class: 'model-on', role: 'img', 'aria-label': t('model.chosenMark') }, icon('check', 18, 3)) : null),
+      { type: 'button', class: `model-card${on ? ' on' : ''}${poor ? ' poor' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', ...(poor ? { 'data-poor': '' } : {}), onclick: () => (actions.chooseModel(m.id), done()) },
+      el(
+        'span',
+        { class: 'model-name' },
+        el('b', { text: m.name ?? m.id }),
+        poor ? el('span', { class: 'model-poor', role: 'img', 'aria-label': t('model.needsMoney') }, icon('addMoney', 20)) : null,
+        on ? el('span', { class: 'model-on', role: 'img', 'aria-label': t('model.chosenMark') }, icon('check', 18, 3)) : null,
+      ),
       el(
         'span',
         { class: 'tags' },
@@ -211,8 +220,8 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     );
   const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
-  // The phone's recogniser heard nothing twice while the sound was there, so the engine hears this phone
-  // (core/talk.js); On this phone above takes it back.
+  // The person chose Go online after the phone's recogniser heard nothing twice while the sound was there
+  // (app.js askVoiceOnline), so the engine hears this phone; On this phone above takes it back.
   const phoneOff = sayEl('p', { class: 'hint', id: 'voicePhoneOff', hidden: true }, t('voice.in.phoneOff'), '', 'ear');
   const naturalHead = el('h2', { class: 'caps', id: 'naturalVoiceHead', text: t('voice.natural'), hidden: true });
   const naturalList = el('div', { class: 'model-list', role: 'radiogroup', id: 'naturalVoices', 'aria-labelledby': 'naturalVoiceHead', hidden: true });

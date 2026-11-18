@@ -373,9 +373,18 @@ describe('hold to talk', () => {
 // which the plugin ends with no-speech. A test can change how the recogniser behaves between presses
 // with window.__speechMode: 'words' (the default), 'silent', or 'deaf' (the level shows sound every
 // 100 ms while held, and the press still ends with no-speech, as on the Galaxy A16). mic: Chrome's
-// microphone is allowed too, for the engine's way.
-async function appPhone({ onDevice, asr = false, ios = false, speech = true, silent = false, mic = false }: { onDevice: boolean; asr?: boolean; ios?: boolean; speech?: boolean; silent?: boolean; mic?: boolean }) {
+// microphone is allowed too, for the engine's way. privateOnly: Private only stays on (no model is picked).
+// standardAudio: the engine lists no private speech to text model.
+async function appPhone({ onDevice, asr = false, ios = false, speech = true, silent = false, mic = false, privateOnly = false, standardAudio = false }: { onDevice: boolean; asr?: boolean; ios?: boolean; speech?: boolean; silent?: boolean; mic?: boolean; privateOnly?: boolean; standardAudio?: boolean }) {
   const ctx = await browser.newContext({ ...PHONE });
+  // An engine whose only speech to text model is a standard one.
+  if (standardAudio)
+    await ctx.route('**/v1/models', async (route) => {
+      const res = await route.fetch();
+      const body: any = await res.json();
+      body.audio = body.audio.filter((m: any) => m.tier !== 'enclave');
+      await route.fulfill({ response: res, json: body });
+    });
   await pastFirstRun(ctx);
   if (mic) await ctx.grantPermissions(['microphone'], { origin: g.url });
   await ctx.addInitScript(([ready, bundled, iphone, hasSpeech, quiet]: boolean[]) => {
@@ -444,10 +453,12 @@ async function appPhone({ onDevice, asr = false, ios = false, speech = true, sil
   await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
   await page.waitForSelector('[data-screen=home]');
   await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), await fundedKey());
-  await page.goto(`${g.url}/v2/#/more/model`);
-  await page.waitForSelector('[data-screen=model]');
-  await page.click('#privateOnly');
-  await page.click('[data-model="mock-echo"]');
+  if (!privateOnly) {
+    await page.goto(`${g.url}/v2/#/more/model`);
+    await page.waitForSelector('[data-screen=model]');
+    await page.click('#privateOnly');
+    await page.click('[data-model="mock-echo"]');
+  }
   const calls = () => page.evaluate(() => (window as any).__native.calls as string[]);
   return { ctx, page, errors, outside, transcriptions, calls };
 }
@@ -523,38 +534,86 @@ describe('hold to talk on this phone (the Android app)', () => {
     await ctx.close();
   }, 90_000);
 
-  // Owner, 2026-11-18: a recogniser that opens the microphone, shows sound, and still hears nothing.
-  it('two presses heard as nothing while the level shows sound switch this phone to the engine, remembered and shown in More, Voice, and switched back there', async () => {
+  // Owner, 2026-11-18: a recogniser that opens the microphone, shows sound, and still hears nothing. The
+  // app asks before the voice goes online; privacy is the default.
+  /** Goes home and holds the talk button for `ms`; the answer screen then says what was heard. */
+  const homeAndHold = async (page: Page, ms: number) => {
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toMatch(/^\$\d/);
+    await hold(page, '#talkBtn', ms);
+    await page.waitForSelector('[data-screen=answer]');
+  };
+  const nothing = 'Nothing was heard. Hold the button and speak.';
+  /** A press the phone hears as nothing, and that the app asked nothing after it. */
+  const missNoAsk = async (page: Page) => {
+    await homeAndHold(page, 1800);
+    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe(nothing);
+    // The question opens in the same turn as the line (core/talkctl.js), so it would be here by now.
+    expect(await page.locator('#voiceAsk').count()).toBe(0);
+  };
+  /** Two misses: the first asks nothing, the second opens the question over "Nothing was heard." */
+  const twoMisses = async (page: Page) => {
+    await missNoAsk(page);
+    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(1);
+    await homeAndHold(page, 1800);
+    await page.waitForSelector('#voiceAsk[open]');
+    expect(await page.textContent('#answerErrorText')).toBe(nothing);
+    expect(await page.textContent('#voiceAskText')).toBe('This phone could not hear you. Your voice can go online to become words.');
+    expect(await page.locator('#voiceAskText svg').count()).toBe(1);
+    expect(await page.textContent('#voiceGo')).toBe('Go online');
+    expect(await page.textContent('#voiceKeep')).toBe('Keep on this phone');
+    // The safe answer has the focus; nothing switched yet.
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('voiceKeep');
+    expect((await settings(page))?.phoneOff).toBe(false);
+  };
+  const speechCalls = async (calls: () => Promise<string[]>) => (await calls()).filter((c) => c.startsWith('ForgeSpeech.'));
+
+  it('two presses heard as nothing ask first; Keep on this phone keeps the recogniser and is never asked again', async () => {
     const { ctx, page, errors, transcriptions, calls } = await appPhone({ onDevice: true, mic: true });
     await page.goto(`${g.url}/v2/#/more/voice`);
     await page.waitForSelector('#voiceIn-phone');
     await page.click('#voiceOut-off');
     await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
-    const homeAndHold = async (ms: number) => {
-      await page.goto(`${g.url}/v2/#/`);
-      await page.waitForSelector('[data-screen=home]');
-      await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toBe('$3.00');
-      await hold(page, '#talkBtn', ms);
-    };
-    const speechCalls = async () => (await calls()).filter((c) => c.startsWith('ForgeSpeech.'));
-
-    // The first: nothing was heard, as before.
-    await homeAndHold(1800);
-    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe('Nothing was heard. Hold the button and speak.');
-    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(1);
-    // The second: the phone goes to the engine, and the person is asked to say it again.
-    await homeAndHold(1800);
-    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe('Nothing was heard. This phone did not hear you twice. Next time, your voice goes online to become words.');
-    expect(await page.textContent('#answerError')).toContain('Hold to say it again.');
-    await expect.poll(() => settings(page).then((x) => x?.phoneOff)).toBe(true);
+    await twoMisses(page);
+    // Turning the voice into words online is paid: the price, as the talk line says prices.
+    expect(await page.textContent('#voiceAskPrice')).toMatch(/^Price(Under|Up to) \$\d+\.\d\d$/);
+    // The engine's speech to text model is a private one here: no Not private tag.
+    expect(await page.locator('#voiceAsk .tag').count()).toBe(0);
+    await page.locator('#voiceKeep').tap();
+    await page.waitForSelector('#voiceAsk', { state: 'detached' });
+    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneAsked])).toEqual([false, true]);
+    // Later misses ask nothing, and the phone keeps hearing it.
+    await missNoAsk(page);
+    await missNoAsk(page);
+    expect((await settings(page))?.phoneOff).toBe(false);
     expect(transcriptions).toEqual([]);
-    expect(await speechCalls()).toEqual(['ForgeSpeech.available', 'ForgeSpeech.start', 'ForgeSpeech.stop', 'ForgeSpeech.start', 'ForgeSpeech.stop']);
+    expect(await speechCalls(calls)).toEqual(['ForgeSpeech.available', ...Array(4).fill(['ForgeSpeech.start', 'ForgeSpeech.stop']).flat()]);
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    expect(await page.isVisible('#voicePhoneOff')).toBe(false);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
-    // Remembered: after a reload, the third press records with the microphone and the engine hears it.
+  it('Go online switches it: the next hold is heard by the engine; More, Voice shows it and On this phone takes it back without asking again', async () => {
+    const { ctx, page, errors, transcriptions, calls } = await appPhone({ onDevice: true, mic: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    await page.click('#voiceOut-off');
+    await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
+    await twoMisses(page);
+    await page.locator('#voiceGo').tap();
+    await page.waitForSelector('#voiceAsk', { state: 'detached' });
+    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneAsked])).toEqual([true, true]);
+    expect(transcriptions).toEqual([]);
+
+    // Remembered: after a reload, the next press records with the microphone and the engine hears it.
     await page.reload();
     await page.goto(`${g.url}/v2/#/`);
     await page.waitForSelector('[data-screen=home]');
-    await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toBe('$3.00');
+    await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toMatch(/^\$\d/);
     const box = (await page.locator('#talkBtn').boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
@@ -566,26 +625,81 @@ describe('hold to talk on this phone (the Android app)', () => {
     await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
     expect(transcriptions).toHaveLength(1);
     // The phone's recogniser was not started for it (the calls are counted from the reload).
-    expect(await speechCalls()).toEqual(['ForgeSpeech.available']);
+    expect(await speechCalls(calls)).toEqual(['ForgeSpeech.available']);
 
-    // More, Voice: Online is the way in use, with a line that says why; On this phone takes it back.
+    // More, Voice: Online is the way in use, with a line that says the person chose it.
     await page.goto(`${g.url}/v2/#/more/voice`);
     await page.waitForSelector('#voiceIn-phone');
     expect(await page.getAttribute('#voiceIn-engine', 'aria-checked')).toBe('true');
     expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('false');
     expect(await page.isVisible('#voicePhoneOff')).toBe(true);
-    expect(await page.textContent('#voicePhoneOff')).toBe('Phone did not hear you. It heard nothing twice, so your voice goes online now to become words. Tap On this phone to try the phone again.');
-    // Its picture first (an ear), as every line here; the rest of the words behind its info button.
+    expect(await page.textContent('#voicePhoneOff')).toBe('You chose to go online. This phone could not hear you, so your voice goes online to become words. Tap On this phone to use the phone again.');
     expect(await page.locator('#voicePhoneOff svg').count()).toBeGreaterThan(0);
     await page.click('#voiceIn-phone');
     await expect.poll(() => page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
     expect(await page.isVisible('#voicePhoneOff')).toBe(false);
-    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneMisses])).toEqual([false, 0]);
+    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneMisses, x?.phoneAsked])).toEqual([false, 0, true]);
+    // Back on the phone after the switch: misses ask nothing again (the reload set the stand-in back to words).
+    await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
+    await missNoAsk(page);
+    await missNoAsk(page);
+    expect(transcriptions).toHaveLength(1);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);
 
-  it('short presses, silent holds and a press with words between never switch it', async () => {
+  it('a phone the previous build switched on its own hears on the phone again and is asked; Back keeps it on the phone', async () => {
+    const { ctx, page, errors, transcriptions } = await appPhone({ onDevice: true, mic: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    await page.click('#voiceOut-off');
+    await expect.poll(() => settings(page).then((x) => x?.voiceOut)).toBe('off');
+    // What the previous build saved after its automatic switch: phoneOff, and no record of a question.
+    await page.evaluate(async () => {
+      const db: IDBDatabase = await new Promise((r) => (indexedDB.open('forge2').onsuccess = (e: any) => r(e.target.result)));
+      const read = db.transaction('kv').objectStore('kv').get('settings');
+      const saved: any = await new Promise((r) => (read.onsuccess = () => r(read.result)));
+      delete saved.phoneAsked;
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put({ ...saved, phoneOff: true, phoneMisses: 0 }, 'settings');
+      await new Promise((r) => (tx.oncomplete = r));
+      db.close();
+    });
+    await page.reload();
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    expect(await page.isVisible('#voicePhoneOff')).toBe(false);
+    await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
+    await twoMisses(page);
+    // Back (Escape here) is the safe answer, as a tap beside the sheet is.
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#voiceAsk', { state: 'detached' });
+    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneAsked])).toEqual([false, true]);
+    await missNoAsk(page);
+    expect(transcriptions).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('with Private only on and no private speech to text model, two misses ask nothing and the phone keeps listening', async () => {
+    const { ctx, page, errors, transcriptions } = await appPhone({ onDevice: true, mic: true, privateOnly: true, standardAudio: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    await page.click('#voiceOut-off');
+    await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
+    await missNoAsk(page);
+    await missNoAsk(page);
+    await expect.poll(() => settings(page).then((x) => [x?.phoneMisses, x?.phoneOff, x?.phoneAsked])).toEqual([2, false, false]);
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    expect(transcriptions).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('short presses, silent holds and a press with words between never ask', async () => {
     const { ctx, page, errors, transcriptions } = await appPhone({ onDevice: true, mic: true });
     await page.goto(`${g.url}/v2/#/more/voice`);
     await page.waitForSelector('#voiceIn-phone');

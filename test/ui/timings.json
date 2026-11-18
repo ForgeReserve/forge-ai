@@ -22,6 +22,7 @@
     "test/ui/literacy.ui.test.ts": 58.5,
     "test/ui/mic-room.ui.test.ts": 15,
     "test/ui/midnight.ui.test.ts": 43.1,
+    "test/ui/model-money.ui.test.ts": 2,
     "test/ui/note.ui.test.ts": 20.4,
     "test/ui/phonon-lab.ui.test.ts": 179.9,
     "test/ui/phonon.ui.test.ts": 111.1,
@@ -32,6 +33,6 @@
     "test/ui/talk-still.ui.test.ts": 20,
     "test/ui/two-balances.ui.test.ts": 6,
     "test/ui/v2.ui.test.ts": 51.8,
-    "test/ui/voice.ui.test.ts": 44
+    "test/ui/voice.ui.test.ts": 78.3
   }
 }

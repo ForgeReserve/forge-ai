@@ -21,16 +21,16 @@ import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
 import { SHARE_CACHE } from './core/photo.js';
-import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion } from './core/price.js';
+import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion, voicePriceLine } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
 import { watchViewport } from './core/viewport.js';
-import { nextMisses, PHONE_MISSES } from './core/talk.js';
+import { afterPhonePress } from './core/talk.js';
 import { createTalk } from './core/talkctl.js';
 import { createClips } from './core/clips.js';
 import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND, transcribeMsub } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
-import { asideKeys, homeTotal, key2Name, keysByUnit, landsIn, newKey, newKeysName, payUnit, prepareFunding, questionsOver, UNITS, unitsPending, withAside, withKey, withoutKey } from './core/balances.js';
+import { asideKeys, cannotPay, homeTotal, key2Name, keysByUnit, landsIn, newKey, newKeysName, payUnit, prepareFunding, questionsOver, UNITS, unitsPending, withAside, withKey, withoutKey } from './core/balances.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
@@ -44,6 +44,7 @@ import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
 import { fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
+import { askSheet } from './screens/parts.js';
 import { askStandard, inviteError, startFreeScreen } from './screens/startfree.js';
 import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
@@ -996,14 +997,18 @@ const chatBody = (model, api, maxOut, search) => ({ model: model.id, messages: a
 /**
  * The price of the next question with these words, and whether it can be paid. Priced in the unit of the
  * balance that pays it (payerFor: dollars first, sats when the dollars are short), or in `unit` when given.
+ * model: the question to that model as if it were chosen now (the model list), which starts a new
+ * conversation when it is not the one in use (modelChanged).
  */
-function estimateFor(text, { voice = false, unit: asked = null } = {}) {
-  const model = pickModel(S.models, S.settings);
+function estimateFor(text, { voice = false, unit: asked = null, model: chosen = null } = {}) {
+  const current = pickModel(S.models, S.settings);
+  const model = chosen ?? current;
   if (!model) return { costMsub: null, unit: asked ?? homeUnit() };
   const vision = !!model.capabilities?.vision;
   const next = pendingMessage(text, S.pending, { vision });
   if (voice) next.meta = { voice: true };
-  const msgs = [...S.conv.messages.filter((m) => !m.meta?.error), next];
+  const before = model.id === current?.id ? S.conv.messages.filter((m) => !m.meta?.error) : [];
+  const msgs = [...before, next];
   const systemPrompt = promptFor(msgs);
   const api = apiMessages(msgs, { systemPrompt, vision });
   const bytes = new TextEncoder().encode(JSON.stringify(api)).length;
@@ -1025,6 +1030,9 @@ function estimateFor(text, { voice = false, unit: asked = null } = {}) {
     // One balance pays a question in full, so it is short when neither covers it alone. A free model
     // holds nothing, so it is never short.
     short: !modelFree && !fr.use && anyKey() && payer.costMsub != null && money && !payer.pays,
+    // Not enough money for even this question, with no paid balance or not enough in either (core/balances.js
+    // cannotPay): what the model list marks.
+    needsMoney: cannotPay({ free: modelFree, freeUse: fr.use, paidMsub: anyKey() ? (total()?.balanceMsub ?? null) : 0, available: { usd: availOf('usd'), sat: availOf('sat') }, hold: { usd: holdIn('usd'), sat: holdIn('sat') }, btcUsd: S.btcUsd, home: homeUnit() }),
     unit,
     // Paid with a free question: the price line reads "Free, 2 of 3 left". A free model: "Free".
     free: modelFree ? true : fr.use ? { left: fr.left, total: fr.total } : null,
@@ -1533,22 +1541,57 @@ const talk = createTalk({
 });
 
 /**
- * Counts a press heard by the phone's own recogniser (core/talk.js). After PHONE_MISSES in a row that
- * heard nothing while the sound was there, the engine hears this phone from now on (phoneOff, kept in the
- * settings; More, Voice shows it and On this phone takes it back). Only when another way can hear it
- * here, under the same Private only rule as a phone with no recogniser: otherwise the phone keeps
- * listening. Returns true when this press made the switch.
+ * Counts a press heard by the phone's own recogniser (core/talk.js afterPhonePress). After PHONE_MISSES
+ * in a row that heard nothing while the sound was there, the app asks once whether the voice may go
+ * online to become words (askVoiceOnline). Privacy is the default (owner, 2026-11-18): nothing switches
+ * on its own. Asked only when another way can hear it here, under the same Private only rule as a phone
+ * with no recogniser: otherwise the phone keeps listening and nothing is asked.
  */
 function notePhone(session) {
   const was = S.settings.phoneMisses ?? 0;
-  const misses = nextMisses(was, session);
-  const off = misses >= PHONE_MISSES && pickVoiceIn(voiceMods('voice-in'), { ...S.settings, phoneOff: true })?.id !== 'phone';
-  if (misses === was && !off) return false;
-  S.settings.phoneMisses = off ? 0 : misses;
-  if (off) S.settings.phoneOff = true;
+  const other = pickVoiceIn(voiceMods('voice-in'), { ...S.settings, phoneOff: true });
+  const { misses, ask } = afterPhonePress(S.settings, session, other && other.id !== 'phone' ? other : null);
+  if (misses === was && !ask) return;
+  S.settings.phoneMisses = misses;
+  if (ask) S.settings.phoneAsked = true;
   saveSettings();
-  if (off) store.set({});
-  return off;
+  if (ask) askVoiceOnline(other, (session.holdMs ?? 0) / 1000);
+}
+
+/**
+ * The question after the phone heard nothing twice (askSheet, as the Private chip's): the voice can go
+ * online to become words. Go online sets phoneOff (More, Voice shows it and On this phone takes it back);
+ * Keep on this phone, or the sheet dismissed, keeps the phone's recogniser. Either way it is not asked
+ * again (phoneAsked, set before it opens). It names who could hear it when that way is a standard model,
+ * and the price as the talk line shows it, for a recording as long as this press: what turning it into
+ * words costs, or the free voice questions left today.
+ */
+async function askVoiceOnline(way, seconds) {
+  const extra = [];
+  if (!way.private()) extra.push(ui.el('span', { class: 'tags' }, ui.el('span', { class: 'tag warn' }, ui.icon('eye', 14), ui.el('span', { text: t('voice.tag.provider') }))));
+  const p = onlinePrice(way, seconds);
+  if (p) extra.push(ui.el('p', { class: 'price-line', id: 'voiceAskPrice' }, ui.el('span', { class: 'cap', text: t('price.label') }), ui.el('span', { class: 'amount', text: t(p.key, p) })));
+  const yes = await askSheet({
+    t,
+    reader,
+    id: 'voiceAsk',
+    text: t('voiceAsk.text'),
+    ico: 'ear',
+    extra,
+    yes: { id: 'voiceGo', ico: 'globe', text: t('voiceAsk.go') },
+    no: { id: 'voiceKeep', ico: 'phone', text: t('voiceAsk.keep') },
+    back: () => document.getElementById('replyBtn') ?? document.getElementById('talkBtn'),
+  });
+  if (!yes) return;
+  Object.assign(S.settings, { phoneOff: true, phoneMisses: 0 });
+  saveSettings();
+  store.set({});
+}
+
+/** The price line of a recording of `seconds` heard by `way` (the engine), in the talk line's unit (talkView). */
+function onlinePrice(way, seconds) {
+  const free = freeVoiceNow(way, seconds).use;
+  return voicePriceLine(free ? 0 : way.price(seconds), priceUnit(pickModel(S.models, S.settings)), free ? S.freeVoice : null);
 }
 
 /**
@@ -1657,7 +1700,7 @@ const actions = {
   setVoiceIn: (id) => {
     S.settings.voiceIn = id;
     S.settings.voiceInPicked = true;
-    // On this phone, picked again after the phone heard nothing: it listens again, with a fresh count.
+    // On this phone, picked again after going online: it listens again. Not asked again (phoneAsked stays).
     if (id === 'phone') Object.assign(S.settings, { phoneOff: false, phoneMisses: 0 });
     saveSettings();
     store.set({});
@@ -1686,6 +1729,8 @@ const actions = {
   attachPhoto,
   removePending,
   estimate: estimateFor,
+  /** True when a short question to model m would stop for want of money once m is chosen (Choose a model's mark). */
+  needsMoney: (m) => !!estimateFor('', { model: m }).needsMoney,
   /** Search the web for the next question (off again once it is sent). */
   setSearch: (on) => {
     S.search = !!on;
