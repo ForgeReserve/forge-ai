@@ -255,6 +255,10 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .qr-block { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .qr { width: min(280px, 100%); aspect-ratio: 1; background: #FFFFFF; border-radius: 16px; padding: 10px; align-self: center; }
 .qr svg { width: 100%; height: 100%; display: block; }
+/* A payment request's code (modules/fund/kit.js requestQR) fills the card up to 340 px: a lowercase
+   Lightning invoice is a denser code, and its modules stay over 3 px at 360 px wide. The white padding
+   and the code's own 2-module margin keep a quiet zone of at least 4 modules. */
+.qr-block .qr { width: min(340px, 100%); padding: 14px; }
 .keyline { text-align: center; }
 .seg { display: flex; gap: 4px; }
 .seg button { flex: 1; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }

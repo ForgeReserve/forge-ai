@@ -412,6 +412,7 @@
 <li><strong>Id:</strong> <code>forge.fund.lightning</code>, known in the app as <code>lightning</code>.</li>
 <li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/lightning"><code>public/v2/modules/fund/lightning/</code></a></li>
 <li><strong>Needs:</strong> <code>engine.fundLightning</code> for <a href="/docs/#post-v1-wallet-fund-lightning"><code>POST /v1/wallet/fund/lightning</code></a>; <code>engine.funding</code> for <a href="/docs/#get-v1-wallet-fund-id"><code>GET /v1/wallet/fund/{id}</code></a>, every 2 seconds until it is paid; <code>qr</code> for the invoice.</li>
+<li><strong>The code:</strong> <code>lightning:&lt;invoice&gt;</code> in lowercase, the same string as Open in wallet (<code>qrPayload</code> in <code>modules/fund/kit.js</code>). BOLT 11 suggests upper case for a smaller code, but Primal on the iPhone strips only a lowercase <code>lightning:</code> and reads <code>LIGHTNING:LNBC...</code> as an invalid checksum. The lowercase code is denser (65 modules for a 250-character invoice), so it is drawn up to 340 px wide: over 4 px a module at 360 px.</li>
 <li><strong>Works on:</strong> the website and both apps, while the engine has Lightning.</li>
 <li><strong>Costs:</strong> the invoice&#39;s amount, between the engine&#39;s least and most.</li>
 <li><strong>Private:</strong> no. The person&#39;s wallet sees a Lightning payment, and so does an exchange that knows their name.</li>
