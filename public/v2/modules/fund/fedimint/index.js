@@ -11,6 +11,7 @@
 // credited it or the till gave the card its money back. A failed payment is listed with Get it back.
 import { inviteField, poll } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
+import { wayHero } from '../../../screens/wallet-art.js';
 import { tillLabel } from '../../../core/till.js';
 import { showOffer } from '../../../core/getapp.js';
 
@@ -199,7 +200,8 @@ export function create(inputs) {
             msg,
           ),
         );
-        foot.replaceChildren(btn({ class: 'btn block', id: 'fedUseTill', onclick: () => use(paste.value) }, 'check', t('fund.fedimint.useTill')));
+        // With no camera to scan the code, using the pasted one is the one lit button.
+        foot.replaceChildren(btn({ class: scanBtn ? 'btn block' : 'btn primary block', id: 'fedUseTill', onclick: () => use(paste.value) }, 'check', t('fund.fedimint.useTill')));
         return { stop: stopScan };
       };
 
@@ -294,9 +296,11 @@ export function create(inputs) {
 
       /**
        * Settles one payment without the card: the engine first (its funds are the end of the story),
-       * then the till. Returns the record as it is now, or null once it is done.
+       * then the till. Returns the record as it is now, or null once it is done. quiet: the screen goes
+       * to Funds next, whose success panel says what was added (lastAdded), so no toast here.
        */
-      const settle = async (id) => {
+      let lastAdded = null;
+      const settle = async (id, { quiet = false } = {}) => {
         let rec = pays.get(id);
         if (!rec) return null;
         const key = wallet.key();
@@ -306,7 +310,10 @@ export function create(inputs) {
             rec = pays.credited(id);
             await wallet.refresh();
             if (!rec) {
-              ui.toast(t('fund.fedimint.added', { amount: format.units(f.body.credited ?? f.body.amount, f.body.unit) }));
+              const amount = format.units(f.body.credited ?? f.body.amount, f.body.unit);
+              const words = t('fund.fedimint.added', { amount });
+              if (quiet) lastAdded = { words, amount };
+              else ui.toast(words);
               return null;
             }
           }
@@ -334,8 +341,14 @@ export function create(inputs) {
         const invite = inviteField(inputs);
         const input = ui.el('input', { id: 'fedAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('fund.fedimint.amountLabel') });
         const seg = ui.el('div', { class: 'seg', role: 'group', 'aria-label': t('fund.fedimint.amountLabel') });
+        // The unit sits in the field, as on Lightning: "$" before an amount in dollars, "sat" after one in sats.
+        const before = ui.el('span', { class: 'amount-unit before', 'aria-hidden': 'true', text: '$' });
+        const after = ui.el('span', { class: 'amount-unit after', 'aria-hidden': 'true', text: 'sat' });
+        const field = ui.el('div', { class: 'amount-field' }, before, input, after);
         const setUnit = (u) => {
           unit = u;
+          before.hidden = u !== 'usd';
+          after.hidden = u === 'usd';
           input.value = format.plain(u === 'usd' ? 500 : 5000, u);
           input.inputMode = u === 'usd' ? 'decimal' : 'numeric';
           for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.unit === u));
@@ -363,7 +376,7 @@ export function create(inputs) {
             waitingList(),
             invite.node,
             ui.el('label', { for: 'fedAmount', class: 'label', text: t('fund.fedimint.amount') }),
-            input,
+            field,
             units.length > 1 ? seg : null,
             msg,
             tillBox(),
@@ -473,14 +486,15 @@ export function create(inputs) {
 
       const working = (text, amountText = null) => {
         msg.set('');
-        body.replaceChildren(...kids(art(amountText), ui.el('p', { class: 'status-line', id: 'fedStatus', role: 'status', text })));
+        body.replaceChildren(...kids(art(amountText), ui.sayEl('p', { class: 'status-line', id: 'fedStatus', role: 'status' }, text, 'wait')));
         foot.replaceChildren();
       };
 
       /** Waits for the card, or goes on with the one already on the phone. */
       const holdFor = (w) => {
         want = w;
-        body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'card-hold', id: 'fedHold' }, t('fund.fedimint.hold')), ui.sayEl('p', { class: 'note' }, t('fund.fedimint.keep')), msg));
+        // Hold the card to the phone: the tap, as Add money's card draws it.
+        body.replaceChildren(...kids(wayHero('fedimint', null), ui.sayEl('p', { class: 'card-hold', id: 'fedHold' }, t('fund.fedimint.hold')), ui.sayEl('p', { class: 'note' }, t('fund.fedimint.keep')), msg));
         foot.replaceChildren();
         if (current) run();
       };
@@ -578,9 +592,9 @@ export function create(inputs) {
         working(t('fund.fedimint.undecided'), amountOf(rec));
         pollers.push(
           poll(async () => {
-            const now = await settle(rec.id);
+            const now = await settle(rec.id, { quiet: true });
             if (!now) {
-              done();
+              done(lastAdded ?? undefined);
               return true;
             }
             if (now.state === 'paid') {
@@ -601,9 +615,9 @@ export function create(inputs) {
         working(t('fund.fedimint.adding'), amountOf(rec));
         pollers.push(
           poll(async () => {
-            const now = await settle(rec.id);
+            const now = await settle(rec.id, { quiet: true });
             if (!now) {
-              done();
+              done(lastAdded ?? undefined);
               return true;
             }
             return false;

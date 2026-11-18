@@ -9,7 +9,7 @@ export function create(inputs) {
     group: 'depends',
     icon: 'chain',
     available: (methods) => !!methods?.onchain?.enabled,
-    view({ done, open }) {
+    view({ done, added, open }) {
       const O = wallet.methods()?.onchain ?? {};
       // A dollar balance cannot take a deposit in sats: say so, with the one way forward the engine has.
       if (wallet.key() && wallet.unit() && wallet.unit() !== 'sat') {
@@ -24,8 +24,8 @@ export function create(inputs) {
         { class: 'scroll fund-body' },
         invite.node,
         ui.sayEl('p', {}, t('fund.onchain.what')),
-        ui.sayEl('p', { class: 'note' }, t('fund.onchain.min', { amount: format.units(O.min_amount ?? 0, 'sat') })),
-        ui.sayEl('p', { class: 'note' }, t('fund.onchain.confirmations', { count: O.confirmations || 3 })),
+        ui.sayEl('p', { class: 'note' }, t('fund.onchain.min', { amount: format.units(O.min_amount ?? 0, 'sat') }), '', 'coins'),
+        ui.sayEl('p', { class: 'note' }, t('fund.onchain.confirmations', { count: O.confirmations || 3 }), '', 'clock'),
         msg,
       );
       const foot = ui.el('div', { class: 'foot' }, go);
@@ -40,19 +40,23 @@ export function create(inputs) {
           if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           const f = r.body;
           const need = f.onchain?.confirmations_required ?? O.confirmations ?? 3;
-          const st = ui.sayEl('p', { class: 'status-line', role: 'status' }, t('fund.onchain.watching'));
+          const st = ui.sayEl('p', { class: 'status-line', role: 'status' }, t('fund.onchain.watching'), 'wait');
           let last = f.credited ?? 0;
-          body.replaceChildren(requestQR(inputs, { uri: 'bitcoin:' + f.request, copyText: f.request, copyLabel: t('fund.onchain.copy'), qrLabel: t('fund.onchain.qr') }), ui.sayEl('p', { class: 'mono keyline' }, f.request.match(/.{1,4}/g).join(' ')), st, ui.sayEl('p', { class: 'note' }, t('fund.onchain.close')));
-          foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', text: t('fund.done'), onclick: done }));
+          const qrBlock = requestQR(inputs, { uri: 'bitcoin:' + f.request, copyText: f.request, copyLabel: t('fund.onchain.copy'), qrLabel: t('fund.onchain.qr') });
+          const keyline = ui.sayEl('p', { class: 'mono keyline' }, f.request.match(/.{1,4}/g).join(' '));
+          body.replaceChildren(qrBlock, keyline, st, ui.sayEl('p', { class: 'note' }, t('fund.onchain.close'), '', 'clock'));
+          foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', text: t('fund.done'), onclick: () => done() }));
           const update = (x) => {
             const o = x.onchain ?? {};
             if (x.state === 'failed') {
-              ui.say(st, t('fund.failed', { message: x.error ?? '' }));
+              st.className = 'status-line err';
+              ui.say(st, t('fund.failed', { message: x.error ?? '' }), 'err');
               return true;
             }
-            if (x.credited > 0 && x.state !== 'minting') ui.say(st, t('fund.onchain.credited', { amount: format.units(x.credited, 'sat') }));
-            else if (x.state === 'minting') ui.say(st, t('fund.lightning.minting'));
-            else if (o.seen_sat) ui.say(st, t('fund.onchain.seen', { amount: format.units(o.seen_sat, 'sat'), count: o.confirmations ?? 0, need }));
+            // The first deposit added: the success panel, with the address and its Copy under it (it takes more).
+            if (x.credited > 0 && x.state !== 'minting') added({ amount: format.units(x.credited, 'sat'), words: t('fund.onchain.credited', { amount: format.units(x.credited, 'sat') }), extra: [keyline, qrBlock.querySelector('.row-btns')] });
+            else if (x.state === 'minting') ui.say(st, t('fund.lightning.minting'), 'wait');
+            else if (o.seen_sat) ui.say(st, t('fund.onchain.seen', { amount: format.units(o.seen_sat, 'sat'), count: o.confirmations ?? 0, need }), 'wait');
             if ((x.credited ?? 0) !== last) {
               last = x.credited ?? 0;
               wallet.refresh();

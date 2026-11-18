@@ -6,7 +6,7 @@ export function inviteField({ t, ui, wallet }) {
   if (wallet.key() || !wallet.inviteOnly()) return { node: null, missing: () => false, value: () => undefined };
   const input = ui.el('input', { id: 'invite', class: 'field-input', placeholder: t('invite.placeholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: wallet.invite() ?? '' });
   input.addEventListener('input', () => wallet.setInvite(input.value.trim()));
-  const node = ui.el('div', { class: 'field' }, ui.el('label', { for: 'invite', class: 'label', text: t('invite.label') }), input, ui.sayEl('p', { class: 'note' }, t('invite.hint')));
+  const node = ui.el('div', { class: 'field' }, ui.el('label', { for: 'invite', class: 'label' }, ui.icon('ticket', 20), ui.el('span', { text: t('invite.label') })), input, ui.sayEl('p', { class: 'note' }, t('invite.hint')));
   return {
     node,
     value: () => (wallet.key() ? undefined : wallet.invite() || undefined),
@@ -112,9 +112,10 @@ const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
  * unit these funds do not hold (foreign.convert), which also says what is changed into what and has a
  * No (onNo). The token goes into the vault on Yes only, with the funding id, so the outcome lands even
  * when the person leaves (settlePendingForeign); No takes nothing, the token stays the person's.
- * Fills body and foot. Returns {stop} for the poller.
+ * Fills body and foot; once the money is in, the success panel takes the screen (added, screens/funds.js).
+ * Returns {stop} for the poller.
  */
-export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
+export function foreignQuote(inputs, { body, foot, f, token, done, added, onNo }) {
   const { t, ui, engine, wallet, vault, format } = inputs;
   const q = f.foreign;
   let poller = null;
@@ -123,16 +124,19 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
   const no = onNo ? ui.el('button', { type: 'button', class: 'btn block', id: 'foreignNo', onclick: onNo }, ui.icon('x', 20), ui.el('span', { text: t('fund.convert.no') })) : null;
   const returned = ui.el('div', { class: 'returned' });
   const words = (u) => t(UNIT_WORD[u] ?? 'unit.other');
-  body.replaceChildren(
+  // The price as one card: what is changed into what, the amount added in large type, and under it where
+  // it comes from and the most the fees take.
+  const price = ui.el(
+    'section',
+    { class: 'card price-card' },
     ...[
       q.convert ? ui.sayEl('p', { id: 'convertWhat' }, t('fund.convert.what', { to: words(f.unit), from: words(q.unit) }), '', 'swap') : null,
       ui.el('div', { class: 'amount-tag', id: 'foreignCredit', text: format.units(q.credit, f.unit) }),
       q.convert ? ui.sayEl('p', { class: 'note', id: 'convertFrom' }, t('fund.convert.from', { amount: format.units(q.token_amount, q.unit) }), '', 'coins') : null,
-      ui.sayEl('p', { class: 'note' }, t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) })),
-      st,
-      returned,
+      ui.sayEl('p', { class: 'note' }, t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) }), '', 'gauge'),
     ].filter(Boolean),
   );
+  body.replaceChildren(price, st, returned);
   foot.replaceChildren(...[confirm, no].filter(Boolean));
   let held = null;
   let refreshed = false;
@@ -148,11 +152,10 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
     // The vault first: the outcome is stored before anything is shown.
     const r = settleForeign(vault, held, x);
     if (x.state === 'done') {
-      ui.say(st, t('fund.othermint.done', { amount: format.units(x.credited, x.unit) }));
-      if (xf.change_token) returned.replaceChildren(ui.sayEl('p', { class: 'note' }, t('fund.othermint.change')));
       if (!refreshed) wallet.refresh();
       refreshed = true;
-      finish();
+      const extra = xf.change_token ? [ui.sayEl('p', { class: 'note added-note' }, t('fund.othermint.change'), '', 'coins')] : [];
+      added({ amount: format.units(x.credited, x.unit), words: t('fund.othermint.done', { amount: format.units(x.credited, x.unit) }), wordsAttrs: { id: 'foreignStatus' }, extra });
       return r.final;
     }
     if (x.state === 'refunded') {
@@ -166,7 +169,7 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
       finish();
       return true;
     }
-    if (steps[x.state]) ui.say(st, t(steps[x.state]));
+    if (steps[x.state]) ui.say(st, t(steps[x.state]), 'wait');
     return false;
   };
   const watch = (ms) =>
@@ -178,7 +181,7 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
     confirm.disabled = true;
     no?.remove();
     st.className = 'status-line';
-    ui.say(st, t('fund.othermint.receiving'));
+    ui.say(st, t('fund.othermint.receiving'), 'wait');
     // Tied to this engine: only it is asked about the funding later (settlePendingForeign).
     held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
     try {
@@ -195,7 +198,7 @@ export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
         // The outcome is open (busy, a server error, or being processed now): keep the token pending
         // and watch the funding.
         vault.pending(held.id, r.body?.error?.code ?? `http_${r.status}`);
-        ui.say(st, t('fund.othermint.receiving'));
+        ui.say(st, t('fund.othermint.receiving'), 'wait');
         return watch(2000);
       }
       if (!update(r.body)) watch(2000);
@@ -231,8 +234,11 @@ export function poll(fn, ms) {
   };
 }
 
-/** A paste box with an optional Scan button (the camera adapter). */
-export function tokenBox({ t, ui, scan }, { id, label, onScanned }) {
+/**
+ * A paste box with an optional Scan button (the camera adapter). Its label leads with the paste picture;
+ * info: detail behind an info button beside it (which mints are taken), or null.
+ */
+export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null }) {
   const ta = ui.el('textarea', { id, rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
   const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
   const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
@@ -265,7 +271,9 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned }) {
         ui.el('span', { text: t('fund.scan') }),
       )
     : null;
-  const node = ui.el('div', { class: 'field' }, ui.el('label', { for: id, class: 'label', text: label }), ta, btn, box);
+  const more = info ? ui.el('p', { class: 'field-info' }, info) : null;
+  const head = ui.el('div', { class: 'field-head' }, ui.el('label', { for: id, class: 'label' }, ui.icon('paste', 20), ui.el('span', { text: label })), more ? ui.infoToggle(more, t('common.info')) : null);
+  const node = ui.el('div', { class: 'field' }, head, more, ta, btn, box);
   return { node, value: () => ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, ''), clear: () => (ta.value = ''), stop, input: ta };
 }
 

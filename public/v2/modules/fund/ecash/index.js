@@ -17,15 +17,16 @@ export function create(inputs) {
     group: 'unlinked',
     icon: 'coins',
     available: () => true,
-    view({ done, open, token: given }) {
+    view({ done, added, open, token: given }) {
       const msg = ui.msgLine();
       // A way on from a refusal: eCash from another mint goes to Other mint, with the token.
       const onward = ui.el('div', { class: 'onward', hidden: true });
       const invite = inviteField(inputs);
       const add = ui.el('button', { type: 'button', class: 'btn primary block', id: 'ecashAdd' }, ui.icon('addMoney', 22), ui.el('span', { text: t('fund.ecash.add') }));
-      const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click() });
+      // Which mints are taken: detail, behind the info button at the box's label.
       const mints = wallet.mints();
-      const form = [invite.node, box.node, msg, onward, mints.length ? ui.sayEl('p', { class: 'note' }, t('fund.ecash.mints', { mints: mints.join(', ') })) : null].filter(Boolean);
+      const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click(), info: mints.length ? t('fund.ecash.mints', { mints: mints.join(', ') }) : null });
+      const form = [invite.node, box.node, msg, onward].filter(Boolean);
       const body = ui.el('div', { class: 'scroll fund-body' }, ...form);
       const foot = ui.el('div', { class: 'foot' }, add);
       let quote = null;
@@ -45,7 +46,7 @@ export function create(inputs) {
         const r = await engine.foreignQuote(wallet.key(), { token, unit, pubkey: wallet.lockKey() || undefined });
         if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
         msg.set('');
-        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, onNo: keep });
+        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added, onNo: keep });
       };
 
       add.addEventListener('click', async () => {
@@ -63,10 +64,10 @@ export function create(inputs) {
           box.clear();
           // A voucher of free questions is counted in questions, never as an amount of money.
           const text = r.replay ? t('fund.ecash.replay') : r.free ? t('fund.free.added', { count: r.credited }) : t('fund.ecash.added', { amount: format.units(r.credited, r.unit) });
-          ui.toast(text);
           msg.set(text, 'ok');
           await wallet.refresh();
-          done();
+          // Funds says it in its success panel.
+          done({ words: text, amount: r.replay ? '' : r.free ? t('fund.note.free', { count: r.credited }) : format.units(r.credited, r.unit), plus: !r.free });
         } catch (e) {
           // The engine read it for the phone: its unit is not these funds', and it says it can change it.
           if (e?.code === 'wrong_unit' && e.body?.convert?.unit && wallet.key()) await convert(token, e.body.convert.unit).catch((x) => msg.set(t('fund.failed', { message: x?.message ?? String(x) }), 'err'));

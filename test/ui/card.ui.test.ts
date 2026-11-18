@@ -237,6 +237,10 @@ describe('Tap a Cashu card', () => {
     await page.click('#cardMove');
     await page.waitForSelector('[data-screen=funds]', { timeout: 30_000 });
     await expect.poll(() => page.textContent('#fundsAmount')).toBe('100 sat');
+    // Funds says it in the success panel, with Ask now under it: all of it moved, so the card is empty.
+    expect(await page.textContent('#fundsAdded .added-amount')).toBe('+100 sat');
+    expect(await page.textContent('#fundsAddedText')).toBe('Added 100 sat. The card is now empty.');
+    expect(await page.isVisible('#fundsAsk')).toBe(true);
     expect(card.balance()).toBe(0);
     // The card's eCash was in the vault while it was sent, and nothing is left once credited.
     expect(heldWhileSending.in).toHaveLength(1);

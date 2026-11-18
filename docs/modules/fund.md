@@ -32,6 +32,7 @@ The whole of [`public/v2/core/ui.js`](https://github.com/ForgeReserve/forge-ai/b
 | `say(node, text, kind = '', ico = null)` | Writes `text` into `node` headline first: an icon, the first sentence in view, the rest behind a round info button. `kind` is `''`, `'err'`, `'ok'` or `'wait'`. Returns `node`. |
 | `sayEl(tag, attrs, text, kind, ico)` | `say` into a new element. |
 | `msgLine()` | A status line (`role="status"`) with `set(text, kind)`. A text with no kind that does not end in a full stop shows the wait icon. |
+| `addedPanel({id, amount, plus, words, wordsAttrs, balance})` | The success panel Add money shows when money is in: a lit check, the amount in large type (with a plus unless `plus` is `false`), the words as a status line (`wordsAttrs` gives it an id) and the funds now as the balance pill. Returns the panel; `setBalance(text)` updates the pill. A module rarely needs it: `added()` and `done()` draw it (below). |
 | `toast(text, ms = 2600)` | A short message at the bottom of the screen. |
 | `announce(text)` | Says `text` to screen readers only. |
 | `hideToast()` | Hides the toast now. |
@@ -191,11 +192,12 @@ available: (methods) => !!methods?.lightning?.enabled,
 
 ### `view(options)`
 
-Required. Draws the module's screen. The app calls it each time the screen opens, and puts the result under a header with the module's name and a back button. `options` holds:
+Required. Draws the module's screen. The app calls it each time the screen opens, and puts the result under a header with the module's name and a back button, and the module's picture from its card on Add money above it (a module with no picture of its own gets its `icon` on a lit disc). `options` holds:
 
 | Field | What it is |
 | - | - |
-| `done()` | Call it when the money is in: the app goes back to Funds. |
+| `done(result)` | Call it when the money is in: the app goes back to Funds. With `result` (`{words, amount, plus}`: the words that say what was added, the amount as text, `plus: false` for what is not money), Funds shows the success panel at its top with Ask now under it. |
+| `added(result)` | Call it when the money is in and the person should see it on this screen first (a paid invoice): the success panel takes the module's place, with the funds now, Ask now and Done (back to Funds). `result` is `{words, amount, plus, wordsAttrs, extra}`: `wordsAttrs` gives the words line its id, `extra` is a list of the module's nodes that still matter, shown under the panel (an address that takes more). |
 | `open(id, {token})` | Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint to Other mint this way. |
 | `token` | The token another module handed over with `open`, or `undefined`. |
 
@@ -316,9 +318,11 @@ export function create({ t, ui, wallet, format }) {
         msg.set(t('fund.ecash.sending'));
         try {
           const r = await wallet.topup(token);
-          msg.set(t('fund.ecash.added', { amount: format.units(r.credited, r.unit) }), 'ok');
+          const words = t('fund.ecash.added', { amount: format.units(r.credited, r.unit) });
+          msg.set(words, 'ok');
           await wallet.refresh();
-          done();
+          // Funds says it in its success panel.
+          done({ words, amount: format.units(r.credited, r.unit) });
         } catch (e) {
           msg.set(e?.retryable ? t('fund.ecash.kept') : t('fund.failed', { message: e?.message ?? String(e) }), 'err');
         } finally {

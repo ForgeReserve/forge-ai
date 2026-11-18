@@ -477,6 +477,11 @@ describe('v2 money paths in a phone-sized browser', () => {
       await go.deps.funding.advance(f.id);
       // The screen polls every 15 seconds.
       await expect.poll(() => page.textContent('[data-fund=onchain] .status-line'), { timeout: 30_000 }).toBe('Added 20,000 sat. More sent to this address is added too.');
+      // The success panel, with the address and its Copy under it (it takes more), Ask now and Done.
+      expect(await page.textContent('#fundAdded .added-amount')).toBe('+20,000 sat');
+      await expect.poll(() => page.textContent('#fundAdded .added-bal')).toBe('20,000 sat');
+      expect(await page.textContent('[data-fund=onchain] .keyline')).toBe(f.request.match(/.{1,4}/g).join(' '));
+      expect(await page.isVisible('#fundAsk')).toBe(true);
       await page.goto(`${go.url}/v2/#/funds`);
       await expect.poll(() => page.textContent('#fundsAmount')).toBe('20,000 sat');
       expect(errors).toEqual([]);

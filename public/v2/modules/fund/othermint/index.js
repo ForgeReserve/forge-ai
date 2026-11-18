@@ -15,7 +15,7 @@ export function create(inputs) {
     group: 'depends',
     icon: 'swap',
     available: (methods) => !!methods?.foreign?.enabled,
-    view({ done, open, token: given }) {
+    view({ done, added, open, token: given }) {
       // The unit is read when the price is asked for: a screen opened before the balance was read
       // (the app opened on this address) still asks in the balance's unit.
       const unitNow = () => wallet.unit() ?? (wallet.methods()?.lightning?.units ?? ['usd', 'sat'])[0];
@@ -30,6 +30,11 @@ export function create(inputs) {
       const foot = ui.el('div', { class: 'foot' }, check);
       let poller = null;
 
+      /** An unknown mint asks first: then Go on is the lit button, and Check eCash waits beside it. */
+      const asking = (on) => {
+        unlisted.hidden = !on;
+        check.classList.toggle('primary', !on);
+      };
       const quote = async (token, acceptUnlisted = false) => {
         check.disabled = true;
         onward.hidden = true;
@@ -40,8 +45,8 @@ export function create(inputs) {
           if (!r.ok) {
             const code = r.body?.error?.code;
             if (code === 'mint_unlisted') {
-              unlisted.replaceChildren(ui.sayEl('p', {}, t('fund.othermint.unlisted')), ui.sayEl('p', { class: 'mono note' }, r.body?.unlisted?.mint ?? ''), ui.el('button', { type: 'button', class: 'btn', id: 'foreignGoOn', onclick: () => quote(token, true) }, ui.icon('next', 20), ui.el('span', { text: t('fund.othermint.goOn') })));
-              unlisted.hidden = false;
+              unlisted.replaceChildren(ui.sayEl('p', {}, t('fund.othermint.unlisted')), ui.sayEl('p', { class: 'mono note' }, r.body?.unlisted?.mint ?? ''), ui.el('button', { type: 'button', class: 'btn primary', id: 'foreignGoOn', onclick: () => quote(token, true) }, ui.icon('next', 20), ui.el('span', { text: t('fund.othermint.goOn') })));
+              asking(true);
               return msg.set('');
             }
             if (code === 'use_topup') {
@@ -51,8 +56,8 @@ export function create(inputs) {
             }
             return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           }
-          unlisted.hidden = true;
-          poller = foreignQuote(inputs, { body, foot, f: r.body, token, done });
+          asking(false);
+          poller = foreignQuote(inputs, { body, foot, f: r.body, token, done, added });
         } catch (e) {
           msg.set(t('fund.failed', { message: e?.message ?? String(e) }), 'err');
         } finally {
