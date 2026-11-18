@@ -56,8 +56,9 @@ export function answer({ t, ui, state, nav, actions, format }) {
     { class: 'screen pf pf-answer', 'data-screen': 'answer', 'data-mode': 'playful' },
     top.node,
     card,
-    el('div', { class: 'rings pf-rings-small' }, r.node, ringBtn, reply),
-    hold.info,
+    // The recording's line lies over the card, above the rings (style.css): in the flow it took room
+    // from the card and moved the reply button up under the finger.
+    el('div', { class: 'rings pf-rings-small' }, r.node, ringBtn, reply, hold.info),
     hold.hint,
     bar({ t, nav }),
     careful,
@@ -199,7 +200,8 @@ export function answer({ t, ui, state, nav, actions, format }) {
     hold.update();
     r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     const recording = v.talk.phase === 'recording';
-    careful.hidden = recording;
+    // Out of sight while recording, its room kept: the reply button must not move under the finger.
+    careful.style.visibility = recording ? 'hidden' : '';
     const ln = answerLine(v);
     face.set(note ? (note.calm ? 'idle' : 'oops') : ln.mood);
     line.dataset.reading = String(!note && !!ln.reading);

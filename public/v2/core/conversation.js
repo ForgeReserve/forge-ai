@@ -16,13 +16,24 @@ export function pendingMessage(text, pending, { vision = false } = {}) {
 export const apiMessages = (messages, { systemPrompt = '', vision = false } = {}) => toApiMessages(messages, { systemPrompt, vision });
 
 /**
- * The system prompt for the question these messages end on (owner, 2026-11-16, spoken answers): a
- * question asked by voice (meta.voice on it) adds the voice instruction to the base prompt, so its
- * answer is short and plain to hear. A typed question, the follow-up to a spoken one too, gets the base.
+ * Words that put eCash, payments or this app's money in a conversation, in English, whatever their case.
+ * "sat" alone (I sat down) and "Forge" (the assistant's own name, as in "thanks Forge") are left out.
  */
-export function systemPromptFor(messages, { base = '', voice = '' } = {}) {
+const ECASH_WORDS = /(?<![\p{L}\p{N}])(?:e[- ]?cash|cashu|fedimints?|mints?|tokens?|sats|satoshis?|lightning|bitcoins?|btc|wallets?|balances?|pay|pays|paid|paying|payments?|invoices?|lnurl|bolt ?1[12])(?![\p{L}\p{N}])/iu;
+
+/** Whether the person's own words in these messages, any question so far, touch eCash or payments. */
+export const aboutEcash = (messages) => (messages ?? []).some((m) => m.role === 'user' && typeof m.content === 'string' && ECASH_WORDS.test(m.content));
+
+/**
+ * The system prompt for the question these messages end on. The base prompt names no money at all; the
+ * eCash paragraph is added only once the person's words bring eCash or payments up (owner, 2026-11-18: a
+ * prompt that named eCash had the model offer it after a plain "great"). A question asked by voice
+ * (meta.voice on it) adds the voice instruction, so its answer is short and plain to hear (owner,
+ * 2026-11-16). A typed question, the follow-up to a spoken one too, gets no voice instruction.
+ */
+export function systemPromptFor(messages, { base = '', ecash = '', voice = '' } = {}) {
   const q = [...(messages ?? [])].reverse().find((m) => m.role === 'user');
-  return q?.meta?.voice && voice ? `${base}\n\n${voice}` : base;
+  return [base, ecash && aboutEcash(messages) ? ecash : '', q?.meta?.voice ? voice : ''].filter(Boolean).join('\n\n');
 }
 
 /** Input tokens of a request for these messages (about four characters a token, as v1 counts). */

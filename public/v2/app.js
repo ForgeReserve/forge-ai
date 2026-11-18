@@ -153,10 +153,11 @@ const freeKeyStore = () => freeKeyName(engine.base, location.origin);
 // ------------------------------------------------------------------ derived view
 
 /**
- * The system prompt for a question ending these messages: the voice instruction is added to a question
- * asked by voice, so the answer that is read aloud is short and plain (core/conversation.js).
+ * The system prompt for a question ending these messages: the eCash paragraph once the person brings
+ * eCash or payments up, and the voice instruction for a question asked by voice, so the answer that is
+ * read aloud is short and plain (core/conversation.js).
  */
-const promptFor = (msgs) => systemPromptFor(msgs, { base: t('system.prompt'), voice: t('system.prompt.voice') });
+const promptFor = (msgs) => systemPromptFor(msgs, { base: t('system.prompt'), ecash: t('system.prompt.ecash'), voice: t('system.prompt.voice') });
 
 let memo = { k: '', v: null };
 function memoryNow(model) {

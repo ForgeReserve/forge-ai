@@ -9,7 +9,7 @@
 // button included, and the bottom row stays fixed in view, so Close never needs a scroll.
 import { el, icon, say } from '../core/ui.js';
 import { bottomRow, rings, searchSwitch, statusBar } from './parts.js';
-import { holdToTalk } from './talk.js';
+import { holdToTalk, keepPlace } from './talk.js';
 
 export function home({ t, state, nav, actions }, { sheet = null, open = null } = {}) {
   const bar = statusBar({ t, state, nav, actions });
@@ -51,9 +51,12 @@ export function home({ t, state, nav, actions }, { sheet = null, open = null } =
 
   const update = () => {
     const v = state.view();
+    const recording = v.talk.phase === 'recording';
+    // While the button is held, the box under the rings keeps the height the press found, and the
+    // recording line lies over it: the talk button stays under the finger (screens/talk.js keepPlace).
+    keepPlace(under, recording);
     bar.update();
     hold.update();
-    const recording = v.talk.phase === 'recording';
     r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     ringBtn.setAttribute('aria-label', v.balanceText ? t('home.rings', { funds: v.balanceText, memory: v.memory.percentFree }) : t('home.ringsEmpty', { memory: v.memory.percentFree }));
     // The ring breathes for money only on a paid model.

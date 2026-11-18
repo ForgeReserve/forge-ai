@@ -889,14 +889,88 @@ describe('the talk controller', () => {
 // Spoken answers (owner, 2026-11-16): a question asked by voice carries the voice instruction to the
 // model, on top of the usual prompt; a typed one, even right after a spoken one, carries the usual one.
 describe('the system prompt and eCash', () => {
-  // "ping" was answered "pong... what would you like to know about eCash?": the prompt defined eCash
-  // without saying when it matters, and named Cashu alone.
-  it('defines eCash by Cashu and Fedimint, and only for a question about it', async () => {
+  // "ping" was answered "pong... what would you like to know about eCash?", and after "great" the model
+  // said it was ready for a question about eCash: a prompt that names eCash at all primes a small model.
+  // Now the eCash paragraph goes only with a conversation whose own words bring eCash or payments up.
+  const load = async () => {
+    const C: any = await import('../../../public/v2/core/conversation.js' as string);
     const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
-    const p = en['system.prompt']!;
-    expect(p).toContain('Cashu and Fedimint');
-    expect(p).toMatch(/Bring up eCash, payments or this app only when the question is about them\./);
-    expect(p.indexOf('only when the question is about them')).toBeLessThan(p.indexOf('Chaumian'));
+    const opts = { base: en['system.prompt'], ecash: en['system.prompt.ecash'], voice: en['system.prompt.voice'] };
+    const user = (content: string, meta?: object) => ({ role: 'user', content, ...(meta ? { meta } : {}) });
+    const bot = (content: string) => ({ role: 'assistant', content });
+    return { C, en, opts, user, bot };
+  };
+  const MONEY = /e-?cash|cashu|fedimint|mint|token|\bsats?\b|satoshi|lightning|bitcoin|wallet|balance|\bpay|payment|money|invoice/i;
+
+  it('names no money at all in a conversation about something else', async () => {
+    const { C, en, opts, user, bot } = await load();
+    expect(en['system.prompt']).not.toMatch(MONEY);
+    expect(en['system.prompt.voice']).not.toMatch(MONEY);
+    for (const conv of [
+      [user('ping')],
+      [user('ping'), bot('pong'), user('great')],
+      [user('Thanks Forge!'), bot('You are welcome.'), user('What is a good name for a cat?')],
+      [user('Will it rain?', { voice: true })],
+      // "sat" is a verb here, and a word is matched whole (payday and repaint are words of their own).
+      [user('I sat down on payday to repaint the shed.')],
+    ]) {
+      const p = C.systemPromptFor(conv, opts);
+      expect(p, JSON.stringify(conv)).not.toMatch(MONEY);
+      expect(C.apiMessages(conv, { systemPrompt: p })[0].content).not.toMatch(MONEY);
+    }
+  });
+
+  it('adds the eCash paragraph once the person brings eCash or payments up, in any turn and any case', async () => {
+    const { C, en, opts, user, bot } = await load();
+    expect(en['system.prompt.ecash']).toContain('Chaumian eCash as in the Cashu and Fedimint protocols');
+    expect(en['system.prompt.ecash']).not.toMatch(/[–—]/);
+    const said = [
+      'What is eCash?',
+      'what is ECASH',
+      'Is e-cash private?',
+      'e cash please',
+      'Tell me about Cashu.',
+      'How does a Fedimint federation work?',
+      'Which mint should I trust?',
+      'Where do I paste my token?',
+      'How many sats is a dollar?',
+      'What is a satoshi?',
+      'Can I pay with Lightning?',
+      'Is Bitcoin money?',
+      'Which wallet should I use?',
+      'Why is my balance low?',
+      'How do I pay for this?',
+      'I paid twice!',
+      'Where is my payment?',
+      'The invoice failed.',
+      'Scan this LNURL',
+      'Is a BOLT12 offer better?',
+    ];
+    for (const words of said) {
+      const p = C.systemPromptFor([user(words)], opts);
+      expect(p, words).toBe(`${en['system.prompt']}\n\n${en['system.prompt.ecash']}`);
+    }
+    // An earlier turn counts: the whole conversation so far keeps the paragraph.
+    const later = [user('What is eCash?'), bot('Digital cash.'), user('great')];
+    expect(C.systemPromptFor(later, opts)).toContain(en['system.prompt.ecash']);
+    // The model's own words do not: it cannot bring the paragraph back by itself.
+    const echo = [user('ping'), bot('Ask me about eCash!'), user('great')];
+    expect(C.systemPromptFor(echo, opts)).toBe(en['system.prompt']);
+    // A spoken question about it: the base, then eCash, then the voice instruction.
+    const spoken = [user('What is a mint?', { voice: true })];
+    expect(C.systemPromptFor(spoken, opts)).toBe([en['system.prompt'], en['system.prompt.ecash'], en['system.prompt.voice']].join('\n\n'));
+    // Without an eCash paragraph to give, the prompt is the base.
+    expect(C.systemPromptFor([user('What is eCash?')], { base: en['system.prompt'] })).toBe(en['system.prompt']);
+  });
+
+  it('aboutEcash reads only the person\'s words', async () => {
+    const { C, user, bot } = await load();
+    expect(C.aboutEcash([])).toBe(false);
+    expect(C.aboutEcash(undefined)).toBe(false);
+    expect(C.aboutEcash([bot('Your balance is low.')])).toBe(false);
+    expect(C.aboutEcash([user('ecashcard')])).toBe(false);
+    expect(C.aboutEcash([user('Mints?')])).toBe(true);
+    expect(C.aboutEcash([user('Bitcoin!'), bot('Yes.')])).toBe(true);
   });
 });
 
