@@ -28,6 +28,70 @@ export function withKey(slots, key) {
   return next;
 }
 
+/**
+ * Keys the phone made itself for a second balance, before sending anything with them (docs/PAYMENTS.md,
+ * Two balances): {key: unit}, kept until the engine first answers for the key. A key here is kept even
+ * when the engine does not know it (yet, or any more: a first funding that failed): the next money in its
+ * unit is sent with it again, opening the balance then.
+ */
+export const NEW_KEYS_STORE = 'forge2.newKeys';
+export const newKeysName = (base, origin) => (!base || base === origin ? NEW_KEYS_STORE : `${NEW_KEYS_STORE}@${base}`);
+
+/** A new balance key from 24 random bytes, in the shape the engine takes from a client (sk-forge-, 32 URL-safe characters). */
+export function newKey(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 18) throw new Error('need at least 18 random bytes');
+  let b64 = btoa(String.fromCharCode(...bytes));
+  b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return 'sk-forge-' + b64;
+}
+
+/**
+ * What money in `unit` is sent with (docs/PAYMENTS.md, Two balances): {key} of the balance in that unit.
+ * With none, while the phone holds the other balance and the engine opens a second one with its key
+ * (siblings), make(unit) makes the new key and keeps it on the phone, and only then is it returned, with
+ * {sibling}: the request carries both, so the same request sent again after a lost answer finds the
+ * balance it opened. A key made so that the engine has not answered for yet (made(key)) goes with the
+ * sibling again. With no balance at all, {key: null}: a first balance takes the invite.
+ *   keys: {usd, sat} by unit. make(unit): the kept key, or null when it has no place.
+ */
+export function prepareFunding(unit, { keys, siblings, made = () => false, make }) {
+  const other = keys[OTHER[unit]];
+  const sibling = other && siblings ? other : undefined;
+  const key = keys[unit];
+  if (key) return { key, sibling: made(key) ? sibling : undefined };
+  if (!sibling) return { key: null };
+  const k = make(unit);
+  return k ? { key: k, sibling } : { key: null };
+}
+
+/**
+ * A list of keys kept aside (forge2.extraKeys, forge2.unrecognizedKeys) as stored text, with `key` added
+ * at the end: nothing in it is ever written over or dropped. Unreadable text is kept as one entry.
+ */
+export function withAside(text, key) {
+  let list = [];
+  if (text) {
+    try {
+      const v = JSON.parse(text);
+      list = Array.isArray(v) ? v : [String(text)];
+    } catch {
+      list = [String(text)];
+    }
+  }
+  return JSON.stringify(list.includes(key) ? list : [...list, key]);
+}
+
+/** The keys in a stored aside list (empty when there is none). */
+export function asideKeys(text) {
+  if (!text) return [];
+  try {
+    const v = JSON.parse(text);
+    return Array.isArray(v) ? v.filter((k) => typeof k === 'string' && k) : [String(text)];
+  } catch {
+    return [String(text)];
+  }
+}
+
 /** The two key names without one key (the engine no longer knows it), the other left where it is. */
 export const withoutKey = (slots, key) => slots.map((k) => (k === key ? null : k));
 

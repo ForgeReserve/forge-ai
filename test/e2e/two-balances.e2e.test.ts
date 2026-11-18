@@ -63,6 +63,30 @@ describe.skipIf(!up)('two balances: sat eCash on a phone that holds dollars', ()
     expect(more.body).toMatchObject({ unit: 'sat', credited: 20, balance_msub: 1_020_000 });
   });
 
+  it('a lost answer costs nothing: the key the phone made and kept, sent again with the same token, is a replay', async () => {
+    const { newKey }: any = await import('../../public/v2/core/balances.js' as string);
+    const usd = await post(g, '/v1/wallet/topup', { token: await mintToken(MINT_A, 'usd', 5), invite: createInvite(g) });
+    const token = await mintToken(MINT_A, 'sat', 700);
+    // The phone makes the sat key and keeps it before sending (app.js makeKey), then sends it as the bearer.
+    const mine = newKey(crypto.getRandomValues(new Uint8Array(24)));
+    const headers = { 'X-Forge-Sibling': usd.body.key, ...auth(mine) };
+    const first = await post(g, '/v1/wallet/topup', { token }, headers);
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ unit: 'sat', credited: 700 });
+    // No key in the answer: the phone has it already. The answer is lost; the same request again:
+    expect(first.body.key).toBeUndefined();
+    const again = await post(g, '/v1/wallet/topup', { token }, headers);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ unit: 'sat', replay: true, credited: 0, balance_msub: 700_000, account_id: first.body.account_id });
+    // Credited once, on the key the phone holds, and only one sat balance was opened.
+    expect((await (await fetch(`${g.url}/v1/wallet`, { headers: auth(mine) })).json()).balance_msub).toBe(700_000);
+    expect(count(g, 'SELECT COUNT(*) AS n FROM accounts WHERE sibling_of = ?', usd.body.account_id)).toBe(1);
+    // A funding route sent again with the key and the header after the balance exists is that balance's, never a 403.
+    const ln = await post(g, '/v1/wallet/fund/lightning', { amount: 10, unit: 'sat' }, headers);
+    expect(ln.status).toBe(200);
+    expect(ln.body.account_id).toBe(first.body.account_id);
+  });
+
   it('pays each question in full from dollars first, then from sats once the dollars cannot cover the hold', async () => {
     const usd = await post(g, '/v1/wallet/topup', { token: await mintToken(MINT_A, 'usd', 5), invite: createInvite(g) });
     const sat = await post(g, '/v1/wallet/topup', { token: await mintToken(MINT_A, 'sat', 1000) }, { 'X-Forge-Sibling': usd.body.key });

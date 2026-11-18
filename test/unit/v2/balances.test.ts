@@ -185,27 +185,63 @@ describe('opening the second balance through the vault and the engine', () => {
     expect(setKey).toHaveBeenCalledWith('sk-forge-sat', 'sat');
   });
 
-  it('never sends the sibling key once the balance has its own key', async () => {
+  it('sends the key the phone made as the bearer, with the sibling header, so a retry is the same request', async () => {
     const seen: any[] = [];
     const engine = E.createEngine({ fetch: async (_u: string, init: any) => (seen.push(init.headers), json({ unit: 'sat', credited: 1 })) });
-    await V.topupWithVault({ engine, vault: V.createVault(memStorage()), token: 'cashuBx', key: 'sk-forge-sat', sibling: 'sk-forge-usd', setKey: vi.fn() });
-    expect(seen[0]['x-forge-sibling']).toBeUndefined();
-    expect(seen[0].authorization).toBe('Bearer sk-forge-sat');
+    await V.topupWithVault({ engine, vault: V.createVault(memStorage()), token: 'cashuBx', key: 'sk-forge-made', sibling: 'sk-forge-usd', setKey: vi.fn() });
+    expect(seen[0].authorization).toBe('Bearer sk-forge-made');
+    expect(seen[0]['x-forge-sibling']).toBe('sk-forge-usd');
   });
 
-  it('sends a funding the same way (fundIn), and tells the wallet when the engine refuses', async () => {
-    const calls: any[] = [];
-    const wallet = { fundingFor: async () => ({ key: null, sibling: 'sk-forge-usd' }), setKey: vi.fn(), siblingRefused: vi.fn(), key: () => 'sk-forge-usd' };
-    const r = await KIT.fundIn(wallet, 'sat', 'inv-x', async (key: any, invite: any, sibling: any) => (calls.push({ key, invite, sibling }), { ok: true, body: { key: 'sk-forge-sat', unit: 'sat' } }));
-    expect(calls).toEqual([{ key: null, invite: undefined, sibling: 'sk-forge-usd' }]);
-    expect(wallet.setKey).toHaveBeenCalledWith('sk-forge-sat', 'sat');
-    expect(r.ok).toBe(true);
-    await KIT.fundIn(wallet, 'sat', undefined, async () => ({ ok: false, status: 403, body: { error: { code: 'sibling_refused' } } }));
-    expect(wallet.siblingRefused).toHaveBeenCalled();
-    // A first balance still takes the invite.
-    const first = { fundingFor: async () => ({ key: null }), setKey: vi.fn(), key: () => null };
+  it('makes and keeps the second key before anything is sent (prepareFunding, then fundIn)', async () => {
+    const kept = new Map<string, string>();
+    const keys: Record<string, string | null> = { usd: 'sk-forge-usd', sat: null };
+    const made = new Set<string>();
+    const make = (unit: string) => {
+      const k = B.newKey(new Uint8Array(24).fill(7));
+      kept.set(`key:${unit}`, k);
+      made.add(k);
+      keys[unit] = k;
+      return k;
+    };
+    const wallet = { fundingFor: async (unit: string) => B.prepareFunding(unit, { keys, siblings: true, made: (k: string) => made.has(k), make }), setKey: vi.fn(), siblingRefused: vi.fn(), key: () => 'sk-forge-usd' };
     const sent: any[] = [];
-    await KIT.fundIn(first, 'sat', 'inv-x', async (...a: any[]) => (sent.push(a), { ok: true, body: {} }));
+    const send = async (key: any, invite: any, sibling: any) => {
+      // At the moment the request leaves, the key is already on the phone.
+      sent.push({ key, invite, sibling, keptThen: kept.get('key:sat') });
+      throw new Error('the answer was lost');
+    };
+    await expect(KIT.fundIn(wallet, 'sat', 'inv-x', send)).rejects.toThrow('lost');
+    expect(sent[0]).toEqual({ key: kept.get('key:sat'), invite: undefined, sibling: 'sk-forge-usd', keptThen: kept.get('key:sat') });
+    expect(sent[0].key).toMatch(/^sk-forge-[A-Za-z0-9_-]{32}$/);
+    // Sent again: the same key and the same header, no second key made.
+    await expect(KIT.fundIn(wallet, 'sat', 'inv-x', send)).rejects.toThrow('lost');
+    expect(sent[1]).toMatchObject({ key: sent[0].key, sibling: 'sk-forge-usd' });
+    // Once the engine knows it, it is an ordinary key: no header.
+    made.clear();
+    expect(B.prepareFunding('sat', { keys, siblings: true, made: () => false, make })).toEqual({ key: sent[0].key, sibling: undefined });
+  });
+
+  it('opens nothing with a sibling the engine does not offer, and a first balance takes the invite', async () => {
+    const make = vi.fn();
+    expect(B.prepareFunding('sat', { keys: { usd: 'k', sat: null }, siblings: false, make })).toEqual({ key: null });
+    expect(B.prepareFunding('sat', { keys: { usd: null, sat: null }, siblings: true, make })).toEqual({ key: null });
+    expect(make).not.toHaveBeenCalled();
+    const sent: any[] = [];
+    await KIT.fundIn({ fundingFor: async () => ({ key: null }), setKey: vi.fn(), key: () => null }, 'sat', 'inv-x', async (...a: any[]) => (sent.push(a), { ok: true, body: {} }));
     expect(sent[0]).toEqual([null, 'inv-x', undefined]);
+    // A refusal is told to the wallet.
+    const w = { fundingFor: async () => ({ key: 'k2', sibling: 'k1' }), setKey: vi.fn(), siblingRefused: vi.fn() };
+    await KIT.fundIn(w, 'sat', undefined, async () => ({ ok: false, status: 403, body: { error: { code: 'sibling_refused' } } }));
+    expect(w.siblingRefused).toHaveBeenCalled();
+  });
+
+  it('keeps aside lists whole: a key is added, never written over', () => {
+    expect(B.withAside(null, 'a')).toBe('["a"]');
+    expect(B.withAside('["a"]', 'b')).toBe('["a","b"]');
+    expect(B.withAside('["a","b"]', 'a')).toBe('["a","b"]');
+    // A single key kept the old way stays in the list.
+    expect(B.asideKeys(B.withAside('sk-forge-old', 'b'))).toEqual(['sk-forge-old', 'b']);
+    expect(B.asideKeys(null)).toEqual([]);
   });
 });

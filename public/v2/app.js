@@ -29,7 +29,7 @@ import { createClips } from './core/clips.js';
 import { createPhonon, meterNumbers as phononMeter } from './core/phonon.js';
 import { audioModels, audioMsub, CHARS_PER_SECOND, transcribeMsub } from './core/voice.js';
 import { refundsToOffer } from './core/refunds.js';
-import { homeTotal, key2Name, keysByUnit, landsIn, OTHER, payUnit, questionsOver, UNITS, unitsPending, withKey, withoutKey } from './core/balances.js';
+import { asideKeys, homeTotal, key2Name, keysByUnit, landsIn, newKey, newKeysName, payUnit, prepareFunding, questionsOver, UNITS, unitsPending, withAside, withKey, withoutKey } from './core/balances.js';
 import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
@@ -157,6 +157,7 @@ const phonon = createPhonon({
 let engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
 const keyStore = () => keyName(engine.base, location.origin);
 const keyStore2 = () => key2Name(engine.base, location.origin);
+const newKeysStore = () => newKeysName(engine.base, location.origin);
 const freeKeyStore = () => freeKeyName(engine.base, location.origin);
 
 // ------------------------------------------------------------------ the two balances (core/balances.js)
@@ -200,6 +201,12 @@ function payerFor(holdIn) {
 function priceUnit(model) {
   return model ? payerFor((u) => perQuestion(model, u)).unit : homeUnit();
 }
+
+/**
+ * Balance keys kept aside on this phone (core/balances.js withAside): a third key that had no place, and
+ * keys the engine stopped knowing. Erase everything removes them too, so it counts them.
+ */
+const keysAside = () => [...new Set([...asideKeys(ui.load('forge2.extraKeys')), ...asideKeys(ui.load('forge2.unrecognizedKeys')), ...asideKeys(ui.load('forge.unrecognizedKey'))])];
 
 /**
  * The paid balances Funds lists, each as its own row with its own Take out: those with money in them,
@@ -277,6 +284,8 @@ function view() {
     // The total's unit, and the paid balances that hold money, each a row on Funds (two when both do).
     unit,
     balances: rows,
+    // How many balance keys are kept aside (keysAside): Erase everything warns about them.
+    keysAside: keysAside().length,
     // The gold ring: free questions as a lighter segment first, then the paid balance (core/rings.js).
     fundsFraction: seg.paid,
     freeFraction: seg.free,
@@ -591,19 +600,37 @@ function setKey(k, unit = null) {
   if (!next) {
     // Both names hold a key already: the phone never asks for a third (core/balances.js landsIn), so
     // this one is only kept aside, with any other kept so.
-    let aside = [];
-    try {
-      aside = JSON.parse(ui.load('forge2.extraKeys') ?? '[]');
-    } catch {
-      /* unreadable: start the list again */
-    }
-    if (!aside.includes(k)) keep('forge2.extraKeys', JSON.stringify([...aside, k]));
+    keep('forge2.extraKeys', withAside(ui.load('forge2.extraKeys'), k));
     return;
   }
   const i = next.findIndex((x, j) => x !== S.keys[j]);
   S.keys = next;
   if (i >= 0) keep(slotName(i), k);
   store.set({});
+}
+
+/** Keys this phone made for a second balance that the engine has not answered for yet: {key: unit}. */
+function newKeys() {
+  try {
+    const v = JSON.parse(ui.load(newKeysStore()) ?? '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+const setNewKeys = (m) => keep(newKeysStore(), Object.keys(m).length ? JSON.stringify(m) : null);
+
+/**
+ * Makes the key of a second balance on the phone and keeps it (its storage name, and newKeys with its
+ * unit) before anything is sent with it, so an answer that never arrives loses nothing: the same key
+ * and the same eCash sent again find the balance the engine opened. null when it has no place.
+ */
+function makeKey(unit) {
+  const k = newKey(crypto.getRandomValues(new Uint8Array(24)));
+  if (!withKey(S.keys.map((x, i) => x ?? ui.load(slotName(i)) ?? null), k)) return null;
+  setNewKeys({ ...newKeys(), [k]: unit });
+  setKey(k, unit);
+  return S.keys.includes(k) ? k : null;
 }
 
 /** Lets a key go (the engine no longer knows it); the other key stays where it is. */
@@ -669,6 +696,12 @@ async function refreshBalance() {
     try {
       const w = await engine.wallet(k);
       S.keyUnits = { ...S.keyUnits, [k]: w.unit };
+      // The engine knows a key this phone made: it is an ordinary key from now on.
+      const made = newKeys();
+      if (k in made) {
+        delete made[k];
+        setNewKeys(made);
+      }
       if (keyFor(w.unit) !== k) continue;
       if (k === S.keys[0]) {
         if (legacyPeak != null && S.peaks[w.unit] == null) S.peaks = { ...S.peaks, [w.unit]: legacyPeak };
@@ -678,10 +711,15 @@ async function refreshBalance() {
       S.bal = { ...S.bal, [w.unit]: { balanceMsub: w.balance_msub, availableMsub: w.available_msub, freeVoice: w.free_voice ?? null } };
       S.peaks = { ...S.peaks, [w.unit]: nextPeak(S.peaks[w.unit], w.balance_msub) };
     } catch (e) {
-      if (e instanceof EngineError && e.status === 401) {
-        // The engine no longer knows this key. Keep a copy aside, as v1 does, then let it go.
+      // Only a definite 401 lets a key go: an engine that cannot be reached or fails (5xx) says nothing
+      // about it. A key this phone made and the engine does not know yet is kept: it opens its balance
+      // with the next money in its unit (makeKey).
+      if (e instanceof EngineError && e.status === 401 && !(k in newKeys())) {
+        // The engine no longer knows this key. Keep a copy aside, as v1 does (in a list that is never
+        // written over), then let it go.
         const alone = S.keys.filter(Boolean).length === 1;
-        keep(alone ? 'forge.unrecognizedKey' : 'forge2.unrecognizedKey2', k);
+        if (alone) keep('forge.unrecognizedKey', k);
+        keep('forge2.unrecognizedKeys', withAside(ui.load('forge2.unrecognizedKeys'), k));
         dropKey(k);
         if (alone) ui.toast(t('error.key'));
       }
@@ -753,33 +791,36 @@ const landing = (unit) => landsIn(unit, { held: { usd: !!keyFor('usd'), sat: !!k
 /** The engine opens the second balance with the first one's key (methods.sibling), and has not refused it here. */
 const siblingsOn = () => !!S.methods?.sibling?.enabled && !S.siblingRefused;
 /**
- * What money in `unit` is sent with: {key} of the balance in that unit, or, with none, {sibling}: the
- * key of the balance in the other unit, which opens this one with no invite.
+ * What money in `unit` is sent with: {key} of the balance in that unit. With none, while the phone
+ * holds the other balance, the key of a new one is made and kept first (makeKey) and goes with
+ * {sibling}, the other balance's key, which opens it with no invite; the same goes for a key made so
+ * that the engine has not answered for yet. With no balance at all, {key: null}: the invite opens one.
  */
-function fundingFor(unit) {
-  const key = keyFor(unit);
-  if (key) return { key };
-  const other = keyFor(OTHER[unit]);
-  return { key: null, sibling: other && siblingsOn() ? other : undefined };
-}
+const fundingFor = (unit) => prepareFunding(unit, { keys: keys(), siblings: siblingsOn(), made: (k) => k in newKeys(), make: makeKey });
 /** The unit a token the phone can read goes to; a token it cannot read goes to the home balance, as before. */
 const landingOf = (token) => {
   const n = readNote(token);
   return n.ok ? landing(n.unit) : homeUnit();
 };
 
-/** Waits for the engine to say which unit each kept key is, so money is never sent as if a balance were missing. */
+/**
+ * Waits for the engine to say which unit each kept key is, so money is never sent as if a balance were
+ * missing (a second balance opened in a unit the phone holds, or the wrong key sent to open one). False
+ * while a key's unit is still not known (the engine could not be reached): then nothing is sent.
+ */
 async function unitsKnown() {
   if (unitsPending(S.keys, S.keyUnits)) await refreshBalance();
+  return !unitsPending(S.keys, S.keyUnits);
 }
+const unitsUnknown = () => new EngineError('offline', t('fund.balancesUnread'), { retryable: true });
 
 /** Sends every voucher and token still waiting on the phone: free ones on the free balance. One run at a time. */
 let retrying = null;
 function retryAll() {
   retrying ??= (async () => {
-    await unitsKnown();
-    // Each token to the balance of its unit (landingOf), opening it with the other key when it is the second.
-    const paid = await retryPending({ engine, vault, getKey: (token) => fundingFor(landingOf(token)).key, getSibling: (token) => fundingFor(landingOf(token)).sibling, invite: S.invite, setKey, setFreeKey });
+    // Each token to the balance of its unit (landingOf), opening it with the other key when it is the
+    // second. Not while a kept key's unit is unknown: the tokens wait for the next try.
+    const paid = !(await unitsKnown()) ? 0 : await retryPending({ engine, vault, getKey: (token) => fundingFor(landingOf(token)).key, getSibling: (token) => fundingFor(landingOf(token)).sibling, invite: S.invite, setKey, setFreeKey });
     const free = await retryPending({ engine, vault, getKey: () => S.freeKey, setKey: setFreeKey, via: 'free' });
     return paid + free;
   })().finally(() => (retrying = null));
@@ -798,12 +839,17 @@ const wallet = {
   /** The unit money in this unit is added to (landing). */
   landsIn: (unit) => landing(unit),
   /** {key} or {sibling} to send money in a unit with (fundingFor), once the kept keys' units are known. */
-  fundingFor: async (unit) => (await unitsKnown(), fundingFor(unit)),
+  fundingFor: async (unit) => {
+    if (!(await unitsKnown())) throw unitsUnknown();
+    return fundingFor(unit);
+  },
   /**
    * After the engine refused to open the second balance with the first one's key (sibling_refused): money
    * in that unit goes the way an engine without two balances takes it, changed into the balance the phone has.
    */
   siblingRefused: () => {
+    // Only a refusal of a key whose unit was known: one sent while units were unknown proves nothing.
+    if (unitsPending(S.keys, S.keyUnits)) return;
     S.siblingRefused = true;
     store.set({});
   },
@@ -828,7 +874,11 @@ const wallet = {
   topup: async (token, invite) => {
     const note = readNote(token);
     if (note.ok && isCreditMint(S.free, note.mint)) return topupFree(token);
-    await unitsKnown();
+    if (!(await unitsKnown())) {
+      // The token waits on the phone, sent again once the balances can be read (retryAll).
+      vault.pending(vault.hold(token, 'topup', { engine: engine.base ?? '' }).id, 'offline');
+      throw unitsUnknown();
+    }
     // To the balance of the token's unit, no change of units and no fee (landing): a second balance is
     // opened with the first one's key.
     const unit = landingOf(token);
@@ -1658,6 +1708,8 @@ const actions = {
   eraseEverything: eraseAll,
   copyAnswer: async () => ui.toast((await ui.copy(lastExchange(S.conv.messages)?.answer.content ?? '')) ? t('answer.copied') : t('answer.copyFailed')),
   takeOut,
+  /** The balance keys kept aside, for Erase everything's Copy keys. */
+  keysAside: () => keysAside(),
   setLook: (id) => {
     S.settings.look = id;
     S.settings.lookPicked = true;
@@ -2341,6 +2393,8 @@ async function start() {
   engine = createEngine({ base: engineBase(), encryptedFetch: tinfoilFetch(engineBase()) });
   // The two balance keys: the first where it always was (the Classic page's name), the second beside it.
   S.keys = [ui.load(keyStore()) ?? null, ui.load(keyStore2()) ?? null];
+  // The units of keys this phone made itself are known before the engine answers (makeKey).
+  S.keyUnits = Object.fromEntries(Object.entries(newKeys()).filter(([k]) => S.keys.includes(k)));
   S.freeKey = ui.load(freeKeyStore());
   S.freeTotal = (await kv.get(`freeTotal:${engine.base}`).catch(() => null)) ?? 0;
   S.peaks = { usd: null, sat: null, ...((await kv.get(`peaks:${engine.base}`).catch(() => null)) ?? {}) };

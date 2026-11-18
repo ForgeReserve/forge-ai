@@ -32,7 +32,7 @@ export interface OpenedAccount {
  * sibling: the key of a paid balance the caller already holds (X-Forge-Sibling, docs/PAYMENTS.md, Two
  * balances). While invite-only, it opens the balance in the other unit in place of an invite or a pass
  * (siblingProof). The new balance stores the id of the one that proved it (accounts.sibling_of); nothing
- * else links them.
+ * else links them. A refused sibling key with an invite beside it falls back to the invite.
  */
 export function openAccount(
   d: { db: DB; ledger: Ledger; invites: Invites; inviteOnly: boolean; passes?: Passes },
@@ -58,8 +58,14 @@ export function openAccount(
   let pass: Pass | undefined;
   let proof: Account | undefined;
   if (d.inviteOnly && !free && p.sibling) {
-    proof = siblingProof(db, ledger, p.sibling, p.unit);
-  } else if (d.inviteOnly && !free) {
+    try {
+      proof = siblingProof(db, ledger, p.sibling, p.unit);
+    } catch (e) {
+      // A refused sibling key with an invite beside it: the invite opens the balance, as it would alone.
+      if (!p.invite) throw e;
+    }
+  }
+  if (d.inviteOnly && !free && !proof) {
     const inv = p.invite ? invites.lookup(p.invite) : undefined;
     pass = !inv && p.invite && d.passes ? d.passes.lookup(p.invite) : undefined;
     if (pass) {
@@ -76,7 +82,14 @@ export function openAccount(
     if (proof) siblingProof(db, ledger, p.sibling!, p.unit); // again inside the transaction: two opens at once
     const a = ledger.createAccountRaw(key, p.unit, null, free);
     if (proof) {
-      db.prepare('UPDATE accounts SET sibling_of = ? WHERE id = ?').run(proof.id, a.id);
+      try {
+        db.prepare('UPDATE accounts SET sibling_of = ? WHERE id = ?').run(proof.id, a.id);
+      } catch (e) {
+        // The unique index caught a second balance opened with the same key (a writer the checks above
+        // did not see): the same refusal, and the transaction undoes the new balance.
+        if (/UNIQUE/i.test(String((e as Error)?.message))) throw new LedgerError('sibling_refused', `this key cannot open a balance in ${p.unit}: it opened its balance in the other unit already`, 403);
+        throw e;
+      }
     } else if (pass) {
       // Counted in the same transaction: at the cap, the balance is not created either.
       d.passes!.useRaw(pass.id);

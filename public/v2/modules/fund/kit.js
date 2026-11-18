@@ -35,15 +35,16 @@ export function lightningUnit(wallet) {
 }
 
 /**
- * Sends a funding request for a balance in `unit`: with its key, or, when the phone has no balance in
- * that unit, with the key of the other one (sibling), or the invite for a first balance. A key the engine
- * makes is kept at once, with its unit. send(key, invite, sibling) makes the request. When the engine
+ * Sends a funding request for a balance in `unit`: with its key. For a second balance that key was made
+ * and kept on the phone before this (app.js makeKey) and goes with the other balance's key (sibling),
+ * which opens it; for a first balance, the invite goes instead. A key the engine makes is kept at once,
+ * with its unit. send(key, invite, sibling) makes the request. When the engine
  * will not open the second balance (sibling_refused), the wallet is told, so the next try takes the way
  * an engine without two balances offers. Returns the engine's answer.
  */
 export async function fundIn(wallet, unit, invite, send) {
   const f = wallet.fundingFor ? await wallet.fundingFor(unit) : { key: wallet.key() };
-  const r = await send(f.key, f.key || f.sibling ? undefined : invite, f.key ? undefined : f.sibling);
+  const r = await send(f.key, f.key || f.sibling ? undefined : invite, f.sibling);
   if (r.body?.key) wallet.setKey(r.body.key, r.body.unit ?? unit);
   if (r.body?.error?.code === 'sibling_refused') wallet.siblingRefused?.();
   return r;

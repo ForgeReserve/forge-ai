@@ -5,13 +5,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openAccount, releaseIfEmpty, SIBLING_HEADER, siblingProof } from '../../src/accounts.ts';
 import { createApp } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import { openDb } from '../../src/db.ts';
 import { buildDeps } from '../../src/deps.ts';
-import { Invites, Ledger, LedgerError, Passes } from '../../src/ledger.ts';
+import { Invites, Ledger, LedgerError, newApiKey, Passes } from '../../src/ledger.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { fixedRateSource } from '../../src/rates.ts';
 
@@ -125,6 +125,51 @@ describe('opening the balance in the other unit with a sibling key', () => {
     expect(open(d, p.key).created).toBe(true);
     // The balance that proved is never released: it has a ledger line.
     expect(releaseIfEmpty(d.db, p.id)).toBe(false);
+  });
+
+  it('opens with a key the phone chose, and the same key and header again find that balance (a lost answer)', () => {
+    const d = setup();
+    const p = usedBalance(d);
+    const mine = newApiKey();
+    const first = openAccount({ ...d, inviteOnly: true }, { unit: 'sat', key: mine, sibling: p.key });
+    expect(first).toMatchObject({ created: true, generatedKey: undefined });
+    // The retry after a lost answer: the same key with the same header is the same balance, never a 403.
+    const again = openAccount({ ...d, inviteOnly: true }, { unit: 'sat', key: mine, sibling: p.key });
+    expect(again).toMatchObject({ created: false });
+    expect(again.account.id).toBe(first.account.id);
+    expect(count(d)).toBe(2);
+  });
+
+  it('falls back to an invite sent beside a refused sibling key, and refuses when there is none', () => {
+    const d = setup();
+    const p = usedBalance(d);
+    open(d, p.key);
+    const { code } = d.invites.create();
+    const o = openAccount({ ...d, inviteOnly: true }, { unit: 'sat', sibling: p.key, invite: code });
+    expect(o.created).toBe(true);
+    expect(d.db.prepare('SELECT invite_id, sibling_of FROM accounts WHERE id = ?').get(o.account.id)).toEqual({ invite_id: d.invites.lookup(code)!.id, sibling_of: null });
+    expect(d.invites.lookup(code)!.status).toBe('redeemed');
+    expect(() => openAccount({ ...d, inviteOnly: true }, { unit: 'sat', sibling: p.key })).toThrow(/other unit already/);
+    // A good sibling key is used first: the invite beside it is left open.
+    const q = usedBalance(d);
+    const { code: spare } = d.invites.create();
+    expect(siblingOf(d, openAccount({ ...d, inviteOnly: true }, { unit: 'sat', sibling: q.key, invite: spare }).account.id)).toBe(q.id);
+    expect(d.invites.lookup(spare)!.status).toBe('open');
+  });
+
+  it('answers a clash on the unique index (a second writer) as 403 sibling_refused, and opens nothing', () => {
+    const d = setup();
+    const p = usedBalance(d);
+    open(d, p.key);
+    // Hide the existing sibling from the checks, as a writer they did not see would be.
+    const real = d.db.prepare.bind(d.db);
+    const spy = vi.spyOn(d.db, 'prepare').mockImplementation((sql: string) => (/WHERE sibling_of = \?/.test(sql) ? ({ get: () => undefined } as any) : real(sql)));
+    try {
+      expect(() => open(d, p.key)).toThrow(expect.objectContaining({ code: 'sibling_refused', status: 403 }));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(count(d)).toBe(2);
   });
 
   it('stores nothing while the gateway is not invite-only: any key opens there', () => {

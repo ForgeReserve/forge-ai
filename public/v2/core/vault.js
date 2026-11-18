@@ -105,15 +105,16 @@ export function createVault(storage) {
  * says the key is for a free balance (free: true) and setFreeKey is given, that key goes to setFreeKey
  * instead, so a free balance key never lands in the paid slot (a voucher sent the paid way, when the
  * app did not yet know the credit mint).
- * sibling: with no key, the key of the balance the phone has in the other unit, which opens this one
- * with no invite (docs/PAYMENTS.md, Two balances).
+ * sibling: the key of the balance the phone has in the other unit, which opens this one with no invite
+ * (docs/PAYMENTS.md, Two balances). It goes with `key`, the new balance's key the phone made and kept
+ * before sending, so a lost answer costs nothing: sent again, the same key finds the balance.
  * Returns {credited, unit, replay}, plus free: true when the token went on a free balance. Throws EngineError (with .retryable) when the token was not credited.
  */
 export async function topupWithVault({ engine, vault, token, key, invite, sibling, setKey, setFreeKey, via = 'topup' }) {
   const entry = vault.hold(token, via, { engine: engineOf(engine) });
   let r;
   try {
-    r = await engine.topup(key, token, invite, key ? undefined : sibling);
+    r = await engine.topup(key, token, invite, sibling);
   } catch (e) {
     vault.pending(entry.id, e?.code ?? 'offline');
     throw e;

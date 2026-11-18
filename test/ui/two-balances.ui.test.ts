@@ -175,3 +175,108 @@ describe('sat eCash on a phone that holds dollars', () => {
     await close();
   }, 60_000);
 });
+
+describe('the second key, kept before it is sent', () => {
+  const ls = (page: Page, k: string) => page.evaluate((name) => localStorage.getItem(name), k);
+  const vault = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('forge2.vault') ?? '{"in":[],"out":[]}'));
+
+  it('a lost answer: the key is on the phone already, and sending again credits once on it', async () => {
+    const { usd } = await balances(100);
+    const token = await mintToken(MINT_A, 'sat', 700);
+    const { page, errors, close } = await phone(usd);
+    let lost = 0;
+    // The engine credits the sats, and the answer never reaches the phone.
+    await page.route('**/v1/wallet/topup', async (route) => {
+      await route.fetch();
+      lost++;
+      await route.abort('connectionreset');
+    });
+    await page.goto(`${g.url}/v2/#/funds/add/ecash`);
+    await page.waitForSelector('[data-fund=ecash] #ecashToken');
+    await page.fill('#ecashToken', token);
+    await page.click('#ecashAdd');
+    await expect.poll(() => page.textContent('[data-fund=ecash] .msg')).toBe('Not added yet. Your eCash is kept on this phone and sent again later.');
+    expect(lost).toBe(1);
+    const made = (await ls(page, 'forge2.balanceKey2'))!;
+    expect(made).toMatch(/^sk-forge-[A-Za-z0-9_-]{32}$/);
+    expect(JSON.parse((await ls(page, 'forge2.newKeys'))!)).toEqual({ [made]: 'sat' });
+    expect((await api('/v1/wallet', undefined, auth(made))).body).toMatchObject({ unit: 'sat', balance_msub: 700_000 });
+    // The connection comes back: the token is sent again with the same key, a replay, credited once.
+    await page.unroute('**/v1/wallet/topup');
+    await page.reload();
+    await expect.poll(async () => (await vault(page)).in.length).toBe(0);
+    await page.goto(`${g.url}/v2/`);
+    await expect.poll(() => pill(page)).toBe('$1.70');
+    expect(await ls(page, 'forge2.balanceKey2')).toBe(made);
+    expect(await ls(page, 'forge2.newKeys')).toBeNull();
+    expect((await api('/v1/wallet', undefined, auth(made))).body.balance_msub).toBe(700_000);
+    expect(errors.filter((e) => !/Failed to load resource/.test(e))).toEqual([]);
+    await close();
+  }, 60_000);
+
+  it('sends nothing while a kept key cannot be read: no second key, no key let go, the eCash waits', async () => {
+    const { usd } = await balances(100);
+    const token = await mintToken(MINT_A, 'sat', 300);
+    const { page, close } = await phone(usd);
+    const topups: string[] = [];
+    page.on('request', (r) => r.url().endsWith('/v1/wallet/topup') && topups.push(r.url()));
+    // The engine fails to read the balances (a 503): their units stay unknown.
+    await page.route('**/v1/wallet', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"unavailable","message":"busy"}}' }));
+    await page.goto(`${g.url}/v2/#/funds/add/ecash`);
+    await page.waitForSelector('[data-fund=ecash] #ecashToken');
+    await page.fill('#ecashToken', token);
+    await page.click('#ecashAdd');
+    await expect.poll(() => page.textContent('[data-fund=ecash] .msg')).toBe('Not added yet. Your eCash is kept on this phone and sent again later.');
+    expect(topups).toEqual([]);
+    expect(await ls(page, 'forge2.balanceKey2')).toBeNull();
+    // A 503 lets no key go.
+    expect(await ls(page, 'forge.balanceKey')).toBe(usd);
+    expect(await ls(page, 'forge2.unrecognizedKeys')).toBeNull();
+    expect((await vault(page)).in.map((x: any) => x.state)).toEqual(['pending']);
+    // Readable again: the eCash goes to a new sat balance.
+    await page.unroute('**/v1/wallet');
+    await page.reload();
+    await expect.poll(async () => (await vault(page)).in.length).toBe(0);
+    const sat = (await ls(page, 'forge2.balanceKey2'))!;
+    expect((await api('/v1/wallet', undefined, auth(sat))).body).toMatchObject({ unit: 'sat', balance_msub: 300_000 });
+    await close();
+  }, 60_000);
+
+  it('sets a key the engine does not know aside in a list (a definite 401), never written over', async () => {
+    const { usd } = await balances(100);
+    const gone = (c: string) => `sk-forge-${c.repeat(32)}`;
+    const { page, close } = await phone(usd, gone('a'));
+    await page.goto(`${g.url}/v2/`);
+    await expect.poll(() => ls(page, 'forge2.unrecognizedKeys')).toBe(JSON.stringify([gone('a')]));
+    expect(await ls(page, 'forge2.balanceKey2')).toBeNull();
+    expect(await ls(page, 'forge.balanceKey')).toBe(usd);
+    await page.evaluate((k) => localStorage.setItem('forge2.balanceKey2', k), gone('b'));
+    await page.reload();
+    await expect.poll(() => ls(page, 'forge2.unrecognizedKeys')).toBe(JSON.stringify([gone('a'), gone('b')]));
+    await close();
+  }, 60_000);
+});
+
+describe('Erase everything with two balances', () => {
+  it('names both balances, with or without a rate, and counts keys kept aside', async () => {
+    const k = await balances(100, 2000);
+    const { page, errors, close } = await phone(k.usd, k.sat);
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await expect.poll(() => page.textContent('#eraseMoneyHead')).toBe('Your $1.00 and 2,000 sat balances are lost');
+    expect(await page.locator('#eraseKeysAside').count()).toBe(0);
+    // With no rate the home shows the dollars alone; Erase still names both.
+    await page.route('**/v1/models', async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, json: { ...(await res.json()), btc_usd: null } });
+    });
+    await page.evaluate(() => localStorage.setItem('forge2.extraKeys', JSON.stringify(['sk-forge-' + 'c'.repeat(32)])));
+    await page.goto(`${g.url}/v2/`);
+    await expect.poll(() => pill(page)).toBe('$1.00');
+    await page.goto(`${g.url}/v2/#/more/erase`);
+    await expect.poll(() => page.textContent('#eraseMoneyHead')).toBe('Your $1.00 and 2,000 sat balances are lost');
+    expect(await page.textContent('#eraseKeysAside')).toBe('1 other saved balance key is lost');
+    expect(await page.isVisible('#eraseCopyKeys')).toBe(true);
+    expect(errors).toEqual([]);
+    await close();
+  }, 60_000);
+});

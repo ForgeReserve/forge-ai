@@ -296,6 +296,8 @@ A balance has one unit for life. A client that holds a paid balance in one unit 
 
 - The key proves something only when its balance is a paid balance (a free-question balance proves nothing), not frozen, in the other unit, already used (funded, or opened with an invite or pass), and not itself opened this way. Each such balance opens one balance in the other unit, once. Anything else answers `403 sibling_refused`, and a token sent with it is left untouched.
 - No invite is redeemed and no pass use is counted. If that first funding fails or expires, the new balance is removed, and the key can open one again.
+- Choose the new balance's key yourself and send it as the bearer with the header, keeping it before you send: if the answer is lost, the same key, header and token sent again find the balance that was opened, where a key the gateway made would be lost with the answer.
+- An `invite` sent beside the header is used when the key is refused.
 - The new balance stores the id of the balance whose key opened it, so the gateway can tell that the two belong together. The header is read only while the gateway is invite-only; elsewhere a new balance needs nothing, and nothing is stored.
 
 ### Top up with eCash

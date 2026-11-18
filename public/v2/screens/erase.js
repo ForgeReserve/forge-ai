@@ -1,7 +1,7 @@
 // Erase everything (DErase), from More: what is lost, the offer to take funds out first, what is
 // removed, and a button that must be held for two seconds (a tap does nothing). Then the Erased screen,
 // drawn by the app once nothing is left, or saying what could not be removed.
-import { el, icon, msgLine, sayEl } from '../core/ui.js';
+import { copy, el, icon, msgLine, sayEl, toast } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
 
 export const HOLD_MS = 2000;
@@ -23,17 +23,34 @@ export function eraseScreen({ t, state, nav, back, actions, format, vault, reade
     // Money first: the balance this phone holds the key to, and how to take it out. Shown whenever there
     // is a key, even at zero: a deposit still on its way (on-chain, say) is added to this balance later,
     // and once the key is gone nobody can spend it.
-    if (v.hasKey) {
+    // Every balance with money is named in its own unit (both, with or without a rate), and keys kept
+    // aside on this phone are counted, so nothing goes without a word.
+    if (v.hasKey || v.keysAside) {
       const known = v.balanceText != null;
       const zero = v.balanceMsub === 0;
+      const two = v.balances.length > 1;
       // One balance with money: its own Take out. Two: Funds, where each has its row and its Take out.
       const one = v.balances.length === 1 ? v.balances[0] : null;
       const out = one?.refundable > 0 ? format.units(one.refundable, one.unit) : null;
-      const [head, sub] = zero ? [t('erase.moneyIncoming'), t('erase.moneyIncomingSub')] : known ? [t('erase.money', { amount: v.balanceText }), t('erase.moneySub')] : [t('erase.moneyUnknown'), t('erase.moneyUnknownSub')];
+      const [head, sub] = !v.hasKey
+        ? [t(v.keysAside === 1 ? 'erase.keysAsideOne' : 'erase.keysAside', { count: v.keysAside }), t('erase.keysAsideSub')]
+        : two
+          ? [t('erase.moneyTwo', { first: v.balances[0].text, second: v.balances[1].text }), t('erase.moneySub')]
+          : zero
+            ? [t('erase.moneyIncoming'), t('erase.moneyIncomingSub')]
+            : known
+              ? [t('erase.money', { amount: one?.text ?? v.balanceText }), t('erase.moneySub')]
+              : [t('erase.moneyUnknown'), t('erase.moneyUnknownSub')];
+      const aside = v.hasKey && v.keysAside ? sayEl('p', { id: 'eraseKeysAside' }, t(v.keysAside === 1 ? 'erase.keysAsideOne' : 'erase.keysAside', { count: v.keysAside }), '', 'lock') : null;
+      const copyKeys = v.keysAside ? el('button', { type: 'button', class: 'btn block', id: 'eraseCopyKeys', onclick: async () => toast((await copy(actions.keysAside().join('\n'))) ? t('answer.copied') : t('answer.copyFailed')) }, icon('copy', 20), el('span', { text: t('erase.copyKeys') })) : null;
       money.replaceChildren(
-        el('b', { id: 'eraseMoneyHead', text: head }),
-        sayEl('p', { id: 'eraseMoneySub' }, sub, '', 'alert'),
-        el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav(v.balances.length > 1 ? 'funds' : 'takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })),
+        ...[
+          el('b', { id: 'eraseMoneyHead', text: head }),
+          sayEl('p', { id: 'eraseMoneySub' }, sub, '', 'alert'),
+          aside,
+          v.hasKey ? el('button', { type: 'button', class: 'btn gold-outline block', id: 'eraseTakeOut', onclick: () => nav(two ? 'funds' : 'takeOut') }, icon('takeout', 20), el('span', { text: out ? t('erase.takeOut', { amount: out }) : t('erase.takeOutAny') })) : null,
+          copyKeys,
+        ].filter(Boolean),
       );
       money.hidden = false;
     } else money.hidden = true;
