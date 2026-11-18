@@ -20,6 +20,7 @@
     "test/ui/join.ui.test.ts": 9.7,
     "test/ui/layout.ui.test.ts": 20.9,
     "test/ui/literacy.ui.test.ts": 58.5,
+    "test/ui/mic-room.ui.test.ts": 15,
     "test/ui/midnight.ui.test.ts": 43.1,
     "test/ui/note.ui.test.ts": 20.4,
     "test/ui/phonon-lab.ui.test.ts": 179.9,

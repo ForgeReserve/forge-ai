@@ -66,8 +66,17 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 .pf-bubble .listen-price { color: var(--pf-ink-2); }
 
 /* The rings: the design's thick flat bands, without the Default rings' glow, light and tip. */
-.pf-rings { width: min(336px, 100%, max(220px, calc(100dvh - 360px))); aspect-ratio: 1; }
-.pf-rings-small { width: clamp(140px, calc(100dvh - 470px), 200px); aspect-ratio: 1; align-self: center; flex: none; }
+/* The home's rings: as wide as the design's 336 px where the screen has room, smaller on a short one, and
+   smaller still (by their flex weight, before Pip's bubble gives way) where larger text needs the room,
+   down to 160 px, where the talk button is 97 px across. The home is one screen high, so the bar below
+   never leaves the screen (owner, 2026-11-18). */
+.pf-home { flex: none; height: 100dvh; min-height: 0; }
+.pf-rings { flex: 0 1000 min(336px, calc(100vw - 32px), max(220px, calc(100dvh - 360px))); min-height: 160px; aspect-ratio: 1; align-self: center; }
+.pf-helper { min-height: 0; }
+.pf-helper:not(.keep-place) > .pf-bubble { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+/* The answer's rings are 200 px high and give up height before the card's words do, down to 172 px, where
+   the reply button is 96 px across (as on Default: style.css .answer-rings). */
+.pf-rings-small { flex: 0 1000 200px; min-height: 172px; aspect-ratio: 1; align-self: center; }
 .pf .ring-glow, .pf .ring-shade, .pf .ring-tip { display: none; }
 
 /* The talk button: white, with the pressed-in bottom edge (its bevel; no drop shadow). Its box-shadow
@@ -92,16 +101,18 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 .pf .bottom-btn .ico { stroke-width: 2.4; }
 
 /* The answer: a white card that holds Pip's line, the words and the actions; the words scroll inside it. */
-/* The answer is one screen high, whatever the answer's length: the card shrinks and its words scroll. */
-.pf-answer { flex: none; height: 100dvh; }
-.pf-card { flex: 1; min-height: 150px; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 28px; background: #FFFFFF; color: var(--pf-ink); box-shadow: inset 0 -6px 0 rgba(27,20,64,0.12); }
+/* The answer is one screen high, whatever the answer's length: the card gives way and its words scroll,
+   so the rings with the reply button and the bar always keep their room (owner, 2026-11-18). The card asks
+   for about seven lines of the page's type for its words, and gives that up after the rings have shrunk. */
+.pf-answer { flex: none; height: 100dvh; min-height: 0; container: pf-answer / size; }
+.pf-card { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 28px; background: #FFFFFF; color: var(--pf-ink); box-shadow: inset 0 -6px 0 rgba(27,20,64,0.12); }
 .pf-card:focus { outline: none; }
 .pf-card-head { display: flex; align-items: center; gap: 10px; }
 .pf-card-head > .pip { flex: none; }
 .pf-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 14px; font-weight: 800; color: var(--pf-ink-2); }
 .pf-line[data-reading="true"] { color: var(--pf-read); }
 .pf-secs { font-variant-numeric: tabular-nums; font-weight: 700; }
-.pf-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+.pf-scroll { flex: 1 1 160px; flex-basis: 7lh; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .pf-scroll-in { margin: auto 0; display: flex; flex-direction: column; gap: 10px; }
 .pf-asked { margin: 0; font-size: 15px; font-weight: 700; color: var(--pf-ink-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pf-asked:empty { display: none; }
@@ -140,6 +151,18 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 .pf-answer .listen-text { background: #FFFFFF; color: var(--pf-ink); }
 .pf-rings-small > .listen-info { background: var(--pf-ground); box-shadow: none; }
 .pf-careful { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: #FFFFFF; text-wrap: balance; }
+.pf-careful-in { display: none; margin: 0; font-size: 13px; font-weight: 700; color: var(--pf-ink-2); }
+/* A screen short for its text (a small phone with larger text: under 20 lines of the page's type) keeps
+   room for the words: Pip's line goes to one line beside a smaller Pip, and the line that Pip can get
+   things wrong follows the words in the card instead of taking the foot of the screen. */
+@container pf-answer (max-height: 20lh) {
+  .pf-careful { display: none; }
+  .pf-careful-in { display: block; }
+  .pf-card { padding: 10px 12px; gap: 6px; border-radius: 22px; }
+  .pf-card-head > .pip { width: 32px; height: 32px; }
+  .pf-line { font-size: 12px; }
+  .pf-asked { -webkit-line-clamp: 1; }
+}
 
 /* Short phones (360 by 640): a smaller Pip and bar, so the talk button and the bar always fit. */
 @media (max-height: 700px) {

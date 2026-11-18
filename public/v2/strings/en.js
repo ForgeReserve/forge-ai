@@ -124,6 +124,7 @@ export default {
 
   // Answer
   'answer.asked': 'You asked',
+  'answer.text': 'The answer',
   'answer.thinking': 'Thinking',
   'answer.stop': 'Stop',
   'answer.copy': 'Copy',

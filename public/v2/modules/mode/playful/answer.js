@@ -10,7 +10,7 @@
 import { errorView } from '../../../core/errors.js';
 import { priceLine } from '../../../core/price.js';
 import { el, icon, say, sayEl, toast } from '../../../core/ui.js';
-import { loadMarkdown, SLOW_MS } from '../../../screens/answer.js';
+import { loadMarkdown, moreBelow, SLOW_MS } from '../../../screens/answer.js';
 import { holdToBurn } from '../../../screens/burn.js';
 import { rings } from '../../../screens/parts.js';
 import { holdToTalk } from '../../../screens/talk.js';
@@ -40,8 +40,14 @@ export function answer({ t, ui, state, nav, actions, format }) {
   const fastBtn = el('button', { type: 'button', class: 'btn primary slow-go', id: 'useFast', onclick: () => actions.useFastModel() });
   const slow = el('div', { class: 'slow-note pf-slow', id: 'slowNote', hidden: true }, slowText, fastBtn);
   const errBox = el('div', { class: 'error-box pf-error', id: 'answerError', role: 'alert', hidden: true });
-  // The words sit in the middle of the card while they fit, and scroll from the top once they do not.
-  const scroll = el('div', { class: 'pf-scroll' }, el('div', { class: 'pf-scroll-in' }, asked, slow, text, errBox));
+  // The words sit in the middle of the card while they fit, and scroll from the top once they do not, by
+  // touch and by the keyboard; the lower edge fades while there is more below (screens/answer.js moreBelow).
+  // On a screen short for its text the line that Pip can get things wrong moves to the end of the words
+  // (playful.css), so the words keep their room; it is the same line, shown in one place at a time.
+  const carefulIn = el('p', { class: 'pf-careful-in', text: t('playful.careful') });
+  const scrollIn = el('div', { class: 'pf-scroll-in' }, asked, slow, text, errBox, carefulIn);
+  const scroll = el('div', { class: 'pf-scroll', tabindex: '0', role: 'region', 'aria-label': t('answer.text') }, scrollIn);
+  const more = moreBelow(scroll, scrollIn);
   const acts = el('div', { class: 'pf-acts', id: 'pfActs' });
   const tray = el('div', { class: 'pf-acts pf-tray', id: 'shareTray', hidden: true });
   const card = el('article', { class: 'pf-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), el('div', { class: 'pf-card-head' }, face.node, line), scroll, acts, tray);
@@ -173,6 +179,8 @@ export function answer({ t, ui, state, nav, actions, format }) {
   /** Draws the answer: the first sentence big, the rest under it (Markdown once it is in). */
   const drawText = (content, streaming) => {
     if (content === shownText) return;
+    // A new answer shows from its top; one that grows as it streams stays where the reader is.
+    if (shownText && !content?.startsWith(shownText)) scroll.scrollTop = 0;
     shownText = content;
     const { lead: l, rest: rs } = splitLead(content ?? '');
     const put = (node, s) => {
@@ -297,6 +305,7 @@ export function answer({ t, ui, state, nav, actions, format }) {
       gone = true;
       clearInterval(timer);
       clearTimeout(noteTimer);
+      more.destroy();
       stopSays();
       burner?.destroy();
       hold.destroy?.();

@@ -62,7 +62,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .stage-under > .listen-info { position: absolute; top: 16px; left: 0; right: 0; z-index: 2; background: var(--bg); }
 .rings { position: relative; flex: none; display: flex; align-items: center; justify-content: center; }
 .home-rings { width: min(336px, 100%); aspect-ratio: 1; }
-.answer-rings { width: 200px; height: 200px; align-self: center; }
+/* The answer's rings are 200 px high. Where the screen is short they give up height before the card's text
+   does (by their flex weight; see Answer), down to 172 px, where the reply button is 96 px across. */
+.answer-rings { flex: 0 1000 200px; min-height: 172px; aspect-ratio: 1; align-self: center; }
 .rings-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 /* The rings fill and empty smoothly, the lit layers and the tip with them (instant with reduced motion). */
 .ring-fill, .ring-lit { transition: stroke-dasharray 700ms var(--ease), stroke-dashoffset 700ms var(--ease), stroke 300ms, opacity 300ms; }
@@ -96,7 +98,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .talk > * { position: relative; z-index: 1; }
 .talk-mic { overflow: visible; }
 .talk:active { transform: scale(.97); --talk-drop: 0 10px 16px -10px rgba(20,22,26,0.55), 0 2px 5px rgba(20,22,26,0.16); }
-.talk.small { width: 112px; height: 112px; font-size: 13px; gap: 4px; --talk-bevel: inset 0 1.5px 1px rgba(255,255,255,0.22), inset 0 -5px 10px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07); --talk-drop: 0 10px 16px -8px rgba(20,22,26,0.55), 0 3px 6px rgba(20,22,26,0.14); }
+.talk.small { width: 56%; height: auto; min-height: 0; font-size: 13px; gap: 4px; --talk-bevel: inset 0 1.5px 1px rgba(255,255,255,0.22), inset 0 -5px 10px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.07); --talk-drop: 0 10px 16px -8px rgba(20,22,26,0.55), 0 3px 6px rgba(20,22,26,0.14); }
 .chip-low { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; background: var(--low-tint); border: 1px solid var(--low-line); color: var(--low-ink); border-radius: 24px; font-size: 14px; font-weight: 700; }
 .held-line { margin: 0; color: var(--text-2); font-size: 14px; font-weight: 600; }
 /* No funds on a paid model: the gold ring's track breathes, unless reduced motion is on. */
@@ -193,9 +195,21 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .notice { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--gold-callout); background: var(--surface); }
 .notice p { margin: 0; }
 
-/* Answer */
-.answer-card { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface); border-radius: 26px; box-shadow: var(--shadow-raised); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+/* Answer. The screen is one screen high whatever the answer's length: the card gives way, so the rings
+   with the reply button, Listen and the bottom row always keep their room (owner, 2026-11-18). The card
+   holds the text that scrolls, with Copy, Ask again and Burn pinned at its foot. Its own height asks for
+   the text's room at about seven lines of the page's type (the question, the model and three lines of
+   the answer's first words); flex-shrink weights give that up after the rings have shrunk. */
+.screen.answer { flex: none; height: 100dvh; min-height: 0; container: answer / size; }
+.answer-card { flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--surface); border-radius: 26px; box-shadow: var(--shadow-raised); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .answer-card:focus { outline: none; }
+.answer-scroll { flex: 1 1 160px; flex-basis: 7lh; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; }
+.answer-scroll:focus-visible { outline-offset: -3px; border-radius: 12px; }
+/* More to read below: the text fades out at the lower edge, and the fade goes at the end of the text
+   (screens/answer.js moreBelow). The other mode's card (.pf-scroll) does the same. */
+@property --more-fade { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
+.answer-scroll, .pf-scroll { --more-fade: 0px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--more-fade)), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - var(--more-fade)), transparent); transition: --more-fade 200ms var(--ease); }
+.answer-scroll[data-more], .pf-scroll[data-more] { --more-fade: min(56px, 40%); }
 .asked { margin: 0; color: var(--text-2); font-size: 14px; font-weight: 600; }
 .answer-body { color: var(--text-body); font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
 .answer-body > :first-child { margin-top: 0; color: var(--ink); }
@@ -209,9 +223,27 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .answer-body a { color: var(--blue); }
 .thinking { color: var(--text-2); animation: pulse 1.2s ease-in-out infinite; }
 .answer-note { margin: 0; font-size: 13px; color: var(--gold-ink); }
-.action-tiles { display: flex; gap: 8px; }
+.action-tiles { flex: none; display: flex; gap: 8px; }
 .action-tile { flex: 1; min-height: 60px; border-radius: 18px; border: 0; background: var(--surface-2); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 600; }
 .error-box { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--danger-tint); color: var(--ink); }
+/* A short phone (360 by 640) keeps room for the answer's words with tighter gaps round the card's parts. */
+@media (max-height: 700px) {
+  .screen.answer { gap: 10px; }
+  .answer-card { padding: 14px 16px; gap: 8px; }
+  .answer-scroll { gap: 8px; }
+  .action-tile { min-height: 52px; }
+  .answer-dock { gap: 6px; }
+}
+/* A screen short for its text (a small phone with larger text: under 20 lines of the page's type) keeps
+   room for the answer: tighter gaps, and the action tiles show their pictures with only the price and Hold
+   beside them (their words stay for screen readers). */
+@container answer (max-height: 20lh) {
+  .answer-card { padding: 12px 14px; gap: 8px; border-radius: 22px; }
+  .answer-scroll { gap: 8px; }
+  .action-tile { min-height: 48px; padding: 6px 4px; flex-direction: row; flex-wrap: wrap; gap: 2px 6px; }
+  .action-tile > span:not(.hold-fill) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .answer-dock { gap: 6px; }
+}
 .error-box p { margin: 0; font-weight: 600; }
 
 /* Funds and memory */
@@ -354,7 +386,7 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 /* Sending: the halo breathes while the question goes (it keeps still with reduced motion). */
 .talk.sending { opacity: .88; animation: talkbusy 1.6s ease-in-out infinite; }
 @keyframes talkbusy { 50% { box-shadow: var(--talk-bevel), 0 0 0 8px var(--teal-tint), 0 0 28px 4px rgba(63,207,180,0.28), var(--talk-drop); } }
-.talk-label { pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+.talk-label { max-width: 88%; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
 .level-bars { display: flex; align-items: center; gap: 5px; height: 40%; pointer-events: none; }
 .level-bars .bar { width: 9px; height: calc(var(--h, .12) * 100%); min-height: 8px; border-radius: 5px; background: currentColor; background-image: linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%, rgba(0,0,0,0.18)); box-shadow: 0 0 10px rgba(63,207,180,0.45), 0 1px 2px rgba(0,0,0,0.3); transition: height 90ms linear; }
 .talk.small .level-bars { gap: 3px; }
@@ -810,9 +842,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 :root:not([data-scheme="light"]) .slow-go .ico { color: #0D7A69; }
 .slow-go .ico { color: var(--teal); }
 
-/* The dock: Listen (or Stop) and the bottom row, pinned to the bottom of the screen over a long answer,
-   on a fade of the ground so the words scroll away under it. */
-.answer-dock { position: sticky; bottom: 0; z-index: 6; display: flex; flex-direction: column; gap: 8px; margin: 0 -16px calc(-1 * max(16px, env(safe-area-inset-bottom))); padding: 18px 16px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 18px); }
+/* The dock: Listen (or Stop) and the bottom row, at the foot of the answer screen. */
+.answer-dock { flex: none; display: flex; flex-direction: column; gap: 8px; }
 .dock-act { display: flex; }
 .dock-act[hidden] { display: none; }
 .dock-btn { flex: 1; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 18px; border: 1px solid var(--teal-line); border-radius: 20px; background: var(--teal-tint); color: var(--teal); font-size: 16px; font-weight: 700; }

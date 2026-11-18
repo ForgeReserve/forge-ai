@@ -6,8 +6,9 @@ import { fakePhoneVoice } from './phonevoice.ts';
 import { selection, wordAt } from './select.ts';
 
 // The answer screen's UX pass (owner, 2026-11-15): the wait shows it is working, then offers a fast model;
-// the model picker's speed groups (rabbits and turtles); Listen and the bottom row pinned under a long
-// answer, with Copy, Ask again and Burn never left half under them; Burn held, never one tap, and a quick
+// the model picker's speed groups (rabbits and turtles); Listen and the bottom row in view under a long
+// answer, which scrolls inside its card, with Copy, Ask again and Burn never left half under them (since
+// 2026-11-18 pinned at the card's foot: mic-room.ui.test.ts); Burn held, never one tap, and a quick
 // touch on it says so; a new model starts a new conversation and each answer names its model; and Funds
 // says free questions work at $0 when a paid model is chosen.
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
@@ -247,11 +248,12 @@ const rowRests = (page: Page) =>
     });
     return tiles.length && where.every((w) => w === 'above' || w === 'below') ? 'ok' : where.join('; ') || 'no row';
   });
-/** Waits for the row to come to rest clear of the dock (a smooth scroll may still be bringing it up). */
+/** Waits for the row to come to rest clear of the dock. */
 const restsClear = (page: Page, what: string) => expect.poll(() => rowRests(page), { message: what, timeout: 4000 }).toBe('ok');
 
 describe('the action row and the dock', () => {
-  // Medium answers from 2 to 9 times the words: their rows land in every place across the dock's height.
+  // Answers from 1 to 40 times the words: before the card scrolled its words, the medium ones left the row
+  // in every place across the dock's height.
   const LENGTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 40];
   it.each([
     [360, 640],
@@ -282,7 +284,7 @@ describe('the action row and the dock', () => {
     await ctx.close();
   }, 120_000);
 
-  it('holds still while the answer streams; the keyboard and a kept answer opened from History leave the row clear too', async () => {
+  it('holds still while the answer streams; the keyboard and a kept answer opened from History find the row clear too', async () => {
     const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 } } });
     await zeroBalance(page);
     await useModel(page, 'fast-two'); // mock-slow: 200 words, 20 ms apart
@@ -290,15 +292,15 @@ describe('the action row and the dock', () => {
     await page.fill('#question', 'Tell me a lot, slowly.');
     await page.click('#sendBtn');
     await page.waitForSelector('#answerText p, #answerText .plain', { timeout: 20_000 });
-    // While the words come in, the page does not move under the reader's eyes.
-    const tops: number[] = [];
+    // While the words come in, neither the page nor the card's text moves under the reader's eyes.
+    const tops: string[] = [];
     while (!(await page.$('#burnBtn'))) {
-      tops.push(await page.evaluate(() => scrollY));
+      tops.push(await page.evaluate(() => `${scrollY} ${document.querySelector('#answerScroll')!.scrollTop}`));
       await page.waitForTimeout(100);
     }
     expect(tops.length).toBeGreaterThan(5);
-    expect(new Set(tops).size).toBe(1);
-    // A long answer: the row is below the screen. The keyboard's way to Burn brings it up above the dock.
+    expect(new Set(tops)).toEqual(new Set(['0 0']));
+    // A long answer: the row is at the card's foot, above the dock, and the keyboard's way to Burn finds it there.
     await restsClear(page, 'the long answer');
     expect(await rowRests(page)).toBe('ok');
     await page.focus('#burnBtn');
@@ -322,20 +324,6 @@ describe('the action row and the dock', () => {
     expect(errors.filter((e) => !/status of 40[13]/.test(e))).toEqual([]);
     await ctx.close();
   }, 120_000);
-
-  it('with reduced motion, the row is put clear of the dock without a glide', async () => {
-    const { ctx, page, errors } = await phone({ context: { viewport: { width: 395, height: 811 }, reducedMotion: 'reduce' } });
-    await zeroBalance(page);
-    await useModel(page, 'plain-free');
-    const words = await answerLength(page);
-    for (const n of LENGTHS) {
-      words(n);
-      await askAgain(page, `How long, still? ${n}`);
-      await restsClear(page, `${n} times the words`);
-    }
-    expect(errors).toEqual([]);
-    await ctx.close();
-  }, 120_000);
 });
 
 describe('a long answer', () => {
@@ -348,13 +336,15 @@ describe('a long answer', () => {
     await useModel(page, 'fast-two'); // mock-slow: 200 words
     await ask(page, 'Tell me a lot.');
     await page.waitForSelector('#speakBtn', { timeout: 30_000 });
-    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(vh + 200);
+    // The page is one screen high; the words scroll inside the card.
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(vh);
+    expect(await page.$eval('#answerScroll', (n) => n.scrollHeight - n.clientHeight)).toBeGreaterThan(200);
     // Nothing runs off the side, and the dock leaves most of the screen to the words.
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vw);
     expect((await page.locator('#answerDock').boundingBox())!.height).toBeLessThan(vh * 0.4);
     for (const top of [0, 400, 100_000]) {
       // Scrolling is synchronous, and so is the layout the boxes are read from.
-      await page.evaluate((y) => window.scrollTo(0, y), top);
+      await page.$eval('#answerScroll', (n, y) => n.scrollTo(0, y), top);
       for (const sel of ['#speakBtn', '#btn-type', '#btn-add', '#btn-more']) {
         const b = (await page.locator(sel).boundingBox())!;
         expect(b.y, `${sel} at ${top}`).toBeGreaterThanOrEqual(0);
