@@ -318,7 +318,7 @@ describe('hold to talk', () => {
     await page.waitForSelector('[data-screen=answer]');
     await page.waitForSelector('#answerError:not([hidden])');
     expect(await page.textContent('.asked')).toBe('Your voice question');
-    expect(await page.textContent('#answerError')).toBe('No answer, not charged. The model did not answer, so you were not charged.Hold to say it again.');
+    expect(await page.textContent('#answerError')).toBe('No answer, not charged. The model did not answer, so you were not charged. The reason given: upstream returned HTTP 500Hold to say it again.');
     await page.goto(`${g.url}/v2/#/`);
     await expect.poll(() => balance(page)).toBe(before);
     expect(errors).toEqual([]);

@@ -914,7 +914,9 @@ async function makeAnswer() {
 /** The plain words for a failed answer, with what it cost when the engine charged for it. */
 const errorText = (err, unit) => {
   const ev = errorView(err.code, err.message, err.charged);
-  return t(ev.key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, unit) : '' });
+  // Said aloud and in a toast: the plain words only. The engine's reason stays on the answer screen.
+  const key = ev.key === 'error.modelWhy' ? 'error.model' : ev.key;
+  return t(key, { message: ev.message ?? '', amount: ev.charged > 0 ? format.cost(ev.charged, unit) : '' });
 };
 
 function again() {
