@@ -10,7 +10,7 @@ Forge AI lets people ask AI models questions and pay for each answer with eCash,
 - **The API guide:** https://ai.forge-reserve.com/docs/ (the source is [docs/API.md](docs/API.md)).
 - **The module guide:** https://ai.forge-reserve.com/docs/modules/ (the source is [docs/modules/](docs/modules/README.md)).
 
-The hosted gateway is invite only. An invite code opens a balance with nothing on it, and that balance can ask the free models at no cost. Ask for an invite on the waitlist at https://ai.forge-reserve.com/beta/. The free models are Standard models (see below), so the app asks you to turn off Private only before you use them.
+The hosted gateway is invite only. An invite code opens a balance with nothing on it, and that balance can ask the free models at no cost. Ask for an invite on the waitlist at https://ai.forge-reserve.com/beta/. The app says whether a model is Private or Standard before you use it (see below).
 
 ## How it works
 
@@ -36,7 +36,7 @@ There are no accounts. The gateway asks for no name, email or password. The bala
 ### Private and Standard models
 
 - **Private models** run in sealed hardware. Sealed hardware is a server whose processor keeps the model's memory encrypted and can prove which code it runs (this proof is called attestation). The app checks that proof and encrypts the question to that machine, so the gateway passes on data it cannot read. Today these models run at Tinfoil.
-- **Standard models** run at an ordinary supplier. The gateway and the supplier can read the question and the answer. Some Standard models are free at the moment.
+- **Standard models** run at an ordinary supplier. The gateway and the supplier can read the question and the answer.
 
 The app has a setting called Private only. It is on by default, and while it is on the app uses Private models only.
 
