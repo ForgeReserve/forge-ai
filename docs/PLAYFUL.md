@@ -7,7 +7,7 @@ Playful is a second `mode` module (docs/MODULES.md): the same app with Pip, brig
 ## What exists
 
 - **Choosing it.** More, Mode and look lists the modes as choices: Default (rings and talk) and Playful. The chosen one is the big card with "On now." Choosing either takes one tap, and Default is the default. The choice is kept in the settings and stays after a reload.
-- **Playful home.** The Private (or Standard) chip and the star chip at the top (with the game button before them while the game opens first: their words are never cut, and on a phone set to larger text the star chip's words go onto two lines); Pip with a speech bubble; the gold and green rings round a white Hold to talk button; the bar of Type (yellow), Add (green) and More (coral). Hold to talk is the Default button (hold, slide off to cancel, haptics, the blockers). Type, Add and More open what they open on Default. The rings open Funds and memory.
+- **Playful home.** The Private (or Standard) chip and the star chip at the top (with the game button before them while the game opens first: their words are never cut, and on a phone set to larger text the star chip's words go onto two lines). The Private chip is Default's (`screens/parts.js` `privacyChip`): one tap switches between a Private and a Standard model, Private in green and Standard in red on light coral, and Pip says which model is in use now; Pip with a speech bubble; the gold and green rings round a white Hold to talk button; the bar of Type (yellow), Add (green) and More (coral). Hold to talk is the Default button (hold, slide off to cancel, haptics, the blockers). Type, Add and More open what they open on Default. The rings open Funds and memory.
 - **Playful answer.** The same chips; a white card with a small Pip and a line that says what Pip is doing ("Pip is reading it to you" while the answer is read aloud, in green); the answer's first sentence big and the rest under it; Again, Share and Burn in the card; the smaller rings round Hold to reply; the bar; and "Pip can get things wrong. Check big things with a grown-up you trust."
 - **Pip.** One small module that draws Pip at any size in five moods, for any screen to reuse.
 - **The cover game.** Playful opens on Pip's Garden, a match-three, with the helper behind it. Hold Pip for 3 seconds to open the helper. See The cover game, below.
@@ -21,7 +21,7 @@ Playful is a second `mode` module (docs/MODULES.md): the same app with Pip, brig
 | `public/v2/modules/mode/playful/index.js` | `create(inputs)` returns `{id: 'playful', ready, home, answer, cover}`. It has no imports, so a phone in Default fetches only this file. `ready()` loads the screens (the home, the answer and the cover with its game), `playful.css`, the game's stylesheet and the two typefaces (waiting up to 1.5 s for them). |
 | `public/v2/modules/mode/playful/home.js` | The Playful home. |
 | `public/v2/modules/mode/playful/answer.js` | The Playful answer. |
-| `public/v2/modules/mode/playful/parts.js` | The top chips (with the game button), the bar, Pip taking the app's short messages, the phone's bar colour. |
+| `public/v2/modules/mode/playful/parts.js` | The top chips (with the game button, and Default's Private chip), the bar, Pip taking the app's short messages, the phone's bar colour. |
 | `public/v2/modules/mode/playful/cover.js`, `games/garden/` | The cover game (The cover game, below). |
 | `public/v2/modules/mode/playful/logic.js` | The pure rules, tested in Node: the star chip's words (`starLevel`), what Pip says on the home (`homeMessage`) and on the answer (`answerLine`), and the answer's first sentence (`splitLead`). |
 | `public/v2/modules/mode/playful/pip.js` | Pip. |
@@ -35,7 +35,7 @@ Playful is a second `mode` module (docs/MODULES.md): the same app with Pip, brig
 - `mode` in the settings (`core/state.js` DEFAULT_SETTINGS: `'default'`), and `gameFirst` (`true`): Playful opens on its cover game. `pickMode(ready, settings)` gives the mode to draw: the chosen one once its screens are in, else Default.
 - `app.js`: `modeNow()` picks the mode module that draws the home and the answer; `prepareMode(id)` calls the module's `ready()`; `actions.setMode(id)` (Mode and look) waits for `ready()`, then saves the setting. A mode that cannot load (offline and never fetched) leaves Default on and says so.
 - At start, on a phone where Playful is chosen, the app calls `ready()` before the first frame. `index.html` paints the Playful ground and ring tracks on the boot frame from `forge2.mode` in localStorage (written only while a mode other than Default is on), so the phone does not flash the look's ground first.
-- The mode module gets the same inputs as Default (`core/registry.js` INPUTS and PROJECTIONS) and no new action. Share uses the phone's own share sheet (`navigator.share`) where there is one; Copy is the existing `copyAnswer`.
+- The mode module gets the same inputs as Default (`core/registry.js` INPUTS and PROJECTIONS), `togglePrivate` among the actions (the Private chip, both modes). Share uses the phone's own share sheet (`navigator.share`) where there is one; Copy is the existing `copyAnswer`.
 
 ### Reused, not forked
 

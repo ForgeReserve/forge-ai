@@ -1,5 +1,6 @@
 // Shared app state and the rules that read it. Pure helpers are exported for tests; the store itself
 // is a small object with subscribe(), so screens repaint when the balance or the conversation changes.
+import { freeModelChoice, perQuestion } from './price.js';
 
 /** The balance key v1 uses on this origin. v2 reads and writes the same key, so a v1 balance carries over. */
 export const KEY_STORE = 'forge.balanceKey';
@@ -21,6 +22,44 @@ export function visibleModels(models, { privateOnly }) {
 export function pickModel(models, settings) {
   const vis = visibleModels(models, settings);
   return vis.find((m) => m.id === settings.model) ?? vis[0] ?? null;
+}
+
+/**
+ * The settings a model choice writes (anywhere: Choose a model, the Private chip, Start free, the slow
+ * answer's switch): the model in use, and the last one chosen of its kind (lastPrivate or lastStandard),
+ * which the Private chip goes back to (kindSwitch).
+ */
+export const choiceOf = (m) => ({ model: m.id, [isPrivate(m) ? 'lastPrivate' : 'lastStandard']: m.id });
+
+/**
+ * The model of a kind with the lowest price for a typical question (core/price.js perQuestion) in the
+ * balance's unit, or in dollars when no model of the list has a price in that unit. A model with no
+ * price comes after every priced one; ties keep the engine's order.
+ */
+export function cheapest(models, unit = 'usd') {
+  const price = (u) => models.map((m) => perQuestion(m, u));
+  let p = price(unit);
+  if (unit !== 'usd' && p.every((x) => x == null)) p = price('usd');
+  let best = -1;
+  for (let i = 0; i < models.length; i++) if (p[i] != null && (best < 0 || p[i] < p[best])) best = i;
+  return models[best < 0 ? 0 : best] ?? null;
+}
+
+/**
+ * The Private (or Standard) chip at the top left (owner, 2026-11-17): one tap switches the kind of model
+ * in use. To Private: the Private model chosen last on this phone (lastPrivate) while the engine lists
+ * it, else the cheapest Private one. To Standard: the Standard model chosen last (lastStandard) while
+ * listed, else the default free model (core/price.js freeModelChoice: the fast free one first), else the
+ * cheapest Standard one; and Private only goes off, since it hides every Standard model. Uncensored
+ * models are never chosen. Returns {model, privateOnly}, or null when the engine lists no model of
+ * that kind.
+ */
+export function kindSwitch(models, settings, { toPrivate, unit = 'usd' }) {
+  const kind = (models ?? []).filter((m) => !m.uncensored && isPrivate(m) === toPrivate);
+  if (!kind.length) return null;
+  const last = kind.find((m) => m.id === (toPrivate ? settings.lastPrivate : settings.lastStandard));
+  const model = last ?? (toPrivate ? null : freeModelChoice(kind)) ?? cheapest(kind, unit);
+  return { model, privateOnly: toPrivate ? !!settings.privateOnly : false };
 }
 
 /**
@@ -80,12 +119,17 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * natural voice, per way of making it ({rtf, spc, n, at}; core/phonon.js notePace).
  */
 /**
+ * lastPrivate, lastStandard: the Private and the Standard model chosen last on this phone (choiceOf), ''
+ * before any. standardOk: true once the person said yes to Standard models (Start free's question, asked
+ * by Start free or by the Private chip the first time it leaves Private); the chip does not ask again.
+ */
+/**
  * look: 'midnight' by default (the owner, 2026-11-15), 'light' or 'dark'. lookPicked: true once the
  * person picked a look in More, Mode and look. mode: the home and answer screens' mode module ('default',
  * or 'playful': docs/PLAYFUL.md), chosen in the same place. gameFirst: a mode with a cover game (Playful)
  * opens on the game, its helper behind it; on by default, turned off in the same place.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', lastPrivate: '', lastStandard: '', standardOk: false, voiceIn: 'auto', voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
 
 /**
  * The mode to draw the home and the answer with: the chosen one when it can be drawn now (`ready`, the

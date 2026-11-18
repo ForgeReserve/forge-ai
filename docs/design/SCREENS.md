@@ -132,6 +132,7 @@ Do not build these. Listed for completeness.
 
 **Status bar (top of home-type screens).** One row, space between.
 - Left: "Private" pill. Padlock icon (16 px) plus the word "Private". Teal text `#0E7C6B` on `#E3F4F0`, 1 px border `#9AD3C8`, radius 22, min height 44. In the markup it is a plain element, not a button.
+  - As built (owner, 2026-11-17): a button, min height 48, radius 24. One tap switches the kind of model in use, Private (closed lock, teal) or Standard (open lock, orange), with a toast that names the model. It goes back to the model of that kind chosen last on the phone, else the cheapest Private model, or the free model (else the cheapest) for Standard; on the way to Standard it turns Private only off. The first time it leaves Private on a phone it asks Start free's question first. Its word keeps the width of "Standard", so the balance pill never moves. What Private and Standard mean is behind the info mark beside each heading in Choose a model.
 - Right: balance pill. A 10 px gold dot `#D4A544` then the amount, for example "$9.99". White fill, 1 px border `#C9A24A`, radius 22, min height 44, 15 px semibold. It is a button. Assume it opens Funds and memory (`ZBoth`).
 
 **The two rings.** A 336 x 336 drawing centred in the free space.
@@ -789,7 +790,7 @@ Each item names the version on the Default mode page.
 8. **Running low.** `ZHome2` turns only the memory ring orange. The funds ring stays gold at 20 percent with $2.10. No low-funds warning or threshold is shown.
 9. **Ring scale.** No screen says what a full funds ring means (85 percent at $9.99).
 10. **Burn, Shred, Erase, Delete.** Answers "Burn" (`XAnswerLight`, `XHistoryLight`). The receipt "Shred" and "SHREDS ITSELF IN 1 DAY" (`XSpendingLight`). Settings "Delete chats automatically" (`DProtect`, `DErase`). Whole app "Erase". Default mode has no chat list, so "chats" in these strings needs a decision.
-11. **Private pill** is not a button in the markup. Decide whether it opens Protection.
+11. **Private pill** is not a button in the markup. Decide whether it opens Protection. Decided (owner, 2026-11-17): it switches between Private and Standard (Shared parts, Status bar).
 12. **Close button icons.** `ZAdd` "Close" keeps the plus icon. `ZMore` "Close" keeps the dots icon.
 13. **Placeholders.** `GLibrary`, `GOpen`, `GAnswer` and `PStep` contain bracketed placeholders such as "[N]", "[GUIDE TITLE]", "[DATE]", "[WHAT STOPS WORKING, FROM THE SOURCE]", "[OTHER SOURCES]". Classic `Speak` and early `Voice` contain "[PRICE]".
 14. **Witness review header** reads "Your account" while the canvas label says "Witness 2". `WRecord` uses a red talk button with no rings.

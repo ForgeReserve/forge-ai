@@ -180,6 +180,48 @@ export function startFree({ t, state, actions, wallet, reader = null }, { id, fi
   return { node, update: draw, busy: () => phase !== 'form', destroy: () => askListen.destroy() };
 }
 
+/**
+ * The question before the Private chip leaves Private the first time on this phone (app.js
+ * togglePrivate): Start free's question, in the owner's words as they are, over the screen as Start free
+ * shows it, with Listen. For a Standard model that is not free, the same words without the free part
+ * (privacy.ask). Resolves true for Use Standard; false for Keep Private, a tap beside the sheet, or Back.
+ */
+export function askStandard({ t, reader, free }) {
+  return new Promise((resolve) => {
+    const text = t(free ? 'startFree.ask' : 'privacy.ask');
+    const listen = listenButton({ t, reader, id: 'kindAskListen', pieces: () => [text, t('privacy.use'), t('privacy.keep')] });
+    const useBtn = el('button', { type: 'button', class: 'btn primary block', id: 'kindUse' }, icon('unlock', 22), el('span', { text: t('privacy.use') }));
+    const keepBtn = el('button', { type: 'button', class: 'btn block', id: 'kindKeep' }, icon('lock', 20), el('span', { text: t('privacy.keep') }));
+    const sheet = el(
+      'div',
+      { class: 'sf-sheet' },
+      el('span', { class: 'sf-grabber', 'aria-hidden': 'true' }),
+      el('div', { class: 'sf-ask-head' }, el('p', { class: 'sf-callout', id: 'kindAskText', 'data-approved': '' }, icon('eye', 24), el('span', { text })), listen.node),
+      el('div', { class: 'foot' }, useBtn, keepBtn),
+    );
+    const dlg = el('dialog', { class: 'kind-ask', id: 'kindAsk', 'aria-labelledby': 'kindAskText' }, sheet);
+    const close = (yes) => {
+      listen.destroy();
+      dlg.close();
+      dlg.remove();
+      document.getElementById('privacyPill')?.focus();
+      resolve(yes);
+    };
+    useBtn.addEventListener('click', () => close(true));
+    keepBtn.addEventListener('click', () => close(false));
+    // A tap on the dim layer beside the sheet, or Back: nothing changes.
+    dlg.addEventListener('click', (e) => e.target === dlg && close(false));
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+    // The safe answer has the focus: Enter alone never leaves Private.
+    keepBtn.focus();
+  });
+}
+
 /** Whether Add money shows the Start free card first (state.view()): free models, and no key or $0 on a paid model. */
 export const startFreeWanted = (v) => !!v.startFree && (!v.hasKey || (v.balanceMsub === 0 && !v.modelFree));
 
