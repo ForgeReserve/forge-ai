@@ -1396,11 +1396,21 @@ const actions = {
     kv.put('draft', v).catch(() => {});
     scratchChanged();
   },
-  /** Burns the open conversation (the answer screen's Burn), then goes home. */
+  /**
+   * Burns the open conversation (the answer screen's Burn), then goes home: in place of the answer, or
+   * with the cover on back to the helper's home just above the game (backTo), so Back from it shows the
+   * game.
+   */
   burn: async () => {
     if (S.conv.id) await burnIds([S.conv.id]);
-    ui.toast(t('history.burned'), 3000);
-    nav('home', {}, { replace: true });
+    const said = () => ui.toast(t('history.burned'), 3000);
+    if (!coverOn()) {
+      said();
+      return nav('home', {}, { replace: true });
+    }
+    // A step back in the history, drawn when it lands: the home says it burned, the answer no longer can.
+    onArrival = said;
+    backTo('home');
   },
   burnConversation: async (id) => {
     await burnIds([id]);
@@ -1648,6 +1658,10 @@ const trail = [];
 const depth = () => history.state?.forge2 ?? 0;
 /** The state of an entry at depth `d`, with the routes under it. */
 const entry = (d) => ({ forge2: d, trail: trail.slice(0, d) });
+// The depth of the entry on show, so a pop knows whether it went back.
+let shownDepth = 0;
+// Said once the next screen is drawn (the burn's words, after a step back that lands later).
+let onArrival = null;
 
 // Each screen drawn has its own number. A click whose press began on an earlier screen is dropped: the
 // finger that held Pip or Burn is still down when the next screen is drawn, and lifting it must not press
@@ -1681,8 +1695,10 @@ function nav(name, params = {}, { replace = false } = {}) {
   }
   const h = href(name, params);
   if (h === location.hash || (h === '#/' && !location.hash)) return render();
-  if (replace) history.replaceState(entry(depth()), '', h);
-  else history.pushState(entry(depth() + 1), '', h);
+  // An answer's entry keeps whose answer it is, so it is never shown again once that one is burned (onPop).
+  const conv = name === 'answer' && S.conv.id ? { conv: S.conv.id } : {};
+  if (replace) history.replaceState({ ...entry(depth()), ...conv }, '', h);
+  else history.pushState({ ...entry(depth() + 1), ...conv }, '', h);
   render();
 }
 
@@ -1715,11 +1731,24 @@ function onPop() {
     history.replaceState(history.state, '', location.pathname + location.search);
     if (live) joinWith(pass);
   }
+  const to = parse(location.hash).name;
   if (afterPop) {
     const name = afterPop;
     afterPop = null;
     history.replaceState({ forge2: 0 }, '', href(name));
-  } else if (currentName === 'game' && coverOn() && parse(location.hash).name !== 'game') {
+  } else if (to === 'answer' && burned.has(history.state?.conv)) {
+    // The answer of a burned conversation (Burn in History or Burn all, opened from that answer): Back
+    // (or Forward) never shows it again, but the home under it, or a home in its place.
+    const i = (history.state.trail ?? []).lastIndexOf('home');
+    if (i >= 0) return history.go(i - depth());
+    history.replaceState({ forge2: depth(), trail: history.state.trail ?? [] }, '', href('home'));
+  } else if (currentName === 'home' && coverOn() && history.state?.forge2 != null && depth() < shownDepth && to !== 'game') {
+    // Back from the helper's home always shows the game (the first entry), however the home was reached:
+    // an event link that reaches the app while the helper is open puts a home over Type (joinOnce), say.
+    // Only Back onto an entry the app made: an address set by hand is a new first entry, shown as it is.
+    if (depth() > 0) return history.go(-depth());
+    history.replaceState({ forge2: 0 }, '', href('game'));
+  } else if (currentName === 'game' && coverOn() && to !== 'game') {
     // Back (or Forward) from the cover game never shows the helper: the game stays. On a page reloaded
     // deep in the helper, older entries are still behind it.
     history.replaceState({ forge2: 0 }, '', href('game'));
@@ -1962,6 +1991,7 @@ function render() {
   if (Array.isArray(below)) trail.splice(0, trail.length, ...below);
   trail[depth()] = name;
   trail.length = depth() + 1;
+  shownDepth = depth();
   current = screenFor(name, params);
   root.replaceChildren(current.node);
   root.dataset.route = name;
@@ -1973,6 +2003,11 @@ function render() {
   // Move focus to the new screen on navigation (not on the first paint, and not on the home).
   if (rendered && name !== 'home') current.focus?.focus?.({ preventScroll: true });
   rendered = true;
+  if (onArrival) {
+    const say = onArrival;
+    onArrival = null;
+    say();
+  }
   if (name === 'takeOut' || name === 'funds') {
     collectRefunds();
     settleOtherMint();

@@ -128,7 +128,7 @@ The app's pages come from `https://localhost` (Capacitor), so every engine call 
 - `test/unit/passes.test.ts`, `test/ui/join.ui.test.ts`: event passes, `/j`, `assetlinks.json` and the web app's join; `test/ui/android.ui.test.ts` also opens the app on a pass through the ForgeJoin stand-in, cold and while it runs.
 - `test/unit/android.test.ts`: the manifest and Gradle files (app id, Android 9, no Google services, the permissions, optional features, no backups, no cleartext, the share filter and file paths), the bundle, and Forge Private Voice (the flavours, the `:asr` process, `scripts/asr/lock.json` and its refusals, the Kotlin API files, the licences the universal APK leaves out).
 - `test/unit/v2/native.test.ts`: the web side of the bridge and the engine address rules.
-- `test/ui/android.ui.test.ts`: the bundle served from its own origin with a stand-in for Capacitor's bridge, against a gateway on another origin: the default engine, switching engine, funding, a streamed answer, a photo shared in and shared out, the bars following the look, and the `/download` page.
+- `test/ui/android.ui.test.ts`: the bundle served from its own origin with a stand-in for Capacitor's bridge, against a gateway on another origin: the default engine, switching engine, funding, a streamed answer, a photo shared in and shared out, the bars following the look, Back from the home an event link opened with the game first (Playful), and the `/download` page.
 - `test/unit/download.test.ts` (both APKs, the choice shown only with both, the iPhone app's link), `test/unit/android-release.test.ts` (both flavours, 16 KB alignment).
 
 ## Not verified
