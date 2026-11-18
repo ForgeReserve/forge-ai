@@ -51,8 +51,22 @@ export function micGlyph(size) {
 }
 
 /**
+ * Keeps `box` at the height it had when the press began, until the button is let go (owner, 2026-11-18:
+ * the talk button never moves under the finger). What the recording shows then spills over the box's
+ * edge instead of pushing the button. Call it first in a screen's update, before anything on the screen
+ * changes, so the height read is the one the press found. The CSS for `.keep-place` says how the box
+ * holds, from its height in --kept-h.
+ */
+export function keepPlace(box, held) {
+  if (held === box.classList.contains('keep-place')) return;
+  if (held) box.style.setProperty('--kept-h', `${box.getBoundingClientRect().height}px`);
+  else box.style.removeProperty('--kept-h');
+  box.classList.toggle('keep-place', held);
+}
+
+/**
  * Makes `button` the talk button. size: 'big' (home) or 'small' (answer). Returns {info, update}:
- * `info` is the line shown under the rings while recording. A mode may draw its own microphone
+ * `info` is the line shown with the rings while recording. A mode may draw its own microphone
  * (glyph(px) returns the node) and name the button with its own words (word: a string key).
  */
 export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big', glyph = micGlyph, word = 'home.talk' }) {

@@ -86,7 +86,9 @@ export function answer({ t, state, nav, actions, format }) {
   const offer = el('div', { class: 'voice-offer', id: 'voiceOffer', hidden: true });
   const act = el('div', { class: 'dock-act' });
   const dock = el('div', { class: 'answer-dock', id: 'answerDock' }, offer, act, bottomRow({ t, nav }));
-  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply), hold.info, hint, dock);
+  // The recording's line lies over the card, above the rings (style.css): in the flow it took room from
+  // the card and moved the reply button up under the finger (owner, 2026-11-18).
+  const main = el('main', { class: 'screen answer', 'data-screen': 'answer' }, bar.node, card, el('div', { class: 'rings answer-rings' }, r.node, ringBtn, reply, hold.info), hint, dock);
 
   /** The next step's button: its picture and its word. */
   const NEXT_ICON = { addFunds: 'addMoney', retry: 'again', chooseModel: 'grid', startFresh: 'trash', takeOut: 'takeout', freeOut: 'gift' };

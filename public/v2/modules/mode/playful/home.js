@@ -8,7 +8,7 @@
 // recorded the bubble holds the recording's line: the time, where the sound goes and the price.
 import { el, icon } from '../../../core/ui.js';
 import { rings } from '../../../screens/parts.js';
-import { holdToTalk } from '../../../screens/talk.js';
+import { holdToTalk, keepPlace } from '../../../screens/talk.js';
 import { homeMessage } from './logic.js';
 import { bar, chips, mic, pipSays, playfulBar, sayShort } from './parts.js';
 import { pip } from './pip.js';
@@ -30,7 +30,8 @@ export function home({ t, ui, state, nav, actions }, { sheet = null, open = null
   const hold = holdToTalk(talk, { t, state, actions, nav, hintId: 'talkHint', size: 'big', glyph: mic });
   const bubble = el('div', { class: 'pf-bubble', id: 'pipBubble', role: 'status', 'aria-live': 'polite' }, words, go, hold.info);
   const ringBox = el('div', { class: 'rings pf-rings' }, r.node, ringBtn, talk);
-  const stage = el('div', { class: `stage pf-stage${sheet ? ' faded' : ''}` }, el('div', { class: 'pf-helper' }, helper.node, bubble), ringBox, hold.hint);
+  const helperBox = el('div', { class: 'pf-helper' }, helper.node, bubble);
+  const stage = el('div', { class: `stage pf-stage${sheet ? ' faded' : ''}` }, helperBox, ringBox, hold.hint);
   const main = el('main', { class: `screen home pf pf-home${sheet ? ' with-sheet' : ''}`, 'data-screen': 'home', 'data-mode': 'playful' }, top.node, stage);
   // Add and More: the app's sheet over the whole home, the bar above it so Close stays in view.
   if (sheet) main.append(el('div', { class: 'float-wrap', onclick: (e) => e.target === e.currentTarget && nav('home') }, sheet));
@@ -50,9 +51,12 @@ export function home({ t, ui, state, nav, actions }, { sheet = null, open = null
   let shownSaid = null;
   const update = () => {
     const v = state.view();
+    const recording = v.talk.phase === 'recording';
+    // While the button is held, Pip and the bubble keep the height the press found and the bubble grows
+    // upward over it: the talk button stays under the finger (screens/talk.js keepPlace).
+    keepPlace(helperBox, recording);
     top.update();
     hold.update();
-    const recording = v.talk.phase === 'recording';
     r.set(v.fundsFraction, v.memory.free, v.memory.low, v.freeFraction);
     ringBtn.setAttribute('aria-label', v.balanceText ? t('home.rings', { funds: v.balanceText, memory: v.memory.percentFree }) : t('home.ringsEmpty', { memory: v.memory.percentFree }));
     const m = recording ? homeMessage(v) : note ? { key: null, mood: note.calm ? 'idle' : 'oops' } : homeMessage(v);

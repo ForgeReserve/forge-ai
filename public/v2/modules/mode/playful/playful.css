@@ -46,6 +46,10 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 .pf-stage { flex: 1; min-height: 0; gap: 10px; }
 .pf-helper { display: flex; align-items: flex-end; gap: 10px; align-self: stretch; padding: 0 6px; }
 .pf-helper > .pip { flex: none; }
+/* While the talk button is held, Pip and the bubble keep the height the press found (screens/talk.js
+   keepPlace) and the bubble grows upward over the chips, so the button never moves under the finger. */
+.pf-helper.keep-place { flex: none; height: var(--kept-h); }
+.pf-helper.keep-place > .pf-bubble { position: relative; z-index: 2; }
 .pf-bubble { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 22px 22px 22px 6px; background: #FFFFFF; color: var(--pf-ink); font-family: var(--pf-display); font-size: 20px; font-weight: 700; line-height: 1.15; }
 .pf-say { margin: 0; }
 .pf-say .info-btn, .pf-card .info-btn { color: var(--pf-ink); }
@@ -130,10 +134,11 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 .pf-card .slow-text { color: var(--pf-ink); }
 .pf .btn.primary { background: var(--pf-ink); color: #FFFFFF; box-shadow: none; font-family: var(--pf-display); font-weight: 800; }
 .pf .btn.primary .ico { color: #FFFFFF; }
-/* The recording's line under the small rings, on the purple. */
+/* The recording's line above the small rings, on the purple over the card. */
 .pf-answer .listen-time, .pf-answer .listen-route, .pf-answer .listen-route[data-route] { color: #FFFFFF; }
 .pf-answer .listen-price { color: var(--pf-yellow); }
 .pf-answer .listen-text { background: #FFFFFF; color: var(--pf-ink); }
+.pf-rings-small > .listen-info { background: var(--pf-ground); box-shadow: none; }
 .pf-careful { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: #FFFFFF; text-wrap: balance; }
 
 /* Short phones (360 by 640): a smaller Pip and bar, so the talk button and the bar always fit. */

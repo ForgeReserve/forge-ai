@@ -55,7 +55,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
    button. The box takes more than its half only when its content needs it. */
 .home-stage { justify-content: flex-start; gap: 0; }
 .home-stage::before { content: ""; flex: 1 1 0; }
-.stage-under { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; min-width: 0; padding-top: 16px; }
+.stage-under { position: relative; flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; min-width: 0; padding-top: 16px; }
+/* While the talk button is held the box keeps the height the press found (screens/talk.js keepPlace) and
+   the recording line lies over it, so a long line of words heard, or larger text, never moves the button. */
+.stage-under.keep-place { flex: 0 0 var(--kept-h); min-height: 0; }
+.stage-under > .listen-info { position: absolute; top: 16px; left: 0; right: 0; z-index: 2; background: var(--bg); }
 .rings { position: relative; flex: none; display: flex; align-items: center; justify-content: center; }
 .home-rings { width: min(336px, 100%); aspect-ratio: 1; }
 .answer-rings { width: 200px; height: 200px; align-self: center; }
@@ -353,6 +357,9 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .talk.small .level-bars .bar { width: 5px; }
 .listen-info { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: center; }
 .listen-info p { margin: 0; }
+/* On the answer the recording line lies over the bottom of the card, just above the rings: in the flow it
+   took the card's room and moved the reply button up under the finger. */
+.answer-rings > .listen-info, .pf-rings-small > .listen-info { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: min(calc(100vw - 32px), 488px); z-index: 7; padding: 12px 14px; border-radius: 22px; background: var(--bg); box-shadow: var(--shadow-raised); }
 .listen-text { font-size: 20px; font-weight: 600; text-align: left; padding: 14px 16px; background: var(--surface); border-radius: 22px; }
 .listen-time { font-size: 15px; font-weight: 600; color: var(--text-body); }
 .listen-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 600; text-align: left; }
