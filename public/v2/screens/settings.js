@@ -211,6 +211,9 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     );
   const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
+  // The phone's recogniser heard nothing twice while the sound was there, so the engine hears this phone
+  // (core/talk.js); On this phone above takes it back.
+  const phoneOff = sayEl('p', { class: 'hint', id: 'voicePhoneOff', hidden: true }, t('voice.in.phoneOff'), '', 'ear');
   const naturalHead = el('h2', { class: 'caps', id: 'naturalVoiceHead', text: t('voice.natural'), hidden: true });
   const naturalList = el('div', { class: 'model-list', role: 'radiogroup', id: 'naturalVoices', 'aria-labelledby': 'naturalVoiceHead', hidden: true });
   // Keep the natural voice on a phone that makes it slowly (answers then wait longer before they start).
@@ -237,6 +240,7 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
       inRows.push(choice('voiceIn', 'device', t('voice.in.device'), blocked ? t('voice.in.deviceOff') : t('voice.in.deviceSub'), { on: inUsed === 'device', disabled: blocked, tags: blocked ? ['blocked', 'maker'] : ['free', 'maker'] }));
     }
     inList.replaceChildren(...(inRows.length ? inRows : [sayEl('p', { class: 'hint', id: 'voiceInNone' }, t('voice.in.none'), '', 'alert')]));
+    phoneOff.hidden = !(S.settings.phoneOff && ins.phone?.available() && inUsed && inUsed !== 'phone');
     // Automatic (the setting until one is picked) shows as the voice it reads with: the natural voice
     // where this phone runs it, else the phone's own voice, else the engine's.
     const picked = (S.settings.voiceOut ?? 'auto') === 'auto' ? (voice.outUsed?.() ?? 'auto') : S.settings.voiceOut;
@@ -275,7 +279,7 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     'main',
     { class: 'screen sub voice', 'data-screen': 'voice' },
     listenHeader(t('voice.title'), back, t('common.back'), listen.node),
-    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, preferRow, preferSub),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, phoneOff, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, preferRow, preferSub),
   );
   listen.update();
   return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };

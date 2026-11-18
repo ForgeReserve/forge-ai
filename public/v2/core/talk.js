@@ -59,3 +59,44 @@ export function clock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+// ---------------------------------------------------------------- a phone recogniser that hears nothing
+//
+// Owner, 2026-11-18: on a Galaxy A16 the phone's own recogniser opened the microphone and its level
+// showed sound, yet every press ended with no-speech. When that happens twice in a row, the engine hears
+// this phone from then on, as it hears a phone with no recogniser (core/state.js pickVoiceIn, phoneOff).
+
+/**
+ * The level that counts as sound. ForgeSpeech's level runs 0 to 0.6: on Android (rmsdB + 2) / 20, about
+ * -2 dB in silence and up to 10 dB for a voice; on the iPhone (dBFS + 50) / 60, about -50 dBFS in a quiet
+ * room and -14 for a voice. 0.2 is 4 dB over Android's silence and 12 dB over a quiet room on the iPhone,
+ * well under a voice near the phone.
+ */
+export const SOUND_LEVEL = 0.2;
+/** How many readings at SOUND_LEVEL or over a press needs. A level comes at most every 80 ms, so this is about a quarter second of sound. */
+export const SOUND_READINGS = 3;
+/** The shortest press that counts. A tap or a quick press is shorter; the presses that failed were 2 to 6 s. */
+export const SOUND_HOLD_MS = 1500;
+/** Presses in a row that heard nothing while the sound was there, before the engine hears this phone. */
+export const PHONE_MISSES = 2;
+
+/**
+ * What one press on the phone's recogniser says about it. session: {heard (words came, live or final),
+ * noSpeech (it ended with no-speech), holdMs, loud (level readings at SOUND_LEVEL or over)}. 'heard'
+ * when words came; 'missed' when it heard nothing in a press long enough and loud enough; else null (a
+ * tap, a silent press, any other error), which says nothing either way.
+ */
+export function phoneHeard(session) {
+  if (session?.heard) return 'heard';
+  if (session?.noSpeech && session.holdMs >= SOUND_HOLD_MS && session.loud >= SOUND_READINGS) return 'missed';
+  return null;
+}
+
+/** The misses in a row after this press: words reset them, a miss adds one, anything else keeps them. */
+export function nextMisses(misses, session) {
+  const r = phoneHeard(session);
+  return r === 'heard' ? 0 : r === 'missed' ? (misses ?? 0) + 1 : (misses ?? 0);
+}
+
+/** True when these presses, in order, end PHONE_MISSES or more misses in a row. */
+export const switchesToEngine = (sessions) => sessions.reduce(nextMisses, 0) >= PHONE_MISSES;

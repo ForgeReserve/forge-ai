@@ -886,6 +886,135 @@ describe('the talk controller', () => {
   });
 });
 
+// Owner, 2026-11-18: a phone whose own recogniser hears nothing twice in a row while its level shows
+// sound goes to the engine (core/talk.js, core/state.js pickVoiceIn phoneOff).
+describe("a phone recogniser that hears nothing", () => {
+  const loud = { heard: false, noSpeech: true, holdMs: 3000, loud: 10 };
+  const words = { heard: true, noSpeech: false, holdMs: 3000, loud: 10 };
+
+  it('counts a press only when it was long enough and loud enough and ended with no-speech', () => {
+    expect(TALK.phoneHeard(loud)).toBe('missed');
+    expect(TALK.phoneHeard(words)).toBe('heard');
+    // Words that came live count as heard even when the recogniser then says no-speech.
+    expect(TALK.phoneHeard({ ...loud, heard: true })).toBe('heard');
+    // A silent hold, a short press, a press with one blip of sound: nothing either way.
+    expect(TALK.phoneHeard({ ...loud, loud: 0 })).toBeNull();
+    expect(TALK.phoneHeard({ ...loud, loud: TALK.SOUND_READINGS - 1 })).toBeNull();
+    expect(TALK.phoneHeard({ ...loud, holdMs: TALK.SOUND_HOLD_MS - 1 })).toBeNull();
+    expect(TALK.phoneHeard({ ...loud, holdMs: TALK.SOUND_HOLD_MS, loud: TALK.SOUND_READINGS })).toBe('missed');
+    // Any other ending (permission, busy, unavailable: thrown, so noSpeech is false) says nothing.
+    expect(TALK.phoneHeard({ ...loud, noSpeech: false })).toBeNull();
+    expect(TALK.phoneHeard(null)).toBeNull();
+    // The threshold sits on the plugins' 0 to 0.6 scale, above silence (0) and under a voice.
+    expect(TALK.SOUND_LEVEL).toBeGreaterThan(0);
+    expect(TALK.SOUND_LEVEL).toBeLessThan(0.6);
+  });
+
+  it('switches after two misses in a row, and never on taps, silent holds, or with words between', () => {
+    const tap = { ...loud, holdMs: 400 };
+    const silent = { ...loud, loud: 0 };
+    expect(TALK.switchesToEngine([loud, loud])).toBe(true);
+    expect(TALK.switchesToEngine([loud])).toBe(false);
+    expect(TALK.switchesToEngine([tap, tap, tap])).toBe(false);
+    expect(TALK.switchesToEngine([silent, silent, silent])).toBe(false);
+    expect(TALK.switchesToEngine([loud, words, loud])).toBe(false);
+    expect(TALK.switchesToEngine([loud, loud, words])).toBe(false);
+    // A tap or a silent hold between two misses neither counts nor resets.
+    expect(TALK.switchesToEngine([loud, tap, silent, loud])).toBe(true);
+    expect(TALK.nextMisses(1, words)).toBe(0);
+    expect(TALK.nextMisses(1, tap)).toBe(1);
+    expect(TALK.nextMisses(undefined, loud)).toBe(1);
+  });
+
+  const mod = (id: string, available: boolean, priv: boolean) => ({ id, available: () => available, private: () => priv });
+  it('phoneOff: the next way hears it under the same Private only rule, the phone only when none can', () => {
+    const phone = mod('phone', true, true);
+    const engine = mod('engine', true, true);
+    const standard = mod('engine', true, false);
+    const bundled = mod('bundled', true, true);
+    const off = { ...STATE.DEFAULT_SETTINGS, phoneOff: true };
+    expect(STATE.DEFAULT_SETTINGS.phoneOff).toBe(false);
+    expect(STATE.pickVoiceIn({ phone, engine }, off)?.id).toBe('engine');
+    expect(STATE.pickVoiceIn({ phone, engine }, { ...off, voiceIn: 'phone' })?.id).toBe('engine');
+    // Private only with only a standard model: as on a phone without a recogniser, that model is never
+    // used; the phone keeps listening, since nothing else can hear it here.
+    expect(STATE.pickVoiceIn({ phone, engine: standard }, off)?.id).toBe('phone');
+    expect(STATE.pickVoiceIn({ phone, engine: standard }, { ...off, privateOnly: false })?.id).toBe('engine');
+    // Forge Private Voice's own model still comes first; the browser's recogniser still only when chosen.
+    expect(STATE.pickVoiceIn({ bundled, phone, engine }, off)?.id).toBe('bundled');
+    expect(STATE.pickVoiceIn({ phone, engine, device: mod('device', true, false) }, off)?.id).toBe('engine');
+  });
+
+  /** A talk controller over the phone module, whose recogniser plays `levels` and then ends with `end`. */
+  function phoneTalk({ levels = [0.5, 0.5, 0.5, 0.5], partial = '', end = { type: 'error', code: 'no-speech' } as any, switched = false } = {}) {
+    let now = 0;
+    const S: any = {};
+    const noted: any[] = [];
+    let listener: (ev: any) => void = () => {};
+    const speech = {
+      available: async () => ({ onDevice: true, reason: null, locale: 'en-US' }),
+      start: async ({ onEvent }: any) => {
+        listener = onEvent;
+        for (const level of levels) onEvent({ type: 'level', level });
+        if (partial) onEvent({ type: 'partial', text: partial });
+        return { stop: () => (listener(end), listener({ type: 'end' })), cancel: () => listener({ type: 'end' }) };
+      },
+    };
+    const phone = VIN_PHONE.create({ speech });
+    const ctl = CTL.createTalk({
+      store: { S, set: (p: object) => Object.assign(S, p) },
+      t: (k: string) => k,
+      ui: { toast() {} },
+      nav() {},
+      haptics: { pulse() {} },
+      voiceIn: () => phone,
+      voiceOut: () => null,
+      blocker: () => null,
+      ask: async () => {},
+      refresh() {},
+      errorText: () => 'error',
+      now: () => now,
+      notePhone: (x: any) => (noted.push(x), switched),
+    });
+    return { S, ctl, noted, phone, advance: (ms: number) => (now += ms) };
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  async function press(x: ReturnType<typeof phoneTalk>, ms: number) {
+    await x.phone.checked;
+    x.ctl.down();
+    await flush();
+    x.advance(ms);
+    x.ctl.up();
+    for (let i = 0; i < 4; i++) await flush();
+  }
+
+  it('the controller hands each press on the phone to notePhone: hold, sound readings, words, no-speech', async () => {
+    const a = phoneTalk();
+    await press(a, 3000);
+    expect(a.noted).toEqual([{ heard: false, noSpeech: true, holdMs: 3000, loud: 4 }]);
+    expect(a.S.talk.error).toEqual({ key: 'talk.empty' });
+    // Quiet readings are not sound.
+    const b = phoneTalk({ levels: [0, 0.05, 0.1, 0.19] });
+    await press(b, 3000);
+    expect(b.noted[0].loud).toBe(0);
+    // Live words came: heard.
+    const c = phoneTalk({ partial: 'Where is' });
+    await press(c, 3000);
+    expect(c.noted[0].heard).toBe(true);
+    // The press that switches says so, with the usual Hold to say it again under it (screens/answer.js).
+    const d = phoneTalk({ switched: true });
+    await press(d, 3000);
+    expect(d.S.talk.error).toEqual({ key: 'talk.phoneOff' });
+    expect(EN['talk.phoneOff']).toMatch(/^Nothing was heard\. /);
+    expect(EN['voice.in.phoneOff']).toBeTruthy();
+    // Another failure of the recogniser is said as before and not counted.
+    const e = phoneTalk({ end: { type: 'error', code: 'busy' } });
+    await press(e, 3000);
+    expect(e.noted).toEqual([]);
+    expect(e.S.talk.error).toEqual({ key: 'talk.phoneFailed' });
+  });
+});
+
 // Spoken answers (owner, 2026-11-16): a question asked by voice carries the voice instruction to the
 // model, on top of the usual prompt; a typed one, even right after a spoken one, carries the usual one.
 describe('the system prompt and eCash', () => {
@@ -1247,7 +1376,7 @@ describe("voice in on this phone in the iPhone app (Apple's recogniser, on the p
     const { native } = iosSpeech({ silent: true });
     const phone = VIN_PHONE.create({ speech: native.speech });
     await phone.checked;
-    expect(await (await phone.start()).finish()).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+    expect(await (await phone.start()).finish()).toEqual({ text: '', chargedMsub: 0, balanceMsub: null, noSpeech: true });
     expect(EN['talk.empty']).toBe('Nothing was heard. Hold the button and speak.');
   });
 

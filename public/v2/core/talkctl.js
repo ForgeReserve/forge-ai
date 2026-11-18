@@ -2,7 +2,7 @@
 // the talk button, runs the chosen voice-in module, sends what was heard as the question, and reads the
 // answer aloud with the chosen voice-out module. The recording lives in memory only and is dropped once
 // it is sent or cancelled.
-import { step, initial } from './talk.js';
+import { step, initial, SOUND_LEVEL } from './talk.js';
 import { speechPieces } from './speech.js';
 
 const HAPTIC = { start: 15, leave: [8, 40, 8], back: 8, send: 25, cancel: [20, 60, 20] };
@@ -20,14 +20,16 @@ const TICK_MS = 100;
  * there: adapters.js speaker.unlock), phoneVoice() (the phone's own voice-out module, or null) and
  * naturalDeclined {get(), set()} (Not now on the natural voice's offer, kept on the phone),
  * voicesReady() (resolves once the phone lists its own voices, or after a short wait: a browser lists
- * them a moment after the page opens) and readAloudOff() (true when the person turned reading aloud off).
+ * them a moment after the page opens), readAloudOff() (true when the person turned reading aloud off)
+ * and notePhone(session) (after each press heard by the phone's own recogniser, core/talk.js phoneHeard:
+ * true when this press switched the phone to the engine).
  *
  * Listen speaks at once (owner, 2026-11-15): while the natural voice is not on the phone yet, the phone's
  * own voice reads the answer, and the natural voice is offered after, as an upgrade (S.voiceOffer, shown
  * under Listen), until the person gets it or says Not now. Only a phone with no voice of its own asks
  * before the download, as before.
  */
-export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, balanceAfter = (balanceMsub) => store.set({ balanceMsub }), now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} }, voicesReady = async () => false, readAloudOff = () => false }) {
+export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, blocker, ask, refresh, errorText, balanceAfter = (balanceMsub) => store.set({ balanceMsub }), now = () => Date.now(), askDownload = async () => false, showDownload = () => null, unlockAudio = () => {}, phoneVoice = () => null, naturalDeclined = { get: () => false, set: () => {} }, voicesReady = async () => false, readAloudOff = () => false, notePhone = () => false }) {
   const S = store.S;
   S.talk = { ...initial(), level: 0, seconds: 0, text: '', error: null };
   S.speaking = { key: null, state: 'idle' };
@@ -82,9 +84,19 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     S.talk.seconds = 0;
     S.talk.text = '';
     stopSpeaking();
-    const r = { mod, session: null, dropped: false };
+    // at, loud, words: how long the press was, how many level readings showed sound, and whether any words
+    // came, for the phone's recogniser (core/talk.js phoneHeard).
+    const r = { mod, session: null, dropped: false, at: now(), loud: 0, words: false };
+    const onLevel = (l) => {
+      S.talk.level = l;
+      if (l >= SOUND_LEVEL) r.loud++;
+    };
+    const onText = (text) => {
+      S.talk.text = text;
+      if (String(text ?? '').trim()) r.words = true;
+    };
     r.ready = mod
-      .start({ onLevel: (l) => (S.talk.level = l), onText: (text) => (S.talk.text = text) })
+      .start({ onLevel, onText })
       .then((session) => {
         if (r.dropped) {
           session.cancel();
@@ -122,6 +134,7 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
     stopTimer();
     const r = rec;
     rec = null;
+    const holdMs = r ? now() - r.at : 0;
     nav('answer');
     const session = r ? await r.ready : null;
     if (!session) {
@@ -138,9 +151,11 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       // A free voice question: the engine says how many are left today.
       if (out.freeVoiceLeft != null && S.freeVoice) store.set({ freeVoice: { ...S.freeVoice, left: out.freeVoiceLeft } });
       const text = String(out.text ?? '').trim();
+      // The phone's recogniser: true when it heard nothing twice in a row and the engine hears from now on.
+      const switched = r.mod?.id === 'phone' && !!notePhone({ heard: !!text || r.words, noSpeech: !!out.noSpeech, holdMs, loud: r.loud });
       dispatch({ type: 'done' });
       if (!text) {
-        set({ error: { key: 'talk.empty' } });
+        set({ error: { key: switched ? 'talk.phoneOff' : 'talk.empty' } });
         return;
       }
       await ask(text, { voice: true });

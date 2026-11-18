@@ -81,6 +81,23 @@ async function hold(page: Page, sel: string, ms: number, { slideOff = false } = 
 }
 
 const balance = (page: Page) => page.textContent('#balanceText');
+
+/** The settings as the app saved them in its database (IndexedDB forge2, kv). */
+const settings = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<any>((done) => {
+        const open = indexedDB.open('forge2');
+        open.onsuccess = () => {
+          const db = open.result;
+          if (![...db.objectStoreNames].includes('kv')) return done(null);
+          const r = db.transaction('kv').objectStore('kv').get('settings');
+          r.onsuccess = () => done(r.result ?? null);
+          r.onerror = () => done(null);
+        };
+        open.onerror = () => done(null);
+      }),
+  );
 const cents = (s: string | null) => Math.round(Number(String(s).replace(/[^0-9.]/g, '')) * 100);
 
 describe('hold to talk', () => {
@@ -353,14 +370,20 @@ describe('hold to talk', () => {
 // it plays Forge Private Voice's own speech to text too (ForgeAsr, the same events). With ios, it is the
 // iPhone app's bridge (SpeechPlugin.swift): Capacitor says 'ios' and lists the plugins the app has,
 // ForgeSpeech only where speech is true (a build before it has none). silent: a hold with nothing said,
-// which the plugin ends with no-speech.
-async function appPhone({ onDevice, asr = false, ios = false, speech = true, silent = false }: { onDevice: boolean; asr?: boolean; ios?: boolean; speech?: boolean; silent?: boolean }) {
+// which the plugin ends with no-speech. A test can change how the recogniser behaves between presses
+// with window.__speechMode: 'words' (the default), 'silent', or 'deaf' (the level shows sound every
+// 100 ms while held, and the press still ends with no-speech, as on the Galaxy A16). mic: Chrome's
+// microphone is allowed too, for the engine's way.
+async function appPhone({ onDevice, asr = false, ios = false, speech = true, silent = false, mic = false }: { onDevice: boolean; asr?: boolean; ios?: boolean; speech?: boolean; silent?: boolean; mic?: boolean }) {
   const ctx = await browser.newContext({ ...PHONE });
   await pastFirstRun(ctx);
+  if (mic) await ctx.grantPermissions(['microphone'], { origin: g.url });
   await ctx.addInitScript(([ready, bundled, iphone, hasSpeech, quiet]: boolean[]) => {
     const w = window as any;
     const listeners: Array<{ plugin: string; event: string; fn: (ev: any) => void }> = [];
     w.__native = { calls: [] as string[] };
+    w.__speechMode ??= quiet ? 'silent' : 'words';
+    let loud: ReturnType<typeof setInterval> | undefined;
     const EVENT: Record<string, string> = { ForgeSpeech: 'speech', ForgeAsr: 'asr' };
     w.Capacitor = {
       ...(iphone ? { getPlatform: () => 'ios', Plugins: { ForgeBars: {}, ForgeNfc: {}, ...(hasSpeech ? { ForgeSpeech: {} } : {}) } } : {}),
@@ -373,22 +396,28 @@ async function appPhone({ onDevice, asr = false, ios = false, speech = true, sil
         };
         if (plugin === 'ForgeAsr' && method === 'available') return { available: bundled, reason: bundled ? null : 'no speech to text in this app', language: 'en' };
         if (method === 'available') return { onDevice: ready, reason: ready ? null : 'no-on-device-recognizer', locale: 'en-US' };
+        const mode = plugin === 'ForgeSpeech' ? w.__speechMode : quiet ? 'silent' : 'words';
         if (method === 'start') {
           const at = (ms: number, ev: any) => setTimeout(() => emit(opts.id, ev), ms);
           at(50, { type: 'started' });
-          at(250, { type: 'level', level: 0.5 });
-          if (!quiet) at(300, { type: 'partial', text: 'What should' });
-          if (!quiet) at(700, { type: 'partial', text: 'What should I bring' });
+          if (mode === 'deaf') loud = setInterval(() => emit(opts.id, { type: 'level', level: 0.45 }), 100);
+          else at(250, { type: 'level', level: 0.5 });
+          if (mode === 'words') at(300, { type: 'partial', text: 'What should' });
+          if (mode === 'words') at(700, { type: 'partial', text: 'What should I bring' });
           return {};
         }
         if (method === 'stop') {
+          clearInterval(loud);
           setTimeout(() => {
-            emit(opts.id, quiet ? { type: 'error', code: 'no-speech' } : { type: 'final', text: 'What should I bring to the beach?' });
+            emit(opts.id, mode === 'words' ? { type: 'final', text: 'What should I bring to the beach?' } : { type: 'error', code: 'no-speech' });
             emit(opts.id, { type: 'end' });
           }, 100);
           return {};
         }
-        if (method === 'cancel') emit(opts.id, { type: 'end' });
+        if (method === 'cancel') {
+          clearInterval(loud);
+          emit(opts.id, { type: 'end' });
+        }
         return {};
       },
       addListener: (plugin: string, event: string, fn: (ev: any) => void) => {
@@ -493,6 +522,110 @@ describe('hold to talk on this phone (the Android app)', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  // Owner, 2026-11-18: a recogniser that opens the microphone, shows sound, and still hears nothing.
+  it('two presses heard as nothing while the level shows sound switch this phone to the engine, remembered and shown in More, Voice, and switched back there', async () => {
+    const { ctx, page, errors, transcriptions, calls } = await appPhone({ onDevice: true, mic: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    await page.click('#voiceOut-off');
+    await page.evaluate(() => ((window as any).__speechMode = 'deaf'));
+    const homeAndHold = async (ms: number) => {
+      await page.goto(`${g.url}/v2/#/`);
+      await page.waitForSelector('[data-screen=home]');
+      await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toBe('$3.00');
+      await hold(page, '#talkBtn', ms);
+    };
+    const speechCalls = async () => (await calls()).filter((c) => c.startsWith('ForgeSpeech.'));
+
+    // The first: nothing was heard, as before.
+    await homeAndHold(1800);
+    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe('Nothing was heard. Hold the button and speak.');
+    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(1);
+    // The second: the phone goes to the engine, and the person is asked to say it again.
+    await homeAndHold(1800);
+    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe('Nothing was heard. This phone did not hear you twice. Next time, your voice goes online to become words.');
+    expect(await page.textContent('#answerError')).toContain('Hold to say it again.');
+    await expect.poll(() => settings(page).then((x) => x?.phoneOff)).toBe(true);
+    expect(transcriptions).toEqual([]);
+    expect(await speechCalls()).toEqual(['ForgeSpeech.available', 'ForgeSpeech.start', 'ForgeSpeech.stop', 'ForgeSpeech.start', 'ForgeSpeech.stop']);
+
+    // Remembered: after a reload, the third press records with the microphone and the engine hears it.
+    await page.reload();
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toBe('$3.00');
+    const box = (await page.locator('#talkBtn').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect.poll(() => page.getAttribute('#talkBtn', 'data-phase')).toBe('recording');
+    expect(await page.textContent('.listen-route')).toBe('Engine could hear it. It goes through the engine to a private model. The engine could hear it on the way. Not saved.');
+    await page.waitForTimeout(900);
+    await page.mouse.up();
+    await page.waitForSelector('[data-screen=answer]');
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    expect(transcriptions).toHaveLength(1);
+    // The phone's recogniser was not started for it (the calls are counted from the reload).
+    expect(await speechCalls()).toEqual(['ForgeSpeech.available']);
+
+    // More, Voice: Online is the way in use, with a line that says why; On this phone takes it back.
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-engine', 'aria-checked')).toBe('true');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('false');
+    expect(await page.isVisible('#voicePhoneOff')).toBe(true);
+    expect(await page.textContent('#voicePhoneOff')).toBe('Phone did not hear you. It heard nothing twice, so your voice goes online now to become words. Tap On this phone to try the phone again.');
+    // Its picture first (an ear), as every line here; the rest of the words behind its info button.
+    expect(await page.locator('#voicePhoneOff svg').count()).toBeGreaterThan(0);
+    await page.click('#voiceIn-phone');
+    await expect.poll(() => page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    expect(await page.isVisible('#voicePhoneOff')).toBe(false);
+    await expect.poll(() => settings(page).then((x) => [x?.phoneOff, x?.phoneMisses])).toEqual([false, 0]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('short presses, silent holds and a press with words between never switch it', async () => {
+    const { ctx, page, errors, transcriptions } = await appPhone({ onDevice: true, mic: true });
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    await page.click('#voiceOut-off');
+    const press = async (mode: string, ms: number, said: string | RegExp) => {
+      await page.evaluate((m) => ((window as any).__speechMode = m), mode);
+      await page.goto(`${g.url}/v2/#/`);
+      await page.waitForSelector('[data-screen=home]');
+      await expect.poll(() => page.textContent('#balanceText'), { timeout: 8000 }).toMatch(/^\$\d/);
+      await hold(page, '#talkBtn', ms);
+      await page.waitForSelector('[data-screen=answer]');
+      if (typeof said === 'string') await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toBe(said);
+      else {
+        await expect.poll(() => page.textContent('.asked'), { timeout: 8000 }).toMatch(said);
+        await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+      }
+    };
+    const empty = 'Nothing was heard. Hold the button and speak.';
+    // Two short presses with sound, two silent holds: nothing counted.
+    await press('deaf', 900, empty);
+    await press('deaf', 900, empty);
+    await press('silent', 1800, empty);
+    await press('silent', 1800, empty);
+    expect((await settings(page))?.phoneMisses ?? 0).toBe(0);
+    // A miss, then words: the count starts again, so the next miss is only the first.
+    await press('deaf', 1800, empty);
+    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(1);
+    await press('words', 900, /^What should I bring to the beach\?$/);
+    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(0);
+    await press('deaf', 1800, empty);
+    await expect.poll(() => settings(page).then((x) => x?.phoneMisses)).toBe(1);
+    expect((await settings(page))?.phoneOff).toBe(false);
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-phone');
+    expect(await page.getAttribute('#voiceIn-phone', 'aria-checked')).toBe('true');
+    expect(await page.isVisible('#voicePhoneOff')).toBe(false);
+    expect(transcriptions).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
 
   it('uses the engine where the phone has no on-device recogniser for the language', async () => {
     const { ctx, page, errors, calls } = await appPhone({ onDevice: false });
