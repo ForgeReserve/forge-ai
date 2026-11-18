@@ -150,7 +150,10 @@ const topRow = (page: Page) =>
       .filter((n) => n && !n.hidden)
       .map((n) => {
         const r = n!.getBoundingClientRect();
-        return { id: n!.id, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+        // The chip must keep its whole box. The others keep their place: the balance is as wide as its own
+        // figure, which settles a moment after the page opens, so it is held by its right edge.
+        if (n!.id === 'privacyPill') return { id: n!.id, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+        return { id: n!.id, right: Math.round(r.right), y: Math.round(r.y), h: Math.round(r.height) };
       }),
   );
 
