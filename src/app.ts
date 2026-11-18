@@ -1184,8 +1184,8 @@ export function createApp(d: Deps) {
     return c.json({ token: r.token, questions: r.questions, mint: d.free?.mint, unit: d.free?.unit });
   });
 
-  // ------------------------------------------------------------------ the Android app's download (docs/ANDROID.md)
-  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL));
+  // ------------------------------------------------------------------ the apps' download (docs/ANDROID.md, docs/IOS.md)
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL), env.FORGE_IOS_URL);
   // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
   registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 

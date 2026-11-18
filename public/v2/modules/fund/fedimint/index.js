@@ -12,6 +12,7 @@
 import { inviteField, poll } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
 import { tillLabel } from '../../../core/till.js';
+import { showOffer } from '../../../core/getapp.js';
 
 const kids = (...list) => list.filter((x) => x != null && x !== '' && x !== false);
 const sats = (msat) => Math.ceil(msat / 1000);
@@ -131,8 +132,14 @@ export function create(inputs) {
 
       if (!ready()) {
         body.replaceChildren(...kids(art(), ui.sayEl('p', { id: 'fedAppOnly' }, t('fund.fedimint.appOnly')), ui.sayEl('p', { class: 'note' }, t('fund.fedimint.what'))));
-        foot.replaceChildren(ui.el('a', { class: 'btn primary block', id: 'fedGetApp', href: '/download' }, ui.icon('download', 20), ui.el('span', { text: t('fund.card.getApp') })));
-        return { node, destroy() {} };
+        // Get the app: the /download page. Not on an iPhone: its app has no till (core/getapp.js).
+        showOffer(foot, ui, t, { id: 'fedGetApp', iphoneApp: false, alive: () => !gone });
+        return {
+          node,
+          destroy() {
+            gone = true;
+          },
+        };
       }
 
       // ------------------------------------------------------------ pairing with a till

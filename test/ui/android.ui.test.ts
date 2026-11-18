@@ -366,6 +366,45 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await twice.ctx.close();
   }, 120_000);
 
+  // With the game first (Playful), an event link that reaches the app while the helper shows Type puts the
+  // helper's home in Type's place, under Start free (app.js joinOnce). Back from that home still shows the
+  // game in one step (app.js onPop). Fingers throughout.
+  it('with the game first, Back from the home an event link opened shows the game (ForgeJoin)', async () => {
+    const { ctx, page, errors } = await appPhone();
+    await page.goto(`${app}/#/more/engine`);
+    await page.waitForSelector('[data-screen=engine]');
+    await page.fill('#engineAddress', `${g.url}/`);
+    await Promise.all([page.waitForEvent('load'), page.click('#engineUse')]);
+    await page.waitForSelector('[data-screen=home]');
+    await page.goto(`${app}/#/more/look`);
+    await page.waitForSelector('[data-screen=look]');
+    await page.click('#mode-playful');
+    await expect.poll(() => page.getAttribute('#mode-playful', 'aria-checked'), { timeout: 10_000 }).toBe('true');
+    await page.goto(`${app}/#/`);
+    await page.reload();
+    await page.waitForSelector('[data-screen=game][data-mode=playful]');
+    // Pip held with a finger until the helper opens, then Type.
+    const r = (await page.locator('#pipBtn').boundingBox())!;
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
+    await page.waitForSelector('[data-screen=home][data-mode=playful]');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    await page.tap('#btn-type');
+    await page.waitForSelector('[data-screen=type]');
+    const pass = g.deps.passes.create({ maxUses: 1, expiresAt: Date.now() + 24 * 3600 * 1000, label: 'app' });
+    await page.evaluate((code) => (window as any).__join(code), pass.code);
+    await page.waitForSelector('[data-screen=startFree] #startFreeAsk:not([hidden])');
+    // Back: the helper's home Start free was opened over, then the game.
+    await page.goBack();
+    await page.waitForSelector('[data-screen=home][data-mode=playful]');
+    await page.goBack();
+    await page.waitForSelector('[data-screen=game][data-mode=playful]');
+    expect(await page.evaluate(() => location.hash)).toBe('#/game');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('keeps the phone\'s bars the colour of the look: Midnight by default, light on the Light look', async () => {
     const { ctx, page, errors } = await appPhone();
     const bars = () => page.evaluate(() => (window as any).__native.calls.filter((c: any) => c.plugin === 'ForgeBars').map((c: any) => `${c.method} ${c.opts.color}`));

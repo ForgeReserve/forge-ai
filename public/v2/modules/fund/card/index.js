@@ -18,6 +18,7 @@
 // price to change it (when the engine changes units).
 import { inviteField } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
+import { showOffer } from '../../../core/getapp.js';
 
 const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
 
@@ -133,8 +134,14 @@ export function create(inputs) {
 
       if (!nfc?.supported?.()) {
         body.replaceChildren(...kids(art(), ui.sayEl('p', { id: 'cardAppOnly' }, t('fund.card.appOnly')), ui.sayEl('p', { class: 'note' }, t('fund.card.what'))));
-        foot.replaceChildren(...kids(ui.el('a', { class: 'btn primary block', id: 'cardGetApp', href: '/download' }, ui.icon('download', 20), ui.el('span', { text: t('fund.card.getApp') }))));
-        return { node, destroy() {} };
+        // Get the app: the /download page, or on an iPhone its app's link or the Home Screen steps (core/getapp.js).
+        showOffer(foot, ui, t, { id: 'cardGetApp', alive: () => !gone });
+        return {
+          node,
+          destroy() {
+            gone = true;
+          },
+        };
       }
 
       // ------------------------------------------------------------ the app

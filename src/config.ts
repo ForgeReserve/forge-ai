@@ -197,6 +197,19 @@ export const EnvSchema = z.object({
    * the app (App Links). Unset: that file answers 404 and such links open in the browser.
    */
   FORGE_ANDROID_CERT_SHA256: csv.pipe(z.array(z.string().transform(certFingerprint).pipe(z.string().regex(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/, 'FORGE_ANDROID_CERT_SHA256: each entry must be a SHA-256 certificate fingerprint')))).default([]),
+
+  // ---------------------------------------------------------------- the iPhone app (docs/IOS.md)
+  /**
+   * The iPhone app's link (docs/IOS.md, Getting the app): a TestFlight invitation or the App Store page,
+   * https only. Set, /download/info carries it as `ios.url`, and Get the app on an iPhone or iPad opens
+   * it. Unset: there is no iPhone app to give, and an iPhone is shown how to put Forge on its Home Screen.
+   */
+  FORGE_IOS_URL: z
+    .string()
+    .url('FORGE_IOS_URL: must be a link')
+    .refine((u) => URL.canParse(u) && new URL(u).protocol === 'https:', 'FORGE_IOS_URL: must be an https link')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

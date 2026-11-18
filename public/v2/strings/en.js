@@ -866,6 +866,13 @@ export default {
   'download.about': 'About {name}',
   'download.androidInfo': 'Forge. For most phones.',
   'download.grapheneInfo': 'Forge Private Voice. For GrapheneOS: it turns your voice into words on the phone. A bigger file.',
+  'download.titleIos': 'Forge for iPhone',
+  // Get the app on an iPhone or iPad with no iPhone app to give (core/getapp.js): Forge on the Home
+  // Screen. Share and Add to Home Screen are the words Safari's own buttons say.
+  'getApp.home': 'Put Forge on your Home Screen.',
+  'getApp.open': 'Open Forge',
+  'getApp.share': 'Share',
+  'getApp.add': 'Add to Home Screen',
   // The event link, /j#<pass> (public/v2/join/): one QR code for everyone in the room.
   'join.title': 'Join Forge',
   'join.lead': 'Free to use. No money, no name, no email.',

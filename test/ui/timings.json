@@ -13,6 +13,7 @@
     "test/ui/free-voice.ui.test.ts": 4.8,
     "test/ui/free.ui.test.ts": 11.2,
     "test/ui/game.ui.test.ts": 77.9,
+    "test/ui/getapp.ui.test.ts": 12,
     "test/ui/history.ui.test.ts": 76.9,
     "test/ui/home-art.ui.test.ts": 15,
     "test/ui/join.ui.test.ts": 9.7,

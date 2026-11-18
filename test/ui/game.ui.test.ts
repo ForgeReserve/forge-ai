@@ -152,6 +152,44 @@ async function fingerHoldPip(page: Page, ms: number) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
 }
+/** Holds `sel` down with a finger (real touch input) until `done` resolves, then lifts it. */
+async function fingerHoldUntil(page: Page, sel: string, done: () => Promise<unknown>) {
+  const r = (await page.locator(sel).boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x + r.width / 2, y: r.y + r.height / 2 }] });
+  try {
+    await done();
+  } finally {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+}
+/** Asks `question` with Type, by finger, and waits until the whole answer is in (Burn shows then). */
+async function askByFinger(page: Page, question: string) {
+  await page.tap('#btn-type');
+  await page.waitForSelector('[data-screen=type]');
+  await page.fill('#question', question);
+  await page.tap('#sendBtn');
+  await page.waitForSelector('[data-screen=answer]');
+  await page.waitForSelector('#burnBtn', { state: 'visible', timeout: 20_000 });
+}
+/** Records every screen drawn from now on, with its address, in window.__drawn. */
+const recordScreens = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as any;
+    w.__drawn = [];
+    if (w.__drawWatch) return;
+    const app = document.getElementById('app')!;
+    w.__drawWatch = new MutationObserver(() => w.__drawn.push(`${app.querySelector('main')?.dataset.screen ?? ''} ${location.hash}`));
+    w.__drawWatch.observe(app, { childList: true });
+  });
+const drawn = (page: Page): Promise<string[]> => page.evaluate(() => (window as any).__drawn);
+/** Back, then waits until the address is `hash` and its screen `screen` is drawn. */
+async function backTo(page: Page, hash: string, screen: string) {
+  await page.goBack();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(hash);
+  await expect.poll(() => screenOf(page)).toBe(screen);
+}
 /** The screen shown now (its data-screen). */
 const screenOf = (page: Page) => page.evaluate(() => document.querySelector('main')?.dataset.screen ?? '');
 /** Sets the address's hash by hand, as a typed address or a test driver does: an entry the app did not make. */
@@ -433,6 +471,65 @@ describe("Pip's Garden", () => {
       await page.goBack();
       await onGame(page);
     }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  // A burn never leaves Back on the burned conversation, and with the game first Back from the helper's
+  // home is the game however the home was reached: after Burn on the answer (which used to put a home
+  // above Type, so Back showed Type), and after a burn in History or Burn all. Fingers throughout.
+  it('with the game first: after a burn on the answer, in History or with Burn all, Back goes to the game and never shows the burned answer', async () => {
+    const { ctx, page, errors } = await phone();
+    await recordScreens(page);
+    // Burn on the answer, held to the end: the helper's home, and Back from it the game.
+    await fingerHoldUntil(page, '#pipBtn', () => onHelper(page));
+    await askByFinger(page, 'Why is the sky blue?');
+    await fingerHoldUntil(page, '#burnBtn', () => onHelper(page));
+    // Pip says it burned, on the helper's home just above the game.
+    await expect.poll(() => textOf(page, '#pipSays')).toMatch(/^Burned/);
+    expect(await page.evaluate(() => history.state?.forge2)).toBe(1);
+    await backTo(page, '#/game', 'game');
+    expect(await drawn(page)).toEqual(['home #/', 'type #/type', 'answer #/answer', 'home #/', 'game #/game']);
+    // Burned in History, opened from the answer's More: Back shows More, then the helper's home in place
+    // of the burned answer, then the game.
+    for (const all of [false, true]) {
+      await recordScreens(page);
+      await fingerHoldUntil(page, '#pipBtn', () => onHelper(page));
+      await askByFinger(page, 'Why is the sea salty?');
+      await page.tap('#btn-more');
+      await page.tap('#moreHistory');
+      await page.waitForSelector('[data-screen=history] [data-burn]');
+      if (all) {
+        await page.tap('#burnAll');
+        await fingerHoldUntil(page, '#burnAllYes', () => page.waitForSelector('#burnAll', { state: 'hidden' }));
+      } else await fingerHoldUntil(page, '[data-burn]', () => page.waitForSelector('[data-burn]', { state: 'detached' }));
+      await backTo(page, '#/more', 'home');
+      await backTo(page, '#/', 'home');
+      await backTo(page, '#/game', 'game');
+      expect(await drawn(page), all ? 'Burn all' : 'one burned').toEqual(['home #/', 'type #/type', 'answer #/answer', 'home #/more', 'history #/more/history', 'home #/more', 'home #/', 'game #/game']);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('Default: Back after a burn on the answer shows Type, as before; after a burn in History it skips the burned answer', async () => {
+    const { ctx, page, errors } = await phone({ playful: false });
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await recordScreens(page);
+    await askByFinger(page, 'Why is the sky blue?');
+    await fingerHoldUntil(page, '#burnBtn', () => page.waitForSelector('[data-screen=home]'));
+    await backTo(page, '#/type', 'type');
+    await backTo(page, '#/', 'home');
+    await askByFinger(page, 'Why is the sea salty?');
+    await page.tap('#btn-more');
+    await page.tap('#moreHistory');
+    await page.waitForSelector('[data-screen=history] [data-burn]');
+    await fingerHoldUntil(page, '[data-burn]', () => page.waitForSelector('[data-burn]', { state: 'detached' }));
+    await backTo(page, '#/more', 'home');
+    await backTo(page, '#/', 'home');
+    const after = (await drawn(page)).slice((await drawn(page)).indexOf('history #/more/history'));
+    expect(after).toEqual(['history #/more/history', 'home #/more', 'home #/']);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);

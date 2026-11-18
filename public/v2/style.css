@@ -239,6 +239,12 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .fund-groups .row.teal-border { border-color: var(--teal-line); }
 .fund-view { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .fund-body { gap: 12px; }
+/* Get the app on an iPhone with no iPhone app to give: Forge on the Home Screen, Safari's two buttons (core/getapp.js). */
+.add-home { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); }
+.add-home > p { margin: 0; font-weight: 700; font-size: 17px; }
+.add-home .add-home-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.add-home-step { display: flex; align-items: center; gap: 14px; font-size: 17px; font-weight: 600; }
+.add-home-ico { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--surface-2); color: var(--ink); }
 .amount-tag { align-self: center; font-size: 28px; font-weight: 700; }
 .qr-block { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .qr { width: min(280px, 100%); aspect-ratio: 1; background: #FFFFFF; border-radius: 16px; padding: 10px; align-self: center; }

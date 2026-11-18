@@ -272,7 +272,7 @@ Add these to [`public/v2/strings/en.js`](https://github.com/ForgeReserve/forge-a
 | `nfc` | `supported()` false: card ways are listed and say they need the app | Reads cards (ForgeNfc) | Reads cards (ForgeNfc), a press then a tap (`sheet`) |
 | `till` | `supported()` false | Pairs and pays (ForgeTill) | `supported()` false: no till yet, so Fedimint cards are left out |
 
-A module that needs a card or a till returns `usable()` false where it cannot work, and its `view` says so in one line with a link to `/download`, as Tap a Cashu card does.
+A module that needs a card or a till returns `usable()` false where it cannot work, and its `view` says so in one line with a link to `/download`, as Tap a Cashu card does (`showOffer` in `public/v2/core/getapp.js` draws it: on an iPhone, the iPhone app's link or the Home Screen steps).
 
 ## A minimal fund module
 
