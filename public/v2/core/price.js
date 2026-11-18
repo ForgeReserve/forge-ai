@@ -65,6 +65,16 @@ export function priceLine(costMsub, unit, free = null) {
 }
 
 /**
+ * The price line for turning a recording into words online (app.js askVoiceOnline), as priceLine says
+ * it: "Free, 2 of 3 left" when a free voice question pays it (freeVoice: {left, per_day}, the engine's
+ * free_voice), else what it costs; null when it costs nothing.
+ */
+export function voicePriceLine(costMsub, unit, freeVoice = null) {
+  if (freeVoice) return priceLine(0, unit, { left: freeVoice.left, total: freeVoice.per_day });
+  return costMsub === 0 ? null : priceLine(costMsub, unit);
+}
+
+/**
  * Bytes of an EHBP-encrypted body for a plaintext body of `bytes`: the vendored Tinfoil SDK seals the body
  * in chunks of up to 64 KiB, each framed as a 4-byte length plus the ciphertext with its 16-byte tag
  * (the SDK's own size estimate, public/vendor/tinfoil.js). The engine holds funds on the bytes it receives.

@@ -211,8 +211,8 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     );
   const inList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceInHead' });
   const outList = el('div', { class: 'model-list', role: 'radiogroup', 'aria-labelledby': 'voiceOutHead' });
-  // The phone's recogniser heard nothing twice while the sound was there, so the engine hears this phone
-  // (core/talk.js); On this phone above takes it back.
+  // The person chose Go online after the phone's recogniser heard nothing twice while the sound was there
+  // (app.js askVoiceOnline), so the engine hears this phone; On this phone above takes it back.
   const phoneOff = sayEl('p', { class: 'hint', id: 'voicePhoneOff', hidden: true }, t('voice.in.phoneOff'), '', 'ear');
   const naturalHead = el('h2', { class: 'caps', id: 'naturalVoiceHead', text: t('voice.natural'), hidden: true });
   const naturalList = el('div', { class: 'model-list', role: 'radiogroup', id: 'naturalVoices', 'aria-labelledby': 'naturalVoiceHead', hidden: true });

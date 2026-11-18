@@ -887,7 +887,8 @@ describe('the talk controller', () => {
 });
 
 // Owner, 2026-11-18: a phone whose own recogniser hears nothing twice in a row while its level shows
-// sound goes to the engine (core/talk.js, core/state.js pickVoiceIn phoneOff).
+// sound asks whether the voice may go online; only a yes sends it to the engine (core/talk.js
+// afterPhonePress, core/state.js pickVoiceIn phoneOff, loadedSettings).
 describe("a phone recogniser that hears nothing", () => {
   const loud = { heard: false, noSpeech: true, holdMs: 3000, loud: 10 };
   const words = { heard: true, noSpeech: false, holdMs: 3000, loud: 10 };
@@ -910,20 +911,72 @@ describe("a phone recogniser that hears nothing", () => {
     expect(TALK.SOUND_LEVEL).toBeLessThan(0.6);
   });
 
-  it('switches after two misses in a row, and never on taps, silent holds, or with words between', () => {
+  it('asks after two misses in a row, and never on taps, silent holds, or with words between', () => {
     const tap = { ...loud, holdMs: 400 };
     const silent = { ...loud, loud: 0 };
-    expect(TALK.switchesToEngine([loud, loud])).toBe(true);
-    expect(TALK.switchesToEngine([loud])).toBe(false);
-    expect(TALK.switchesToEngine([tap, tap, tap])).toBe(false);
-    expect(TALK.switchesToEngine([silent, silent, silent])).toBe(false);
-    expect(TALK.switchesToEngine([loud, words, loud])).toBe(false);
-    expect(TALK.switchesToEngine([loud, loud, words])).toBe(false);
+    expect(TALK.asksToGoOnline([loud, loud])).toBe(true);
+    expect(TALK.asksToGoOnline([loud])).toBe(false);
+    expect(TALK.asksToGoOnline([tap, tap, tap])).toBe(false);
+    expect(TALK.asksToGoOnline([silent, silent, silent])).toBe(false);
+    expect(TALK.asksToGoOnline([loud, words, loud])).toBe(false);
+    expect(TALK.asksToGoOnline([loud, loud, words])).toBe(false);
     // A tap or a silent hold between two misses neither counts nor resets.
-    expect(TALK.switchesToEngine([loud, tap, silent, loud])).toBe(true);
+    expect(TALK.asksToGoOnline([loud, tap, silent, loud])).toBe(true);
     expect(TALK.nextMisses(1, words)).toBe(0);
     expect(TALK.nextMisses(1, tap)).toBe(1);
     expect(TALK.nextMisses(undefined, loud)).toBe(1);
+  });
+
+  it('afterPhonePress: asks once, only with another way to hear, and never switches on its own', () => {
+    const other = { id: 'engine' };
+    const fresh = { ...STATE.DEFAULT_SETTINGS };
+    expect(STATE.DEFAULT_SETTINGS.phoneAsked).toBe(false);
+    expect(TALK.afterPhonePress(fresh, loud, other)).toEqual({ misses: 1, ask: false });
+    // The second miss in a row asks, and the count starts again.
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 1 }, loud, other)).toEqual({ misses: 0, ask: true });
+    // Words between reset it; a tap keeps it.
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 1 }, words, other)).toEqual({ misses: 0, ask: false });
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 1 }, { ...loud, holdMs: 400 }, other)).toEqual({ misses: 1, ask: false });
+    // No other way can hear it here (Private only with no private speech to text): no question, the count goes on.
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 1 }, loud, null)).toEqual({ misses: 2, ask: false });
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 2 }, loud, other)).toEqual({ misses: 0, ask: true });
+    // Asked once (either answer): never again, and nothing more is counted.
+    expect(TALK.afterPhonePress({ ...fresh, phoneMisses: 1, phoneAsked: true }, loud, other)).toEqual({ misses: 1, ask: false });
+    expect(TALK.afterPhonePress({ ...fresh, phoneAsked: true, phoneOff: true }, loud, other)).toEqual({ misses: 0, ask: false });
+    // The rule only asks: it never returns a switch.
+    expect(Object.keys(TALK.afterPhonePress({ ...fresh, phoneMisses: 1 }, loud, other)).sort()).toEqual(['ask', 'misses']);
+  });
+
+  it('the question names the price as the talk line does: what the words cost, or the free voice questions left', async () => {
+    const P: any = await import('../../../public/v2/core/price.js' as string);
+    const line = (...a: any[]) => {
+      const p = P.voicePriceLine(...a);
+      return p && EN[p.key].replace('{amount}', p.amount).replace('{left}', p.left).replace('{total}', p.total);
+    };
+    expect(line(400, 'usd')).toBe('Under $0.01');
+    expect(line(23_400, 'usd')).toBe('Up to $0.24');
+    expect(line(5_000, 'sat')).toBe('Up to 5 sat');
+    expect(line(null, 'usd')).toBe('Price not known');
+    expect(line(0, 'usd')).toBeNull();
+    expect(line(0, 'usd', { enabled: true, per_day: 3, left: 2 })).toBe('Free, 2 of 3 left');
+  });
+
+  it('loadedSettings: a phone the previous build switched on its own hears on the phone again, so it is asked', () => {
+    // Switched by the old build: phoneOff with no record of a question.
+    const old = STATE.loadedSettings({ phoneOff: true, phoneMisses: 0, voiceIn: 'auto' });
+    expect([old.phoneOff, old.phoneMisses, old.phoneAsked]).toEqual([false, 0, false]);
+    expect(TALK.afterPhonePress({ ...old, phoneMisses: 1 }, loud, { id: 'engine' }).ask).toBe(true);
+    // Chosen with Go online: kept.
+    expect(STATE.loadedSettings({ phoneOff: true, phoneAsked: true }).phoneOff).toBe(true);
+    // Kept on the phone, or switched back by hand in More, Voice: not asked again.
+    const kept = STATE.loadedSettings({ phoneOff: false, phoneAsked: true, phoneMisses: 1 });
+    expect([kept.phoneOff, kept.phoneAsked, kept.phoneMisses]).toEqual([false, true, 1]);
+    // Nothing saved yet (and so after Erase everything): the defaults.
+    expect([STATE.loadedSettings(null).phoneOff, STATE.loadedSettings(null).phoneAsked]).toEqual([false, false]);
+    // The step is pure: the saved object is not changed.
+    const saved = { phoneOff: true, phoneMisses: 2 };
+    STATE.loadedSettings(saved);
+    expect(saved).toEqual({ phoneOff: true, phoneMisses: 2 });
   });
 
   const mod = (id: string, available: boolean, priv: boolean) => ({ id, available: () => available, private: () => priv });
@@ -946,7 +999,7 @@ describe("a phone recogniser that hears nothing", () => {
   });
 
   /** A talk controller over the phone module, whose recogniser plays `levels` and then ends with `end`. */
-  function phoneTalk({ levels = [0.5, 0.5, 0.5, 0.5], partial = '', end = { type: 'error', code: 'no-speech' } as any, switched = false } = {}) {
+  function phoneTalk({ levels = [0.5, 0.5, 0.5, 0.5], partial = '', end = { type: 'error', code: 'no-speech' } as any } = {}) {
     let now = 0;
     const S: any = {};
     const noted: any[] = [];
@@ -974,7 +1027,7 @@ describe("a phone recogniser that hears nothing", () => {
       refresh() {},
       errorText: () => 'error',
       now: () => now,
-      notePhone: (x: any) => (noted.push(x), switched),
+      notePhone: (x: any) => noted.push(x),
     });
     return { S, ctl, noted, phone, advance: (ms: number) => (now += ms) };
   }
@@ -1001,12 +1054,16 @@ describe("a phone recogniser that hears nothing", () => {
     const c = phoneTalk({ partial: 'Where is' });
     await press(c, 3000);
     expect(c.noted[0].heard).toBe(true);
-    // The press that switches says so, with the usual Hold to say it again under it (screens/answer.js).
-    const d = phoneTalk({ switched: true });
+    // The press after which the app asks says only that nothing was heard: the question is the app's (app.js).
+    const d = phoneTalk();
     await press(d, 3000);
-    expect(d.S.talk.error).toEqual({ key: 'talk.phoneOff' });
-    expect(EN['talk.phoneOff']).toMatch(/^Nothing was heard\. /);
-    expect(EN['voice.in.phoneOff']).toBeTruthy();
+    await press(d, 3000);
+    expect(d.noted).toHaveLength(2);
+    expect(d.S.talk.error).toEqual({ key: 'talk.empty' });
+    expect(EN['talk.phoneOff']).toBeUndefined();
+    expect(EN['voice.in.phoneOff']).toMatch(/^You chose to go online\. /);
+    expect(EN['voice.in.phoneOff']).not.toMatch(/twice/);
+    expect([EN['voiceAsk.go'], EN['voiceAsk.keep']]).toEqual(['Go online', 'Keep on this phone']);
     // Another failure of the recogniser is said as before and not counted.
     const e = phoneTalk({ end: { type: 'error', code: 'busy' } });
     await press(e, 3000);

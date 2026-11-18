@@ -130,11 +130,12 @@ export const hiddenCount = (models, settings) => visibleModels(models, { private
  * opens on the game, its helper behind it; on by default, turned off in the same place.
  */
 /**
- * phoneOff: true once the phone's own recogniser heard nothing twice in a row while its level showed
- * sound (core/talk.js), so the engine hears this phone (pickVoiceIn). phoneMisses: such presses in a row
- * so far.
+ * phoneOff: true once the person said Go online when the app asked, after the phone's own recogniser
+ * heard nothing twice in a row while its level showed sound (core/talk.js afterPhonePress), so the engine
+ * hears this phone (pickVoiceIn). phoneMisses: such presses in a row so far. phoneAsked: true once the
+ * app asked (either answer, or the sheet dismissed): it never asks again on this phone.
  */
-export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', lastPrivate: '', lastStandard: '', standardOk: false, voiceIn: 'auto', phoneOff: false, phoneMisses: 0, voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
+export const DEFAULT_SETTINGS = Object.freeze({ look: 'midnight', followSystem: false, privateOnly: true, model: '', lastPrivate: '', lastStandard: '', standardOk: false, voiceIn: 'auto', phoneOff: false, phoneMisses: 0, phoneAsked: false, voiceOut: 'auto', naturalVoice: '', voiceDevice: '', preferNatural: false, voicePace: null, autoDelete: 'day', lastWay: '', mode: 'default', gameFirst: true });
 
 /**
  * The mode to draw the home and the answer with: the chosen one when it can be drawn now (`ready`, the
@@ -150,9 +151,9 @@ export function pickMode(ready, settings) {
  * phone's own on-device recogniser (in the Android and iPhone apps) when it has the language; else the engine's. With
  * 'engine' chosen, the engine's first. The browser's recogniser is never used with Private only on,
  * since the browser may send the sound to its maker, and never unless chosen.
- * phoneOff: the phone's recogniser heard nothing twice in a row while the sound was there (core/talk.js
- * PHONE_MISSES), so the next way hears it, under the same Private only rule; the phone only when no
- * other way can. Picking On this phone in More, Voice clears it.
+ * phoneOff: the person chose to go online after the phone's recogniser heard nothing twice in a row
+ * (core/talk.js PHONE_MISSES), so the next way hears it, under the same Private only rule; the phone only
+ * when no other way can. Picking On this phone in More, Voice clears it.
  * mods: {bundled, phone, engine, device}, each a module instance or undefined.
  */
 export function pickVoiceIn(mods, settings) {
@@ -167,11 +168,14 @@ export function pickVoiceIn(mods, settings) {
  * the default and was saved with any other setting, so a saved 'engine' is 'auto' unless the person
  * picked it in More, Voice since then (voiceInPicked). In the same way Light was the default look until
  * Midnight, so a saved 'light' is Midnight unless the person picked a look since then (lookPicked).
+ * A build before the question switched a phone to the engine on its own (phoneOff with no phoneAsked):
+ * that phone hears with its own recogniser again, with a fresh count, so it is asked.
  */
 export function loadedSettings(saved) {
   const s = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
   if (s.voiceIn === 'engine' && !s.voiceInPicked) s.voiceIn = 'auto';
   if (s.look === 'light' && !s.lookPicked) s.look = DEFAULT_SETTINGS.look;
+  if (s.phoneOff && !s.phoneAsked) Object.assign(s, { phoneOff: false, phoneMisses: 0 });
   return s;
 }
 

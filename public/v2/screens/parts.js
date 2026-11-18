@@ -307,3 +307,45 @@ export function listenHeader(title, onBack, backLabel, listen) {
     el('span', { class: 'listen-slot' }, listen),
   );
 }
+
+/**
+ * A yes or no question over the screen, as a sheet from the bottom (the Private chip's question first,
+ * screens/startfree.js askStandard): the words with their picture and Listen, anything `extra` under
+ * them, and two buttons, yes first. The safe answer (no) has the focus, so Enter alone never says yes.
+ * A tap on the dim layer beside the sheet, or Back, is a no. The ids: `id` on the dialog, `${id}Text` on
+ * the words, `${id}Listen` on Listen. approved: the owner's own words (data-approved). back(): the node
+ * the focus goes back to. Resolves true for yes.
+ */
+export function askSheet({ t, reader, id, text, ico, approved = false, extra = [], yes, no, back = () => null }) {
+  return new Promise((resolve) => {
+    const listen = listenButton({ t, reader, id: `${id}Listen`, pieces: () => [text, yes.text, no.text] });
+    const yesBtn = el('button', { type: 'button', class: 'btn primary block', id: yes.id }, icon(yes.ico, 22), el('span', { text: yes.text }));
+    const noBtn = el('button', { type: 'button', class: 'btn block', id: no.id }, icon(no.ico, 20), el('span', { text: no.text }));
+    const sheet = el(
+      'div',
+      { class: 'sf-sheet' },
+      el('span', { class: 'sf-grabber', 'aria-hidden': 'true' }),
+      el('div', { class: 'sf-ask-head' }, el('p', { class: 'sf-callout', id: `${id}Text`, ...(approved ? { 'data-approved': '' } : {}) }, icon(ico, 24), el('span', { text })), listen.node),
+      ...extra,
+      el('div', { class: 'foot' }, yesBtn, noBtn),
+    );
+    const dlg = el('dialog', { class: 'kind-ask', id, 'aria-labelledby': `${id}Text` }, sheet);
+    const close = (answer) => {
+      listen.destroy();
+      dlg.close();
+      dlg.remove();
+      back()?.focus();
+      resolve(answer);
+    };
+    yesBtn.addEventListener('click', () => close(true));
+    noBtn.addEventListener('click', () => close(false));
+    dlg.addEventListener('click', (e) => e.target === dlg && close(false));
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+    noBtn.focus();
+  });
+}
