@@ -6,7 +6,9 @@ Status: design proposal, written 2026-11-17. Nothing on this page is built. It r
 
 Alex Gladstein of the Human Rights Foundation (HRF) calls it the "organizational brain": an AI that staff meeting transcripts, weekly updates and the organisation's own output are fed into, so anyone in the organisation can ask it what is going on ([1]). He credits Block with the idea. Jack Dorsey and Roelof Botha describe Block's version as a "company world model" built from the records that remote work leaves: "Decisions, discussions, code, designs, plans, problems, and progress" ([2]). They also write that Block "is in the early stages of this transition". Gladstein's team at HRF built one in a few weeks: years of public reports, an interview with each member, weekly meeting transcripts and Friday briefs, held in "an encrypted database that uses nostr" for permissions ([3]).
 
-For Forge the useful part is narrower: an organisation keeps what its members should know, and a member asks by voice and hears the answer in the organisation's own words.
+For Forge the useful part is narrower: an organisation keeps what people should know, and a person asks by voice and hears the answer in the organisation's own words.
+
+The person asking need not belong to the organisation. A movement, a research institute or a company with hard-won experience can publish a package for anyone it shares the code with, and one phone can hold packages from several of them. This page says "member" for whoever an organisation shares a package with.
 
 ## The approaches
 
