@@ -65,6 +65,7 @@
 <li><a href="#holds-and-charges">Holds and charges</a></li>
 <li><a href="#pay-per-request-nut-24">Pay per request (NUT-24)</a></li>
 <li><a href="#open-a-balance">Open a balance</a></li>
+<li><a href="#a-second-balance">A second balance</a></li>
 <li><a href="#top-up-with-ecash">Top up with eCash</a></li>
 <li><a href="#lightning">Lightning</a></li>
 <li><a href="#on-chain">On-chain</a></li>
@@ -290,6 +291,7 @@ raw = client.chat.completions.with_raw_response.create(
 <li>Opening a balance redeems the invite and binds it to that balance. One invite opens one balance. A used one answers <code>403 invite_used</code>.</li>
 <li>When a top-up or funding opens a balance and that first funding fails or expires before anything is credited, the empty balance is removed and its invite opens again.</li>
 <li><code>POST /v1/wallet/open</code> always needs an invite, even on a gateway that is not invite-only, because it opens a balance for the free models.</li>
+<li>A client that holds a paid balance opens its balance in the other unit without an invite: see <a href="#a-second-balance">A second balance</a>.</li>
 </ul>
 <h3 id="event-passes">Event passes<a class="anchor" href="#event-passes" aria-label="Link to this section">#</a></h3>
 <p>An event pass (<code>pass-...</code>) is one code for a room full of people. It works only at <code>POST /v1/wallet/open</code>, where each use opens one balance at 0 for the free models. A pass has a number of uses and an expiry: past either, it answers <code>403 pass_used_up</code> or <code>403 pass_expired</code>. It never stands in for an invite on a funded top-up or a per-request payment. A balance opened with a pass takes funds later like any other.</p>
@@ -375,6 +377,13 @@ X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
 <li><code>POST /v1/wallet/open</code> with an invite code or event pass opens a balance at 0. It can use the free models at once and take funds later.</li>
 <li><code>POST /v1/wallet/topup</code> with a token, and the funding routes, open a balance on first use too (with an invite while invite-only).</li>
 <li>Send an existing key as the bearer to add to that balance instead.</li>
+</ul>
+<h3 id="a-second-balance">A second balance<a class="anchor" href="#a-second-balance" aria-label="Link to this section">#</a></h3>
+<p>A balance has one unit for life. A client that holds a paid balance in one unit can open its balance in the other unit without an invite, so that sat eCash lands in sats and dollar eCash in dollars, with no change of units. Send the key of the balance it holds in the <code>X-Forge-Sibling</code> header, and no bearer (or a new key of your choice), on the request that opens the new balance: <code>POST /v1/wallet/topup</code>, <code>POST /v1/wallet/fund/lightning</code>, <code>POST /v1/wallet/fund/onchain</code> or <code>POST /v1/wallet/fund/foreign/quote</code>. <code>sibling</code> in <code>GET /v1/wallet/fund/methods</code> says the gateway offers this.</p>
+<ul>
+<li>The key proves something only when its balance is a paid balance (a free-question balance proves nothing), not frozen, in the other unit, already used (funded, or opened with an invite or pass), and not itself opened this way. Each such balance opens one balance in the other unit, once. Anything else answers <code>403 sibling_refused</code>, and a token sent with it is left untouched.</li>
+<li>No invite is redeemed and no pass use is counted. If that first funding fails or expires, the new balance is removed, and the key can open one again.</li>
+<li>The new balance stores the id of the balance whose key opened it, so the gateway can tell that the two belong together. The header is read only while the gateway is invite-only; elsewhere a new balance needs nothing, and nothing is stored.</li>
 </ul>
 <h3 id="top-up-with-ecash">Top up with eCash<a class="anchor" href="#top-up-with-ecash" aria-label="Link to this section">#</a></h3>
 <p><code>POST /v1/wallet/topup</code> with a <code>cashuB</code> token from one of the accepted mints (<code>mints</code> in <code>GET /v1/models</code>, and <code>ecash.mints</code> in <code>GET /v1/wallet/fund/methods</code>). The token&#39;s unit must match the balance; a token in the other unit answers <code>400 wrong_unit</code> and is left untouched (see <a href="#change-units">Change units</a>). Sending the same token again to the same key is safe: it answers <code>replay: true</code> and credits nothing more.</p>
@@ -840,10 +849,10 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <td>For a new balance while invite-only. Also accepted as <code>X-Forge-Invite</code></td>
 </tr>
 </tbody></table></div>
-<p>Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made.</p>
+<p>Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made. <code>X-Forge-Sibling</code>: in place of an invite, the key of the client&#39;s balance in the other unit (<a href="#a-second-balance">A second balance</a>).</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sk-forge-...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;credited&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;replay&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span></code></pre></div>
-<p><code>credited</code> is in whole units, after the mint&#39;s input fees. Errors: the token errors, <code>409 wrong_balance</code>, <code>400 wrong_unit</code> (the balance has another unit; with <code>convert</code> when the token can be changed, see <a href="#change-units">Change units</a>), <code>403 invite_required</code>, <code>503 topup_pending</code> (retry with the returned <code>key</code> and the same token).</p>
+<p><code>credited</code> is in whole units, after the mint&#39;s input fees. Errors: the token errors, <code>409 wrong_balance</code>, <code>400 wrong_unit</code> (the balance has another unit; with <code>convert</code> when the token can be changed, see <a href="#change-units">Change units</a>), <code>403 invite_required</code>, <code>403 sibling_refused</code>, <code>503 topup_pending</code> (retry with the returned <code>key</code> and the same token).</p>
 <h3 id="get-v1-wallet" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet</code><a class="anchor" href="#get-v1-wallet" aria-label="Link to this section">#</a></h3>
 <p>Bearer key required.</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
@@ -882,7 +891,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <h3 id="get-v1-wallet-refunds" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/refunds</code><a class="anchor" href="#get-v1-wallet-refunds" aria-label="Link to this section">#</a></h3>
 <p>Bearer key required. Every token issued to this key, so none is lost: <code>{&quot;data&quot;: [{id, amount, unit, status, token, locked_to}]}</code>.</p>
 <h2 id="funding">Funding<a class="anchor" href="#funding" aria-label="Link to this section">#</a></h2>
-<p>Every funding route returns a funding object. The routes that create a funding also open a balance on first use: send <code>invite</code> in the body for a new balance while invite-only (these routes read the invite from the body only), and the answer carries <code>key</code> once when the gateway made it.</p>
+<p>Every funding route returns a funding object. The routes that create a funding also open a balance on first use: send <code>invite</code> in the body for a new balance while invite-only (these routes read the invite from the body only), or the key of the client&#39;s balance in the other unit in <code>X-Forge-Sibling</code> (<a href="#a-second-balance">A second balance</a>), and the answer carries <code>key</code> once when the gateway made it.</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
   <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;fund_...&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;lightning&quot;</span><span class="hljs-punctuation">,</span>
@@ -952,9 +961,10 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
   <span class="hljs-attr">&quot;invite_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;free_voice&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;per_day&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;questions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;open&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;open&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sibling&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;header&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;X-Forge-Sibling&quot;</span> <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span></code></pre></div>
-<p>The figures above were read from the hosted gateway on 16 November 2026 (<code>convert</code> added since). <code>usd</code> limits are in cents. <code>convert.units</code>: the balance units eCash from the gateway&#39;s own mints can be changed into (<a href="#change-units">Change units</a>).</p>
+<p>The figures above were read from the hosted gateway on 16 November 2026 (<code>convert</code> added since). <code>usd</code> limits are in cents. <code>convert.units</code>: the balance units eCash from the gateway&#39;s own mints can be changed into (<a href="#change-units">Change units</a>). <code>sibling</code>: the header that opens a client&#39;s balance in the other unit with the key of the one it holds (<a href="#a-second-balance">A second balance</a>); a gateway without it needs an invite for every new balance.</p>
 <h3 id="get-v1-wallet-fund-mints" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/mints</code><a class="anchor" href="#get-v1-wallet-fund-mints" aria-label="Link to this section">#</a></h3>
 <p>Other mints whose eCash is accepted for funding: <code>{&quot;enabled&quot;, &quot;policy&quot;, &quot;mints&quot;: [{&quot;url&quot;, &quot;name&quot;?, &quot;reviewers&quot;?, &quot;source&quot;: &quot;discovered&quot; | &quot;operator&quot;}], &quot;updated_at&quot;}</code>. Discovered mints come from NIP-87 announcements and reviews on Nostr. No key needed.</p>
 <h3 id="post-v1-wallet-fund-lightning" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/lightning</code><a class="anchor" href="#post-v1-wallet-fund-lightning" aria-label="Link to this section">#</a></h3>
@@ -1212,6 +1222,11 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <td>403</td>
 <td><code>pass_expired</code>, <code>pass_used_up</code></td>
 <td>The event pass is past its expiry or its uses</td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>sibling_refused</code></td>
+<td>The <code>X-Forge-Sibling</code> key cannot open a balance in the other unit</td>
 </tr>
 <tr>
 <td>403</td>

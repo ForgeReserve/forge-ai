@@ -7,7 +7,7 @@ import { PaymentRequest } from '@cashu/cashu-ts';
 import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
-import { openAccount, releaseIfEmpty } from './accounts.ts';
+import { openAccount, releaseIfEmpty, SIBLING_HEADER } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
 import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
@@ -76,6 +76,8 @@ const ALLOW = [
   'X-Cashu',
   'X-Cashu-Pubkey',
   'X-Forge-Invite',
+  // The key of a balance the phone holds, to open its balance in the other unit (src/accounts.ts siblingProof).
+  SIBLING_HEADER,
   'X-Forge-Request-Id',
   'X-Forge-Unit',
   'Ehbp-Encapsulated-Key',
@@ -116,6 +118,11 @@ function bearer(c: Context): string | undefined {
   const h = c.req.header('authorization');
   const m = h ? /^Bearer\s+(.+)$/i.exec(h) : null;
   return m?.[1]?.trim();
+}
+
+/** The key sent to open a balance in the other unit (src/accounts.ts siblingProof), if any. */
+function sibling(c: Context): string | undefined {
+  return c.req.header(SIBLING_HEADER)?.trim() || undefined;
 }
 
 /** The balance reservation a chat request holds, if any (see the chat route). */
@@ -283,7 +290,7 @@ export function createApp(d: Deps) {
     // Credits open or fill a free balance, never a paid one (src/accounts.ts).
     let opened: ReturnType<typeof openAccount>;
     try {
-      opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit, free: t.credit });
+      opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit, free: t.credit, sibling: sibling(c) });
     } catch (e) {
       // eCash in the other unit is never changed here: the answer stays wrong_unit, and says where the
       // change is offered, with its quote shown before anything is spent (docs/PAYMENTS.md).
@@ -470,7 +477,7 @@ export function createApp(d: Deps) {
   const fundingResponse = (c: Context, row: Parameters<FundingService['view']>[0], key?: string) => c.json({ ...funding.view(row), key });
   /** Opens the balance for a funding; a balance created here is released again if the quote cannot be made. */
   const withAccount = async <T,>(c: Context, unit: Unit, invite: unknown, fn: (accountId: string) => Promise<T>): Promise<{ result: T; key?: string }> => {
-    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite: typeof invite === 'string' ? invite : undefined, unit });
+    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite: typeof invite === 'string' ? invite : undefined, unit, sibling: sibling(c) });
     try {
       return { result: await fn(opened.account.id), key: opened.generatedKey };
     } catch (e) {
@@ -508,6 +515,9 @@ export function createApp(d: Deps) {
       free: { enabled: !!d.faucet, questions: d.faucet ? env.FORGE_FAUCET_QUESTIONS : null },
       // Free models (pricing "free"): a balance opened with an invite code uses them with nothing on it.
       open: { enabled: freeModelIds.length > 0, free_models: freeModelIds },
+      // Two balances (docs/PAYMENTS.md): the key of a paid balance opens the one in the other unit, once,
+      // with no invite, sent in this header on a top-up or a funding.
+      sibling: { enabled: true, header: SIBLING_HEADER },
     }),
   );
 
