@@ -192,7 +192,7 @@ export default {
   'photo.before': 'Before',
   'photo.afterLabel': 'The photo as it will be shared. Tap to add a block, or drag to cover an area.',
   'photo.beforeLabel': 'The photo as it came in.',
-  'photo.hint': 'Tap to add a block. Drag to cover an area. Tap a block to take it away.',
+  'photo.hint': 'Tap the cross to take a block away. Tap the photo to add a block. Drag to cover an area.',
   'photo.beforeNote': 'Only you see this. Before: as it came in. It is never shared.',
   'photo.block.face': 'Take this block away. It covers a face.',
   'photo.block.writing': 'Take this block away. It covers writing.',

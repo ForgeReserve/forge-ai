@@ -59,6 +59,8 @@
 </ul></li>
 <li><a href="#lifecycle">Lifecycle</a><ul>
 </ul></li>
+<li><a href="#how-covers-are-painted">How covers are painted</a><ul>
+</ul></li>
 <li><a href="#errors">Errors</a><ul>
 </ul></li>
 <li><a href="#how-the-app-lists-and-orders-them">How the app lists and orders them</a><ul>
@@ -73,7 +75,7 @@
 </aside>
 <main class="doc" id="content">
 <h1 id="top">Filter modules</h1>
-<p>A filter module checks a photo in Share unseen before it is shared. It finds hidden details in the file to take out, or places in the picture to cover with solid blocks: faces, writing, a number plate. Every filter runs on every photo, one after another, on the phone.</p>
+<p>A filter module checks a photo in Share unseen before it is shared. It finds hidden details in the file to take out, or places in the picture to cover: faces, writing, a number plate. Every filter runs on every photo, one after another, on the phone.</p>
 <p>Read <a href="/docs/modules/">the overview</a> first. The bundled filters are in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter"><code>public/v2/modules/filter/</code></a> and described in the <a href="/docs/modules/list#filter">module list</a>. <a href="/docs/modules/first-module#a-filter-cover-a-date-stamp">Write your first module</a> builds one step by step.</p>
 <h2 id="manifest">Manifest<a class="anchor" href="#manifest" aria-label="Link to this section">#</a></h2>
 <p><code>kind</code> is <code>filter</code>. The other fields follow <a href="/docs/modules/#the-manifest">the manifest rules</a>.</p>
@@ -112,7 +114,7 @@
 <td>The file&#39;s type, such as <code>image/jpeg</code>.</td>
 </tr>
 </tbody></table></div>
-<p>Blocks are in the working picture&#39;s pixels.</p>
+<p>Covers are in the working picture&#39;s pixels. The new file is made at that size too, so a cover lands on the same pixels on the screen and in the file.</p>
 <h2 id="what-a-filter-provides">What a filter provides<a class="anchor" href="#what-a-filter-provides" aria-label="Link to this section">#</a></h2>
 <h3 id="id"><code>id</code><a class="anchor" href="#id" aria-label="Link to this section">#</a></h3>
 <p>Required. A short name such as <code>&#39;cover-faces&#39;</code>. Each step row on the screen and each block a filter makes carries it.</p>
@@ -129,7 +131,7 @@
 </thead>
 <tbody><tr>
 <td><code>covers</code></td>
-<td>Blocks to paint: <code>[{x, y, w, h, kind}]</code> in the photo&#39;s pixels. <code>kind</code> is <code>&#39;face&#39;</code> or <code>&#39;writing&#39;</code>; without it a <code>faces</code> filter&#39;s blocks are faces and any other&#39;s are writing. Blocks are cut to the photo and empty ones dropped.</td>
+<td>Covers to paint, in the photo&#39;s pixels: a box <code>{x, y, w, h, kind}</code>, or an ellipse <code>{shape: &#39;ellipse&#39;, cx, cy, rx, ry, x, y, w, h, kind}</code> whose <code>x</code>, <code>y</code>, <code>w</code> and <code>h</code> are its bounds. <code>kind</code> is <code>&#39;face&#39;</code> or <code>&#39;writing&#39;</code>; without it a <code>faces</code> filter&#39;s covers are faces and any other&#39;s are writing. <code>found</code>, optional, is the box of what the filter found (the face, the line of writing), which the cover holds; tests check it. Covers are cut to the photo and empty ones dropped.</td>
 </tr>
 <tr>
 <td><code>found</code></td>
@@ -142,7 +144,7 @@
 </tbody></table></div>
 <p>Resolve <code>{covers: []}</code> when there is nothing to cover.</p>
 <h3 id="finish-bytes"><code>finish(bytes)</code><a class="anchor" href="#finish-bytes" aria-label="Link to this section">#</a></h3>
-<p>Optional. After the person picks Share, Save or Ask about it, the app draws the photo again with every block painted solid, makes a new JPEG, and hands its bytes to each filter&#39;s <code>finish</code> in turn. Return the cleaned bytes (a <code>Uint8Array</code>, or a promise of one). The hidden details filter takes every place for notes out of the JPEG here.</p>
+<p>Optional. After the person picks Share, Save or Ask about it, the app draws the photo again with every cover painted (see <a href="#how-covers-are-painted">How covers are painted</a>), makes a new JPEG, and hands its bytes to each filter&#39;s <code>finish</code> in turn. Return the cleaned bytes (a <code>Uint8Array</code>, or a promise of one). The hidden details filter takes every place for notes out of the JPEG here.</p>
 <h3 id="prepare"><code>prepare()</code><a class="anchor" href="#prepare" aria-label="Link to this section">#</a></h3>
 <p>Optional. Starts slow work early, such as loading a model. The app calls it once, shortly after Share unseen opens, and ignores its errors. Return a promise.</p>
 <h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
@@ -150,9 +152,18 @@
 <li>The registry calls <code>create(inputs)</code> once when the app starts.</li>
 <li>Share unseen opens: after 300 ms the app calls <code>prepare()</code> on every filter that has one.</li>
 <li>The person picks or takes a photo, or shares one in from another app. The app runs <code>analyse(photo)</code> on each filter in turn, through <code>runFilters</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js"><code>public/v2/core/filters.js</code></a>, and shows each step as it runs.</li>
-<li>The person sees the photo before and after, with every block. They can take blocks away and add their own.</li>
-<li>Share, Save or Ask about it: the app paints the blocks into a new JPEG, calls each <code>finish(bytes)</code> in turn, and checks that the file holds no hidden details before it goes anywhere.</li>
+<li>The person sees the photo before and after, with every cover. They can take a cover away with the cross on its corner, or a tap on it, and add their own by tapping or dragging on the photo.</li>
+<li>Share, Save or Ask about it: the app paints the covers into a new JPEG, calls each <code>finish(bytes)</code> in turn, and checks that the file holds no hidden details before it goes anywhere.</li>
 </ol>
+<h2 id="how-covers-are-painted">How covers are painted<a class="anchor" href="#how-covers-are-painted" aria-label="Link to this section">#</a></h2>
+<p><code>paintCovers</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/covers.js"><code>public/v2/core/covers.js</code></a> paints them, for the screen and for the file alike:</p>
+<ul>
+<li>Every pixel a cover touches is painted whole. There is no soft edge that keeps part of what was under it.</li>
+<li>Each cover is one flat colour: the middle value of red, green and blue over a thin ring of pixels just outside it (about 4 pixels wide on a 1,000 pixel photo), counting only pixels under no cover. So it reads as a smudge, not a black bar, and the colour is made only of pixels the new file shows anyway.</li>
+<li>A cover is never blurred or pixelated: a blurred face or line of writing can be sharpened or matched. Nothing under a cover reaches the new file in any form; a test changes every pixel under the covers and gets the same file, byte for byte.</li>
+</ul>
+<p>On the screen each cover also has a gold outline and a cross on its corner to take it away. The file has neither.</p>
+<p>The face filter fits an ellipse round each face: it reaches half the detector&#39;s box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus two of the detector&#39;s pixels, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter&#39;s height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.</p>
 <h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
 <ul>
 <li>A filter that throws, rejects or takes longer than 45 seconds is listed as not checked, and the chain goes on with the next one. Before the photo is shared the person is told a check did not run and taps again to share anyway.</li>

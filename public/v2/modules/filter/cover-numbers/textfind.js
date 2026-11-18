@@ -6,7 +6,9 @@
 // with the average around it, which picks out marks darker or lighter than their background (letters on
 // a sign, digits on a plate). Each connected mark that is shaped like a letter becomes a candidate.
 // Candidates of a similar height and shade that sit side by side on one line are joined. A line of three
-// or more is taken as writing and covered, with a margin.
+// or more is taken as writing. It then reaches out along itself to marks beside it that are not shaped
+// like one letter (letters run together, a bare I or 1), and is covered with a small margin. Lines are
+// joined into one block only where that block covers little more than the lines do.
 //
 // What it misses: very small or blurred writing, handwriting that joins up, and writing on a slant
 // steeper than about 20 degrees. What it can cover that is not writing: rows of similar marks, such as
@@ -15,9 +17,16 @@
 /** Pixels on the long side the search works at. */
 export const WORK_SIDE = 1024;
 
+/** The margin round a line, in letter heights, and at least this many working pixels. */
+export const PAD = 0.35;
+const MIN_PAD = 2;
+/** Two lines' blocks are joined when one block over both is at most this much larger than the two. */
+export const JOIN_SLACK = 1.25;
+
 /**
- * Lines of writing in an RGBA image ({width, height, data}). Returns boxes in the image's own pixels,
- * {x, y, w, h, chars}, with a margin, joined where they overlap.
+ * Lines of writing in an RGBA image ({width, height, data}). Returns blocks in the image's own pixels,
+ * {x, y, w, h, chars, found, marks}: `found` is the writing itself, without the margin, and `marks` the
+ * box of each mark the block covers.
  */
 export function findWriting(img, opts = {}) {
   const { width, height, data } = img;
@@ -26,14 +35,18 @@ export function findWriting(img, opts = {}) {
   const W = Math.max(1, Math.round(width * s));
   const H = Math.max(1, Math.round(height * s));
   const grey = shrinkGrey(data, width, height, W, H, s);
-  const chars = candidates(grey, W, H, opts);
-  const lines = joinLines(chars, W);
+  const { chars, marks } = candidates(grey, W, H, opts);
   const out = [];
-  for (const line of lines) {
-    const pad = 0.35 * line.med;
-    out.push({ x: (line.x0 - pad) / s, y: (line.y0 - pad) / s, w: (line.x1 - line.x0 + 1 + 2 * pad) / s, h: (line.y1 - line.y0 + 1 + 2 * pad) / s, chars: line.n });
+  for (const line of joinLines(chars, W)) {
+    reach(line, marks);
+    const pad = Math.max(PAD * line.med, MIN_PAD);
+    const box = (x0, y0, x1, y1, p = 0) => ({ x: (x0 - p) / s, y: (y0 - p) / s, w: (x1 - x0 + 1 + 2 * p) / s, h: (y1 - y0 + 1 + 2 * p) / s });
+    const b = clamp({ ...box(line.x0, line.y0, line.x1, line.y1, pad), chars: line.n }, width, height);
+    b.found = clamp(box(line.x0, line.y0, line.x1, line.y1), width, height);
+    b.marks = line.m.map((c) => clamp(box(c.x0, c.y0, c.x1, c.y1), width, height));
+    out.push(b);
   }
-  return mergeOverlapping(out.map((b) => clamp(b, width, height)));
+  return joinBlocks(out);
 }
 
 /** Grey levels at W x H, each the average of the source pixels that fall in it. */
@@ -83,6 +96,7 @@ function candidates(g, W, H, opts) {
   const seen = new Uint8Array(W * H);
   const stack = new Int32Array(W * H);
   const out = [];
+  const marks = [];
   for (let i = 0; i < W * H; i++) {
     const kind = mark[i];
     if (!kind || seen[i]) continue;
@@ -122,9 +136,11 @@ function candidates(g, W, H, opts) {
     const w = x1 - x0 + 1;
     const h = y1 - y0 + 1;
     const fill = n / (w * h);
-    if (h >= 6 && h <= maxH && w <= 1.6 * h && fill >= 0.12 && fill <= 0.92 && n >= 10) out.push({ x0, y0, x1, y1, w, h, cy: (y0 + y1) / 2, lum: lum / n });
+    const c = { x0, y0, x1, y1, w, h, cy: (y0 + y1) / 2, lum: lum / n, kind };
+    if (h >= 6 && h <= maxH && w <= 1.6 * h && fill >= 0.12 && fill <= 0.92 && n >= 10) out.push(c);
+    else if (h >= 3 && h <= maxH) marks.push(c);
   }
-  return out;
+  return { chars: out, marks };
 }
 
 /** Candidates joined into lines: similar height and shade, side by side, close together. */
@@ -168,9 +184,38 @@ function joinLines(chars, W) {
     const y1 = Math.max(...m.map((c) => c.y1));
     // A line is about one letter tall (with room for tails such as g and y).
     if (y1 - y0 + 1 > 2 * med) continue;
-    lines.push({ x0: Math.min(...m.map((c) => c.x0)), x1: Math.max(...m.map((c) => c.x1)), y0, y1, med, n: m.length });
+    const kind = m.filter((c) => c.kind === 1).length * 2 >= m.length ? 1 : 2;
+    lines.push({ x0: Math.min(...m.map((c) => c.x0)), x1: Math.max(...m.map((c) => c.x1)), y0, y1, med, n: m.length, m, kind, lum: m.reduce((a, c) => a + c.lum, 0) / m.length });
   }
   return lines;
+}
+
+/**
+ * The line takes in marks beside it, on it, that were not shaped like one letter: letters run together
+ * into one mark, a bare I, 1 or l, a letter cut by a fold. Each is of the line's shade and about its
+ * height, and no further from it than two letters of a line may be apart. So a block fitted to the line
+ * still holds every letter of it.
+ */
+function reach(line, marks) {
+  const { med } = line;
+  const top = line.y0 - 0.5 * med;
+  const bottom = line.y1 + 0.5 * med;
+  const near = marks.filter((c) => c.kind === line.kind && c.h >= 0.5 * med && c.h <= 1.6 * med && c.y0 >= top && c.y1 <= bottom && Math.abs(c.lum - line.lum) <= 40);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (let i = near.length - 1; i >= 0; i--) {
+      const c = near[i];
+      if (Math.max(c.x0 - line.x1, line.x0 - c.x1, 0) > 1.6 * med) continue;
+      line.x0 = Math.min(line.x0, c.x0);
+      line.x1 = Math.max(line.x1, c.x1);
+      line.y0 = Math.min(line.y0, c.y0);
+      line.y1 = Math.max(line.y1, c.y1);
+      line.m.push(c);
+      line.n++;
+      near.splice(i, 1);
+      grew = true;
+    }
+  }
 }
 
 function clamp(b, W, H) {
@@ -179,24 +224,31 @@ function clamp(b, W, H) {
   return { ...b, x, y, w: Math.max(0, Math.min(W, Math.ceil(b.x + b.w)) - x), h: Math.max(0, Math.min(H, Math.ceil(b.y + b.h)) - y) };
 }
 
-function mergeOverlapping(boxes) {
-  let list = boxes;
+const area = (b) => b.w * b.h;
+const overlap = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+const around = (a, b) => {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
+
+/**
+ * Blocks that overlap are joined where one block over both covers at most JOIN_SLACK times what the two
+ * cover: the lines of one paragraph become one block. Two lines that only touch at a corner stay two
+ * blocks, since one block round both would cover the picture between them.
+ */
+function joinBlocks(blocks) {
+  let list = blocks;
   for (let changed = true; changed; ) {
     changed = false;
     const out = [];
     for (const b of list) {
-      const o = out.find((a) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+      const o = out.find((a) => overlap(a, b) > 0 && area(around(a, b)) <= JOIN_SLACK * (area(a) + area(b) - overlap(a, b)));
       if (!o) {
         out.push({ ...b });
         continue;
       }
-      const x = Math.min(o.x, b.x);
-      const y = Math.min(o.y, b.y);
-      o.w = Math.max(o.x + o.w, b.x + b.w) - x;
-      o.h = Math.max(o.y + o.h, b.y + b.h) - y;
-      o.x = x;
-      o.y = y;
-      o.chars += b.chars;
+      Object.assign(o, around(o, b), { chars: o.chars + b.chars, found: around(o.found, b.found), marks: [...o.marks, ...b.marks] });
       changed = true;
     }
     list = out;

@@ -1,15 +1,17 @@
-// Cover blocks for Share unseen: solid blocks painted over faces, writing and whatever the person
-// covers by hand. Pure maths on boxes in the photo's own pixels ({x, y, w, h}), tested in Node.
+// Covers for Share unseen: what is painted over faces, writing and whatever the person covers by hand.
+// Pure maths on covers in the photo's own pixels, tested in Node.
 //
-// A block is painted solid, never blurred (a blur can be undone). Before it is painted it is widened to
-// the JPEG encoder's 16 pixel grid, so no 16 by 16 block of the new file mixes covered and uncovered
-// pixels: each covered block is one flat colour and holds nothing of what was under it.
+// A cover is a box {x, y, w, h} or, for a face, an ellipse {shape: 'ellipse', cx, cy, rx, ry}; an
+// ellipse's x, y, w and h are its bounds in the photo. Every pixel a cover touches is covered whole, with
+// no soft edge that keeps part of what was under it. A cover is never blurred or pixelated (both can be
+// undone or matched): it is painted one flat colour, taken from the uncovered pixels just around it, so it
+// reads as a smudge and the new file holds nothing of what was under it.
 
-/** The grid the JPEG encoder works on with colour subsampling (16 by 16 pixel blocks). */
-export const GRID = 16;
+/** The colour a cover takes when no uncovered pixel is near it (the whole photo is covered). */
+export const NEUTRAL_FILL = Object.freeze([128, 128, 128]);
 
-/** The colour painted over a covered area. */
-export const COVER_FILL = '#000000';
+/** Uncovered pixels a cover's colour is taken from, at least; with fewer the ring around it widens. */
+const MIN_RING = 16;
 
 /** Cover kinds, and the filter that makes each. 'mine' is a block the person added. */
 export const KINDS = Object.freeze(['face', 'writing', 'mine']);
@@ -21,20 +23,6 @@ export function clampBox(b, W, H) {
   const x1 = Math.max(x0, Math.min(W, Math.ceil(b.x + b.w)));
   const y1 = Math.max(y0, Math.min(H, Math.ceil(b.y + b.h)));
   return { ...b, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
-
-/** The box widened outwards to the GRID, within the photo. */
-export function alignBox(b, W, H, grid = GRID) {
-  const x0 = Math.max(0, Math.floor(b.x / grid) * grid);
-  const y0 = Math.max(0, Math.floor(b.y / grid) * grid);
-  const x1 = Math.min(W, Math.ceil((b.x + b.w) / grid) * grid);
-  const y1 = Math.min(H, Math.ceil((b.y + b.h) / grid) * grid);
-  return { ...b, x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
-}
-
-/** The box with a margin on each side, as fractions of its own width and height. */
-export function padBox(b, { left = 0, right = left, top = 0, bottom = top } = {}, W = Infinity, H = Infinity) {
-  return clampBox({ ...b, x: b.x - b.w * left, y: b.y - b.h * top, w: b.w * (1 + left + right), h: b.h * (1 + top + bottom) }, W, H);
 }
 
 const area = (b) => Math.max(0, b.w) * Math.max(0, b.h);
@@ -78,18 +66,21 @@ export function mergeBoxes(boxes) {
   return list;
 }
 
-/** The index of the top block under the point (x, y), or -1. `slop` widens each block for a finger. */
+/** True when the point (x, y) is on the cover. `slop` widens the cover for a finger. */
+export function onCover(c, x, y, slop = 0) {
+  if (c.shape === 'ellipse') return ((x - c.cx) / (c.rx + slop)) ** 2 + ((y - c.cy) / (c.ry + slop)) ** 2 <= 1;
+  return x >= c.x - slop && x <= c.x + c.w + slop && y >= c.y - slop && y <= c.y + c.h + slop;
+}
+
+/** The index of the top cover under the point (x, y), or -1. `slop` widens each cover for a finger. */
 export function hitCover(covers, x, y, slop = 0) {
-  for (let i = covers.length - 1; i >= 0; i--) {
-    const c = covers[i];
-    if (x >= c.x - slop && x <= c.x + c.w + slop && y >= c.y - slop && y <= c.y + c.h + slop) return i;
-  }
+  for (let i = covers.length - 1; i >= 0; i--) if (onCover(covers[i], x, y, slop)) return i;
   return -1;
 }
 
 /** A block for one tap at (x, y): a square a seventh of the photo's shorter side, centred there. */
 export function tapBox(x, y, W, H) {
-  const s = Math.max(GRID, Math.round(Math.min(W, H) / 7));
+  const s = Math.max(16, Math.round(Math.min(W, H) / 7));
   return clampBox({ kind: 'mine', x: Math.round(x - s / 2), y: Math.round(y - s / 2), w: s, h: s }, W, H);
 }
 
@@ -119,4 +110,100 @@ export function isFlat(img, box, rgb = [0, 0, 0], tol = 0) {
       if (Math.abs(img.data[i] - rgb[0]) > tol || Math.abs(img.data[i + 1] - rgb[1]) > tol || Math.abs(img.data[i + 2] - rgb[2]) > tol) return false;
     }
   return true;
+}
+
+/**
+ * The pixels a cover takes, as rows [y, x0, x1) inside a W x H photo. A pixel is taken when any part of it
+ * is under the cover, so a cover never leaves a sliver of what it covers. An ellipse is cut to the photo
+ * at its edges and still takes every pixel of it inside the photo.
+ */
+export function coverSpans(c, W, H) {
+  const out = [];
+  if (c.shape === 'ellipse') {
+    const { cx, cy, rx, ry } = c;
+    if (!(rx > 0 && ry > 0)) return out;
+    const y1 = Math.min(H, Math.ceil(cy + ry));
+    for (let y = Math.max(0, Math.floor(cy - ry)); y < y1; y++) {
+      // The row's widest part of the ellipse is at its point nearest the centre.
+      const ny = Math.min(Math.max(cy, y), y + 1);
+      const t = 1 - ((ny - cy) / ry) ** 2;
+      if (t <= 0) continue;
+      const hw = rx * Math.sqrt(t);
+      const x0 = Math.max(0, Math.floor(cx - hw));
+      const x1 = Math.min(W, Math.ceil(cx + hw));
+      if (x1 > x0) out.push([y, x0, x1]);
+    }
+    return out;
+  }
+  const b = clampBox(c, W, H);
+  if (b.w > 0) for (let y = b.y; y < b.y + b.h; y++) out.push([y, b.x, b.x + b.w]);
+  return out;
+}
+
+/** Every pixel under any of the covers: 1 where covered, 0 elsewhere, one byte per pixel. */
+export function coverMask(covers, W, H) {
+  const mask = new Uint8Array(W * H);
+  for (const c of covers) for (const [y, x0, x1] of coverSpans(c, W, H)) mask.fill(1, y * W + x0, y * W + x1);
+  return mask;
+}
+
+/** The cover grown by r pixels on every side. */
+function grow(c, r) {
+  if (c.shape === 'ellipse') return { ...c, rx: c.rx + r, ry: c.ry + r };
+  return { ...c, x: c.x - r, y: c.y - r, w: c.w + 2 * r, h: c.h + 2 * r };
+}
+
+/** How wide a ring around a cover its colour is taken from: thin, a few pixels on a phone photo. */
+export const ringWidth = (W, H) => Math.max(3, Math.round(Math.max(W, H) / 256));
+
+/**
+ * A cover's colour: the middle value of each of red, green and blue over a thin ring of pixels just
+ * outside it. Only pixels under no cover count (`mask`, from coverMask, holds every cover, this one too),
+ * so the colour says nothing about what any cover hides: it is made only of pixels the new file shows.
+ */
+export function fillColour(img, c, mask, ring = ringWidth(img.width, img.height)) {
+  const { width: W, height: H, data } = img;
+  const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  for (let r = ring; ; r *= 2) {
+    let n = 0;
+    for (const [y, x0, x1] of coverSpans(grow(c, r), W, H))
+      for (let i = y * W + x0, end = y * W + x1; i < end; i++) {
+        if (mask[i]) continue;
+        hist[0][data[i * 4]]++;
+        hist[1][data[i * 4 + 1]]++;
+        hist[2][data[i * 4 + 2]]++;
+        n++;
+      }
+    if (n >= MIN_RING || r >= Math.max(W, H)) return n ? hist.map((h) => middle(h, n)) : [...NEUTRAL_FILL];
+    for (const h of hist) h.fill(0);
+  }
+}
+
+function middle(hist, n) {
+  for (let v = 0, seen = 0; v < 256; v++) if ((seen += hist[v]) * 2 >= n) return v;
+  return 255;
+}
+
+/**
+ * Paints the covers into an RGBA image ({width, height, data}), in place: each cover one flat colour from
+ * fillColour. Every colour is taken before any is painted, so the order of the covers does not change
+ * them. Returns the colours, one [r, g, b] per cover.
+ */
+export function paintCovers(img, covers) {
+  const { width: W, height: H, data } = img;
+  const spans = covers.map((c) => coverSpans(c, W, H));
+  const mask = new Uint8Array(W * H);
+  for (const s of spans) for (const [y, x0, x1] of s) mask.fill(1, y * W + x0, y * W + x1);
+  const fills = covers.map((c) => fillColour(img, c, mask));
+  spans.forEach((s, k) => {
+    const [r, g, b] = fills[k];
+    for (const [y, x0, x1] of s)
+      for (let i = (y * W + x0) * 4, end = (y * W + x1) * 4; i < end; i += 4) {
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = 255;
+      }
+  });
+  return fills;
 }

@@ -240,7 +240,7 @@ Reads which hidden details the original file holds (where, when, which phone, a 
 
 ### Cover faces
 
-Finds faces and covers each with a solid block. The person sees every block before anything is shared and can add more; it can miss a face turned away, very small or in shadow.
+Finds faces and covers each with a flat ellipse. The person sees every cover before anything is shared and can add more; it can miss a face turned away, very small or in shadow.
 
 - **Id:** `forge.filter.cover-faces`, known in the app as `cover-faces`.
 - **Folder:** [`public/v2/modules/filter/cover-faces/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-faces)

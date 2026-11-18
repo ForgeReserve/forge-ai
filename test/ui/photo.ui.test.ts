@@ -8,7 +8,7 @@ import { pastFirstRun } from './firstrun-seen.ts';
 // Share unseen in a phone-sized Chrome: a real photo with faces and a real phone photo with GPS, through
 // the photo picker, the filters on the page, the before and after view, blocks added and taken away by
 // hand, and out through a stand-in for the share sheet or as a download. The checks read the file that
-// would be shared: no hidden details left, and every block solid in its pixels.
+// would be shared: no hidden details left, and every cover one flat colour in its pixels.
 const PHONE = { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 const PHOTOS = resolve(import.meta.dirname, '../unit/fixtures/photos');
 const CREW = readFileSync(resolve(PHOTOS, 'crew.jpg'));
@@ -89,37 +89,97 @@ async function pick(page: Page, name: string, buffer: Buffer) {
 /** The list of changes as [text, state] pairs. */
 const changes = (page: Page) => page.locator('#photoChanges .change-row').evaluateAll((n) => n.map((x) => [x.querySelector('span')!.textContent, x.getAttribute('data-state')]));
 
-/** The blocks on the photo, in its pixels, with their kind. */
-const blocks = (page: Page) =>
+interface Cover {
+  kind: string;
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  shape?: 'ellipse';
+  cx?: number;
+  cy?: number;
+  rx?: number;
+  ry?: number;
+  found?: { x: number; y: number; w: number; h: number };
+}
+
+/** The covers on the photo, as the screen holds them: kind, bounds, an ellipse's shape, what was found. */
+const blocks = (page: Page): Promise<Cover[]> =>
   page.locator('#coverLayer .cover-box').evaluateAll((n) =>
     n.map((x) => {
-      const [bx, by, bw, bh] = x.getAttribute('data-box')!.split(',').map(Number);
-      return { kind: x.getAttribute('data-kind'), x: bx!, y: by!, w: bw!, h: bh! };
+      const num = (a: string) => x.getAttribute(a)?.split(',').map(Number);
+      const [bx, by, bw, bh] = num('data-box')!;
+      const e = num('data-ellipse');
+      const f = num('data-found');
+      return {
+        kind: x.getAttribute('data-kind')!,
+        id: x.getAttribute('data-cover')!,
+        x: bx!,
+        y: by!,
+        w: bw!,
+        h: bh!,
+        ...(e ? { shape: 'ellipse' as const, cx: e[0], cy: e[1], rx: e[2], ry: e[3] } : {}),
+        ...(f ? { found: { x: f[0]!, y: f[1]!, w: f[2]!, h: f[3]! } } : {}),
+      };
     }),
   );
 
 /**
- * Decodes a JPEG in the page and checks each box: solid black or not. The decoder smooths colour across
- * the edge of a block (JPEG keeps colour at half size), so its outermost pixel takes a tint from the
- * pixels beside the block; the check starts 2 pixels in. What the encoder was given under a block is
- * checked exactly by the test that changes it and compares the files.
+ * Checks a file against what the page paints for these covers on the original photo. `flat`: each cover is
+ * one colour as painted. `inner` and `edge`: the file's mean difference from that painting over the covered
+ * pixels, and over the pixels on either side of each cover's edge (JPEG changes them a little; an outline
+ * drawn into the file would change the edge a lot). `found`: whether all of each cover's found region is
+ * under a cover. `share`: the part of the photo covered.
  */
-async function solid(page: Page, bytes: number[], boxes: { x: number; y: number; w: number; h: number }[]) {
+async function painted(page: Page, out: number[], original: Buffer, covers: Cover[]) {
   return page.evaluate(
-    async ({ bytes, boxes, src }) => {
-      const { isFlat, alignBox } = await new Function('s', 'return import(s)')(src);
-      const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }));
+    async ({ out, original, covers }) => {
+      const imp = new Function('s', 'return import(s)');
+      const P = await imp('/v2/core/photo.js');
+      const C = await imp('/v2/core/covers.js');
+      const photo = await P.openPhoto(new File([new Uint8Array(original)], 'x.jpg', { type: 'image/jpeg' }));
+      const W = photo.width;
+      const H = photo.height;
+      const want = P.drawCovered(photo, covers, document.createElement('canvas')).getContext('2d').getImageData(0, 0, W, H).data;
+      const bmp = await createImageBitmap(new Blob([new Uint8Array(out)], { type: 'image/jpeg' }));
       const c = new OffscreenCanvas(bmp.width, bmp.height);
       const x = c.getContext('2d')!;
       x.drawImage(bmp, 0, 0);
-      const img = x.getImageData(0, 0, bmp.width, bmp.height);
-      const inset = (b: any) => {
-        const a = alignBox(b, bmp.width, bmp.height);
-        return { x: a.x + 2, y: a.y + 2, w: a.w - 4, h: a.h - 4 };
-      };
-      return { width: bmp.width, height: bmp.height, flat: boxes.map((b) => isFlat(img, inset(b), [0, 0, 0], 4)) };
+      const got = x.getImageData(0, 0, bmp.width, bmp.height).data;
+      const mask = C.coverMask(covers, W, H);
+      const flat = covers.map((cv: any, k: number) => {
+        const later = C.coverMask(covers.slice(k + 1), W, H);
+        const colours = new Set<number>();
+        for (const [y, x0, x1] of C.coverSpans(cv, W, H)) for (let i = y * W + x0; i < y * W + x1; i++) if (!later[i]) colours.add((want[i * 4]! << 16) | (want[i * 4 + 1]! << 8) | want[i * 4 + 2]!);
+        return colours.size === 1;
+      });
+      const diff = (i: number) => (Math.abs(got[i * 4]! - want[i * 4]!) + Math.abs(got[i * 4 + 1]! - want[i * 4 + 1]!) + Math.abs(got[i * 4 + 2]! - want[i * 4 + 2]!)) / 3;
+      let inner = 0;
+      let ni = 0;
+      let edge = 0;
+      let ne = 0;
+      for (let i = 0; i < W * H; i++) {
+        const px = i % W;
+        const near = [px > 0 ? i - 1 : i, px < W - 1 ? i + 1 : i, i >= W ? i - W : i, i < W * (H - 1) ? i + W : i];
+        if (near.some((j) => mask[j] !== mask[i])) {
+          edge += diff(i);
+          ne++;
+        } else if (mask[i]) {
+          inner += diff(i);
+          ni++;
+        }
+      }
+      const found = covers.map((cv: any) => {
+        if (!cv.found) return true;
+        const b = C.clampBox(cv.found, W, H);
+        for (let y = b.y; y < b.y + b.h; y++) for (let i = y * W + b.x; i < y * W + b.x + b.w; i++) if (!mask[i]) return false;
+        return true;
+      });
+      const covered = mask.reduce((a: number, v: number) => a + v, 0);
+      return { width: bmp.width, height: bmp.height, flat, found, inner: inner / Math.max(1, ni), edge: edge / Math.max(1, ne), share: covered / (W * H) };
     },
-    { bytes, boxes, src: '/v2/core/covers.js' },
+    { out, original: [...original], covers },
   );
 }
 
@@ -138,6 +198,20 @@ function gpsValues(jpeg: Buffer): Buffer[] {
     .map((e) => jpeg.subarray(t + u32(e + 8), t + u32(e + 8) + 24));
 }
 const SIGN_GPS = gpsValues(SIGN);
+
+/**
+ * The part of each photo covered when every cover was a black rectangle widened to a 16 pixel grid (the
+ * app before 2026-11-17), measured in this Chrome: the three faces and eight places with writing on
+ * crew.jpg, the four places with writing on sign.jpg.
+ */
+const RECT_SHARE = { crew: 0.22, sign: 0.0579 };
+
+/** A JPEG Exif block holding only an orientation, inserted after the start of `jpeg`. */
+function withOrientation(jpeg: Buffer, o: number): Buffer {
+  const tiff = [0x4d, 0x4d, 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, o, 0, 0, 0, 0, 0, 0];
+  const body = [...Buffer.from('Exif\0\0', 'latin1'), ...tiff];
+  return Buffer.concat([jpeg.subarray(0, 2), Buffer.from([0xff, 0xe1, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body]), jpeg.subarray(2)]);
+}
 
 describe('Share unseen', () => {
   it('covers the faces, takes out the hidden details, and shares a clean file through the share sheet', async () => {
@@ -208,15 +282,17 @@ describe('Share unseen', () => {
     expect(META.leftDetails(out)).toEqual([]);
     expect(Buffer.from(out).includes(Buffer.from('Photoshop'))).toBe(false);
 
-    // Every block on the screen is solid black in the shared file, and every face is under one.
+    // The shared file is the photo at its own size with every cover on the screen painted one flat colour,
+    // and nothing else drawn: no outline. Every face is under one.
     const now = await blocks(page);
-    const px = await solid(page, shared.bytes, now);
+    const px = await painted(page, shared.bytes, CREW, now);
     expect([px.width, px.height]).toEqual([960, 754]);
     expect(px.flat.every(Boolean)).toBe(true);
+    expect(px.inner).toBeLessThan(3);
+    expect(px.edge).toBeLessThan(12);
     for (const f of FACES) expect(now.some((x) => inside(f, x))).toBe(true);
-    // The same places in the original are not flat: the check can tell.
-    const orig = await solid(page, [...CREW], now.slice(0, 3));
-    expect(orig.flat.some(Boolean)).toBe(false);
+    // The original differs from it under the covers: the check can tell.
+    expect((await painted(page, [...CREW], CREW, now)).inner).toBeGreaterThan(20);
 
     // Nothing was sent anywhere while the photo was checked and shared: no request at all.
     expect(requests.slice(before)).toEqual([]);
@@ -231,14 +307,12 @@ describe('Share unseen', () => {
         const file = new File([new Uint8Array(bytes)], 'x.jpg', { type: 'image/jpeg' });
         const a = await P.openPhoto(file);
         const b = await P.openPhoto(file);
+        // Every pixel under a cover in b is changed, each to its own colour.
         const x = b.canvas.getContext('2d');
-        for (const box of boxes) {
-          const al = C.alignBox(box, b.width, b.height);
-          for (let i = 0; i < 400; i++) {
-            x.fillStyle = `rgb(${(i * 97) % 256},${(i * 31) % 256},${(i * 59) % 256})`;
-            x.fillRect(al.x + ((i * 13) % (al.w - 3)), al.y + ((i * 7) % (al.h - 3)), 3, 3);
-          }
-        }
+        const img = x.getImageData(0, 0, b.width, b.height);
+        const mask = C.coverMask(boxes, b.width, b.height);
+        for (let i = 0; i < mask.length; i++) if (mask[i]) img.data.set([(i * 97) % 256, (i * 31) % 256, (i * 59) % 256], i * 4);
+        x.putImageData(img, 0, 0);
         const fa = new Uint8Array(await (await P.makeFile(a, boxes, [strip])).arrayBuffer());
         const fb = new Uint8Array(await (await P.makeFile(b, boxes, [strip])).arrayBuffer());
         const da = a.canvas.getContext('2d').getImageData(0, 0, a.width, a.height).data;
@@ -279,9 +353,171 @@ describe('Share unseen', () => {
       // Nor are the GPS latitude and longitude values the original carries.
       expect(SIGN_GPS).toHaveLength(2);
       for (const v of SIGN_GPS) expect(Buffer.from(out).includes(v)).toBe(false);
-      const px = await solid(page, [...out], await blocks(page));
+      const px = await painted(page, [...out], SIGN, await blocks(page));
       expect(px.flat.every(Boolean)).toBe(true);
+      expect(px.inner).toBeLessThan(3);
+      expect(px.edge).toBeLessThan(12);
     }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('covers less of each photo than rectangles did, with every face and line the checks found under a cover', async () => {
+    const { ctx, page, errors } = await phone();
+    for (const [name, buffer] of [
+      ['crew', CREW],
+      ['sign', SIGN],
+    ] as const) {
+      if (name === 'crew') await pick(page, 'crew.jpg', buffer);
+      else {
+        await page.click('#photoAnother');
+        await page.setInputFiles('#photoFile', { name: 'sign.jpg', mimeType: 'image/jpeg', buffer });
+        await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+      }
+      const now = await blocks(page);
+      // Faces are ellipses round what the detector found; writing is a box round each line.
+      expect(now.filter((c) => c.kind === 'face').every((c) => c.shape === 'ellipse' && c.found)).toBe(true);
+      expect(now.filter((c) => c.kind === 'writing').every((c) => !c.shape && c.found)).toBe(true);
+      expect(now.filter((c) => c.kind === 'face')).toHaveLength(name === 'crew' ? 3 : 0);
+      expect(now.filter((c) => c.kind === 'writing').length).toBeGreaterThan(2);
+      const px = await painted(page, [...buffer], buffer, now);
+      expect(px.found.every(Boolean), name).toBe(true);
+      expect(px.share, name).toBeLessThan(0.8 * RECT_SHARE[name]);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('covers the faces of a photo the camera stored turned or mirrored, where they show', async () => {
+    const { ctx, page, errors } = await phone();
+    await pick(page, 'crew.jpg', CREW);
+    // crew.jpg stored turned a quarter to the left with orientation 6 (turn it right to show it), and stored
+    // mirrored with orientation 2 (mirror it to show it): both show as crew.jpg does.
+    const stored = async (how: 'left' | 'mirror') =>
+      Buffer.from(
+        await page.evaluate(
+          async ({ bytes, how }) => {
+            const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }));
+            const c = how === 'left' ? new OffscreenCanvas(bmp.height, bmp.width) : new OffscreenCanvas(bmp.width, bmp.height);
+            const x = c.getContext('2d')!;
+            if (how === 'left') {
+              x.translate(0, bmp.width);
+              x.rotate(-Math.PI / 2);
+            } else {
+              x.translate(bmp.width, 0);
+              x.scale(-1, 1);
+            }
+            x.drawImage(bmp, 0, 0);
+            return [...new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg', quality: 0.92 })).arrayBuffer())];
+          },
+          { bytes: [...CREW], how },
+        ),
+      );
+    for (const [how, o] of [
+      ['left', 6],
+      ['mirror', 2],
+    ] as const) {
+      const file = withOrientation(await stored(how), o);
+      await page.click('#photoAnother');
+      await page.setInputFiles('#photoFile', { name: `${how}.jpg`, mimeType: 'image/jpeg', buffer: file });
+      await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+      expect(await page.getAttribute('#photoStage', 'data-size'), how).toBe('960x754');
+      const now = await blocks(page);
+      for (const f of FACES) expect(now.some((c) => c.kind === 'face' && inside(f, c)), `${how} ${JSON.stringify(f)}`).toBe(true);
+      await page.click('#photoShare');
+      await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(o === 6 ? 1 : 2);
+      const out: number[] = await page.evaluate(() => (window as any).__shared.at(-1).bytes);
+      const px = await painted(page, out, file, now);
+      // The file is upright, its covers where the faces show, and it says nothing about turning.
+      expect([px.width, px.height], how).toEqual([960, 754]);
+      expect(px.inner, how).toBeLessThan(3);
+      expect(META.readDetails(new Uint8Array(out)).found).toEqual([]);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('each cover has a cross to take it away by touch, and taps and drags add covers by touch', async () => {
+    const { ctx, page, errors } = await phone();
+    const cdp = await ctx.newCDPSession(page);
+    const touch = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    await pick(page, 'IMG_2041.jpg', CREW);
+    // The hint says it in few words, after a cross like the ones on the covers.
+    expect(await page.textContent('#photoHint .say-head')).toBe('Tap the cross to take a block away.');
+    expect(await page.locator('#photoHint > svg').count()).toBe(1);
+    // The covers keep their names for a screen reader; the crosses are only for the eye and the finger.
+    expect(await page.getAttribute('#coverLayer .cover-box[data-kind=face]', 'aria-label')).toBe('Take this block away. It covers a face.');
+    expect(await page.getAttribute('#coverLayer .cover-box[data-kind=writing]', 'aria-label')).toBe('Take this block away. It covers writing.');
+    const crosses = () =>
+      page.locator('#coverLayer .cover-x').evaluateAll((n) => {
+        const stage = document.querySelector('#photoStage')!.getBoundingClientRect();
+        return n.map((x) => {
+          const r = x.getBoundingClientRect();
+          const d = x.querySelector('.cover-x-dot')!.getBoundingClientRect();
+          // top: nothing lies over the cross's middle, so a finger there touches this cross.
+          const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('.cover-x') === x;
+          return { id: x.getAttribute('data-cover')!, hidden: x.getAttribute('aria-hidden'), top, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, dot: Math.max(d.width, d.height), inStage: r.left >= stage.left - 0.5 && r.right <= stage.right + 0.5 && r.top >= stage.top - 0.5 && r.bottom <= stage.bottom + 0.5 };
+        });
+      });
+    const ids = async () => (await blocks(page)).map((c) => c.id).sort();
+    let all = await crosses();
+    expect(all.map((c) => c.id).sort()).toEqual(await ids());
+    // Each is a touch area of at least 48 px inside the photo, round a mark no wider than 28 px, even on
+    // the smallest cover.
+    for (const c of all) {
+      expect(c.w >= 48 && c.h >= 48 && c.inStage, JSON.stringify(c)).toBe(true);
+      expect(c.dot).toBeLessThanOrEqual(28);
+      expect(c.hidden).toBe('true');
+    }
+    // A touch on a writing cover's cross takes that cover away, and only it.
+    const crossOf = async (kind: string) => {
+      const on = await crosses();
+      const c = (await blocks(page)).filter((b) => b.kind === kind).find((b) => on.find((x) => x.id === b.id)?.top)!;
+      return { cover: c, cross: on.find((x) => x.id === c.id)! };
+    };
+    const { cover: writing, cross: wx } = await crossOf('writing');
+    const before = await ids();
+    let cross = wx;
+    await page.touchscreen.tap(cross.x, cross.y);
+    await expect.poll(ids).toEqual(before.filter((id) => id !== writing.id));
+    // A touch on a face's cross takes the face cover away, and the list says so.
+    const { cover: face, cross: fx } = await crossOf('face');
+    cross = fx;
+    await page.touchscreen.tap(cross.x, cross.y);
+    await expect.poll(async () => (await ids()).includes(face.id)).toBe(false);
+    expect(await changes(page)).toContainEqual(['1 face block you took away', 'uncovered']);
+    // A tap adds a cover there, and a drag adds one over the area, both by touch.
+    const mine = () => page.locator('#coverLayer .cover-box[data-kind=mine]').count();
+    await page.locator('#photoCanvas').scrollIntoViewIfNeeded();
+    const tap = (await clearSpot(page))!;
+    await page.touchscreen.tap(tap.x, tap.y);
+    await expect.poll(mine).toBe(1);
+    const from = (await clearSpot(page))!;
+    const to = { x: from.x + 70, y: from.y + 50 };
+    await touch('touchStart', from.x, from.y);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+    await touch('touchEnd');
+    await expect.poll(mine).toBe(2);
+    expect(await changes(page)).toContainEqual(['2 blocks you added', 'covered']);
+    // The cross of an added cover takes it away too.
+    const { cover: added, cross: ax } = await crossOf('mine');
+    await page.touchscreen.tap(ax.x, ax.y);
+    await expect.poll(mine).toBe(1);
+    expect((await ids()).includes(added.id)).toBe(false);
+    // Covers taken away stay away: after Before and After, and in the file.
+    await page.click('#photo-before');
+    await page.click('#photo-after');
+    const now = await blocks(page);
+    expect(now.map((c) => c.id)).not.toContain(face.id);
+    expect(now.map((c) => c.id)).not.toContain(writing.id);
+    await page.click('#photoShare');
+    await expect.poll(() => page.evaluate(() => (window as any).__shared.length)).toBe(1);
+    const out: number[] = await page.evaluate(() => (window as any).__shared[0].bytes);
+    // The file is what is painted for the covers left, the added one in its own flat colour, with no outline.
+    const px = await painted(page, out, CREW, now);
+    expect(px.flat.every(Boolean)).toBe(true);
+    expect(px.inner).toBeLessThan(3);
+    expect(px.edge).toBeLessThan(12);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 120_000);
@@ -460,11 +696,14 @@ const reframed = async (page: Page, how: 'portrait' | 'tall') =>
     ),
   );
 
-/** A point on the photo (page pixels) clear of every block and its touch area (48 px at least), the leftmost first. */
+/**
+ * A point on the photo (page pixels) clear of every block, its cross and their touch areas (48 px at
+ * least), the leftmost first. A finger near one is taken as a touch on it.
+ */
 const clearSpot = (page: Page) =>
   page.evaluate(() => {
     const c = document.querySelector('#photoCanvas')!.getBoundingClientRect();
-    const boxes = [...document.querySelectorAll('#coverLayer .cover-box')].map((b) => b.getBoundingClientRect());
+    const boxes = [...document.querySelectorAll('#coverLayer .cover-box, #coverLayer .cover-x')].map((b) => b.getBoundingClientRect());
     for (let x = c.left + 8; x < c.right - 8; x += 8)
       for (let y = c.top + 8; y < c.bottom - 8; y += 8) if (boxes.every((b) => x < b.left - 32 || x > b.right + 32 || y < b.top - 32 || y > b.bottom + 32)) return { x, y };
     return null;

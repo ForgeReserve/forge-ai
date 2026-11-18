@@ -15,6 +15,7 @@ const COVERS = await imp('core/covers.js');
 const FILTERS = await imp('core/filters.js');
 const TEXT = await imp('modules/filter/cover-numbers/textfind.js');
 const FACES = await imp('modules/filter/cover-faces/boxes.js');
+const { decodeJpeg } = await import('./jpeg.ts');
 const en: Record<string, string> = (await imp('strings/en.js')).default;
 
 const has = (b: Uint8Array, s: string) => Buffer.from(b).includes(Buffer.from(s, 'latin1'));
@@ -101,16 +102,57 @@ describe('hidden details in a photo file', () => {
   });
 });
 
-describe('cover blocks', () => {
-  it('widens a block to the 16 pixel grid of the JPEG encoder, inside the photo', () => {
-    expect(COVERS.alignBox({ x: 17, y: 3, w: 10, h: 30 }, 100, 40)).toMatchObject({ x: 16, y: 0, w: 16, h: 40 });
-    expect(COVERS.alignBox({ x: 90, y: 30, w: 20, h: 20 }, 100, 40)).toMatchObject({ x: 80, y: 16, w: 20, h: 24 });
-    const b = COVERS.alignBox({ x: 33.5, y: 47.2, w: 61, h: 9 }, 960, 754);
-    expect([b.x % 16, b.y % 16, b.w % 16, b.h % 16]).toEqual([0, 0, 0, 0]);
+/** The pixels a cover takes, as a set of y * W + x. */
+const taken = (c: any, W: number, H: number) => {
+  const out = new Set<number>();
+  for (const [y, x0, x1] of COVERS.coverSpans(c, W, H)) for (let x = x0; x < x1; x++) out.add(y * W + x);
+  return out;
+};
+/** True when every pixel of the box (cut to the photo) is under the mask. */
+const holds = (mask: Uint8Array, W: number, H: number, b: { x: number; y: number; w: number; h: number }) => {
+  const c = COVERS.clampBox(b, W, H);
+  for (let y = c.y; y < c.y + c.h; y++) for (let x = c.x; x < c.x + c.w; x++) if (!mask[y * W + x]) return false;
+  return true;
+};
+
+describe('covers', () => {
+  it('a box takes every pixel it touches, cut to the photo', () => {
+    expect(COVERS.coverSpans({ x: 2.5, y: 1.2, w: 3, h: 1.5 }, 10, 10)).toEqual([
+      [1, 2, 6],
+      [2, 2, 6],
+    ]);
+    expect(COVERS.coverSpans({ x: -3, y: 8, w: 5, h: 5 }, 10, 10)).toEqual([
+      [8, 0, 2],
+      [9, 0, 2],
+    ]);
+    expect(COVERS.coverSpans({ x: 12, y: 0, w: 5, h: 5 }, 10, 10)).toEqual([]);
+  });
+
+  it('an ellipse takes every pixel any part of it touches, and no pixel it does not touch', () => {
+    const W = 64;
+    const H = 48;
+    for (const e of [
+      { cx: 30.3, cy: 20.7, rx: 11.2, ry: 7.9 },
+      { cx: 2, cy: 45, rx: 9.5, ry: 6 },
+      { cx: 32, cy: 24, rx: 0.4, ry: 0.4 },
+    ]) {
+      const c = { shape: 'ellipse', ...e };
+      const set = taken(c, W, H);
+      // Every point of the ellipse inside the photo, on a fine grid, is on a taken pixel.
+      for (let y = 0; y < H; y += 0.125)
+        for (let x = 0; x < W; x += 0.125) if (((x - e.cx) / e.rx) ** 2 + ((y - e.cy) / e.ry) ** 2 < 1) expect(set.has(Math.floor(y) * W + Math.floor(x)), `${x},${y}`).toBe(true);
+      // Every taken pixel has a part inside the ellipse: the cover is no larger than it must be.
+      for (const i of set) {
+        const px = i % W;
+        const py = (i - px) / W;
+        const nx = Math.min(Math.max(e.cx, px), px + 1);
+        const ny = Math.min(Math.max(e.cy, py), py + 1);
+        expect(((nx - e.cx) / e.rx) ** 2 + ((ny - e.cy) / e.ry) ** 2).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
   it('pads, clamps, taps and drags', () => {
-    expect(COVERS.padBox({ x: 10, y: 10, w: 10, h: 10 }, { left: 0.5, top: 1 }, 100, 100)).toMatchObject({ x: 5, y: 0, w: 20, h: 30 });
     expect(COVERS.clampBox({ x: -5, y: 90, w: 20, h: 20 }, 100, 100)).toMatchObject({ x: 0, y: 90, w: 15, h: 10 });
     const tap = COVERS.tapBox(50, 50, 700, 1400);
     expect(tap).toMatchObject({ kind: 'mine', w: 100, h: 100, x: 0, y: 0 });
@@ -118,7 +160,7 @@ describe('cover blocks', () => {
     expect(COVERS.dragBox(10, 10, 14, 30, 100, 100)).toBeNull();
   });
 
-  it('finds the top block under a finger, merges overlaps and counts kinds', () => {
+  it('finds the top cover under a finger, by its shape, merges overlaps and counts kinds', () => {
     const cs = [
       { kind: 'face', x: 0, y: 0, w: 50, h: 50 },
       { kind: 'mine', x: 40, y: 40, w: 20, h: 20 },
@@ -127,6 +169,11 @@ describe('cover blocks', () => {
     expect(COVERS.hitCover(cs, 10, 10)).toBe(0);
     expect(COVERS.hitCover(cs, 63, 63)).toBe(-1);
     expect(COVERS.hitCover(cs, 63, 63, 4)).toBe(1);
+    // An ellipse is hit inside its outline, not in the corners of its bounds.
+    const face = { kind: 'face', shape: 'ellipse', cx: 100, cy: 100, rx: 40, ry: 50, x: 60, y: 50, w: 80, h: 100 };
+    expect(COVERS.hitCover([face], 100, 145)).toBe(0);
+    expect(COVERS.hitCover([face], 64, 54)).toBe(-1);
+    expect(COVERS.hitCover([face], 141, 100, 2)).toBe(0);
     expect(COVERS.mergeBoxes([...cs, { x: 90, y: 90, w: 5, h: 5 }])).toEqual([
       { kind: 'face', x: 0, y: 0, w: 60, h: 60 },
       { x: 90, y: 90, w: 5, h: 5 },
@@ -142,6 +189,90 @@ describe('cover blocks', () => {
     expect(COVERS.isFlat(img, { x: 0, y: 0, w: 4, h: 4 })).toBe(false);
     expect(COVERS.isFlat(img, { x: 0, y: 0, w: 4, h: 4 }, [0, 0, 0], 10)).toBe(true);
     expect(COVERS.isFlat(img, { x: 0, y: 0, w: 2, h: 2 })).toBe(true);
+  });
+});
+
+/** A W x H RGBA picture of coloured noise, the same for the same seed. */
+function noise(W: number, H: number, seed = 1) {
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    data.set([60 + ((seed >>> 8) % 80), 90 + ((seed >>> 16) % 60), 30 + ((seed >>> 4) % 100), 255], i * 4);
+  }
+  return { width: W, height: H, data };
+}
+
+describe('cover colours', () => {
+  const W = 160;
+  const H = 120;
+  const covers = [
+    { kind: 'face', shape: 'ellipse', cx: 150, cy: 20, rx: 25, ry: 30 },
+    { kind: 'writing', x: 20, y: 60, w: 50, h: 14 },
+    // Two that overlap, and one inside another.
+    { kind: 'mine', x: 60, y: 66, w: 30, h: 30 },
+    { kind: 'mine', x: 30, y: 63, w: 6, h: 6 },
+  ];
+
+  it('each cover is one flat colour, the middle of the uncovered pixels in a thin ring round it', () => {
+    const img = noise(W, H);
+    const before = noise(W, H);
+    const fills = COVERS.paintCovers(img, covers);
+    const mask = COVERS.coverMask(covers, W, H);
+    covers.forEach((c, k) => {
+      // The ring: pixels within ringWidth of the cover, under no cover, twice as wide until it holds 16.
+      // Its middle value, per colour.
+      const grown = (r: number) => (c.shape === 'ellipse' ? { ...c, rx: c.rx! + r, ry: c.ry! + r } : { ...c, x: c.x! - r, y: c.y! - r, w: c.w! + 2 * r, h: c.h! + 2 * r });
+      let ring: number[] = [];
+      let r = COVERS.ringWidth(W, H);
+      for (; ; r *= 2) if ((ring = [...taken(grown(r), W, H)].filter((i) => !mask[i])).length >= 16) break;
+      // Only the cover inside another one needs a wider ring.
+      expect(r > COVERS.ringWidth(W, H)).toBe(k === 3);
+      const mid = [0, 1, 2].map((ch) => ring.map((i) => before.data[i * 4 + ch]!).sort((a, b) => a - b)[Math.ceil(ring.length / 2) - 1]);
+      expect(fills[k]).toEqual(mid);
+    });
+    // Painted later, a cover takes its colour over one painted before it; every covered pixel is one of the fills.
+    covers.forEach((c, k) => {
+      for (const i of taken(c, W, H)) {
+        const top = covers.findLastIndex((d) => taken(d, W, H).has(i));
+        if (top === k) expect([...img.data.subarray(i * 4, i * 4 + 4)]).toEqual([...fills[k], 255]);
+      }
+    });
+    // Outside the covers the picture is as it was.
+    for (let i = 0; i < W * H; i++) if (!mask[i]) expect(img.data.subarray(i * 4, i * 4 + 4)).toEqual(before.data.subarray(i * 4, i * 4 + 4));
+  });
+
+  it('whatever is under the covers, the painted picture is the same byte for byte', () => {
+    const a = noise(W, H);
+    const b = noise(W, H);
+    const mask = COVERS.coverMask(covers, W, H);
+    // b gets other pixels under every cover: bright, and different from pixel to pixel.
+    let changed = 0;
+    for (let i = 0; i < W * H; i++)
+      if (mask[i]) {
+        b.data.set([255, (i * 37) % 256, 255 - ((i * 11) % 256), 255], i * 4);
+        changed++;
+      }
+    expect(changed).toBeGreaterThan(2000);
+    COVERS.paintCovers(a, covers);
+    COVERS.paintCovers(b, covers);
+    expect(Buffer.from(b.data).equals(Buffer.from(a.data))).toBe(true);
+    // No pixel of what was under the covers is left: none of b's bright pixels remains.
+    for (let i = 0; i < W * H; i++) expect(b.data[i * 4] === 255 && b.data[i * 4 + 2]! > 200).toBe(false);
+  });
+
+  it('a cover with no uncovered pixel near it takes a wider ring, and a photo covered whole takes grey', () => {
+    const img = noise(40, 30);
+    // The only uncovered pixels, the bottom four rows, are one colour.
+    for (let i = 26 * 40; i < 30 * 40; i++) img.data.set([10, 200, 30], i * 4);
+    const fills = COVERS.paintCovers(img, [
+      { kind: 'mine', x: 0, y: 0, w: 40, h: 26 },
+      { kind: 'mine', x: 10, y: 10, w: 4, h: 4 },
+    ]);
+    expect(fills).toEqual([
+      [10, 200, 30],
+      [10, 200, 30],
+    ]);
+    expect(COVERS.paintCovers(noise(40, 30), [{ kind: 'mine', x: 0, y: 0, w: 40, h: 30 }])).toEqual([[...COVERS.NEUTRAL_FILL]]);
   });
 });
 
@@ -222,6 +353,61 @@ describe('the writing finder (cover-numbers)', () => {
     expect(TEXT.findWriting({ width: 0, height: 0, data: new Uint8ClampedArray(0) })).toEqual([]);
   });
 
+  it('reaches along a line to letters run together at its end, so the tight block still holds them', () => {
+    const img = picture(800, 600);
+    const line = write(img, 'AB12', 100, 200, 4);
+    // Four 7s with no gap between them: one wide mark, not shaped like a letter.
+    const run = { x: line.x + line.w, y: 200, w: 4 * 5 * 4, h: 7 * 4 };
+    for (let k = 0; k < 4; k++) write(img, '7', run.x + k * 20, 200, 4);
+    const found = TEXT.findWriting(img);
+    expect(found).toHaveLength(1);
+    expect(covered(found[0], line) && covered(found[0], run)).toBe(true);
+  });
+
+  it('joins lines into one block only where it covers little more than the lines', () => {
+    // Two lines of a paragraph: one block. Two lines that meet only at a corner: two blocks.
+    const para = picture(800, 600);
+    const a = write(para, 'AB 1234', 100, 100, 4);
+    const b = write(para, 'K7 4321', 100, 136, 4);
+    const one = TEXT.findWriting(para);
+    expect(one).toHaveLength(1);
+    expect(covered(one[0], a) && covered(one[0], b)).toBe(true);
+    const stairs = picture(800, 600);
+    const c = write(stairs, 'AB 1234', 100, 100, 4);
+    const d = write(stairs, 'K7 4321', 100 + c.w - 9, 132, 4);
+    const two = TEXT.findWriting(stairs);
+    expect(two).toHaveLength(2);
+    expect(two.some((x: any) => covered(x, c)) && two.some((x: any) => covered(x, d))).toBe(true);
+    // The two blocks cover far less than one block round both would.
+    const both = COVERS.coverMask(two, 800, 600).reduce((n: number, v: number) => n + v, 0);
+    const x0 = Math.min(...two.map((x: any) => x.x));
+    const y0 = Math.min(...two.map((x: any) => x.y));
+    const round = (Math.max(...two.map((x: any) => x.x + x.w)) - x0) * (Math.max(...two.map((x: any) => x.y + x.h)) - y0);
+    expect(both).toBeLessThan(0.7 * round);
+  });
+
+  it('on the sample photos, every mark it takes for writing is under a block fitted closely to it', () => {
+    for (const [name, bytes] of [
+      ['crew', CREW],
+      ['sign', SIGN],
+    ] as const) {
+      const img = decodeJpeg(bytes);
+      const s = Math.min(1, TEXT.WORK_SIDE / Math.max(img.width, img.height));
+      const blocks = TEXT.findWriting(img);
+      expect(blocks.length, name).toBeGreaterThan(2);
+      const mask = COVERS.coverMask(blocks, img.width, img.height);
+      for (const b of blocks) {
+        expect(holds(mask, img.width, img.height, b.found), name).toBe(true);
+        for (const m of b.marks) expect(holds(mask, img.width, img.height, m), `${name} ${JSON.stringify(m)}`).toBe(true);
+        // The margin round the writing is a third of a letter's height, or two working pixels.
+        const pad = Math.max(TEXT.PAD * b.found.h, 2 / s) + 1;
+        expect(b.x >= b.found.x - pad && b.y >= b.found.y - pad && b.x + b.w <= b.found.x + b.found.w + pad && b.y + b.h <= b.found.y + b.found.h + pad, `${name} ${JSON.stringify(b)}`).toBe(true);
+      }
+    }
+    // The road sign's "138A" is under a block.
+    expect(TEXT.findWriting(decodeJpeg(SIGN)).some((b: any) => b.x <= 243 && b.x + b.w >= 243 && b.y <= 220 && b.y + b.h >= 220)).toBe(true);
+  });
+
   it('is quick enough for a low-end phone: a 2048 px photo in well under a second on this machine', () => {
     const img = picture(2048, 1536);
     write(img, 'AB 1234', 300, 300, 6);
@@ -252,10 +438,59 @@ describe('the face filter’s boxes (cover-faces)', () => {
     expect(kept.map((k: any) => k.score)).toEqual([0.9, 0.4]);
   });
 
-  it('reaches past the face to the hair, ears and chin, inside the photo', () => {
-    expect(FACES.faceCover({ x: 100, y: 100, w: 100, h: 100 }, 1000, 1000)).toEqual({ kind: 'face', x: 70, y: 50, w: 160, h: 180 });
-    const edge = FACES.faceCover({ x: 0, y: 0, w: 100, h: 100 }, 120, 120);
-    expect(edge).toEqual({ kind: 'face', x: 0, y: 0, w: 120, h: 120 });
+  it('covers the face with an ellipse round the detector’s box, reaching to the hair, ears and chin', () => {
+    const W = 1000;
+    const H = 1000;
+    const d = { x: 300, y: 300, w: 100, h: 120, score: 0.9 };
+    const f = FACES.faceCover(d, W, H);
+    expect(f).toMatchObject({ kind: 'face', shape: 'ellipse', cx: 350, found: { x: 300, y: 300, w: 100, h: 120 } });
+    const mask = COVERS.coverMask([f], W, H);
+    // The whole box, and the box grown by a twentieth of its size.
+    expect(holds(mask, W, H, d)).toBe(true);
+    expect(holds(mask, W, H, { x: 295, y: 294, w: 110, h: 132 })).toBe(true);
+    // Half the box's height above it (hair), three tenths of its width to each side at the eyes (ears),
+    // three tenths of its height below it (chin).
+    for (const [x, y] of [
+      [350, 240],
+      [270, 348],
+      [430, 348],
+      [350, 455],
+    ])
+      expect(mask[y! * W + x!], `${x},${y}`).toBe(1);
+    // Its bounds are the ellipse's, inside the photo.
+    expect([f.x, f.y, f.x + f.w, f.y + f.h]).toEqual([Math.floor(f.cx - f.rx), Math.floor(f.cy - f.ry), Math.ceil(f.cx + f.rx), Math.ceil(f.cy + f.ry)]);
+    // Tighter than a rectangle reaching as far (1.6 by 1.8 boxes), even with the detector's pixels added.
+    const n = mask.reduce((a: number, v: number) => a + v, 0);
+    expect(n).toBeLessThan(0.9 * 160 * 216);
+    expect(n).toBeGreaterThan((Math.PI / 4) * 160 * 216);
+  });
+
+  it('a face the detector was less sure of gets a larger cover', () => {
+    const d = { x: 300, y: 300, w: 100, h: 120 };
+    const sure = FACES.faceCover({ ...d, score: 0.9 }, 1000, 1000);
+    const unsure = FACES.faceCover({ ...d, score: FACES.MIN_SCORE }, 1000, 1000);
+    expect(FACES.faceCover({ ...d, score: FACES.SURE_SCORE }, 1000, 1000).rx).toBe(sure.rx);
+    expect(unsure.rx).toBeGreaterThan(1.14 * sure.rx);
+    expect(unsure.ry).toBeGreaterThan(1.14 * sure.ry);
+  });
+
+  it('a face at the photo’s edge, or a very small one, is still covered inside the photo', () => {
+    // Half out of the photo at its top left corner, and a face 9 pixels wide at the bottom right.
+    const cases: [{ x: number; y: number; w: number; h: number; score: number }, number, number][] = [
+      [{ x: -40, y: -50, w: 100, h: 110, score: 0.5 }, 640, 480],
+      [{ x: 2040, y: 1528, w: 9, h: 10, score: 0.4 }, 2048, 1536],
+    ];
+    for (const [d, W, H] of cases) {
+      const f = FACES.faceCover(d, W, H);
+      expect(f.x >= 0 && f.y >= 0 && f.x + f.w <= W && f.y + f.h <= H).toBe(true);
+      const mask = COVERS.coverMask([f], W, H);
+      expect(holds(mask, W, H, d)).toBe(true);
+      // Every row and column of the box inside the photo reaches to the edge it is cut at.
+      for (const [y, x0, x1] of COVERS.coverSpans(f, W, H)) expect(x0 >= 0 && x1 <= W && y >= 0 && y < H).toBe(true);
+    }
+    // The small face still gets two of the detector's pixels round it: about 10 pixels in a 2048 px photo.
+    const small = FACES.faceCover({ x: 1000, y: 700, w: 9, h: 10, score: 0.9 }, 2048, 1536);
+    expect(small.rx - 0.8 * 9).toBeCloseTo((2 * 2048) / FACES.INPUT_SIZE);
   });
 });
 
