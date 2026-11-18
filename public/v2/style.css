@@ -142,6 +142,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .field-input { width: 100%; min-height: 56px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); padding: 14px 16px; font-size: 17px; resize: vertical; }
 .field-input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
 .mono { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+/* A field is never under 16px: iPhone Safari zooms the page into a smaller one and does not zoom back. */
+.field-input.mono { font-size: 16px; }
 .msg { margin: 0; min-height: 1.2em; font-size: 14px; }
 .msg.err, .status-line.err { color: var(--danger); }
 .msg.ok, .status-line.ok { color: var(--teal); }

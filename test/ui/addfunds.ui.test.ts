@@ -256,6 +256,25 @@ describe('Add money as wallet cards', () => {
     await ctx.close();
   }, 60_000);
 
+  // iPhone Safari zooms the page into a field whose text is under 16px and stays zoomed (seen on the eCash box).
+  it('no field has text under 16px, so an iPhone never zooms into one', async () => {
+    const { ctx, page, errors } = await phone();
+    const sizes = () => page.locator('main input:not([type=checkbox]):not([type=radio]):not([type=file]), main textarea').evaluateAll((fs) => fs.map((f) => `${f.id || f.className}: ${parseFloat(getComputedStyle(f).fontSize)}`));
+    const small = (list: string[]) => list.filter((x) => Number(x.split(': ')[1]) < 16);
+    await page.goto(`${g.url}/v2/#/funds/add`);
+    await page.waitForSelector('#tab-ecash');
+    await openWay(page, 'ecash');
+    await page.waitForSelector('[data-fund=ecash] textarea');
+    const ecash = await sizes();
+    expect(ecash.length).toBeGreaterThan(0);
+    expect(small(ecash)).toEqual([]);
+    await page.goto(`${g.url}/v2/#/type`);
+    await page.waitForSelector('#question');
+    expect(small(await sizes())).toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('puts Start free first at $0 with free models, then the way used last; a way from More gets its own card', async () => {
     const { ctx, page, errors } = await phone();
     await page.goto(`${g.url}/v2/#/funds/add`);
