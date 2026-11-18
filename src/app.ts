@@ -281,7 +281,19 @@ export function createApp(d: Deps) {
     const t = await wallet.inspect(token);
 
     // Credits open or fill a free balance, never a paid one (src/accounts.ts).
-    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit, free: t.credit });
+    let opened: ReturnType<typeof openAccount>;
+    try {
+      opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: t.unit, free: t.credit });
+    } catch (e) {
+      // eCash in the other unit is never changed here: the answer stays wrong_unit, and says where the
+      // change is offered, with its quote shown before anything is spent (docs/PAYMENTS.md).
+      const a = e instanceof LedgerError && e.code === 'wrong_unit' && !t.credit ? ledger.findByKey(bearer(c)!) : undefined;
+      const convert = a ? (await d.funding.methods()).convert : undefined;
+      if (a && convert?.enabled && convert.units.includes(a.unit)) {
+        throw new PaymentError('wrong_unit', (e as Error).message, 400, { convert: { quote: '/v1/wallet/fund/foreign/quote', unit: a.unit, token_unit: t.unit } });
+      }
+      throw e;
+    }
     const account = opened.account;
     const created = opened.created;
     const generated = !!opened.generatedKey;

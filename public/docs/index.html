@@ -69,6 +69,7 @@
 <li><a href="#lightning">Lightning</a></li>
 <li><a href="#on-chain">On-chain</a></li>
 <li><a href="#ecash-from-another-mint">eCash from another mint</a></li>
+<li><a href="#change-units">Change units</a></li>
 <li><a href="#read-a-balance">Read a balance</a></li>
 <li><a href="#take-funds-out">Take funds out</a></li>
 <li><a href="#lock-payouts-to-your-key">Lock payouts to your key</a></li>
@@ -176,7 +177,7 @@ curl -s https://ai.forge-reserve.com/v1/chat/completions \
   -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span> \
   -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \
   -d <span class="hljs-string">&#x27;{&quot;amount&quot;: 100, &quot;unit&quot;: &quot;usd&quot;}&#x27;</span></code></pre></div>
-<p>A balance has one unit for life, set when it is opened: <code>usd</code> unless you send <code>&quot;unit&quot;: &quot;sat&quot;</code> to <code>/v1/wallet/open</code>. A funding in another unit is refused with <code>wrong_unit</code>, so fund a <code>usd</code> balance in <code>usd</code> and a <code>sat</code> balance in <code>sat</code>.</p>
+<p>A balance has one unit for life, set when it is opened: <code>usd</code> unless you send <code>&quot;unit&quot;: &quot;sat&quot;</code> to <code>/v1/wallet/open</code>. A funding in another unit is refused with <code>wrong_unit</code>, so fund a <code>usd</code> balance in <code>usd</code> and a <code>sat</code> balance in <code>sat</code>. eCash in the other unit can still be changed into the balance&#39;s unit, at a price you see first (see <a href="#change-units">Change units</a>).</p>
 <p>Pay the <code>request</code> field (a BOLT11 invoice) from any Lightning wallet, then poll the funding until its <code>state</code> is <code>done</code>:</p>
 <div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/wallet/fund/fund_YOUR_FUNDING_ID \
   -H <span class="hljs-string">&quot;Authorization: Bearer <span class="hljs-variable">$FORGE_KEY</span>&quot;</span></code></pre></div>
@@ -376,7 +377,7 @@ X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
 <li>Send an existing key as the bearer to add to that balance instead.</li>
 </ul>
 <h3 id="top-up-with-ecash">Top up with eCash<a class="anchor" href="#top-up-with-ecash" aria-label="Link to this section">#</a></h3>
-<p><code>POST /v1/wallet/topup</code> with a <code>cashuB</code> token from one of the accepted mints (<code>mints</code> in <code>GET /v1/models</code>, and <code>ecash.mints</code> in <code>GET /v1/wallet/fund/methods</code>). The token&#39;s unit must match the balance. Sending the same token again to the same key is safe: it answers <code>replay: true</code> and credits nothing more.</p>
+<p><code>POST /v1/wallet/topup</code> with a <code>cashuB</code> token from one of the accepted mints (<code>mints</code> in <code>GET /v1/models</code>, and <code>ecash.mints</code> in <code>GET /v1/wallet/fund/methods</code>). The token&#39;s unit must match the balance; a token in the other unit answers <code>400 wrong_unit</code> and is left untouched (see <a href="#change-units">Change units</a>). Sending the same token again to the same key is safe: it answers <code>replay: true</code> and credits nothing more.</p>
 <p>If the mint does not answer while a new balance is being opened, the answer is <code>503 topup_pending</code> with the new <code>key</code>. Retry with that key and the same token to finish.</p>
 <h3 id="lightning">Lightning<a class="anchor" href="#lightning" aria-label="Link to this section">#</a></h3>
 <p><code>POST /v1/wallet/fund/lightning</code> returns a BOLT11 invoice from the Forge mint in <code>request</code>. Pay it from any Lightning wallet. The funding goes <code>pending</code>, then <code>minting</code>, then <code>done</code>, and the balance is credited exactly the invoice amount. Unpaid past its expiry, it ends <code>expired</code>. <code>lightning.min</code> and <code>lightning.max</code> in <code>GET /v1/wallet/fund/methods</code> give the limits per unit.</p>
@@ -388,7 +389,15 @@ X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
 <li><code>POST /v1/wallet/fund/foreign/quote</code> with the token. Nothing is spent. The answer shows <code>foreign.credit</code> (what the balance gets) and <code>foreign.fee_max</code> (the most the token&#39;s mint can keep in fees).</li>
 <li><code>POST /v1/wallet/fund/foreign/confirm</code> with the funding <code>id</code> and the same token. The gateway receives it, melts it into the Forge invoice, then credits the balance. Unused fee reserve comes back as <code>foreign.change_token</code>. If the melt cannot go through, the token&#39;s value comes back as <code>foreign.refund_token</code> and the funding ends <code>refunded</code>.</li>
 </ol>
-<p>Which mints are accepted is listed at <code>GET /v1/wallet/fund/mints</code>. A mint off that list answers <code>409 mint_unlisted</code> with its lower cap; send the quote again with <code>&quot;accept_unlisted&quot;: true</code> to go ahead at your own risk. A token from one of the gateway&#39;s own mints answers <code>use_topup</code>: add it with <code>POST /v1/wallet/topup</code>.</p>
+<p>Which mints are accepted is listed at <code>GET /v1/wallet/fund/mints</code>. A mint off that list answers <code>409 mint_unlisted</code> with its lower cap; send the quote again with <code>&quot;accept_unlisted&quot;: true</code> to go ahead at your own risk. A token from one of the gateway&#39;s own mints in the balance&#39;s unit answers <code>use_topup</code>: add it with <code>POST /v1/wallet/topup</code>.</p>
+<h3 id="change-units">Change units<a class="anchor" href="#change-units" aria-label="Link to this section">#</a></h3>
+<p>eCash from one of the gateway&#39;s own mints in the other unit (sat eCash for a <code>usd</code> balance, or <code>usd</code> eCash for a <code>sat</code> balance) is changed through the same two calls, while <code>convert.enabled</code> in <code>GET /v1/wallet/fund/methods</code> is true and <code>convert.units</code> lists the balance&#39;s unit.</p>
+<ul>
+<li><code>POST /v1/wallet/topup</code> with such a token still answers <code>400 wrong_unit</code>, untouched, and adds <code>&quot;convert&quot;: {&quot;quote&quot;: &quot;/v1/wallet/fund/foreign/quote&quot;, &quot;unit&quot;: &quot;usd&quot;, &quot;token_unit&quot;: &quot;sat&quot;}</code> (<code>unit</code> is the balance&#39;s). A client that does not know <code>convert</code> sees the same error as before.</li>
+<li><code>POST /v1/wallet/fund/foreign/quote</code> with the token and the balance&#39;s <code>unit</code>. The gateway sets no exchange rate: the Forge mint makes an invoice in the balance&#39;s unit, and the token&#39;s mint says what paying it costs in the token&#39;s unit. The answer has <code>foreign.convert: true</code>, <code>foreign.credit</code> (what the balance gets, in its unit), <code>foreign.token_amount</code> and <code>foreign.fee_max</code> (the most the fees can take, in the token&#39;s unit). Nothing is spent.</li>
+<li><code>POST /v1/wallet/fund/foreign/confirm</code> as for another mint. What the fees do not use comes back as <code>foreign.change_token</code>, eCash in the token&#39;s unit.</li>
+</ul>
+<p>The other-mint list, caps and <code>accept_unlisted</code> do not apply to the gateway&#39;s own mints. The Lightning limits of the balance&#39;s unit do (<code>lightning.max</code>, <code>lightning.min</code>): a larger credit answers <code>400 amount_too_large</code>, a token too small for the fees <code>400 insufficient_amount</code>. A Lightning or on-chain funding asked in the other unit stays <code>400 wrong_unit</code>: ask for one in the balance&#39;s unit and pay it from any wallet.</p>
 <h3 id="read-a-balance">Read a balance<a class="anchor" href="#read-a-balance" aria-label="Link to this section">#</a></h3>
 <p><code>GET /v1/wallet</code> returns the balance, the part not held by running requests (<code>available_msub</code>), and what can be taken out (<code>refundable</code>, whole units). Every paid response also carries <code>X-Forge-Balance-Msub</code>.</p>
 <h3 id="take-funds-out">Take funds out<a class="anchor" href="#take-funds-out" aria-label="Link to this section">#</a></h3>
@@ -834,7 +843,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <p>Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made.</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sk-forge-...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;account_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;acct_...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;unit&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;credited&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;replay&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance_msub&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;balance&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span></code></pre></div>
-<p><code>credited</code> is in whole units, after the mint&#39;s input fees. Errors: the token errors, <code>409 wrong_balance</code>, <code>400 wrong_unit</code> (the balance has another unit), <code>403 invite_required</code>, <code>503 topup_pending</code> (retry with the returned <code>key</code> and the same token).</p>
+<p><code>credited</code> is in whole units, after the mint&#39;s input fees. Errors: the token errors, <code>409 wrong_balance</code>, <code>400 wrong_unit</code> (the balance has another unit; with <code>convert</code> when the token can be changed, see <a href="#change-units">Change units</a>), <code>403 invite_required</code>, <code>503 topup_pending</code> (retry with the returned <code>key</code> and the same token).</p>
 <h3 id="get-v1-wallet" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet</code><a class="anchor" href="#get-v1-wallet" aria-label="Link to this section">#</a></h3>
 <p>Bearer key required.</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
@@ -917,7 +926,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 </tr>
 <tr>
 <td><code>foreign</code></td>
-<td>Other-mint only: <code>mint</code>, <code>unlisted</code>, <code>unit</code>, <code>token_amount</code>, <code>credit</code>, <code>fee_max</code>, <code>change_token</code>, <code>refund_token</code>, <code>locked_to</code>, <code>payout_pending</code></td>
+<td>Other-mint and change of units only: <code>mint</code>, <code>convert</code> (eCash from the gateway&#39;s own mint, changed from its unit), <code>unlisted</code>, <code>unit</code>, <code>token_amount</code>, <code>credit</code>, <code>fee_max</code>, <code>change_token</code>, <code>refund_token</code>, <code>locked_to</code>, <code>payout_pending</code></td>
 </tr>
 <tr>
 <td><code>error</code></td>
@@ -939,12 +948,13 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
     <span class="hljs-attr">&quot;mints_url&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/v1/wallet/fund/mints&quot;</span><span class="hljs-punctuation">,</span>
     <span class="hljs-attr">&quot;unlisted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;max&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5000</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;usd&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;convert&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;units&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;sat&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;usd&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;invite_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;free_voice&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;per_day&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;free&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;questions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;open&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;free_models&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span></code></pre></div>
-<p>The figures above were read from the hosted gateway on 16 November 2026. <code>usd</code> limits are in cents.</p>
+<p>The figures above were read from the hosted gateway on 16 November 2026 (<code>convert</code> added since). <code>usd</code> limits are in cents. <code>convert.units</code>: the balance units eCash from the gateway&#39;s own mints can be changed into (<a href="#change-units">Change units</a>).</p>
 <h3 id="get-v1-wallet-fund-mints" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund/mints</code><a class="anchor" href="#get-v1-wallet-fund-mints" aria-label="Link to this section">#</a></h3>
 <p>Other mints whose eCash is accepted for funding: <code>{&quot;enabled&quot;, &quot;policy&quot;, &quot;mints&quot;: [{&quot;url&quot;, &quot;name&quot;?, &quot;reviewers&quot;?, &quot;source&quot;: &quot;discovered&quot; | &quot;operator&quot;}], &quot;updated_at&quot;}</code>. Discovered mints come from NIP-87 announcements and reviews on Nostr. No key needed.</p>
 <h3 id="post-v1-wallet-fund-lightning" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/lightning</code><a class="anchor" href="#post-v1-wallet-fund-lightning" aria-label="Link to this section">#</a></h3>
@@ -961,7 +971,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 </thead>
 <tbody><tr>
 <td><code>token</code></td>
-<td>Required. A <code>cashuB</code> token from another mint</td>
+<td>Required. A <code>cashuB</code> token from another mint, or from one of the gateway&#39;s own mints in the other unit</td>
 </tr>
 <tr>
 <td><code>unit</code></td>
@@ -980,7 +990,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <td>For a new balance</td>
 </tr>
 </tbody></table></div>
-<p>Returns a funding in state <code>quoted</code>. Nothing is spent until confirm. Errors: <code>400 use_topup</code> (the token is from one of the gateway&#39;s own mints), <code>400 mint_not_allowed</code>, <code>409 mint_unlisted</code> (with <code>unlisted: {mint, max}</code>), <code>400 mint_check_failed</code>, <code>400 amount_too_large</code>, <code>400 insufficient_amount</code>, <code>400 foreign_mint_error</code>, <code>400 credits_not_money</code>, <code>400 method_unavailable</code>.</p>
+<p>Returns a funding in state <code>quoted</code>. Nothing is spent until confirm. Errors: <code>400 use_topup</code> (the token is from one of the gateway&#39;s own mints, in the balance&#39;s unit), <code>400 mint_not_allowed</code>, <code>409 mint_unlisted</code> (with <code>unlisted: {mint, max}</code>), <code>400 mint_check_failed</code>, <code>400 amount_too_large</code>, <code>400 insufficient_amount</code>, <code>400 foreign_mint_error</code>, <code>400 credits_not_money</code>, <code>400 method_unavailable</code>, <code>409 wrong_balance</code> (a free-question balance key), <code>503 rate_unavailable</code> (the units differ and the gateway has no BTC/USD rate to pick the first credit).</p>
 <h3 id="post-v1-wallet-fund-foreign-confirm" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/foreign/confirm</code><a class="anchor" href="#post-v1-wallet-fund-foreign-confirm" aria-label="Link to this section">#</a></h3>
 <p>Bearer key required. Body: <code>id</code> (from the quote), <code>token</code> (the same token), optional <code>pubkey</code>. Returns the funding as it moves on; poll it until <code>done</code> or <code>refunded</code>. Errors: <code>400 token_mismatch</code>, <code>409 quote_expired</code>, <code>409 in_flight</code>, <code>404 not_found</code>.</p>
 <h3 id="get-v1-wallet-fund" class="endpoint"><span class="verb verb-get">GET</span> <code>/v1/wallet/fund</code><a class="anchor" href="#get-v1-wallet-fund" aria-label="Link to this section">#</a></h3>
@@ -1056,7 +1066,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <tr>
 <td>400</td>
 <td><code>wrong_unit</code></td>
-<td>The unit is not taken here, or does not match the balance or quote</td>
+<td>The unit is not taken here, or does not match the balance or quote. A top-up whose eCash can be changed adds <code>convert</code> (<a href="#change-units">Change units</a>)</td>
 </tr>
 <tr>
 <td>400</td>

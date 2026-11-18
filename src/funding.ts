@@ -100,6 +100,8 @@ export interface FundingMethods {
     /** Mints that are not accepted may still be used after a warning, up to max (sat / cents). */
     unlisted: { enabled: boolean; max: { sat: number; usd: number } };
   };
+  /** eCash from Forge's own mints in the other unit, changed into these balance units (quoteForeign). */
+  convert: { enabled: boolean; units: Unit[] };
 }
 
 /** A mint the operator added on the admin page. */
@@ -214,6 +216,7 @@ export function isPrivateAddress(ip: string): boolean {
  * Lightning: pending -> (quote PAID) minting -> done. Unpaid past expiry -> expired.
  * On-chain:  pending -> (amount_paid > amount_issued) minting -> pending ... until the watch window ends.
  * Foreign:   quoted -> (confirm) receiving -> melting -> pending -> minting -> done; a failed melt -> refunded.
+ *            The same path changes eCash from one of Forge's own mints in the other unit (convert).
  */
 export class FundingService {
   private readonly db: DB;
@@ -299,6 +302,7 @@ export class FundingService {
         mints_url: FOREIGN_MINTS_PATH,
         unlisted: { enabled: this.unlistedEnabled(), max: this.unlistedMax() },
       },
+      convert: { enabled: env.FORGE_CONVERT_ENABLED && lightningUnits.length > 0, units: env.FORGE_CONVERT_ENABLED ? lightningUnits : [] },
     };
   }
 
@@ -377,6 +381,8 @@ export class FundingService {
         r.method === 'foreign'
           ? {
               mint: r.f_mint,
+              // eCash from one of Forge's own mints, changed from its unit into the balance's.
+              convert: !!r.f_mint && this.wallet.isTrusted(r.f_mint),
               unlisted: !!r.f_unlisted,
               unit: r.f_unit,
               token_amount: r.f_amount,
@@ -626,18 +632,30 @@ export class FundingService {
    */
   async quoteForeign(accountId: string, unit: Unit, token: string, lockPubkey: string | null = null, opts: { acceptUnlisted?: boolean } = {}): Promise<FundingRow> {
     const m = await this.methods();
-    if (!m.foreign.enabled || !m.lightning.units.includes(unit)) throw new PaymentError('method_unavailable', `funding in ${unit} from other mints is not available`, 400);
-    let meta: { mint: string };
+    let meta: { mint: string; unit?: string };
     try {
       meta = getTokenMetadata(token);
     } catch {
       throw new PaymentError('invalid_token', 'could not decode token');
     }
-    const vetted = await this.vetForeignMint(meta.mint, opts);
-    const t = await this.wallet.inspect(token, undefined, { foreign: true });
+    // One of Forge's own mints: a token in the balance's unit is added as it is (POST /v1/wallet/topup).
+    // A token in the other unit is changed here the way other-mint eCash is, melted at its mint into a
+    // Forge invoice in the balance's unit, so the mint's own quote is the rate and the fees show first.
+    const own = this.wallet.isTrusted(meta.mint);
+    if (own && (meta.unit ?? 'sat') === unit) throw new PaymentError('use_topup', 'this token is from an accepted mint: add it as eCash instead');
+    if (own ? !m.convert.enabled || !m.convert.units.includes(unit) : !m.foreign.enabled || !m.lightning.units.includes(unit)) {
+      throw new PaymentError('method_unavailable', own ? `eCash in another unit cannot be changed into ${unit} here` : `funding in ${unit} from other mints is not available`, 400);
+    }
+    const vetted: VettedMint = own ? { url: normalizeMintUrl(meta.mint), unlisted: false } : await this.vetForeignMint(meta.mint, opts);
+    // Forge's own mints are read as a top-up reads them (the trusted list and FORGE_UNITS).
+    const t = await this.wallet.inspect(token, undefined, { foreign: !own });
     const rawAmount = t.proofs.reduce((s, p) => s + num(p.amount), 0);
-    const max = t.unit === 'sat' ? this.env.FORGE_FOREIGN_MAX_SAT : this.env.FORGE_FOREIGN_MAX_USD;
-    if (rawAmount > max) throw new PaymentError('amount_too_large', `tokens from other mints are limited to ${max} ${t.unit}`);
+    // The other-mint caps are about trusting another mint: a change from Forge's own mint has the
+    // Lightning funding limits of the balance's unit instead (below, on the credit).
+    if (!own) {
+      const max = t.unit === 'sat' ? this.env.FORGE_FOREIGN_MAX_SAT : this.env.FORGE_FOREIGN_MAX_USD;
+      if (rawAmount > max) throw new PaymentError('amount_too_large', `tokens from other mints are limited to ${max} ${t.unit}`);
+    }
     if (vetted.unlisted) {
       const cap = this.unlistedMax()[t.unit];
       if (rawAmount > cap) throw new PaymentError('amount_too_large', `tokens from a mint that is not on Forge's list are limited to ${cap} ${t.unit}`);
@@ -657,6 +675,10 @@ export class FundingService {
       if (!rate) throw new PaymentError('rate_unavailable', 'BTC/USD rate unavailable; try a token in the same unit', 503);
       credit = t.unit === 'sat' ? Math.floor(((budget * rate) / 1e8) * 100 * 0.97) : Math.floor(((budget / 100) * 1e8 * 0.97) / rate);
     }
+    // A change is a Lightning funding in the balance's unit, with its limits (FORGE_FUND_MAX_*, the mint's).
+    const lnMax = m.lightning.max[unit] ?? 0;
+    const lnMin = m.lightning.min[unit] ?? 1;
+    if (own && credit > lnMax) throw new PaymentError('amount_too_large', `eCash changed into ${unit} is limited to ${lnMax} ${unit} at once`);
     let fq: Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> | undefined;
     let mq: MeltQuoteBolt11Response | undefined;
     for (let i = 0; i < 6; i++) {
@@ -677,6 +699,22 @@ export class FundingService {
       credit = Math.floor((credit * budget) / cost) - (i + 1);
     }
     if (!fq || !mq) throw new PaymentError('insufficient_amount', 'this token cannot cover the Lightning fees to move it to the Forge mint');
+    if (own) {
+      // The first credit came from the gateway's rate, less 3 percent. Ask once more at the mint's own
+      // price, read off the quote just made, so less of the token comes back as change in a unit this
+      // balance does not hold. The first price stands if the second does not fit or is not given.
+      const fuller = Math.min(lnMax, Math.floor((credit * budget) / (num(mq.amount) + num(mq.fee_reserve))));
+      if (fuller > credit) {
+        try {
+          const fq2 = await forge.createMintQuoteBolt11(fuller);
+          const mq2 = await fw.createMeltQuoteBolt11(fq2.request);
+          if (num(mq2.amount) + num(mq2.fee_reserve) <= budget) [fq, mq, credit] = [fq2, mq2, fuller];
+        } catch (e) {
+          log.warn('fund_convert_requote_failed', { err: errText(e) });
+        }
+      }
+      if (credit < lnMin) throw new PaymentError('insufficient_amount', `this token is worth less than ${lnMin} ${unit} after fees`);
+    }
     const feeMax = rawAmount - t.amount + meltInputFee + num(mq.fee_reserve);
     const expiries = [fq.expiry, mq.expiry].filter((x): x is number => typeof x === 'number' && x > 0);
     const row = this.insert({
@@ -698,7 +736,7 @@ export class FundingService {
       f_lock_pubkey: lockPubkey,
       f_unlisted: vetted.unlisted ? 1 : 0,
     });
-    log.info('fund_created', { id: row.id, method: 'foreign', unit, amount: credit, foreign_unit: t.unit, foreign_amount: rawAmount, unlisted: vetted.unlisted });
+    log.info('fund_created', { id: row.id, method: 'foreign', unit, amount: credit, foreign_unit: t.unit, foreign_amount: rawAmount, unlisted: vetted.unlisted, convert: own });
     return row;
   }
 

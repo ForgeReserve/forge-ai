@@ -78,6 +78,11 @@ export const EnvSchema = z.object({
   FORGE_ESPLORA_URL: z.string().url().optional(),
   /** eCash from other mints, melted into a Forge Lightning quote. */
   FORGE_FOREIGN_ENABLED: bool.default(true),
+  /**
+   * eCash from one of Forge's own mints in the other unit (a sat token for a usd balance, or the reverse),
+   * melted at its mint into a Forge Lightning quote in the balance's unit, as other-mint funding does.
+   */
+  FORGE_CONVERT_ENABLED: bool.default(true),
   FORGE_FOREIGN_ALLOW: csv.default([]),
   FORGE_FOREIGN_DENY: csv.default([]),
   FORGE_FOREIGN_MAX_SAT: z.coerce.number().int().min(1).default(100_000),

@@ -4,8 +4,9 @@
 // the phone before sending it and removes it only once the engine confirms the credit (core/vault.js).
 //
 // A note from a mint the engine does not take says so and offers the other-mint path when the engine
-// has one. Whether a note was already used is known only to its mint, so the phone learns it when the
-// engine refuses the note (token_spent), and says so.
+// has one. A note from the engine's own mint in the unit these funds do not hold offers the change
+// (fund module eCash shows its price first). Whether a note was already used is known only to its mint,
+// so the phone learns it when the engine refuses the note (token_spent), and says so.
 import { isNoteUnit, mintLabel, noteVerdict, readNote, refusalOf } from '../../../core/note.js';
 import { inviteField } from '../kit.js';
 
@@ -105,9 +106,16 @@ export function create(inputs) {
           body.replaceChildren(...head, ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, words, 'err'));
           foot.replaceChildren(...[kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again].filter(Boolean));
         };
+        // The engine's own eCash in the unit these funds do not hold: changed through eCash, price first.
+        const canConvert = !!wallet.key() && !!wallet.unit() && !!methods?.convert?.units?.includes(wallet.unit());
+        const offerConvert = () => {
+          body.replaceChildren(...head, ui.sayEl('p', { class: 'note', id: 'noteResult', role: 'status' }, t('fund.note.convert', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }), '', 'swap'));
+          foot.replaceChildren(btn({ class: 'btn primary block', id: 'noteConvert', onclick: () => open('ecash', { token: note.token }) }, 'swap', t('fund.note.seePrice')), again);
+        };
         if (!known) return refused('wrong_unit');
         // Free questions go on their own balance, so the paid balance's unit and the invite do not apply.
-        const verdict = credit ? 'add' : noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled });
+        const verdict = credit ? 'add' : noteVerdict(note, { mints: wallet.mints(), aliases: wallet.mintAliases(), units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!methods?.foreign?.enabled, convert: canConvert });
+        if (verdict === 'convert') return offerConvert();
         if (verdict !== 'add') return refused(verdict);
 
         const invite = credit ? { node: null, missing: () => false, value: () => undefined } : inviteField(inputs);
@@ -128,7 +136,8 @@ export function create(inputs) {
             done();
           } catch (e) {
             const kind = refusalOf(e);
-            if (kind === 'kept') msg.set(t('fund.note.kept'), 'err');
+            if (kind === 'wrong_unit' && e?.body?.convert) offerConvert();
+            else if (kind === 'kept') msg.set(t('fund.note.kept'), 'err');
             else if (kind === 'failed') msg.set(t('fund.failed', { message: e?.message ?? String(e) }), 'err');
             else refused(kind === 'other_mint' && !methods?.foreign?.enabled ? 'wrong_mint' : kind);
           } finally {
