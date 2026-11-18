@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { setLogSilent } from '../../src/log.ts';
 import { tx } from '../../src/db.ts';
 import { newApiKey } from '../../src/ledger.ts';
 import { chatBody, createInvite, type Gateway, MINT_A, mintsUp, mintToken, redeem, startGateway } from './helpers.ts';
@@ -35,6 +36,33 @@ describe.skipIf(!up)('non-stream upstream body failures', () => {
       mock.chat = realChat;
     }
   };
+
+  it("the request log line says why the supplier gave no answer", async () => {
+    const key = newApiKey();
+    tx(g.deps.db, () => {
+      const a = g.deps.ledger.createAccountRaw(key, 'usd', null);
+      g.deps.ledger.creditRaw(a.id, 100_000, 'topup', null);
+    });
+    const lines: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: any) => (lines.push(String(chunk)), true));
+    setLogSilent(false);
+    try {
+      const res = await withBrokenBody(() =>
+        fetch(`${g.url}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify(chatBody('mock-echo')),
+        }),
+      );
+      expect(res.status).toBe(502);
+    } finally {
+      setLogSilent(process.env.FORGE_LOG_SILENT === '1');
+      write.mockRestore();
+    }
+    const logged = lines.flatMap((l) => l.split('\n')).filter((l) => l.includes('"msg":"request"')).map((l) => JSON.parse(l));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ status: 'upstream_error', reason: expect.stringContaining('connection reset') });
+  });
 
   it('a balance request is finalised in-process: nothing charged, reservation released', async () => {
     const key = newApiKey();

@@ -18,6 +18,18 @@ export function chargedFor(forge, err) {
  * null when nobody knows: the stream ended without the engine's final event. The words never claim
  * "not charged" unless the engine said so.
  */
+/**
+ * The engine's own reason for a failed answer, short enough to show under the plain words: one line,
+ * without the "You were not charged." the plain words already say. '' when it gave none.
+ */
+export function reasonOf(message) {
+  const s = String(message ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/\.? ?You were not charged\.?$/i, '')
+    .replace(/[\s.]+$/, '');
+  return s.length > 160 ? `${s.slice(0, 159)}…` : s;
+}
+
 export function errorView(code, message, charged = 0) {
   switch (code) {
     case 'insufficient_balance':
@@ -37,7 +49,8 @@ export function errorView(code, message, charged = 0) {
     case 'stream_failed':
       if (charged == null) return { key: 'error.modelUnknown', next: 'retry' };
       if (charged > 0) return { key: 'error.modelCharged', next: 'retry', charged };
-      return { key: 'error.model', next: 'retry' };
+      // The engine's reason rides along for whoever is helping: the plain words stay first.
+      return reasonOf(message) ? { key: 'error.modelWhy', next: 'retry', message: reasonOf(message) } : { key: 'error.model', next: 'retry' };
     case 'model_not_found':
       return { key: 'error.gone', next: 'chooseModel' };
     case 'request_too_large':
