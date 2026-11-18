@@ -64,6 +64,15 @@ describe('the Tap a card module', () => {
     expect(M.routeFor({ trusted: false }, { unit: 'sat', otherMint: false })).toBe('wrong_mint');
   });
 
+  it('sends the engine own eCash in the other unit to the phone for the change, when the engine makes it', () => {
+    const o = { unit: 'sat', units: ['usd', 'sat'], balanceUnit: 'usd' };
+    expect(M.routeFor({ trusted: true }, { ...o, convert: true })).toBe('othermint');
+    expect(M.routeFor({ trusted: true }, { ...o, convert: false })).toBe('wrong_unit');
+    expect(M.routeFor({ trusted: true }, { ...o, balanceUnit: 'sat', convert: true })).toBe('topup');
+    // A unit the engine does not hold is never changed.
+    expect(M.routeFor({ trusted: true }, { ...o, units: ['usd'], convert: true })).toBe('wrong_unit');
+  });
+
   it('says what went wrong in plain words, with the PIN tries left', () => {
     expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 2 }, t)).toBe('Wrong PIN, 2 tries left.');
     expect(M.wordsFor({ code: 'pin_wrong', triesLeft: 1 }, t)).toBe('Wrong PIN, 1 try left.');

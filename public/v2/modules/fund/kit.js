@@ -104,6 +104,102 @@ export async function settlePendingForeign({ engine, vault, key }) {
   return n;
 }
 
+const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
+
+/**
+ * The price the engine quoted for eCash it changes (POST /v1/wallet/fund/foreign/quote), with Yes, then
+ * the steps until the outcome. Other mint uses it, and so does eCash from the engine's own mint in the
+ * unit these funds do not hold (foreign.convert), which also says what is changed into what and has a
+ * No (onNo). The token goes into the vault on Yes only, with the funding id, so the outcome lands even
+ * when the person leaves (settlePendingForeign); No takes nothing, the token stays the person's.
+ * Fills body and foot. Returns {stop} for the poller.
+ */
+export function foreignQuote(inputs, { body, foot, f, token, done, onNo }) {
+  const { t, ui, engine, wallet, vault, format } = inputs;
+  const q = f.foreign;
+  let poller = null;
+  const st = ui.el('p', { class: 'status-line', id: 'foreignStatus', role: 'status' });
+  const confirm = ui.el('button', { type: 'button', class: 'btn primary block', id: 'foreignConfirm' }, ui.icon('check', 20), ui.el('span', { text: t('fund.othermint.confirm', { amount: format.units(q.credit, f.unit) }) }));
+  const no = onNo ? ui.el('button', { type: 'button', class: 'btn block', id: 'foreignNo', onclick: onNo }, ui.icon('x', 20), ui.el('span', { text: t('fund.convert.no') })) : null;
+  const returned = ui.el('div', { class: 'returned' });
+  const words = (u) => t(UNIT_WORD[u] ?? 'unit.other');
+  body.replaceChildren(
+    ...[
+      q.convert ? ui.sayEl('p', { id: 'convertWhat' }, t('fund.convert.what', { to: words(f.unit), from: words(q.unit) }), '', 'swap') : null,
+      ui.el('div', { class: 'amount-tag', id: 'foreignCredit', text: format.units(q.credit, f.unit) }),
+      q.convert ? ui.sayEl('p', { class: 'note', id: 'convertFrom' }, t('fund.convert.from', { amount: format.units(q.token_amount, q.unit) }), '', 'coins') : null,
+      ui.sayEl('p', { class: 'note' }, t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) })),
+      st,
+      returned,
+    ].filter(Boolean),
+  );
+  foot.replaceChildren(...[confirm, no].filter(Boolean));
+  let held = null;
+  let refreshed = false;
+  const finish = () => foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', id: 'fundDone', text: t('fund.done'), onclick: done }));
+  const update = (x) => {
+    const xf = x.foreign ?? q;
+    const steps = { receiving: 'fund.othermint.receiving', melting: 'fund.othermint.melting', pending: 'fund.othermint.pending', minting: 'fund.othermint.minting' };
+    // The vault first: the outcome is stored before anything is shown.
+    const r = settleForeign(vault, held, x);
+    if (x.state === 'done') {
+      ui.say(st, t('fund.othermint.done', { amount: format.units(x.credited, x.unit) }));
+      if (xf.change_token) returned.replaceChildren(ui.sayEl('p', { class: 'note' }, t('fund.othermint.change')));
+      if (!refreshed) wallet.refresh();
+      refreshed = true;
+      finish();
+      return r.final;
+    }
+    if (x.state === 'refunded') {
+      ui.say(st, xf.refund_token || xf.payout_pending ? t('fund.othermint.refunded') : t('fund.failed', { message: x.error ?? '' }));
+      if (xf.refund_token) returned.replaceChildren(ui.el('textarea', { class: 'field-input mono', readonly: true, rows: '3', text: xf.refund_token }));
+      finish();
+      return r.final;
+    }
+    if (x.state === 'failed' || x.state === 'expired') {
+      ui.say(st, x.state === 'expired' ? t('fund.othermint.expired') : t('fund.failed', { message: x.error ?? '' }));
+      finish();
+      return true;
+    }
+    if (steps[x.state]) ui.say(st, t(steps[x.state]));
+    return false;
+  };
+  const watch = (ms) =>
+    (poller = poll(async () => {
+      const s = await engine.funding(wallet.key(), f.id);
+      return s.ok ? update(s.body) : false;
+    }, ms));
+  confirm.addEventListener('click', async () => {
+    confirm.disabled = true;
+    no?.remove();
+    ui.say(st, t('fund.othermint.receiving'));
+    // Tied to this engine: only it is asked about the funding later (settlePendingForeign).
+    held = vault.hold(token, 'othermint', { fundingId: f.id, engine: engine.base ?? '' });
+    try {
+      const r = await engine.foreignConfirm(wallet.key(), { id: f.id, token, pubkey: wallet.lockKey() || undefined });
+      if (!r.ok) {
+        const message = r.body?.error?.message ?? `HTTP ${r.status}`;
+        if (confirmOutcome(r.status, r.body) === 'refused') {
+          // Not taken: the eCash stays on the phone, listed under Funds as not added, so it can be copied.
+          vault.refused(held.id, r.body?.error?.code ?? `http_${r.status}`, message);
+          ui.say(st, t('fund.failed', { message }));
+          confirm.disabled = false;
+          return;
+        }
+        // The outcome is open (busy, a server error, or being processed now): keep the token pending
+        // and watch the funding.
+        vault.pending(held.id, r.body?.error?.code ?? `http_${r.status}`);
+        ui.say(st, t('fund.othermint.receiving'));
+        return watch(2000);
+      }
+      if (!update(r.body)) watch(2000);
+    } catch {
+      watch(3000);
+    }
+  });
+  return { stop: () => poller?.stop() };
+}
+
 /** Calls fn every `ms` until it returns true or stop() is called. Skips a tick while the page is hidden. */
 export function poll(fn, ms) {
   let stopped = false;

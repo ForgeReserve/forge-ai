@@ -13,7 +13,9 @@
 //
 // Where the eCash goes: a card from the engine's own mint tops up the funds through the vault (stored
 // first, removed once credited). A card from another mint the engine takes through other-mint funding:
-// the eCash is kept in the vault, marked not added, and the Other mint screen opens with it.
+// the eCash is kept in the vault, marked not added, and the Other mint screen opens with it. The engine's
+// own eCash in the unit these funds do not hold goes the same way, to the eCash screen, which shows the
+// price to change it (when the engine changes units).
 import { inviteField } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
 
@@ -24,11 +26,17 @@ const kids = (...list) => list.filter((x) => x != null && x !== '' && x !== fals
 
 /**
  * Where a card's eCash can go, decided before the card signs. info is the relay's answer about the
- * card's mint ({trusted}). 'topup', 'othermint', 'wrong_unit' or 'wrong_mint'.
+ * card's mint ({trusted}). 'topup', 'othermint', 'wrong_unit' or 'wrong_mint'. The engine's own eCash in
+ * the unit these funds do not hold goes the 'othermint' way (to the phone, then a price) when the engine
+ * changes it (convert): the eCash module shows that price.
  */
-export function routeFor(info, { unit, units = [], balanceUnit = null, otherMint = false }) {
+export function routeFor(info, { unit, units = [], balanceUnit = null, otherMint = false, convert = false }) {
   if (!unit) return 'wrong_unit';
-  if (info?.trusted) return (units.length && !units.includes(unit)) || (balanceUnit && balanceUnit !== unit) ? 'wrong_unit' : 'topup';
+  if (info?.trusted) {
+    if (units.length && !units.includes(unit)) return 'wrong_unit';
+    if (balanceUnit && balanceUnit !== unit) return convert ? 'othermint' : 'wrong_unit';
+    return 'topup';
+  }
   return otherMint ? 'othermint' : 'wrong_mint';
 }
 
@@ -294,7 +302,8 @@ export function create(inputs) {
           summary = e?.code === 'empty' ? summary : null;
           return failed(e);
         }
-        route = routeFor(info, { unit: summary.unit, units: wallet.units(), balanceUnit: wallet.key() ? wallet.unit() : null, otherMint: !!wallet.methods()?.foreign?.enabled });
+        const balanceUnit = wallet.key() ? wallet.unit() : null;
+        route = routeFor(info, { unit: summary.unit, units: wallet.units(), balanceUnit, otherMint: !!wallet.methods()?.foreign?.enabled, convert: !!balanceUnit && !!wallet.methods()?.convert?.units?.includes(balanceUnit) });
         if (route === 'wrong_unit') return refuse(t('fund.card.wrongUnit', { unit: t(UNIT_WORD[summary.unit] ?? 'unit.other') }));
         if (route === 'wrong_mint') return refuse(t('fund.card.wrongMint'));
         showForm();
@@ -392,7 +401,7 @@ export function create(inputs) {
           preview.replaceChildren(...kids(
             // Another mint's eCash still goes through Other mint, which shows its own price: what is
             // known here is only what reaches this phone.
-            ui.sayEl('p', { class: 'card-get', id: 'cardGet' }, t(route === 'othermint' ? 'fund.card.toPhone' : 'fund.card.youGet', { amount: format.units(plan.receive, unit) })),
+            ui.sayEl('p', { class: 'card-get', id: 'cardGet' }, t(route === 'othermint' ? (info?.trusted ? 'fund.card.toPhoneChange' : 'fund.card.toPhone') : 'fund.card.youGet', { amount: format.units(plan.receive, unit) })),
             plan.fee ? ui.sayEl('p', { class: 'note', id: 'cardFee' }, t('fund.card.fee', { amount: format.units(plan.fee, unit) })) : null,
             back ? ui.sayEl('p', { class: 'note', id: 'cardBack' }, t('fund.card.backToCard', { amount: format.units(back, unit) })) : null,
           ));
@@ -465,12 +474,13 @@ export function create(inputs) {
         working(t('fund.card.adding'));
         let r;
         try {
-          r = await cards.handToken(job, { wallet, vault, engineBase: engine.base ?? '', message: t('fund.card.toOtherMint') });
+          r = await cards.handToken(job, { wallet, vault, engineBase: engine.base ?? '', message: t(info?.trusted ? 'fund.card.toChange' : 'fund.card.toOtherMint') });
           cards.flow.handed(job.id);
         } catch (e) {
           return failed({ code: 'mint_unavailable', kept: true, message: e?.message });
         }
-        if (r.route === 'othermint') return open('othermint', { token: job.token });
+        // The engine's own eCash in the other unit: the eCash module shows the price to change it.
+        if (r.route === 'othermint') return open(info?.trusted ? 'ecash' : 'othermint', { token: job.token });
         await wallet.refresh();
         if (r.error) return failed({ code: 'mint_unavailable', kept: true });
         const words = r.replay ? t('fund.ecash.replay') : t('fund.card.added', { amount: format.units(r.credited, r.unit) });

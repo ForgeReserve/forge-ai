@@ -161,14 +161,18 @@ export function readNote(text) {
  *     under one of them as a note from its main address.
  *   units: the units the engine takes. balanceUnit: the unit of the balance on this phone, if any.
  *   otherMint: whether the engine offers the other-mint path.
+ *   convert: whether the engine changes eCash from its own mint into balanceUnit (methods.convert).
  * Returns 'add', 'other_mint' (from a mint the engine does not take, other-mint path offered),
- * 'wrong_mint' (same, no path offered), 'wrong_unit' (the engine or this balance cannot hold its unit).
+ * 'wrong_mint' (same, no path offered), 'convert' (from an accepted mint, in the unit the engine holds
+ * but this balance does not: the engine can change it, and shows the price first), 'wrong_unit' (the
+ * engine or this balance cannot hold its unit, and nothing changes it).
  * A unit other than usd and sat is always 'wrong_unit' once the mint is known: no engine holds one.
  */
-export function noteVerdict(note, { mints = [], aliases = [], units = [], balanceUnit = null, otherMint = false } = {}) {
+export function noteVerdict(note, { mints = [], aliases = [], units = [], balanceUnit = null, otherMint = false, convert = false } = {}) {
   const accepted = !mints.length || [...mints, ...aliases].some((m) => normalizeMint(m) === note.mint);
   if (!accepted) return otherMint && isNoteUnit(note.unit) ? 'other_mint' : 'wrong_mint';
-  if (!isNoteUnit(note.unit) || (units.length && !units.includes(note.unit)) || (balanceUnit && balanceUnit !== note.unit)) return 'wrong_unit';
+  if (!isNoteUnit(note.unit) || (units.length && !units.includes(note.unit))) return 'wrong_unit';
+  if (balanceUnit && balanceUnit !== note.unit) return convert ? 'convert' : 'wrong_unit';
   return 'add';
 }
 

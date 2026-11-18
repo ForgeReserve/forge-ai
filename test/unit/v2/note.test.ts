@@ -111,6 +111,20 @@ describe('what the phone says about a note', () => {
     expect(N.noteVerdict(note(), { mints: ['http://127.0.0.1:3338'], units: ['usd', 'sat'], balanceUnit: 'usd' })).toBe('add');
   });
 
+  it('a note from an accepted mint in the other unit is offered the change when the engine makes it', () => {
+    const o = { mints: ['http://127.0.0.1:3338'], units: ['usd', 'sat'], balanceUnit: 'sat' };
+    expect(N.noteVerdict(note(), { ...o, convert: true })).toBe('convert');
+    expect(N.noteVerdict(note(), { ...o, convert: false })).toBe('wrong_unit');
+    // The same unit is added as it is, change or not.
+    expect(N.noteVerdict(note(), { ...o, balanceUnit: 'usd', convert: true })).toBe('add');
+    // No balance yet: a new one opens in the note's unit.
+    expect(N.noteVerdict(note(), { ...o, balanceUnit: null, convert: true })).toBe('add');
+    // A unit the engine does not hold is never changed, and another mint stays on the other-mint path.
+    expect(N.noteVerdict(note('http://127.0.0.1:3338', 'eur'), { ...o, convert: true })).toBe('wrong_unit');
+    expect(N.noteVerdict(note(), { ...o, units: ['sat'], convert: true })).toBe('wrong_unit');
+    expect(N.noteVerdict(note('http://x'), { ...o, convert: true, otherMint: true })).toBe('other_mint');
+  });
+
   it('turns the engine refusal into the note words: spent, wrong mint, kept for later', () => {
     expect(N.refusalOf({ code: 'token_spent' })).toBe('spent');
     expect(N.refusalOf({ code: 'untrusted_mint' })).toBe('other_mint');
