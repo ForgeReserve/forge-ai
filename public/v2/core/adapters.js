@@ -42,6 +42,13 @@ const SYNTH_START_MS = 2500;
 let synthUnlocked = false;
 const blockedError = () => Object.assign(new Error('the phone kept the sound off'), { name: 'AudioBlocked' });
 
+/**
+ * How the microphone is asked for. Echo cancelling is off: nothing plays while a person records, and on
+ * some Android phones (a Galaxy A16) a web view asked for it is handed pure silence, so every recording
+ * read as "nothing was heard". Noise suppression and automatic gain stay on.
+ */
+export const MIC_SOUND = { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true };
+
 const defaults = {
   camera: {
     available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
@@ -63,7 +70,7 @@ const defaults = {
   mic: {
     available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof (window.AudioContext ?? window.webkitAudioContext) === 'function',
     async open() {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_SOUND });
       const Ctx = window.AudioContext ?? window.webkitAudioContext;
       const ctx = new Ctx();
       if (ctx.state === 'suspended') await ctx.resume().catch(() => {});

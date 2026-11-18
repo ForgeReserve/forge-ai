@@ -888,6 +888,18 @@ describe('the talk controller', () => {
 
 // Spoken answers (owner, 2026-11-16): a question asked by voice carries the voice instruction to the
 // model, on top of the usual prompt; a typed one, even right after a spoken one, carries the usual one.
+describe('the system prompt and eCash', () => {
+  // "ping" was answered "pong... what would you like to know about eCash?": the prompt defined eCash
+  // without saying when it matters, and named Cashu alone.
+  it('defines eCash by Cashu and Fedimint, and only for a question about it', async () => {
+    const en: Record<string, string> = ((await import('../../../public/v2/strings/en.js' as string)) as any).default;
+    const p = en['system.prompt']!;
+    expect(p).toContain('Cashu and Fedimint');
+    expect(p).toMatch(/Bring up eCash, payments or this app only when the question is about them\./);
+    expect(p.indexOf('only when the question is about them')).toBeLessThan(p.indexOf('Chaumian'));
+  });
+});
+
 describe('the system prompt of a spoken question', () => {
   it('adds the voice instruction to a voice question only', async () => {
     const C: any = await import('../../../public/v2/core/conversation.js' as string);
