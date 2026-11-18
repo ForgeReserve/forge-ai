@@ -27,10 +27,9 @@ const ease = (p) => p * p * (3 - 2 * p);
  * onBurn(): called once the hold completes (after the ash), awaited.
  * onTap(again): a press too short to be a hold (say "Hold to burn"). again: it was a screen reader's
  * activation, which cannot hold, and doing it once more burns (say so).
- * below(): an element pinned over the card's foot (the answer's dock): the fire stays above it.
  * Returns {destroy()}.
  */
-export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS, below = null }) {
+export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS }) {
   btn.classList.add('hold-burn');
   const fill = document.createElement('span');
   fill.className = 'hold-fill';
@@ -63,7 +62,7 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
       card = target?.() ?? null;
       if (card && !reduced()) {
         card.classList.add('burning');
-        fx ??= createFire(below);
+        fx ??= createFire();
       }
     }
     phase = 'holding';
@@ -227,7 +226,7 @@ export function holdToBurn(btn, { target, onBurn, onTap = () => {}, ms = BURN_MS
  * over the card's visible part; burst(card) throws the last embers and the ash; fadeOut(done) lets the
  * ash drift, then removes the canvas.
  */
-function createFire(below = null) {
+function createFire() {
   const cv = document.createElement('canvas');
   cv.className = 'burn-fx';
   cv.setAttribute('aria-hidden', 'true');
@@ -254,8 +253,7 @@ function createFire(below = null) {
   const rectOf = (card) => {
     const r = card.getBoundingClientRect();
     const top = Math.max(r.top, 0);
-    const foot = below?.()?.getBoundingClientRect().top;
-    const bottom = Math.min(r.bottom, H, foot != null ? foot + 14 : H);
+    const bottom = Math.min(r.bottom, H);
     if (bottom <= top) return null;
     const rad = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 0;
     return { left: r.left, right: r.right, top, bottom, w: r.width, h: bottom - top, rad, fullTop: r.top, fullBottom: r.bottom };

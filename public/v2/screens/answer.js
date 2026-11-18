@@ -5,11 +5,12 @@
 //
 // While the first words are awaited the card shows that it is working: turning rings and the seconds
 // waited; after SLOW_MS a "Slow model" note offers a fast model in one tap (owner, 2026-11-15).
-// The dock stays pinned at the bottom whatever the answer's length: Stop while it is being made, Listen
-// (or Stop) once it is in, with the natural voice offered under it after the phone's own voice read an
-// answer, and the bottom row (Type, Add, More). Copy, Ask again and Burn never rest half under it: once
-// the answer is in, and when a kept answer is opened, a row the dock covers is brought up just above it
-// (clearOfDock). Never while the answer streams, and a row out of view below the screen stays there.
+// The screen is one screen high whatever the answer's length (owner, 2026-11-18: a long answer pushed the
+// reply button down under Listen). The card gives way: the rings with the reply button, then the dock
+// (Stop while the answer is being made, Listen or Stop once it is in, the natural voice offered under it
+// after the phone's own voice read an answer, and the bottom row: Type, Add, More) keep their room, and
+// the question and the answer scroll inside the card, faded at its lower edge while there is more below
+// (moreBelow). Copy, Ask again and Burn stay pinned at the card's foot, always in view.
 //
 // Markdown (js/markdown.js with marked and DOMPurify, about 80 KB) loads when an answer screen is first
 // made, not with the app, so it does not hold up the first paint. Until it is in, the answer shows as
@@ -27,13 +28,26 @@ export const loadMarkdown = () =>
   ));
 import { errorView } from '../core/errors.js';
 import { priceLine } from '../core/price.js';
-import { el, icon, reduced, say, sayEl, toast } from '../core/ui.js';
+import { el, icon, say, sayEl, toast } from '../core/ui.js';
 import { holdToBurn } from './burn.js';
 import { bottomRow, rings, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
 /** How long the first words may take before the Slow model note shows. */
 export const SLOW_MS = 20_000;
+
+/**
+ * Marks `box` (an answer's scrolling text, in any mode) with data-more while there is more of it below
+ * what shows: the CSS fades its lower edge then, a cue that needs no words. Checked as it scrolls and as
+ * it or what it holds (`inner`) changes size. Returns {check, destroy}.
+ */
+export function moreBelow(box, ...inner) {
+  const check = () => box.toggleAttribute('data-more', box.scrollTop + box.clientHeight < box.scrollHeight - 4);
+  const sized = new ResizeObserver(check);
+  for (const n of [box, ...inner]) sized.observe(n);
+  box.addEventListener('scroll', check, { passive: true });
+  return { check, destroy: () => sized.disconnect() };
+}
 
 const NS = 'http://www.w3.org/2000/svg';
 /** The waiting mark: the home's two rings, turning in opposite ways, with a light running round each. */
@@ -75,14 +89,17 @@ export function answer({ t, state, nav, actions, format }) {
   const speaking = el('p', { class: 'speak-state', id: 'speakState', hidden: true }, icon('speaker', 16), speakWhat, readyBar, speakVia);
   const errBox = el('div', { class: 'error-box', id: 'answerError', role: 'alert', hidden: true });
   const tiles = el('div', { class: 'action-tiles' });
-  const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, asked, modelLine, wait, slow, body, errBox, note, tiles);
+  // The part that scrolls: by touch, and by the keyboard once it has the focus (a screen reader moves through it).
+  const scroll = el('div', { class: 'answer-scroll', id: 'answerScroll', tabindex: '0', role: 'region', 'aria-label': t('answer.text') }, asked, modelLine, wait, slow, body, errBox, note);
+  const more = moreBelow(scroll, body);
+  const card = el('article', { class: 'answer-card', 'aria-labelledby': 'askedLabel' }, el('span', { class: 'sr-only', id: 'askedLabel', text: t('answer.asked') }), speaking, scroll, tiles);
   const r = rings('answer');
   // Hold to talk (screens/talk.js). Where voice cannot be used here, the button opens Type.
   const reply = el('button', { type: 'button', class: 'talk small', id: 'replyBtn', 'aria-describedby': 'replyHint' });
   const hold = holdToTalk(reply, { t, state, actions, nav, hintId: 'replyHint', size: 'small' });
   const hint = hold.hint;
   const ringBtn = el('button', { type: 'button', class: 'ring-hit', onclick: () => nav('funds'), 'aria-label': t('funds.title') });
-  // The dock: pinned to the bottom, so Listen and the bottom row never scroll away under a long answer.
+  // The dock: Listen and the bottom row, at the foot of the screen.
   const offer = el('div', { class: 'voice-offer', id: 'voiceOffer', hidden: true });
   const act = el('div', { class: 'dock-act' });
   const dock = el('div', { class: 'answer-dock', id: 'answerDock' }, offer, act, bottomRow({ t, nav }));
@@ -105,7 +122,7 @@ export function answer({ t, state, nav, actions, format }) {
   const burnTile = () => {
     const b = el('button', { type: 'button', class: 'action-tile danger', id: 'burnBtn', 'aria-label': t('answer.burnLabel') }, icon('flame', 22), el('span', { text: t('answer.burn') }), el('small', { class: 'tile-sub hold-sub', text: t('burn.hold') }));
     burner?.destroy();
-    burner = holdToBurn(b, { target: () => card, below: () => dock, onBurn: () => actions.burn(), onTap: (again) => toast(t(again ? 'burn.again' : 'burn.tap'), again ? 6000 : 2600) });
+    burner = holdToBurn(b, { target: () => card, onBurn: () => actions.burn(), onTap: (again) => toast(t(again ? 'burn.again' : 'burn.tap'), again ? 6000 : 2600) });
     return b;
   };
 
@@ -190,7 +207,12 @@ export function answer({ t, state, nav, actions, format }) {
   };
 
   let hearingSince = null;
+  // Drawn, then the fade at the card's foot set for what it holds now.
   const update = () => {
+    draw();
+    more.check();
+  };
+  const draw = () => {
     const v = state.view();
     bar.update();
     hold.update();
@@ -251,6 +273,8 @@ export function answer({ t, state, nav, actions, format }) {
     setWaiting(streaming && !a.content ? (v.waitSince ?? Date.now()) : null, t('answer.thinking'));
     drawAct(v, streaming);
     if (a.content !== shownText) {
+      // A new answer shows from its top; one that grows as it streams stays where the reader is.
+      if (shownText && !a.content?.startsWith(shownText)) scroll.scrollTop = 0;
       shownText = a.content;
       if (a.content && md) {
         body.innerHTML = md.renderMarkdown(a.content);
@@ -275,7 +299,6 @@ export function answer({ t, state, nav, actions, format }) {
       return t(p.key, p);
     })();
     tiles.replaceChildren(...(a.content ? [tile('copyBtn', 'copy', t('answer.copy'), () => actions.copyAnswer())] : []), tile('againBtn', 'again', t('answer.again'), () => actions.again(), againPrice), burnTile());
-    clearOfDock();
     if (a.meta?.error) {
       const ev = errorView(a.meta.error.code, a.meta.error.message, a.meta.error.charged);
       const go = { addFunds: () => nav('addFunds'), retry: () => actions.again(), chooseModel: () => nav('model'), startFresh: () => (actions.startFresh(), nav('home')), takeOut: () => nav('takeOut'), freeOut: () => nav('freeOut') }[ev.next];
@@ -309,17 +332,6 @@ export function answer({ t, state, nav, actions, format }) {
     // A stopped answer shows the stop mark, whatever it cost.
     say(note, noteText, '', a.meta?.stopped ? 'stop' : a.meta?.free || modelFree ? 'gift' : cost ? 'coins' : null);
   };
-  /** Brings the action row up above the dock when the dock covers any of it, once the answer is in. */
-  let clearing = 0;
-  function clearOfDock() {
-    cancelAnimationFrame(clearing);
-    clearing = requestAnimationFrame(() => {
-      if (!tiles.childElementCount || state.view().streaming || !main.isConnected) return;
-      const row = tiles.getBoundingClientRect();
-      if (row.bottom <= dock.getBoundingClientRect().top || row.top >= innerHeight) return;
-      tiles.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'instant' : 'smooth' });
-    });
-  }
   const showSpeaking = (v) => {
     const on = v.speak.current && v.speak.state !== 'idle';
     speaking.hidden = !on;
@@ -337,16 +349,6 @@ export function answer({ t, state, nav, actions, format }) {
     speakVia.hidden = !(on && v.speak.viaEngine);
     say(speakVia, speakVia.hidden ? '' : t('speak.viaEngine'), '', 'eye');
   };
-  // The page's scroll padding is the dock's height while this screen shows, so a row brought into view,
-  // and a button the keyboard moves to, stop above the dock instead of under it.
-  const root = document.documentElement;
-  const sized = new ResizeObserver(() => {
-    root.style.scrollPaddingBottom = `${dock.offsetHeight}px`;
-    clearOfDock();
-  });
-  sized.observe(dock);
-  sized.observe(card);
-  addEventListener('resize', clearOfDock);
   update();
   // Once markdown is in, the answer is drawn again with it.
   let gone = false;
@@ -365,10 +367,7 @@ export function answer({ t, state, nav, actions, format }) {
     destroy: () => {
       gone = true;
       clearInterval(timer);
-      sized.disconnect();
-      cancelAnimationFrame(clearing);
-      removeEventListener('resize', clearOfDock);
-      root.style.removeProperty('scroll-padding-bottom');
+      more.destroy();
       burner?.destroy();
       hold.destroy?.();
     },

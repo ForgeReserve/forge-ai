@@ -74,6 +74,31 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
   const bars = el('span', { class: 'level-bars', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => el('span', { class: 'bar' })));
   const label = el('span', { class: 'talk-label' });
   button.replaceChildren(mic, bars, label);
+
+  // The word stays inside the round button (owner, 2026-11-18): where the phone's larger text would make
+  // it spill out under the microphone, it is drawn smaller (CSS zoom, so it wraps and centres as drawn),
+  // never smaller than half. Fitted when the button changes size, when the fonts come in and when the
+  // word changes; the button itself never changes size for it.
+  const fit = () => {
+    label.style.zoom = '';
+    const d = button.clientWidth;
+    if (!d || !label.textContent) return;
+    // The round button's inner part, near enough, less the microphone (or the level bars) above the word.
+    const room = d * 0.8;
+    const wide = d * 0.88;
+    const above = (bars.hidden ? mic : bars).getBoundingClientRect().height + parseFloat(getComputedStyle(button).rowGap || '0');
+    let z = 1;
+    for (let i = 0; i < 3; i++) {
+      const r = label.getBoundingClientRect();
+      const s = Math.min((room - above) / r.height, wide / r.width);
+      if (s >= 0.99 || !r.height) return;
+      z = Math.max(0.5, z * s);
+      label.style.zoom = String(z);
+    }
+  };
+  const sized = new ResizeObserver(fit);
+  sized.observe(button);
+  document.fonts?.addEventListener?.('loadingdone', fit);
   const hint = el('p', { class: 'sr-only', id: hintId });
 
   const time = el('p', { class: 'listen-time', id: size === 'big' ? 'talkTime' : 'replyTime' });
@@ -173,7 +198,11 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
     mic.style.display = recording ? 'none' : '';
     bars.hidden = !recording;
     if (recording) [...bars.children].forEach((b, i) => b.style.setProperty('--h', String(Math.max(0.12, Math.min(1, tk.level * 1.6 * SHAPE[i])))));
-    label.textContent = recording ? (tk.inside ? t('talk.letGo') : t('talk.letGoCancel')) : tk.phase === 'sending' ? t('talk.sending') : t(word);
+    const said = recording ? (tk.inside ? t('talk.letGo') : t('talk.letGoCancel')) : tk.phase === 'sending' ? t('talk.sending') : t(word);
+    if (said !== label.textContent) {
+      label.textContent = said;
+      fit();
+    }
     hint.textContent = tk.available ? t('home.talkHintVoice') : t('home.talkHint');
     info.hidden = !recording;
     if (recording) {
@@ -191,6 +220,8 @@ export function holdToTalk(button, { t, state, actions, nav, hintId, size = 'big
   };
   update();
   const destroy = () => {
+    sized.disconnect();
+    document.fonts?.removeEventListener?.('loadingdone', fit);
     document.removeEventListener('visibilitychange', onHide);
     // Leaving the screen while holding (the back button, say) cancels: nothing is sent unseen.
     if (active && state.view().talk.phase === 'recording') actions.talkCancel();
