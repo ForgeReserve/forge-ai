@@ -1,6 +1,6 @@
 // Mode and look (XThemes) and Choose a model (DPrivateOnly), both reached from More.
 import { isFreeModel } from '../core/price.js';
-import { isPrivate, modelGroups } from '../core/state.js';
+import { hiddenCount, isPrivate, modelGroups, visibleModels } from '../core/state.js';
 import { backHeader, el, icon, infoToggle, sayEl } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
 
@@ -107,8 +107,17 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
   return { node: main, update: draw, focus: main.querySelector('h1') };
 }
 
-export function modelScreen({ t, state, back, actions, format, reader, done = back }) {
+/**
+ * Choose a model. photo: Ask about it with a model that cannot see photos (app.js attachPhoto). The list
+ * then holds only the models that can, under one line saying so, and the one picked goes on to the
+ * question with the photo (photo.chosen()). With Private only on and no private model that can, it says
+ * so and offers Standard's question (photo.standard()).
+ */
+export function modelScreen({ t, state, back, actions, format, reader, done = back, photo = null }) {
   const S = state.S;
+  const canSee = (m) => !!m?.capabilities?.vision;
+  const photoLead = photo ? sayEl('p', { class: 'lead', id: 'modelPhotoLead' }, t('model.photoLead'), '', 'image') : null;
+  const photoNone = el('div', { class: 'dashed-box', id: 'modelPhotoNone', hidden: true });
   const sw = el('button', { type: 'button', role: 'switch', class: 'switch', id: 'privateOnly', 'aria-label': t('model.privateOnly') }, el('span', { class: 'track' }, el('span', { class: 'knob' })));
   sw.addEventListener('click', () => actions.setPrivateOnly(!S.settings.privateOnly));
   const list = el('div', { class: 'model-list', role: 'radiogroup', 'aria-label': t('model.title') });
@@ -131,7 +140,7 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
     // button. Choosing a model closes the list.
     const card = el(
       'button',
-      { type: 'button', class: `model-card${on ? ' on' : ''}${poor ? ' poor' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', ...(poor ? { 'data-poor': '' } : {}), onclick: () => (actions.chooseModel(m.id), done()) },
+      { type: 'button', class: `model-card${on ? ' on' : ''}${poor ? ' poor' : ''}`, role: 'radio', 'aria-checked': String(on), 'data-model': m.id, 'data-speed': m.speed ?? '', ...(poor ? { 'data-poor': '' } : {}), onclick: () => (actions.chooseModel(m.id), photo ? photo.chosen() : done()) },
       el(
         'span',
         { class: 'model-name' },
@@ -164,7 +173,8 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
   const draw = () => {
     sw.setAttribute('aria-checked', String(!!S.settings.privateOnly));
     const v = state.view();
-    const groups = modelGroups(S.models, S.settings);
+    const models = photo ? (S.models ?? []).filter(canSee) : S.models;
+    const groups = modelGroups(models, S.settings);
     list.replaceChildren(
       ...(groups.length
         ? groups.map((g) =>
@@ -175,9 +185,20 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
               ...g.models.map((m) => modelCard(m, v)),
             ),
           )
-        : [el('p', { class: 'hint', text: t('model.none') })]),
+        : photo
+          ? []
+          : [el('p', { class: 'hint', text: t('model.none') })]),
     );
-    hidden.hidden = !(S.settings.privateOnly && v.hiddenCount > 0);
+    const hiddenNow = photo ? hiddenCount(models, S.settings) : v.hiddenCount;
+    // For a photo with none listed: no private model can see it (Standard's question), or none at all.
+    const standardOnly = !!photo && !groups.length && visibleModels(models, { privateOnly: false }).length > 0;
+    photoNone.hidden = !photo || groups.length > 0;
+    if (!photoNone.hidden)
+      photoNone.replaceChildren(
+        el('b', { class: 'ib', id: 'modelPhotoNoneText' }, icon(standardOnly ? 'lock' : 'alert', 18), el('span', { text: t(standardOnly ? 'model.photoNoPrivate' : 'add.noPhotosAny') })),
+        standardOnly ? el('div', { class: 'row-btns' }, el('button', { type: 'button', class: 'btn', id: 'modelPhotoStandard', onclick: () => photo.standard() }, icon('unlock', 20), el('span', { text: t('model.photoStandard') }))) : '',
+      );
+    hidden.hidden = standardOnly || !(S.settings.privateOnly && hiddenNow > 0);
   };
   draw();
   const listen = screenListen({ t, reader, id: 'modelListen', root: () => main });
@@ -188,13 +209,15 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
     el(
       'div',
       { class: 'scroll' },
+      photoLead,
       el('div', { class: 'teal-panel' }, el('span', {}, el('b', { class: 'ib' }, icon('lock', 18), el('span', { text: t('model.privateOnly') })), sayEl('small', { id: 'privateOnlySub' }, t('model.privateOnlySub'))), sw),
       list,
+      photoNone,
       hidden,
     ),
   );
   listen.update();
-  return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };
+  return { node: main, update: draw, destroy: () => (listen.destroy(), photo?.leave()), focus: main.querySelector('h1') };
 }
 
 /**

@@ -181,6 +181,7 @@ export default {
   'add.reading': 'Reading {name}',
   'add.added': 'Added {name}',
   'add.noPhotos': 'No photos with this model. Choose another model in More.',
+  'add.noPhotosAny': 'No model can see photos now.',
   'add.tooMany': 'No room for more. That is the most this question can hold.',
   // Share unseen (photos)
   'photo.title': 'Share unseen',
@@ -1270,6 +1271,9 @@ export default {
   'model.fastSub': 'Fast. The first words come in a few seconds.',
   'model.chosenMark': 'Chosen',
   'model.needsMoney': 'Add money first',
+  'model.photoLead': 'Pick a model that can see photos.',
+  'model.photoNoPrivate': 'No private model can see photos.',
+  'model.photoStandard': 'Use Standard',
   // The first run's last step: Start free as a choice beside Start, and Scan for the code.
   'startFree.scanLabel': 'Scan the invite code with the camera',
   'home.modelChip': '{name} is chosen. Change the model',

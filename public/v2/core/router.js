@@ -35,6 +35,8 @@ export const ROUTES = {
   photoMissed: 'photo/missed',
   photoNone: 'photo/none',
   photoSent: 'photo/sent',
+  // Ask about it with a model that cannot see photos: Choose a model, showing only the models that can.
+  modelPhoto: 'photo/model',
   // The first run (core/firstrun.js), one route per step: Welcome, How you pay, the limits, Private only.
   intro: 'start',
   introPay: 'start/pay',
@@ -77,5 +79,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', modelPhoto: 'photo', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

@@ -29,8 +29,8 @@ beforeAll(async () => {
   if (!(await mintsUp())) throw new Error('The local test mints are not running. Start them with pnpm mint:up.');
   g = await startGateway({
     env: { FORGE_INVITE_ONLY: 'true' },
-    // A standard model that reads photos, for Ask about it.
-    editCatalog: (c) => c.models.push({ ...c.models.find((m: any) => m.id === 'mock-echo'), id: 'mock-see', upstream: 'mock-echo', vision: true }),
+    // A standard model that reads photos, for Ask about it, and a private one.
+    editCatalog: (c) => c.models.push({ ...c.models.find((m: any) => m.id === 'mock-echo'), id: 'mock-see', upstream: 'mock-echo', vision: true }, { ...c.models.find((m: any) => m.id === 'tinfoil/enc-model'), id: 'tinfoil/enc-see', vision: true }),
   });
   browser = await chromium.launch({ channel: 'chrome', headless: true });
 }, 60_000);
@@ -620,6 +620,114 @@ describe('Share unseen', () => {
     const bytes = Buffer.from(pending[0].url.split(',')[1], 'base64');
     expect(META.readDetails(bytes).found).toEqual([]);
     await ctx.close();
+  }, 120_000);
+
+  it('Ask about it with a model that cannot see photos lists the ones that can, then asks with the photo', async () => {
+    const { ctx, page, errors } = await phone();
+    const kv = (name: string) => page.evaluate(async ([src, n]) => (await new Function('s', 'return import(s)')(src)).kv.get(n), ['/v2/core/db.js', name]);
+    // Private only is on, and the private model in use cannot see photos.
+    await page.goto(`${g.url}/v2/#/more/model`);
+    await page.waitForSelector('[data-model="tinfoil/enc-model"]');
+    await page.click('[data-model="tinfoil/enc-model"]');
+    await page.waitForSelector('[data-screen=home]');
+    await pick(page, 'sign.jpg', SIGN);
+    await page.click('#photoAsk');
+    await page.waitForSelector('#modelPhotoLead');
+    expect(await page.textContent('#modelPhotoLead')).toBe('Pick a model that can see photos.');
+    expect(await page.locator('#modelPhotoLead svg').count()).toBe(1);
+    // Only the private one that can see photos: Private only still applies.
+    expect(await page.locator('[data-model]').evaluateAll((n) => n.map((x) => x.getAttribute('data-model')))).toEqual(['tinfoil/enc-see']);
+    expect(await page.isVisible('#modelPhotoNone')).toBe(false);
+    // No money on this phone: the Add money mark, as in the full list.
+    expect(await page.getAttribute('[data-model="tinfoil/enc-see"] .model-poor', 'aria-label')).toBe('Add money first');
+    // While the list is open the photo is in memory only: nothing waits in storage.
+    expect(await kv('pending')).toBeFalsy();
+    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+    expect(stored).not.toMatch(/image\/jpeg|\/9j\//);
+    await page.click('[data-model="tinfoil/enc-see"]');
+    // Straight to the question, with the photo attached: where Ask about it lands with a model that sees.
+    await page.waitForSelector('[data-screen=type]');
+    await expect.poll(async () => ((await kv('pending')) ?? []).length).toBe(1);
+    expect((await kv('settings')).model).toBe('tinfoil/enc-see');
+    expect(await page.locator('#attached .chip').count()).toBe(1);
+    // No money: the Type screen says so at once, with Add money.
+    expect(await page.isVisible('#noticeBtn')).toBe(true);
+    // The list is not under the question: Back goes to Share unseen.
+    await page.goBack();
+    await page.waitForSelector('[data-screen=photo]');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('with no private model that can see photos, it says so and asks the Standard question first', async () => {
+    const g2 = await startGateway({ env: { FORGE_INVITE_ONLY: 'true' }, editCatalog: (c) => c.models.push({ ...c.models.find((m: any) => m.id === 'mock-echo'), id: 'mock-see', upstream: 'mock-echo', vision: true }) });
+    const ctx = await browser.newContext({ ...PHONE, serviceWorkers: 'block' });
+    await pastFirstRun(ctx);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    try {
+      await page.goto(`${g2.url}/v2/`);
+      await page.waitForSelector('[data-screen=home]');
+      await page.click('#btn-add');
+      await page.click('#addPhoto');
+      await page.setInputFiles('#photoFile', { name: 'sign.jpg', mimeType: 'image/jpeg', buffer: SIGN });
+      await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+      await page.click('#photoAsk');
+      await page.waitForSelector('#modelPhotoNone:not([hidden])');
+      expect(await page.textContent('#modelPhotoNoneText')).toBe('No private model can see photos.');
+      expect(await page.locator('[data-model]').count()).toBe(0);
+      // The generic note about hidden Standard models does not say it twice.
+      expect(await page.isVisible('#hiddenNote')).toBe(false);
+      // Use Standard asks the Private chip's question; Keep Private changes nothing.
+      await page.click('#modelPhotoStandard');
+      await page.waitForSelector('#kindAsk[open]');
+      expect(await page.textContent('#kindAskText')).toBe('Standard models: the company running them can read what you type. Use them?');
+      await page.click('#kindKeep');
+      await page.waitForSelector('#kindAsk', { state: 'detached' });
+      expect(await page.getAttribute('#privateOnly', 'aria-checked')).toBe('true');
+      expect(await page.locator('[data-model]').count()).toBe(0);
+      await page.click('#modelPhotoStandard');
+      await page.waitForSelector('#kindAsk[open]');
+      await page.click('#kindUse');
+      await page.waitForSelector('#kindAsk', { state: 'detached' });
+      // Private only is off: the Standard models that can see photos, and only those.
+      await page.waitForSelector('[data-model="mock-see"]');
+      expect(await page.getAttribute('#privateOnly', 'aria-checked')).toBe('false');
+      expect(await page.locator('[data-model]').evaluateAll((n) => n.map((x) => x.getAttribute('data-model')))).toEqual(['mock-see']);
+      expect(await page.isVisible('#modelPhotoNone')).toBe(false);
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('data-model'))).toBe('mock-see');
+      await page.click('[data-model="mock-see"]');
+      await page.waitForSelector('[data-screen=type]');
+      const pending = await page.evaluate(async (src) => (await new Function('s', 'return import(s)')(src)).kv.get('pending'), '/v2/core/db.js');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({ kind: 'image', status: 'ready' });
+      expect(errors).toEqual([]);
+    } finally {
+      await ctx.close();
+      await g2.close();
+    }
+  }, 120_000);
+
+  it('with no model at all that can see photos, Ask about it says so and stays', async () => {
+    const g3 = await startGateway({ env: { FORGE_INVITE_ONLY: 'true' } });
+    const ctx = await browser.newContext({ ...PHONE, serviceWorkers: 'block' });
+    await pastFirstRun(ctx);
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${g3.url}/v2/`);
+      await page.waitForSelector('[data-screen=home]');
+      await page.click('#btn-add');
+      await page.click('#addPhoto');
+      await page.setInputFiles('#photoFile', { name: 'sign.jpg', mimeType: 'image/jpeg', buffer: SIGN });
+      await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+      await page.click('#photoAsk');
+      await expect.poll(() => page.evaluate(() => document.getElementById('toast')?.textContent ?? '')).toBe('No model can see photos now.');
+      expect(await page.isVisible('[data-screen=photo]')).toBe(true);
+    } finally {
+      await ctx.close();
+      await g3.close();
+    }
   }, 120_000);
 
   it('when a check did not run, the first tap on Share only warns and the second one shares', async () => {

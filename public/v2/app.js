@@ -1317,7 +1317,8 @@ async function openConversation(id) {
 async function forgetConversation() {
   const pending = S.pending;
   await startFresh();
-  S.pending = pending;
+  // What was added meanwhile stays too: a photo for a model just chosen (attachPhoto), say.
+  S.pending = [...pending, ...S.pending];
   await savePending();
   store.set({});
 }
@@ -1374,17 +1375,65 @@ async function attach(files, want) {
  * Share unseen, Ask about it: the protected photo (never the original) waits for the next question,
  * like a photo added from Add. Then the Type screen opens, with the price before sending.
  */
-async function attachPhoto(file) {
+/**
+ * Ask about it (Share unseen): the photo goes with the next question, on the Type screen. When the model
+ * in use cannot see photos, Choose a model opens with only the models that can (modelPhoto), the photo
+ * held in this page's memory only (photoWaiting); the one picked takes it on to Type. When no model on
+ * this engine can see photos, a toast says so.
+ */
+async function attachPhoto(file, { replace = false } = {}) {
   const model = pickModel(S.models, S.settings);
   if (!model) return nav('model');
-  if (!model.capabilities?.vision) return ui.toast(t('add.noPhotos'), 3500);
+  if (!model.capabilities?.vision) {
+    if (!visibleModels(S.models, { privateOnly: false }).some((m) => m.capabilities?.vision)) return ui.toast(t('add.noPhotosAny'), 3500);
+    photoWaiting = file;
+    return nav('modelPhoto');
+  }
   if (S.pending.filter((a) => a.kind === 'image').length >= MAX_IMAGES) return ui.toast(t('add.tooMany'));
   const img = await shrinkImage(file);
   S.pending.push({ id: newId('a'), kind: 'image', name: t('add.photo'), status: 'ready', ...img });
   await savePending();
   store.set({});
-  nav('type');
+  nav('type', {}, { replace });
 }
+
+/** The photo Ask about it waits to send while a model that can see it is chosen (attachPhoto). Memory only. */
+let photoWaiting = null;
+
+/**
+ * Choose a model for a photo (modelPhoto): the photo view's two steps. chosen(): the model is chosen, so
+ * the photo goes on to Type in place of the list. standard(): no private model can see photos, so the
+ * Private chip's question is asked (askStandard) before Private only is turned off, unless the person
+ * said yes to it before on this phone.
+ */
+const photoChoice = {
+  chosen: () => {
+    const file = photoWaiting;
+    photoWaiting = null;
+    if (file) attachPhoto(file, { replace: true }).catch(() => ui.toast(t('photo.bad'), 3500));
+  },
+  standard: async () => {
+    if (askingKind) return;
+    if (!S.settings.standardOk) {
+      askingKind = true;
+      let yes = false;
+      try {
+        yes = await askStandard({ t, reader, free: false, back: () => document.getElementById('modelPhotoStandard') ?? document.querySelector('[data-screen=model] .model-card') });
+      } finally {
+        askingKind = false;
+      }
+      if (!yes) return;
+      S.settings.standardOk = true;
+    }
+    actions.setPrivateOnly(false);
+    // The button is gone with the list drawn again: the first model that can see the photo takes the focus.
+    document.querySelector('[data-screen=model] .model-card')?.focus();
+  },
+  // Back, or any other screen: the photo is let go (chosen() took it already).
+  leave: () => {
+    photoWaiting = null;
+  },
+};
 
 async function removePending(id) {
   S.pending = S.pending.filter((a) => a.id !== id);
@@ -2251,6 +2300,10 @@ function screenFor(name, params) {
       // else back where it was opened (an error's Choose a model, say). Home is gone back to, not pushed
       // over the list, so the phone's Back does not open the More menu again.
       return modelScreen({ ...ctx, done: () => (depth() === 0 || trail[depth() - 1] === 'more' ? backTo('home') : back()) });
+    case 'modelPhoto':
+      // With no photo waiting (the page was opened again on this address), the plain list.
+      if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home') });
+      return modelScreen({ ...ctx, photo: photoChoice });
     case 'voice':
       return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
     case 'history':

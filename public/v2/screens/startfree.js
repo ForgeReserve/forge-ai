@@ -185,8 +185,10 @@ export function startFree({ t, state, actions, wallet, reader = null }, { id, fi
  * togglePrivate): Start free's question, in the owner's words as they are, over the screen as Start free
  * shows it, with Listen. For a Standard model that is not free, the same words without the free part
  * (privacy.ask). Resolves true for Use Standard; false for Keep Private, a tap beside the sheet, or Back.
+ * Also asked by Choose a model for a photo when no private model can see photos (app.js photoChoice).
+ * back: what takes the focus once the sheet closes.
  */
-export function askStandard({ t, reader, free }) {
+export function askStandard({ t, reader, free, back = () => document.getElementById('privacyPill') }) {
   return askSheet({
     t,
     reader,
@@ -196,7 +198,7 @@ export function askStandard({ t, reader, free }) {
     approved: true,
     yes: { id: 'kindUse', ico: 'unlock', text: t('privacy.use') },
     no: { id: 'kindKeep', ico: 'lock', text: t('privacy.keep') },
-    back: () => document.getElementById('privacyPill'),
+    back,
   });
 }
 
