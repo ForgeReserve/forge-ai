@@ -176,6 +176,24 @@ async function pairAndPrice(page: Page) {
   await page.goto(`${app}/#/funds/add`);
   await openWay(page, 'fedimint');
   await page.waitForSelector('#fedNeedTill');
+  // Nothing pasted or scanned yet (or only spaces): the message line says so, the focus goes to the field,
+  // and the field is described by the message for a screen reader. The button stays enabled.
+  const noCode = (await page.locator('#fedScan').count()) ? 'No pay code yet. Scan it or paste it.' : 'No pay code yet. Paste it here.';
+  for (const text of ['', '  \n ']) {
+    await page.fill('#fedPairText', text);
+    expect(await page.isEnabled('#fedUseTill')).toBe(true);
+    await page.click('#fedUseTill');
+    await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe(noCode);
+    expect(await page.getAttribute('.fedimint-view .msg', 'class')).toMatch(/\berr\b/);
+    expect(await page.getAttribute('.fedimint-view .msg', 'role')).toBe('status');
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('fedPairText');
+    const described = await page.getAttribute('#fedPairText', 'aria-describedby');
+    expect(await page.evaluate((id) => document.getElementById(id!)?.textContent, described)).toBe(noCode);
+    expect(await page.getAttribute('#fedPairText', 'aria-invalid')).toBe('true');
+  }
+  // Typing takes the error mark off the field.
+  await page.type('#fedPairText', 'x');
+  expect(await page.getAttribute('#fedPairText', 'aria-invalid')).toBeNull();
   // A till's own POS code is refused.
   await page.fill('#fedPairText', `fedimintcard-till:${till.url}?t=${till.posToken}`);
   await page.click('#fedUseTill');

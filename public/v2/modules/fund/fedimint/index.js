@@ -149,6 +149,10 @@ export function create(inputs) {
         stopPolls();
         want = null;
         const paste = ui.el('textarea', { id: 'fedPairText', rows: '3', class: 'field-input mono', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
+        paste.addEventListener('input', () => {
+          paste.removeAttribute('aria-invalid');
+          paste.removeAttribute('aria-describedby');
+        });
         const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
         const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
         let job = null;
@@ -160,6 +164,16 @@ export function create(inputs) {
         const use = async (text) => {
           stopScan();
           msg.set('');
+          // Nothing scanned or pasted yet: say so where the code goes, and put the focus there. The field
+          // is described by the message, so a screen reader reads it with the field.
+          if (!String(text ?? '').trim()) {
+            msg.id ||= 'fedPairMsg';
+            msg.set(t(scanBtn ? 'fund.fedimint.noPayCode' : 'fund.fedimint.noPayCodePaste'), 'err');
+            paste.setAttribute('aria-invalid', 'true');
+            paste.setAttribute('aria-describedby', msg.id);
+            paste.focus();
+            return;
+          }
           try {
             const r = await till.pair(text);
             till.settings.paired(r.url);

@@ -764,6 +764,8 @@ export default {
   'fund.fedimint.useTill': 'Use this till',
   'fund.fedimint.tillSet': 'Till set.',
   'fund.fedimint.notPayCode': 'Not a till pay code.',
+  'fund.fedimint.noPayCode': 'No pay code yet. Scan it or paste it.',
+  'fund.fedimint.noPayCodePaste': 'No pay code yet. Paste it here.',
   'fund.fedimint.posCode': 'Wrong code. This code is for the phones that run the till. Ask for its pay code.',
   'fund.fedimint.insecure': 'Till not on https. This till is not on https. The app pays only through a till on https.',
   'fund.fedimint.tillLabel': 'Till',
