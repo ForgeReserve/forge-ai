@@ -748,6 +748,10 @@ describe('a long press never selects the interface', () => {
     await page.click('#sendBtn');
     await page.waitForSelector('[data-screen=answer]');
     await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    // Markdown loads with the first answer screen, and until it is in the answer shows as plain text
+    // (screens/answer.js): once it arrives the text is drawn again, which would take the code block below
+    // with it. A short answer can finish first, so the block goes in once the text is drawn as Markdown.
+    await page.waitForSelector('#answerText[aria-busy="false"]:not(:has(> p.plain))');
 
     // The answer: its text, a code block in it and the question asked can be selected; its controls cannot.
     // A code block as the answer's renderer makes it (public/js/markdown.js), with its Copy button.
