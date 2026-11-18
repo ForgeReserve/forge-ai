@@ -25,7 +25,7 @@ The token is then swapped at the mint into new proofs that only the gateway know
 4. The gateway re-prices, checks the token covers it, swaps it, calls the supplier, and charges `ceil(actual cost)` capped at the hold (and so at what was paid).
 5. Change, if any, is issued as a new token from the same mint: in the `X-Cashu-Change` response header for non-streaming responses, in the final `event: forge` of a stream, and always at `GET /v1/change/{request_id}`.
 
-NUT-24 does not specify change. Forge AI's choice (header, final stream event, re-fetch URL) is documented here and in the README. Upstream failures charge nothing and return everything.
+NUT-24 does not specify change. Forge AI's choice (header, final stream event, re-fetch URL) is documented here and in [API.md](API.md). Upstream failures charge nothing and return everything.
 
 ## Flow 2: prepaid balance
 
