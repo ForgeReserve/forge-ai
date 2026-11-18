@@ -17,7 +17,7 @@ mode: ['t', 'ui', 'state', 'nav', 'actions', 'format'],
 // PROJECTIONS
 mode: {
   state: ['view', 'subscribe'],
-  actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'useFastModel', 'getNaturalVoice', 'naturalNotNow', 'coverProgress', 'saveCoverProgress'],
+  actions: ['ask', 'stop', 'again', 'copyAnswer', 'startFresh', 'burn', 'talkDown', 'talkMove', 'talkUp', 'talkCancel', 'speak', 'stopSpeaking', 'setSearch', 'togglePrivate', 'useFastModel', 'getNaturalVoice', 'naturalNotNow', 'coverProgress', 'saveCoverProgress'],
 },
 ```
 
@@ -43,7 +43,7 @@ The fields of `view()`, from `view()` in [`public/v2/app.js`](https://github.com
 | Field | What it is |
 | - | - |
 | `model` | The model questions go to: an entry of [`GET /v1/models`](../API.md#get-v1-models), or `null`. |
-| `private` | `true` when that model is private. |
+| `private` | `true` when that model is private (with no model, when Private only is on). The chip at the top left shows it, and `togglePrivate()` switches it. |
 | `online` | `false` while the phone is offline. |
 | `hasKey` | `true` when the phone has a balance key. |
 | `balanceMsub`, `balanceText` | The balance in msub and in words, or `null`. |
@@ -93,6 +93,7 @@ The answer and voice actions. None of them takes money out.
 | `speak()` | Reads the last answer aloud. |
 | `stopSpeaking()` | Stops reading aloud. |
 | `setSearch(on)` | Search the web for the next question only. |
+| `togglePrivate()` | Switches between a Private and a Standard model: the chip at the top left of the home and the answer. The first time it leaves Private on a phone, the app asks Start free's question first. |
 | `useFastModel()` | Switches a slow answer to a fast model and asks again there. |
 | `getNaturalVoice()` | Downloads the natural voice, then reads the answer. |
 | `naturalNotNow()` | Stops offering the natural voice on this phone. |

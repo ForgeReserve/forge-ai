@@ -26,7 +26,7 @@ const NEXT_ICON = { addFunds: 'addMoney', retry: 'again', chooseModel: 'grid', s
 const CALM = ['answer.copied', 'history.burned', 'history.burnedAll'];
 
 export function answer({ t, ui, state, nav, actions, format }) {
-  const top = chips({ t, state, nav });
+  const top = chips({ t, state, nav, actions });
   const face = pip({ size: 52 });
   // What Pip is doing; the seconds waited sit beside it, kept out of the live region.
   const lineText = el('span', { class: 'pf-line-text' });

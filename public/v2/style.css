@@ -38,8 +38,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* Status bar */
 .status-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pill-private { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--teal-line); background: var(--teal-tint); border-radius: 22px; color: var(--teal); font-size: 14px; font-weight: 600; }
+.pill-private { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 14px; border: 1px solid var(--teal-line); background: var(--teal-tint); border-radius: 24px; color: var(--teal); font-size: 14px; font-weight: 600; }
 .pill-private[data-kind="standard"] { border-color: var(--low-line); background: var(--low-tint); color: var(--low-ink); }
+/* The Private chip's word keeps the width of the longer word (screens/parts.js privacyChip): the other
+   word is laid under it with no height, so nothing beside the chip moves when the word changes. */
+.kind-word { display: inline-flex; flex-direction: column; align-items: center; }
+.kind-word::after { content: attr(data-other); height: 0; overflow: hidden; visibility: hidden; }
 .pill-balance { min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--surface); border: 1px solid var(--gold-line); border-radius: 24px; color: var(--ink); font-size: 15px; font-weight: 600; }
 .pill-balance .dot { width: 10px; height: 10px; border-radius: 5px; background: var(--gold); }
 
@@ -840,6 +844,11 @@ body:has(> #app[data-route="answer"]) .toast.show { transform: translate(-50%, 0
 .ask-ico.free { background: var(--gold-tint); color: var(--gold-ink); }
 .ask-ico.private { background: var(--teal-tint); color: var(--teal); }
 .sf-ask-head { display: flex; flex-direction: column; gap: 8px; }
+/* The Private chip's question (screens/startfree.js askStandard): Start free's sheet, as a modal dialog. */
+dialog.kind-ask { position: fixed; inset: 0; margin: 0; padding: 0; border: 0; width: 100%; height: 100%; max-width: none; max-height: none; background: var(--backdrop); color: var(--ink); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+dialog.kind-ask:not([open]) { display: none; }
+dialog.kind-ask::backdrop { background: transparent; }
+dialog.kind-ask .sf-sheet { width: min(520px, 100%); }
 .sf-ask-head .listen-chip { align-self: flex-end; }
 /* A paid model at $0 on the home: its name with its lock above Add money. */
 .home-empty { flex-wrap: wrap; }

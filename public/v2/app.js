@@ -33,7 +33,7 @@ import { BUNDLED, bundledLoader, createRegistry } from './core/registry.js';
 import { fundsSegments, nextPeak, questionsLeft } from './core/rings.js';
 import { href, parentOf, parse } from './core/router.js';
 import { createUpdater } from './core/updates.js';
-import { createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, loadedSettings, pickMode, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
+import { choiceOf, createStore, DEFAULT_SETTINGS, fastPick, hiddenCount, isPrivate, keyName, kindSwitch, loadedSettings, pickMode, pickModel, pickVoiceIn, pickVoiceOut, visibleModels } from './core/state.js';
 import * as ui from './core/ui.js';
 import { createVault, retryPending, topupWithVault } from './core/vault.js';
 import { settlePendingForeign } from './modules/fund/kit.js';
@@ -42,7 +42,7 @@ import { eraseScreen, erasedScreen } from './screens/erase.js';
 import { firstRunScreen } from './screens/firstrun.js';
 import { freeOutScreen } from './screens/free.js';
 import { fundScreen, fundsScreen, takeOutScreen } from './screens/funds.js';
-import { inviteError, startFreeScreen } from './screens/startfree.js';
+import { askStandard, inviteError, startFreeScreen } from './screens/startfree.js';
 import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
 import { photoScreen } from './screens/photo.js';
@@ -160,8 +160,10 @@ const promptFor = (msgs) => systemPromptFor(msgs, { base: t('system.prompt'), vo
 
 let memo = { k: '', v: null };
 function memoryNow(model) {
-  const k = `${S.conv.id}|${S.conv.messages.length}|${S.streaming}|${S.pending.map((a) => a.id + a.status).join(',')}|${model?.id}`;
-  if (memo.k !== k) memo = { k, v: memoryView(S.conv.messages, S.pending, { systemPrompt: t('system.prompt'), vision: !!model?.capabilities?.vision, contextLength: model?.context_length }) };
+  // A conversation the next question leaves (freshNext) no longer counts against the new model's memory.
+  const fresh = leavingConv();
+  const k = `${S.conv.id}|${S.conv.messages.length}|${S.streaming}|${S.pending.map((a) => a.id + a.status).join(',')}|${model?.id}|${fresh}`;
+  if (memo.k !== k) memo = { k, v: memoryView(fresh ? [] : S.conv.messages, S.pending, { systemPrompt: t('system.prompt'), vision: !!model?.capabilities?.vision, contextLength: model?.context_length }) };
   return memo.v;
 }
 
@@ -171,7 +173,7 @@ function againNow(model) {
   if (S.streaming || !model) return null;
   const msgs = S.conv.messages;
   const voice = msgs.findLast?.((m) => m.role === 'user')?.meta?.voice ? 'v' : '';
-  const k = `${S.conv.id}|${msgs.length}|${model.id}|${S.unit}|${msgs.at(-1)?.meta?.error ? 'e' : ''}|${voice}|${voiceOut()?.id ?? ''}`;
+  const k = `${S.conv.id}|${msgs.length}|${model.id}|${S.unit}|${msgs.at(-1)?.meta?.error ? 'e' : ''}|${voice}|${voiceOut()?.id ?? ''}|${leavingConv()}`;
   // The price lists are part of the key by identity: the cached list is replaced by the live one (new
   // prices under the same model id) when the engine answers.
   if (againMemo.k !== k || againMemo.models !== S.models || againMemo.audioModels !== S.audioModels) againMemo = { k, models: S.models, audioModels: S.audioModels, v: estimateAgain(model) };
@@ -667,7 +669,7 @@ const wallet = {
     }
     const shown = visibleModels(S.models, S.settings).filter(isFreeModel);
     if (shown.length && !isFreeModel(pickModel(S.models, S.settings))) {
-      S.settings.model = freeModelChoice(shown).id;
+      Object.assign(S.settings, choiceOf(freeModelChoice(shown)));
       await saveSettings();
       store.set({});
     }
@@ -686,6 +688,12 @@ let gen = null; // {controller, quiet}
 let genIdle = Promise.resolve();
 // True while actions.useFastModel moves the question to a fast model.
 let switching = false;
+// The conversation the Private chip switched the model under while it was on show (an answer coming in,
+// or the answer screen): the next question leaves it (actions.togglePrivate). null for none.
+let freshNext = null;
+const leavingConv = () => !!S.conv.id && S.conv.id === freshNext;
+// True while the Private chip's question is open.
+let askingKind = false;
 
 /** Saves a conversation (the open one by default). A burned one is never written back. */
 async function saveConv(conv = S.conv) {
@@ -788,7 +796,8 @@ function readingPrice() {
  */
 function estimateAgain(model) {
   const unit = S.unit ?? 'usd';
-  const history = againHistory(S.conv.messages);
+  // After the Private chip switched the model, Ask again asks the question alone, in a new conversation.
+  const history = leavingConv() ? againHistory(S.conv.messages).slice(-1) : againHistory(S.conv.messages);
   if (!history.length) return null;
   const vision = !!model.capabilities?.vision;
   const systemPrompt = promptFor(history);
@@ -809,6 +818,10 @@ async function ask(text, meta = null) {
   const msg = { id: newId('m'), ...pendingMessage(text, S.pending, { vision: !!model.capabilities?.vision }) };
   if (meta?.voice) msg.meta = { voice: true };
   if (!msg.content && !msg.images && !msg.files) return;
+  // The Private chip switched the model while this conversation was on show: it stays in History, and
+  // the question goes to the new model with nothing from it.
+  if (leavingConv()) S.conv = { id: null, messages: [] };
+  freshNext = null;
   if (!S.conv.id) S.conv = { id: newId('c'), messages: [], createdAt: Date.now() };
   S.conv.messages.push(msg);
   S.pending = [];
@@ -921,6 +934,15 @@ const errorText = (err, unit) => {
 
 function again() {
   if (gen) return;
+  if (leavingConv()) {
+    // The Private chip switched the model since this answer: the question alone, in a new conversation.
+    const question = S.conv.messages.findLast?.((x) => x.role === 'user');
+    freshNext = null;
+    if (!question) return nav('type');
+    S.conv = { id: newId('c'), messages: [{ ...question, id: newId('m') }], createdAt: Date.now() };
+    saveConv();
+    return generate();
+  }
   const msgs = S.conv.messages;
   while (msgs.length && msgs.at(-1).role === 'assistant') msgs.pop();
   if (!msgs.length) return nav('type');
@@ -1454,8 +1476,10 @@ const actions = {
     const m = isFreeModel(cur) ? cur : freeModelChoice(S.models);
     if (!m) return null;
     const before = pickModel(S.models, S.settings);
+    // With Private only on, this follows a yes to Start free's question: the Private chip does not ask it again.
+    if (S.settings.privateOnly) S.settings.standardOk = true;
     S.settings.privateOnly = false;
-    S.settings.model = m.id;
+    Object.assign(S.settings, choiceOf(m));
     saveSettings();
     modelChanged(before);
     store.set({});
@@ -1494,11 +1518,59 @@ const actions = {
   },
   chooseModel: (id) => {
     const before = pickModel(S.models, S.settings);
-    S.settings.model = id;
-    saveSettings();
     const m = S.models.find((x) => x.id === id);
+    if (m) Object.assign(S.settings, choiceOf(m));
+    else S.settings.model = id;
+    saveSettings();
     const fresh = modelChanged(before);
     ui.toast(t(fresh ? 'model.chosenNew' : 'model.chosen', { name: m?.name ?? id }), fresh ? 3000 : 2600);
+    store.set({});
+  },
+  /**
+   * The Private (or Standard) chip at the top left of the home and the answer (owner, 2026-11-17): one tap
+   * switches the kind of model in use (core/state.js kindSwitch: the one of that kind chosen last on this
+   * phone, else the cheapest, or for Standard the free one). Leaving Private asks Start free's question
+   * first, until the person says yes once on this phone; a no changes nothing. Switching to Private never
+   * asks: with no money, asking says Not enough funds as on any paid model. A conversation on show (an
+   * answer coming in, or the answer screen) stays on the screen, and the next question leaves it; on the
+   * home a new conversation begins at once, as with Choose a model. With no model of the other kind, a
+   * toast says so and nothing changes.
+   */
+  togglePrivate: async () => {
+    if (askingKind) return;
+    const toPrivate = !view().private;
+    let next = kindSwitch(S.models, S.settings, { toPrivate, unit: S.unit ?? 'usd' });
+    if (!next) return ui.toast(t(toPrivate ? 'privacy.noPrivate' : 'privacy.noStandard'), 3000);
+    if (!toPrivate && !S.settings.standardOk) {
+      askingKind = true;
+      let yes = false;
+      try {
+        yes = await askStandard({ t, reader, free: isFreeModel(next.model) });
+      } finally {
+        askingKind = false;
+      }
+      if (!yes) return;
+      S.settings.standardOk = true;
+      // The list may have changed while the question was open.
+      next = kindSwitch(S.models, S.settings, { toPrivate, unit: S.unit ?? 'usd' });
+      if (!next) {
+        saveSettings();
+        return ui.toast(t('privacy.noStandard'), 3000);
+      }
+    }
+    const before = pickModel(S.models, S.settings);
+    S.settings.privateOnly = next.privateOnly;
+    Object.assign(S.settings, choiceOf(next.model));
+    saveSettings();
+    const name = next.model.name ?? next.model.id;
+    const moved = before?.id !== next.model.id;
+    let key = 'model.chosen';
+    if (moved && S.conv.messages.length && (gen || currentName === 'answer')) {
+      // Left on the screen: the answer's own line names the model that wrote it.
+      freshNext = S.conv.id;
+      key = 'model.chosenNext';
+    } else if (modelChanged(before)) key = 'model.chosenNew';
+    ui.toast(t(key, { name }), 3000);
     store.set({});
   },
   /**
@@ -1521,7 +1593,7 @@ const actions = {
         gen.controller.abort();
         await genIdle;
       }
-      S.settings.model = m.id;
+      Object.assign(S.settings, choiceOf(m));
       saveSettings();
       await forgetConversation();
       ui.toast(t('answer.fastChosen', { name: m.name ?? m.id }), 3000);

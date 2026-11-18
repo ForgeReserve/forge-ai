@@ -12,7 +12,7 @@ import { bottomRow, rings, searchSwitch, statusBar } from './parts.js';
 import { holdToTalk } from './talk.js';
 
 export function home({ t, state, nav, actions }, { sheet = null, open = null } = {}) {
-  const bar = statusBar({ t, state, nav });
+  const bar = statusBar({ t, state, nav, actions });
   const r = rings('home');
   const ringBtn = el('button', { type: 'button', class: 'ring-hit', id: 'ringsBtn', onclick: () => nav('funds') });
   // Hold to talk (screens/talk.js). Where voice cannot be used here, the button opens Type.

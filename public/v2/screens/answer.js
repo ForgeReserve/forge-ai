@@ -54,7 +54,7 @@ function waitArt() {
 }
 
 export function answer({ t, state, nav, actions, format }) {
-  const bar = statusBar({ t, state, nav });
+  const bar = statusBar({ t, state, nav, actions });
   const asked = el('p', { class: 'asked' });
   // role note: a plain paragraph's aria-label is never read, and the label says what the name is.
   const modelLine = el('p', { class: 'answer-model', id: 'answerModel', role: 'note', hidden: true });

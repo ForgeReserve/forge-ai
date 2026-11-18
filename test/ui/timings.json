@@ -23,6 +23,7 @@
     "test/ui/phonon.ui.test.ts": 111.1,
     "test/ui/photo.ui.test.ts": 35.9,
     "test/ui/playful.ui.test.ts": 36.5,
+    "test/ui/privacy-toggle.ui.test.ts": 20,
     "test/ui/search.ui.test.ts": 4.7,
     "test/ui/v2.ui.test.ts": 51.8,
     "test/ui/voice.ui.test.ts": 44

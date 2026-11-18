@@ -35,6 +35,9 @@ body:has(> #app > .pf) { background: #4B3FC9; }
 /* The game button: back to the cover game in one tap (docs/PLAYFUL.md). Shown while the game opens first.
    With it in the row the chips sit a little closer in, so the words keep their room at 360 px. */
 .pf-top-start { flex: none; display: flex; align-items: center; gap: 8px; }
+/* Private in the design's green, Standard in the warning red on a light coral (6.0:1): the kind at a glance. */
+.pf-private[data-kind="private"] { color: var(--pf-read); }
+.pf-private[data-kind="standard"] { color: #A3392A; background: #FFF0EC; }
 .pf-game { flex: none; width: 48px; padding: 0; justify-content: center; }
 .pf-game:active { transform: translateY(1px); background: var(--pf-lilac); }
 .pf-top:has(.pf-game:not([hidden])) .pf-chip:not(.pf-game) { gap: 6px; padding: 0 12px; }

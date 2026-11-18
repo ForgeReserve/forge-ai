@@ -19,7 +19,7 @@ const GO = { startFree: ['gift', 'playful.startFree'], addFunds: ['addMoney', 'h
 const CALM = ['answer.copied', 'history.burned', 'history.burnedAll'];
 
 export function home({ t, ui, state, nav, actions }, { sheet = null, open = null } = {}) {
-  const top = chips({ t, state, nav });
+  const top = chips({ t, state, nav, actions });
   const helper = pip({ size: 84, label: t('playful.pip') });
   const words = el('p', { class: 'pf-say', id: 'pipSays' });
   const go = el('div', { class: 'pf-say-go' });

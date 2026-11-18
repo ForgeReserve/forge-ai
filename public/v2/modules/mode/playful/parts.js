@@ -1,7 +1,7 @@
 // Parts shared by Playful mode's home and answer (docs/PLAYFUL.md): the top chips (the game, Private and
 // the star), the bottom bar, Pip's messages in place of the toasts, and the phone's bar colour.
 import { el, headOf, icon } from '../../../core/ui.js';
-import { bottomRow } from '../../../screens/parts.js';
+import { bottomRow, privacyChip } from '../../../screens/parts.js';
 import { starLevel } from './logic.js';
 
 /** The ground of the Playful screens, also the phone's bar colour while they show. */
@@ -27,13 +27,14 @@ function tiles(size) {
 
 /**
  * The top row: the game button (while "Open as a game first" is on: puts the game back on the screen at
- * once), Private (or Standard), as the Default status bar says it, and the star chip on the right in
- * place of the money chip: how much is left in a few words, never a price (logic.js starLevel). The star
- * opens Funds and memory, as the money chip does; with no balance key on a free model it opens Start free.
+ * once), Private (or Standard), the Default status bar's chip (screens/parts.js privacyChip: one tap
+ * switches the kind of model), and the star chip on the right in place of the money chip: how much is
+ * left in a few words, never a price (logic.js starLevel). The star opens Funds and memory, as the money
+ * chip does; with no balance key on a free model it opens Start free.
  */
-export function chips({ t, state, nav }) {
+export function chips({ t, state, nav, actions }) {
   const game = el('button', { type: 'button', class: 'pf-chip pf-game', id: 'gameBtn', 'aria-label': t('playful.toGame'), title: t('playful.toGame'), onclick: () => nav('game') }, tiles(26));
-  const pill = el('div', { class: 'pf-chip pf-private', id: 'privacyPill' });
+  const pill = privacyChip({ t, state, actions, cls: 'pf-chip pf-private', size: 18, stroke: 2.4 });
   const words = el('span', { id: 'starWords' });
   const go = () => {
     const v = state.view();
@@ -44,17 +45,14 @@ export function chips({ t, state, nav }) {
   const update = () => {
     const v = state.view();
     game.hidden = !v.cover;
-    pill.replaceChildren(icon(v.private ? 'lock' : 'unlock', 18, 2.4), el('span', { text: v.private ? t('status.private') : t('status.standard') }));
-    pill.dataset.kind = v.private ? 'private' : 'standard';
-    pill.setAttribute('title', v.private ? t('status.privateLabel') : t('status.standardLabel'));
-    pill.setAttribute('aria-label', v.private ? t('status.privateLabel') : t('status.standardLabel'));
+    pill.update();
     const level = v.online || v.balanceText ? starLevel({ model: v.model, unit: v.talk.unit, balanceMsub: v.balanceMsub, freeLeft: v.freeLeft, fundsBlock: v.fundsBlock }) : 'offline';
     starBtn.dataset.level = level;
     words.textContent = level === 'offline' ? t('status.offline') : t(`playful.star.${level}`);
     starBtn.setAttribute('aria-label', t('playful.starLabel', { words: words.textContent }));
   };
   update();
-  return { node: el('div', { class: 'pf-top' }, el('div', { class: 'pf-top-start' }, game, pill), starBtn), update };
+  return { node: el('div', { class: 'pf-top' }, el('div', { class: 'pf-top-start' }, game, pill.node), starBtn), update };
 }
 
 /** The bottom bar: the app's Type, Add and More (screens/parts.js), as the design's three coloured buttons. */

@@ -145,16 +145,38 @@ export function cardRing(track, fill) {
   };
 }
 
-/** The status bar: Private (or Standard) pill on the left, the balance pill on the right. */
-export function statusBar({ t, state, nav }) {
-  const pill = el('div', { class: 'pill-private', id: 'privacyPill' });
+/**
+ * The Private (or Standard) chip at the top left, on the home and the answer in every mode (owner,
+ * 2026-11-17): a button whose one tap switches the kind of model in use (actions.togglePrivate). Its lock
+ * shows the kind; its word keeps the width of the longer of the two (data-other, style.css .kind-word),
+ * so nothing beside it moves when the word changes. Returns {node, update}; cls is the mode's own class.
+ */
+export function privacyChip({ t, state, actions, cls = 'pill-private', size = 16, stroke = 2 }) {
+  const chip = el('button', { type: 'button', class: cls, id: 'privacyPill', onclick: () => actions.togglePrivate() });
+  let shown = null;
+  const update = () => {
+    const priv = state.view().private;
+    // Drawn again only when the kind changes: the screens update many times a second, and a finger on
+    // the chip must still be on it when it lifts.
+    if (priv === shown) return;
+    shown = priv;
+    chip.replaceChildren(icon(priv ? 'lock' : 'unlock', size, stroke), el('span', { class: 'kind-word', 'data-other': t(priv ? 'status.standard' : 'status.private'), text: t(priv ? 'status.private' : 'status.standard') }));
+    chip.dataset.kind = priv ? 'private' : 'standard';
+    // The kind and what a tap does; what the kind means is its description.
+    chip.setAttribute('aria-label', t(priv ? 'status.privateTap' : 'status.standardTap'));
+    chip.setAttribute('title', t(priv ? 'status.privateLabel' : 'status.standardLabel'));
+  };
+  update();
+  return { node: chip, update };
+}
+
+/** The status bar: the Private (or Standard) chip on the left, the balance pill on the right. */
+export function statusBar({ t, state, nav, actions }) {
+  const chip = privacyChip({ t, state, actions });
   const bal = el('button', { type: 'button', class: 'pill-balance', id: 'balancePill', onclick: () => nav('funds') });
   const update = () => {
     const v = state.view();
-    pill.replaceChildren(icon(v.private ? 'lock' : 'unlock', 16), el('span', { text: v.private ? t('status.private') : t('status.standard') }));
-    pill.dataset.kind = v.private ? 'private' : 'standard';
-    pill.setAttribute('title', v.private ? t('status.privateLabel') : t('status.standardLabel'));
-    pill.setAttribute('aria-label', v.private ? t('status.privateLabel') : t('status.standardLabel'));
+    chip.update();
     // With no paid balance, free questions left are what the pill shows.
     const freeText = !v.balanceText && v.freeLeft > 0 ? t(v.freeLeft === 1 ? 'status.freeOne' : 'status.free', { count: v.freeLeft }) : null;
     const text = v.balanceText ?? freeText ?? (v.online ? t('status.noBalance') : t('status.offline'));
@@ -163,7 +185,7 @@ export function statusBar({ t, state, nav }) {
     bal.setAttribute('aria-label', v.balanceText ? t('status.balance', { amount: v.balanceText }) : freeText ? t('status.freeLabel', { free: freeText }) : t('status.noBalanceLabel'));
   };
   update();
-  return { node: el('div', { class: 'status-bar' }, pill, bal), update };
+  return { node: el('div', { class: 'status-bar' }, chip.node, bal), update };
 }
 
 /**

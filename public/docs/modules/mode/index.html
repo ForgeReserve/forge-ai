@@ -87,7 +87,7 @@
 <span class="hljs-comment">// PROJECTIONS</span>
 <span class="hljs-attr">mode</span>: {
   <span class="hljs-attr">state</span>: [<span class="hljs-string">&#x27;view&#x27;</span>, <span class="hljs-string">&#x27;subscribe&#x27;</span>],
-  <span class="hljs-attr">actions</span>: [<span class="hljs-string">&#x27;ask&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-string">&#x27;again&#x27;</span>, <span class="hljs-string">&#x27;copyAnswer&#x27;</span>, <span class="hljs-string">&#x27;startFresh&#x27;</span>, <span class="hljs-string">&#x27;burn&#x27;</span>, <span class="hljs-string">&#x27;talkDown&#x27;</span>, <span class="hljs-string">&#x27;talkMove&#x27;</span>, <span class="hljs-string">&#x27;talkUp&#x27;</span>, <span class="hljs-string">&#x27;talkCancel&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>, <span class="hljs-string">&#x27;stopSpeaking&#x27;</span>, <span class="hljs-string">&#x27;setSearch&#x27;</span>, <span class="hljs-string">&#x27;useFastModel&#x27;</span>, <span class="hljs-string">&#x27;getNaturalVoice&#x27;</span>, <span class="hljs-string">&#x27;naturalNotNow&#x27;</span>, <span class="hljs-string">&#x27;coverProgress&#x27;</span>, <span class="hljs-string">&#x27;saveCoverProgress&#x27;</span>],
+  <span class="hljs-attr">actions</span>: [<span class="hljs-string">&#x27;ask&#x27;</span>, <span class="hljs-string">&#x27;stop&#x27;</span>, <span class="hljs-string">&#x27;again&#x27;</span>, <span class="hljs-string">&#x27;copyAnswer&#x27;</span>, <span class="hljs-string">&#x27;startFresh&#x27;</span>, <span class="hljs-string">&#x27;burn&#x27;</span>, <span class="hljs-string">&#x27;talkDown&#x27;</span>, <span class="hljs-string">&#x27;talkMove&#x27;</span>, <span class="hljs-string">&#x27;talkUp&#x27;</span>, <span class="hljs-string">&#x27;talkCancel&#x27;</span>, <span class="hljs-string">&#x27;speak&#x27;</span>, <span class="hljs-string">&#x27;stopSpeaking&#x27;</span>, <span class="hljs-string">&#x27;setSearch&#x27;</span>, <span class="hljs-string">&#x27;togglePrivate&#x27;</span>, <span class="hljs-string">&#x27;useFastModel&#x27;</span>, <span class="hljs-string">&#x27;getNaturalVoice&#x27;</span>, <span class="hljs-string">&#x27;naturalNotNow&#x27;</span>, <span class="hljs-string">&#x27;coverProgress&#x27;</span>, <span class="hljs-string">&#x27;saveCoverProgress&#x27;</span>],
 },</code></pre></div>
 <h3 id="t"><code>t</code><a class="anchor" href="#t" aria-label="Link to this section">#</a></h3>
 <p><code>t(key, params)</code> returns the text for <code>key</code> from the string table. See <a href="/docs/modules/fund#t">Fund</a>.</p>
@@ -125,7 +125,7 @@
 </tr>
 <tr>
 <td><code>private</code></td>
-<td><code>true</code> when that model is private.</td>
+<td><code>true</code> when that model is private (with no model, when Private only is on). The chip at the top left shows it, and <code>togglePrivate()</code> switches it.</td>
 </tr>
 <tr>
 <td><code>online</code></td>
@@ -290,6 +290,10 @@
 <tr>
 <td><code>setSearch(on)</code></td>
 <td>Search the web for the next question only.</td>
+</tr>
+<tr>
+<td><code>togglePrivate()</code></td>
+<td>Switches between a Private and a Standard model: the chip at the top left of the home and the answer. The first time it leaves Private on a phone, the app asks Start free&#39;s question first.</td>
 </tr>
 <tr>
 <td><code>useFastModel()</code></td>

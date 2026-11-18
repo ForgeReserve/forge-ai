@@ -143,6 +143,15 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
     const speed = m.speed === 'fast' ? t('model.fastSub') : m.speed === 'slow' ? t('model.slowSub') : null;
     return option(card, [speed, free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
   };
+  // What Private and Standard mean, behind the info mark beside their headings (the words the Private chip
+  // at the top left of the home describes itself with).
+  const ABOUT = { private: 'status.privateLabel', standard: 'status.standardLabel' };
+  const groupHead = (id) => {
+    const head = el('h2', { class: 'caps group-head', id: `groupHead-${id}` }, icon(GROUP_ICON[id], 20), el('span', { text: t(`model.group.${id}`) }));
+    if (!ABOUT[id]) return [head];
+    const more = el('p', { class: 'group-about', text: t(ABOUT[id]) });
+    return [el('div', { class: 'with-info' }, head, infoToggle(more, t('model.info', { name: t(`model.group.${id}`) }), `groupInfo-${id}`)), more];
+  };
   const draw = () => {
     sw.setAttribute('aria-checked', String(!!S.settings.privateOnly));
     const v = state.view();
@@ -153,7 +162,7 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
             el(
               'section',
               { class: `model-group group-${g.id}`, id: `group-${g.id}`, 'aria-labelledby': `groupHead-${g.id}` },
-              el('h2', { class: 'caps group-head', id: `groupHead-${g.id}` }, icon(GROUP_ICON[g.id], 20), el('span', { text: t(`model.group.${g.id}`) })),
+              ...groupHead(g.id),
               ...g.models.map((m) => modelCard(m, v)),
             ),
           )
