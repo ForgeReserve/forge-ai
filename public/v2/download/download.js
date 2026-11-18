@@ -1,18 +1,22 @@
 // The /download page: the Android app's APK, its size and its SHA-256, and how to install it. Where the
 // site also has Forge Private Voice (the APK for GrapheneOS), a choice of two first: Android or
 // GrapheneOS, an icon and a word each. When the site has no APK yet it says the app is coming and points
-// to the web app. Nothing here is sent anywhere but this site.
+// to the web app. Nothing here is sent anywhere but this site. An iPhone or iPad gets Forge for iPhone
+// instead (core/getapp.js): the iPhone app's link when the site has one, else the Home Screen steps,
+// opening Forge first so what goes on the Home Screen is Forge itself. An iPhone is never offered an APK.
+import { getAppOffer, offerNode, thisPhone } from '../core/getapp.js';
 import { t } from '../core/i18n.js';
 import { applyPageLook } from '../core/pagelook.js';
 import { el, icon, sayEl } from '../core/ui.js';
 import { apkChoices } from './view.js';
 
 applyPageLook();
-document.title = t('download.title');
+const iphone = thisPhone().ios;
+document.title = t(iphone ? 'download.titleIos' : 'download.title');
 
 const root = document.getElementById('download');
 const body = el('div', { class: 'download-body', id: 'downloadBody', 'aria-live': 'polite' });
-root.replaceChildren(el('main', { class: 'screen download-page', 'data-screen': 'download' }, el('h1', { text: t('download.title') }), sayEl('p', { class: 'lead' }, t('download.lead')), body));
+root.replaceChildren(el('main', { class: 'screen download-page', 'data-screen': 'download' }, el('h1', { text: document.title }), iphone ? null : sayEl('p', { class: 'lead' }, t('download.lead')), body));
 
 const webApp = () => el('a', { class: 'btn block', href: '/v2/', id: 'openWeb' }, icon('external', 20), el('span', { text: t('download.web') }));
 
@@ -69,9 +73,16 @@ function draw(choices) {
   );
 }
 
-try {
-  const res = await fetch('/download/info', { cache: 'no-store' });
-  draw(apkChoices(res.ok ? await res.json() : null));
-} catch {
-  draw([]);
+if (iphone) {
+  const offer = await getAppOffer();
+  // The steps open Forge themselves; with a link or nothing to give, Use in browser follows.
+  body.replaceChildren(...[offerNode(offer, { el, icon, sayEl }, t, { id: 'downloadIos', open: '/v2/' }), offer.kind === 'addHome' ? null : webApp()].filter(Boolean));
+  body.dataset.offer = offer.kind;
+} else {
+  try {
+    const res = await fetch('/download/info', { cache: 'no-store' });
+    draw(apkChoices(res.ok ? await res.json() : null));
+  } catch {
+    draw([]);
+  }
 }

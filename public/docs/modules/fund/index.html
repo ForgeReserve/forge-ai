@@ -667,7 +667,7 @@
 <td><code>supported()</code> false: no till yet, so Fedimint cards are left out</td>
 </tr>
 </tbody></table></div>
-<p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a Cashu card does.</p>
+<p>A module that needs a card or a till returns <code>usable()</code> false where it cannot work, and its <code>view</code> says so in one line with a link to <code>/download</code>, as Tap a Cashu card does (<code>showOffer</code> in <code>public/v2/core/getapp.js</code> draws it: on an iPhone, the iPhone app&#39;s link or the Home Screen steps).</p>
 <h2 id="a-minimal-fund-module">A minimal fund module<a class="anchor" href="#a-minimal-fund-module" aria-label="Link to this section">#</a></h2>
 <p>This module adds pasted eCash. It reuses eCash&#39;s strings, so it needs only <code>fund.paste.name</code> in the string table. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/fund/paste"><code>docs/modules/examples/fund/paste/</code></a>, loaded through the registry by <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/module-docs.test.ts"><code>test/unit/module-docs.test.ts</code></a>.</p>
 <p><code>manifest.json</code>:</p>

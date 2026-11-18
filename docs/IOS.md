@@ -27,6 +27,19 @@ The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/nat
 | Back button | iPhones have none: every screen has its own Back. |
 | Cross-origin isolation (MainActivity) | Not done: WKWebView gets no isolation headers from Capacitor, so the page never reloads for it and the voice runs on one thread. |
 
+## Getting the app
+
+There is no iPhone app to download yet: no TestFlight link and no App Store page. Until there is, the web app in Safari is Forge on an iPhone, and nothing on an iPhone or iPad offers the Android page or its APK (`public/v2/core/getapp.js`, the same tests as the Classic app's `isIOS` and standalone check in `public/app.js`).
+
+- **Tap a Cashu card**, on the website: in place of Get the app, the Home Screen steps: one line, *Put Forge on your Home Screen.*, then Safari's two buttons as icons with their words, **Share** and **Add to Home Screen**. Opened from the Home Screen already (`navigator.standalone`, or `display-mode: standalone`): no steps and no button.
+- **Tap a Fedimint card**: no button and no steps, as the iPhone app has no till either.
+- **`/download`** (also `/j` with no pass): **Forge for iPhone** with the same steps after **Open Forge**, which goes to `/v2/` first, so what goes on the Home Screen is Forge itself. An APK on the site is never offered to an iPhone.
+- `/j#<pass>` opens the web app on the pass, as before.
+
+`public/v2/index.html` has what Safari reads when Forge is put on the Home Screen: the web app manifest (`/v2/manifest.webmanifest`, standalone), `apple-mobile-web-app-capable`, the name **Forge AI** (`apple-mobile-web-app-title`) and the 180 by 180 icon (`/icons/apple-touch-icon.png`).
+
+Once there is an app to give, set **`FORGE_IOS_URL`** on the gateway to its TestFlight invitation or its App Store page (https only; the gateway does not start with another link). `/download/info` then carries it as `ios: {available: true, url}`, and on an iPhone or iPad, in Safari or from the Home Screen, Get the app on the Cashu card and the `/download` page open that link in place of the steps. Unset by default. Android and computers are not affected: they keep the `/download` page and its APKs ([ANDROID.md](ANDROID.md)). Inside the apps Get the app never shows.
+
 ## Card taps (ForgeNfc)
 
 `ios/App/App/NfcPlugin.swift` is the Android plugin (`NfcPlugin.kt`) in Swift with CoreNFC: the same name, ForgeNfc, the same methods (`status`, `start`, `transceive`, `close`, `stop`), the same `card` event `{id, isoDep}`, the same answers and error codes (`no_nfc`, `bad_apdu`, `tag_gone`, `tag_lost`). It is a bridge for bytes: the page builds every command (`public/v2/core/card/`), the plugin checks each is one well formed short APDU (`NfcRules.swift`, as `NfcRules.kt`), gives each command 5 seconds on the card, and hands back the card's whole answer with its status word. Each card is numbered, and a command for a card that has gone, or for an earlier one, is refused. Nothing from a card is stored or logged.
@@ -160,3 +173,4 @@ A long press on a control selected its words and brought up Copy, Look Up and Tr
 - Paid requests, funding, Start free with a code: not run against the production engine.
 - WebKit's own speech recogniser on a phone: in the Simulator it started and stopped without error.
 - Dark look (only Midnight and Light were looked at).
+- Get the app on a real iPhone or iPad: the Home Screen steps and the `FORGE_IOS_URL` link were checked in Chrome with an iPhone's user agent, and an installed web app with `navigator.standalone` set by the test. What Safari puts on the Home Screen (name, icon, opening full screen) was not tried.

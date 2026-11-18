@@ -10,3 +10,5 @@
 .download-page .apk-kind[aria-checked="true"] { border-color: var(--teal); background: var(--teal-tint); color: var(--teal); }
 .download-page .apk-kind span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .download-page .apk-info { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 22px; background: transparent; color: var(--text-body); }
+/* Forge for iPhone (an offer drawn, core/getapp.js): the link and Use in browser apart. */
+.download-page .download-body[data-offer] { display: flex; flex-direction: column; gap: 12px; }

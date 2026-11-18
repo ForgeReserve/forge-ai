@@ -100,6 +100,21 @@ describe('GET /download', () => {
     }
   });
 
+  it('carries the iPhone app\'s link when FORGE_IOS_URL is set, and only then', async () => {
+    const link = 'https://testflight.apple.com/join/AbCd1234';
+    expect(await (await gateway({ FORGE_APK_PATH: '', FORGE_IOS_URL: link })('/download/info')).json()).toEqual({ available: false, ios: { available: true, url: link } });
+    const bytes = Buffer.from('PK\u0003\u0004'.padEnd(2000, 'i'));
+    expect(await (await gateway({ FORGE_APK_PATH: apkFile(bytes), FORGE_IOS_URL: link })('/download/info')).json()).toMatchObject({ available: true, sha256: sha(bytes), ios: { available: true, url: link } });
+    for (const env of [{}, { FORGE_IOS_URL: '' }] as Record<string, string>[]) expect(await (await gateway(env)('/download/info')).json()).not.toHaveProperty('ios');
+  });
+
+  it('takes only an https link for FORGE_IOS_URL', () => {
+    const load = (v: string) => loadConfig({ FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_IOS_URL: v } as NodeJS.ProcessEnv, testCatalog()).env.FORGE_IOS_URL;
+    expect(load('https://apps.apple.com/app/id1234567890')).toBe('https://apps.apple.com/app/id1234567890');
+    expect(load('')).toBeUndefined();
+    for (const bad of ['http://testflight.apple.com/join/AbCd1234', 'testflight.apple.com/join/AbCd1234', 'javascript:alert(1)']) expect(() => load(bad), bad).toThrow(/FORGE_IOS_URL/);
+  });
+
   it('serves the page at /download and /download/', async () => {
     const call = gateway();
     for (const p of ['/download', '/download/']) {

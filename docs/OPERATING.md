@@ -104,6 +104,7 @@ Environment variables, validated with zod at startup. `src/config.ts` is the com
 | `FORGE_APK_PATH` | unset | The signed Android APK `/download` offers ([ANDROID.md](ANDROID.md)). Unset: the page says the app is coming |
 | `FORGE_ANDROID_CERT_SHA256` | unset | SHA-256 fingerprints of the APKs' signing certificates, comma separated. Set: `/.well-known/assetlinks.json` links both apps, so event links (`/j#<pass>`) open in the app. Unset: that file is 404 |
 | `FORGE_APK_PRIVATE_VOICE_PATH` | unset | The signed Forge Private Voice APK (for GrapheneOS). Set: `/download` offers Android or GrapheneOS. Unset: that choice is hidden |
+| `FORGE_IOS_URL` | unset | The iPhone app's link, a TestFlight invitation or the App Store page, https only ([IOS.md](IOS.md), Getting the app). Set: `/download/info` carries it and Get the app on an iPhone opens it. Unset: an iPhone is shown how to put Forge on its Home Screen |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys, named by `apiKeyEnv` in the model catalog |
 
 ### Other mints (NIP-87 discovery)

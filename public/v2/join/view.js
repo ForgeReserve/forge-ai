@@ -1,15 +1,15 @@
 // What the /j page does with the event link it was opened on (/j#<pass>). Pure, tested in Node.
+import { isAndroid } from '../core/getapp.js';
 import { passFrom, webJoin } from '../core/join.js';
 
-export { passFrom, webJoin };
+export { isAndroid, passFrom, webJoin };
 
 /** The two Android apps, by the id the /download page gives each choice (download/view.js apkChoices). */
 export const PACKAGES = { android: 'com.forgereserve.ai', graphene: 'com.forgereserve.ai.privatevoice' };
 
-export const isAndroid = (ua) => /\bAndroid\b/i.test(String(ua ?? ''));
-
 /**
- * Where /j goes: {go} to leave at once, or {show: pass} for the two steps. No pass: the download page.
+ * Where /j goes: {go} to leave at once, or {show: pass} for the two steps. No pass: the download page
+ * (Forge for iPhone on an iPhone).
  * Not Android (an iPhone, a computer): the web app. Android with no APK on this site: the web app too.
  */
 export function joinRoute({ hash, ua, apks = 1 }) {

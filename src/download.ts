@@ -57,12 +57,14 @@ export function apkSource(path: string | undefined, url = APK_URL) {
 /**
  * GET /download/info, GET /download/forge.apk and, when FORGE_APK_PRIVATE_VOICE_PATH is set, GET
  * /download/forge-private-voice.apk. The info is the universal APK's, with `privateVoice` (the same
- * fields) only while that APK is there. The page itself is served with the static files.
+ * fields) only while that APK is there, and `ios` ({available, url}) only while FORGE_IOS_URL is set:
+ * the iPhone app's link, which Get the app opens on an iPhone (public/v2/core/getapp.js). The page
+ * itself is served with the static files.
  */
-export function registerDownloadRoutes(app: Hono, apk: ReturnType<typeof apkSource>, privateVoice?: ReturnType<typeof apkSource>) {
+export function registerDownloadRoutes(app: Hono, apk: ReturnType<typeof apkSource>, privateVoice?: ReturnType<typeof apkSource>, iosUrl?: string) {
   app.get('/download/info', (c) => {
     const pv = privateVoice?.info();
-    return c.json({ ...apk.info(), ...(pv?.available ? { privateVoice: pv } : {}) }, 200, { 'Cache-Control': 'no-cache' });
+    return c.json({ ...apk.info(), ...(pv?.available ? { privateVoice: pv } : {}), ...(iosUrl ? { ios: { available: true, url: iosUrl } } : {}) }, 200, { 'Cache-Control': 'no-cache' });
   });
   const serve = (src: ReturnType<typeof apkSource>, url: string, filename: string) =>
     app.get(url, (c) => {
