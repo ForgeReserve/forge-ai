@@ -241,6 +241,10 @@ describe('Tap a Fedimint card', () => {
     await page.click('#fedPay');
     await page.waitForSelector('[data-screen=funds]', { timeout: 30_000 });
     await expect.poll(() => page.textContent('#fundsAmount'), { timeout: 20_000 }).toBe('$5.00');
+    // Funds says it in the success panel, with Ask now under it.
+    expect(await page.textContent('#fundsAdded .added-amount')).toBe('+$5.00');
+    expect(await page.textContent('#fundsAddedText')).toBe('Added $5.00.');
+    expect(await page.isVisible('#fundsAsk')).toBe(true);
     expect(card.balanceMsat).toBe(50_000_000 - (rec.invoiceMsat + rec.maxFeeMsat));
     // Both tries carried the same client_ref and the PIN typed for them, with the card link.
     const posts = till.log.filter((l) => l.path === '/v1/pay');

@@ -86,9 +86,11 @@ export function create(inputs) {
         const note = readNote(text);
         const camera = !!scan?.available();
         const again = btn({ class: 'btn block', id: 'noteScanAgain', onclick: () => (camera ? scanning() : pasting()) }, camera ? 'qr' : 'copy', camera ? t('fund.note.again') : t('fund.note.pasteAgain'));
+        // Alone, scanning (or pasting) another is the one next step: the lit button.
+        const againOnly = () => (again.classList.add('primary'), again);
         if (!note.ok) {
           body.replaceChildren(ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, t(REASON[note.reason]), 'err'));
-          foot.replaceChildren(again);
+          foot.replaceChildren(againOnly());
           return;
         }
         // An amount is shown only in a unit the phone formats exactly (usd, sat); any other unit is refused
@@ -98,13 +100,15 @@ export function create(inputs) {
         const known = isNoteUnit(note.unit);
         const amount = credit ? t(note.amount === 1 ? 'fund.note.freeOne' : 'fund.note.free', { count: note.amount }) : known ? format.units(note.amount, note.unit) : '';
         const mintLine = ui.sayEl('p', { class: 'note note-mint', id: 'noteMint' }, credit ? t('fund.note.freeFrom') : t('fund.note.from', { mint: mintLabel(note.mint) }));
-        const head = known ? [ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }), mintLine] : [mintLine];
+        // What the note holds as one card: its amount in large type, and its mint.
+        const head = [ui.el('section', { class: 'card price-card' }, known ? ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }) : null, mintLine)];
         const methods = wallet.methods();
         const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('othermint', { token: note.token }) }, 'swap', t('fund.note.useOtherMint'));
         const refused = (kind) => {
           const words = { spent: t('fund.note.spent'), other_mint: t('fund.note.otherMint'), wrong_mint: t('fund.note.wrongMint'), wrong_unit: t('fund.note.wrongUnit', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }) }[kind];
           body.replaceChildren(...head, ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, words, 'err'));
-          foot.replaceChildren(...[kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null, again].filter(Boolean));
+          const onward = kind === 'other_mint' && methods?.foreign?.enabled ? otherMintBtn() : null;
+          foot.replaceChildren(...(onward ? [onward, again] : [againOnly()]));
         };
         // The engine's own eCash in the unit these funds do not hold: changed through eCash, price first.
         const canConvert = !!wallet.key() && !!wallet.unit() && !!methods?.convert?.units?.includes(wallet.unit());
@@ -130,10 +134,10 @@ export function create(inputs) {
           try {
             const r = await wallet.topup(note.token, invite.value());
             const words = r.replay ? t('fund.note.replay') : r.free ? t('fund.free.added', { count: r.credited }) : t('fund.note.added', { amount: format.units(r.credited, r.unit) });
-            ui.toast(words);
             msg.set(words, 'ok');
             await wallet.refresh();
-            done();
+            // Funds says it in its success panel.
+            done({ words, amount: r.replay ? '' : r.free ? t('fund.note.free', { count: r.credited }) : format.units(r.credited, r.unit), plus: !r.free });
           } catch (e) {
             const kind = refusalOf(e);
             if (kind === 'wrong_unit' && e?.body?.convert) offerConvert();

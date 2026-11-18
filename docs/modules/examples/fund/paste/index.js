@@ -16,9 +16,11 @@ export function create({ t, ui, wallet, format }) {
         msg.set(t('fund.ecash.sending'));
         try {
           const r = await wallet.topup(token);
-          msg.set(t('fund.ecash.added', { amount: format.units(r.credited, r.unit) }), 'ok');
+          const words = t('fund.ecash.added', { amount: format.units(r.credited, r.unit) });
+          msg.set(words, 'ok');
           await wallet.refresh();
-          done();
+          // Funds says it in its success panel.
+          done({ words, amount: format.units(r.credited, r.unit) });
         } catch (e) {
           msg.set(e?.retryable ? t('fund.ecash.kept') : t('fund.failed', { message: e?.message ?? String(e) }), 'err');
         } finally {

@@ -127,6 +127,10 @@
 <td>A status line (<code>role=&quot;status&quot;</code>) with <code>set(text, kind)</code>. A text with no kind that does not end in a full stop shows the wait icon.</td>
 </tr>
 <tr>
+<td><code>addedPanel({id, amount, plus, words, wordsAttrs, balance})</code></td>
+<td>The success panel Add money shows when money is in: a lit check, the amount in large type (with a plus unless <code>plus</code> is <code>false</code>), the words as a status line (<code>wordsAttrs</code> gives it an id) and the funds now as the balance pill. Returns the panel; <code>setBalance(text)</code> updates the pill. A module rarely needs it: <code>added()</code> and <code>done()</code> draw it (below).</td>
+</tr>
+<tr>
 <td><code>toast(text, ms = 2600)</code></td>
 <td>A short message at the bottom of the screen.</td>
 </tr>
@@ -526,7 +530,7 @@
 <p>Required. Returns <code>true</code> when the module can be offered with this engine. <code>methods</code> is the body of <a href="/docs/#get-v1-wallet-fund-methods"><code>GET /v1/wallet/fund/methods</code></a>, or <code>null</code> before it arrives. The app calls it often: every time Add money, the Funds card stack or the first run is drawn or updated, and before a module&#39;s screen opens. Keep it fast and never let it throw.</p>
 <div class="code"><span class="lang">js</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-js"><span class="hljs-attr">available</span>: <span class="hljs-function">(<span class="hljs-params">methods</span>) =&gt;</span> !!methods?.<span class="hljs-property">lightning</span>?.<span class="hljs-property">enabled</span>,</code></pre></div>
 <h3 id="view-options"><code>view(options)</code><a class="anchor" href="#view-options" aria-label="Link to this section">#</a></h3>
-<p>Required. Draws the module&#39;s screen. The app calls it each time the screen opens, and puts the result under a header with the module&#39;s name and a back button. <code>options</code> holds:</p>
+<p>Required. Draws the module&#39;s screen. The app calls it each time the screen opens, and puts the result under a header with the module&#39;s name and a back button, and the module&#39;s picture from its card on Add money above it (a module with no picture of its own gets its <code>icon</code> on a lit disc). <code>options</code> holds:</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -535,8 +539,12 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>done()</code></td>
-<td>Call it when the money is in: the app goes back to Funds.</td>
+<td><code>done(result)</code></td>
+<td>Call it when the money is in: the app goes back to Funds. With <code>result</code> (<code>{words, amount, plus}</code>: the words that say what was added, the amount as text, <code>plus: false</code> for what is not money), Funds shows the success panel at its top with Ask now under it.</td>
+</tr>
+<tr>
+<td><code>added(result)</code></td>
+<td>Call it when the money is in and the person should see it on this screen first (a paid invoice): the success panel takes the module&#39;s place, with the funds now, Ask now and Done (back to Funds). <code>result</code> is <code>{words, amount, plus, wordsAttrs, extra}</code>: <code>wordsAttrs</code> gives the words line its id, <code>extra</code> is a list of the module&#39;s nodes that still matter, shown under the panel (an address that takes more).</td>
 </tr>
 <tr>
 <td><code>open(id, {token})</code></td>
@@ -702,9 +710,11 @@
         msg.<span class="hljs-title function_">set</span>(<span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.sending&#x27;</span>));
         <span class="hljs-keyword">try</span> {
           <span class="hljs-keyword">const</span> r = <span class="hljs-keyword">await</span> wallet.<span class="hljs-title function_">topup</span>(token);
-          msg.<span class="hljs-title function_">set</span>(<span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.added&#x27;</span>, { <span class="hljs-attr">amount</span>: format.<span class="hljs-title function_">units</span>(r.<span class="hljs-property">credited</span>, r.<span class="hljs-property">unit</span>) }), <span class="hljs-string">&#x27;ok&#x27;</span>);
+          <span class="hljs-keyword">const</span> words = <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.added&#x27;</span>, { <span class="hljs-attr">amount</span>: format.<span class="hljs-title function_">units</span>(r.<span class="hljs-property">credited</span>, r.<span class="hljs-property">unit</span>) });
+          msg.<span class="hljs-title function_">set</span>(words, <span class="hljs-string">&#x27;ok&#x27;</span>);
           <span class="hljs-keyword">await</span> wallet.<span class="hljs-title function_">refresh</span>();
-          <span class="hljs-title function_">done</span>();
+          <span class="hljs-comment">// Funds says it in its success panel.</span>
+          <span class="hljs-title function_">done</span>({ words, <span class="hljs-attr">amount</span>: format.<span class="hljs-title function_">units</span>(r.<span class="hljs-property">credited</span>, r.<span class="hljs-property">unit</span>) });
         } <span class="hljs-keyword">catch</span> (e) {
           msg.<span class="hljs-title function_">set</span>(e?.<span class="hljs-property">retryable</span> ? <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.ecash.kept&#x27;</span>) : <span class="hljs-title function_">t</span>(<span class="hljs-string">&#x27;fund.failed&#x27;</span>, { <span class="hljs-attr">message</span>: e?.<span class="hljs-property">message</span> ?? <span class="hljs-title class_">String</span>(e) }), <span class="hljs-string">&#x27;err&#x27;</span>);
         } <span class="hljs-keyword">finally</span> {

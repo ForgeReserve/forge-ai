@@ -595,12 +595,12 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .way-card { --ink-c: #14161A; position: relative; flex: 0 0 var(--cw); height: 100%; max-height: 420px; display: flex; flex-direction: column; border-radius: 32px; overflow: hidden; color: var(--ink-c); scroll-snap-align: center; scroll-snap-stop: always; box-shadow: inset 0 -7px 0 rgba(0,0,0,0.14), inset 0 2px 0 rgba(255,255,255,0.35), 0 12px 22px rgba(20,22,26,0.18); transition: transform 300ms var(--ease), opacity 300ms var(--ease); }
 .way-card:not(.now) { transform: scale(.92); opacity: .9; }
 /* The cards' own colours, from the design: pictures, so the same in every look. */
-.way-card[data-way="start"], .stack-card[data-way="start"], .sf-hero { background: linear-gradient(160deg, #18A08A 0%, #0E7C6B 55%, #0A5F52 100%); --ink-c: #FFFFFF; }
-.way-card[data-way="note"], .stack-card[data-way="note"] { background: linear-gradient(160deg, #FFFDF6 0%, #F4ECD6 60%, #E9DCB8 100%); }
-.way-card[data-way="lightning"], .stack-card[data-way="lightning"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
+.way-card[data-way="start"], .stack-card[data-way="start"], .sf-hero, .way-hero[data-way="start"] { background: linear-gradient(160deg, #18A08A 0%, #0E7C6B 55%, #0A5F52 100%); --ink-c: #FFFFFF; }
+.way-card[data-way="note"], .stack-card[data-way="note"], .way-hero[data-way="note"] { background: linear-gradient(160deg, #FFFDF6 0%, #F4ECD6 60%, #E9DCB8 100%); }
+.way-card[data-way="lightning"], .stack-card[data-way="lightning"], .way-hero[data-way="lightning"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
 /* The two cards on their brands' grounds: the Cashu card on its deep green, the Fedimint card on its pale paper. */
-.way-card[data-way="card"], .stack-card[data-way="card"] { background: linear-gradient(160deg, #2B4C31 0%, #173526 55%, #10271E 100%); --ink-c: #EDF3E7; }
-.way-card[data-way="fedimint"], .stack-card[data-way="fedimint"] { background: linear-gradient(160deg, #FFFFFF 0%, #F5F7FD 55%, #DCE4F7 100%); --ink-c: #1A3272; }
+.way-card[data-way="card"], .stack-card[data-way="card"], .way-hero[data-way="card"] { background: linear-gradient(160deg, #2B4C31 0%, #173526 55%, #10271E 100%); --ink-c: #EDF3E7; }
+.way-card[data-way="fedimint"], .stack-card[data-way="fedimint"], .way-hero[data-way="fedimint"] { background: linear-gradient(160deg, #FFFFFF 0%, #F5F7FD 55%, #DCE4F7 100%); --ink-c: #1A3272; }
 /* Both cards on one card: the two printed cards side by side on the night of the Lightning card, each one a
    button that opens its way, its word under it. */
 .way-card[data-way="cards"], .stack-card[data-way="cards"] { background: linear-gradient(160deg, #2A2F37 0%, #14161A 60%, #0B0D10 100%); --ink-c: #FFFFFF; }
@@ -609,8 +609,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .way-pair-btn .card-face { width: 100%; height: auto; border-radius: 7px; box-shadow: 0 8px 16px rgba(0,0,0,0.45); }
 .way-pair-btn[data-brand="card"] span { color: #D3F39A; }
 .way-pair-btn[data-brand="fedimint"] span { color: #B9C8EE; }
-.way-card[data-way="ecash"], .stack-card[data-way="ecash"] { background: linear-gradient(160deg, #FBF1D6 0%, #F6E9C8 60%, #EBD9A8 100%); }
-.way-card, .stack-card { background: linear-gradient(160deg, #FFFFFF 0%, #F1EFE9 100%); }
+.way-card[data-way="ecash"], .stack-card[data-way="ecash"], .way-hero[data-way="ecash"] { background: linear-gradient(160deg, #FBF1D6 0%, #F6E9C8 60%, #EBD9A8 100%); }
+.way-card, .stack-card, .way-hero { background: linear-gradient(160deg, #FFFFFF 0%, #F1EFE9 100%); }
 .way-art { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px 20px 0; border: 0; background: transparent; color: inherit; }
 .way-art-svg { width: 100%; height: 100%; max-height: 240px; }
 .way-art-disc { width: min(160px, 70%); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #FFFFFF, #F1EFE9 60%, #DAD6CB); box-shadow: 0 10px 20px rgba(20,22,26,0.12); display: flex; align-items: center; justify-content: center; color: #3F4348; }
@@ -690,14 +690,11 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 /* On Dark and Midnight the primary button is light: its teal and gold icons take the Light look's deeper
    shades there, so they keep 3 to 1 on it. */
 :root:not([data-scheme="light"]) .sf-go .ico, :root:not([data-scheme="light"]) .sf-sheet .btn.primary .ico { color: #0D7A69; }
-:root:not([data-scheme="light"]) .way-go .ico { color: #8A6410; }
+:root:not([data-scheme="light"]) .way-go .ico, :root:not([data-scheme="light"]) :is(.fund, .take-out) .foot .btn.primary .ico { color: #8A6410; }
 @keyframes sfdrop { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* Funds (AddFunds-C4): the ring in the middle, FREE in its centre on a free model at $0, Ask now, and
    Add money as a fanned stack of cards. */
-.funds-said { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 20px; background: var(--teal-tint); border: 1px solid var(--teal-line); }
-.funds-said p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink); }
-.funds-said-ico { flex: none; width: 28px; height: 28px; border-radius: 14px; background: var(--memory); color: var(--primary-ink); display: flex; align-items: center; justify-content: center; }
 .funds-top { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
 .funds-top .caps { margin: 0; }
 .funds-ring { position: relative; align-self: center; width: 180px; height: 180px; }
@@ -813,9 +810,10 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .offer-text b { font-size: 15px; }
 .offer-size { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-2); }
 .btn.offer-get { min-height: 48px; padding: 0 14px; font-size: 15px; }
-/* On the answer, a message sits in the top bar, never over the words. */
-body:has(> #app[data-route="answer"]) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; transform: translate(-50%, -12px); min-height: 48px; display: flex; align-items: center; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
-body:has(> #app[data-route="answer"]) .toast.show { transform: translate(-50%, 0); }
+/* On the answer, a message sits in the top bar, never over the words. On the add money screens too: there
+   the bottom holds the pinned buttons, which a message must never cover. */
+body:has(> #app:is([data-route="answer"], [data-route="fund"], [data-route="addFunds"], [data-route="funds"], [data-route="takeOut"], [data-route="startFree"])) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; transform: translate(-50%, -12px); min-height: 48px; display: flex; align-items: center; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+body:has(> #app:is([data-route="answer"], [data-route="fund"], [data-route="addFunds"], [data-route="funds"], [data-route="takeOut"], [data-route="startFree"])) .toast.show { transform: translate(-50%, 0); }
 
 /* Hold to burn (screens/burn.js): the tile fills from the left as it is held; the card warms, tilts back
    and darkens as the fire climbs it (the fire itself is drawn on .burn-fx). */
@@ -879,6 +877,51 @@ button.funds-ring { padding: 0; border: 0; border-radius: 50%; background: trans
 .amount-field .field-input { flex: 1; min-width: 0; min-height: 60px; border: 0; background: transparent; padding: 0; font-size: 24px; font-weight: 700; }
 .amount-field .field-input:focus { outline: none; }
 .amount-unit { flex: none; font-size: 24px; font-weight: 700; color: var(--gold-ink); }
+
+/* Add money's way screens and Take funds out (rehearsal, 2026-11-17): one family with the home, the first
+   run, Add money's cards and Start free. The way's card at the top as a hero, its picture on its own ground;
+   what is held or offered as a raised card with the amount in large type; the other buttons raised like
+   Start free's Paste and Scan; the one lit button pinned at the bottom, as big as Add money's; bold labels
+   that lead with a picture; and the one success panel (core/ui.js addedPanel). */
+.way-hero { position: relative; flex: none; height: clamp(88px, calc(88px + (100dvh - 640px) * 0.55), 200px); border-radius: 28px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 -6px 0 rgba(0,0,0,0.14), inset 0 2px 0 rgba(255,255,255,0.35), 0 12px 22px rgba(20,22,26,0.18); }
+.way-hero .way-art-svg { width: auto; height: 92%; max-width: 100%; }
+.way-hero .way-art-disc { width: auto; height: 78%; }
+/* Where a code, a token or the success panel is the thing to see, the hero steps down to a band. */
+:is(.fund, .take-out).hero-band > .way-hero { height: clamp(72px, calc(72px + (100dvh - 640px) * 0.2), 112px); }
+/* On a short phone the camera's view is the picture while it scans: the hero gives it the room. */
+@media (max-height: 760px) { .fund.scanning > .way-hero { display: none; } }
+:is(.fund, .take-out) .btn:not(.primary) { min-height: 56px; border: 0; background: var(--surface); box-shadow: var(--shadow-raised); font-size: 16px; font-weight: 700; }
+:is(.fund, .take-out) .btn.small:not(.primary) { min-height: 48px; font-size: 15px; }
+:is(.fund, .take-out) :is(.card, .notice, .till-box, .token-card, .vault-row) .btn:not(.primary) { background: var(--surface-2); }
+:is(.fund, .take-out) .foot .btn.primary { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }
+:is(.fund, .take-out) .foot .btn.primary .ico { color: var(--gold); }
+:is(.fund, .take-out) .label { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+:is(.fund, .take-out) .label .ico { color: var(--gold-ink); }
+:is(.fund, .take-out) .field-input:not(.amount-field .field-input) { border: 2px solid var(--line-2); border-radius: 18px; }
+:is(.fund, .take-out) .amount-field { border: 2px solid var(--line-2); border-radius: 18px; }
+:is(.fund, .take-out) .msg:empty { display: none; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 24px; }
+.field-head .info-btn { margin: -12px -10px -12px 0; }
+.qr-block .row-btns { justify-content: center; }
+.till-box .row-btns .btn { flex: 1 1 auto; white-space: nowrap; }
+/* What a card gives: one raised card under the printed one. */
+.card-view .card-preview { gap: 6px; padding: 16px; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow-raised); }
+.card-view .card-preview .note { font-size: 15px; color: var(--text-body); }
+.qr-block .row-btns .btn { flex: 1 1 auto; white-space: nowrap; padding: 0 14px; }
+/* A price or a note's worth: one card, the amount in large type, where it comes from under it. */
+.price-card { align-items: center; gap: 8px; padding: 20px 16px; text-align: center; }
+.price-card > .say { justify-content: center; }
+.price-card > .say > .say-head { flex: 0 1 auto; }
+.price-card .note { font-size: 15px; color: var(--text-body); }
+:is(.fund, .take-out) .amount-tag { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+.out-none { justify-content: center; font-size: 16px; color: var(--text-body); }
+/* The success panel: a lit teal check, the amount added in gold, the words, and the funds now. */
+.added { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 16px 20px; border-radius: 28px; background: var(--surface); box-shadow: var(--shadow-raised); text-align: center; animation: rise 260ms var(--ease) both; }
+.added-mark { width: 76px; height: 76px; border-radius: 38px; background: var(--memory); color: var(--primary-ink); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 8px var(--teal-tint), 0 12px 30px rgba(63,207,180,0.32), inset 0 -4px 0 rgba(0,0,0,0.16), inset 0 2px 0 rgba(255,255,255,0.45); }
+.added-amount { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; color: var(--gold-ink); }
+.added-words { font-size: 16px; color: var(--ink); }
+.added-bal { margin-top: 4px; }
+.added-note { justify-content: center; color: var(--text-body); }
 
 /* History: the answer's first words and the times big enough to read. */
 .hist-answer { font-size: 15px; }

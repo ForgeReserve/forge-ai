@@ -1,18 +1,25 @@
 // Funds and memory (ZBoth, with the add area of AddFunds-C4), one funding method (a fund module), and
 // Take funds out (refund as eCash, kept on the phone until the person says they saved it). Add money
 // itself is the wallet cards (screens/wallet.js).
-import { backHeader, copy, el, icon, msgLine, say, sayEl, toast } from '../core/ui.js';
+import { CARD_WAYS } from '../core/ways.js';
+import { addedPanel, backHeader, copy, el, icon, msgLine, say, sayEl, toast } from '../core/ui.js';
 import { cardRing, listenButton, listenHeader, screenListen } from './parts.js';
 import { takeSaid } from './startfree.js';
-import { fundsRing } from './wallet-art.js';
+import { fundsRing, wayHero } from './wallet-art.js';
 import { cardStack } from './wallet.js';
 
 export function fundsScreen(ctx) {
   const { t, state, nav, back, actions, format, vault, reader } = ctx;
   const S = state.S;
-  // What Start free said when it chose the free model (AddFunds-C4), once.
-  const said = takeSaid();
-  const done = el('div', { class: 'funds-said', id: 'fundsSaid', role: 'status', hidden: !said }, el('span', { class: 'funds-said-ico' }, icon('check', 16, 3)), sayEl('p', { id: 'fundsSaidText' }, said ?? ''));
+  // What a way just added (its success panel, once), or what Start free said when it chose the free model
+  // (AddFunds-C4): the success panel at the top, Ask now right under it as the next step.
+  const added = takeAdded();
+  const said = added ? null : takeSaid();
+  const done = added
+    ? addedPanel({ id: 'fundsAdded', amount: added.amount, plus: added.plus !== false, words: added.words, wordsAttrs: { id: 'fundsAddedText' } })
+    : said
+      ? addedPanel({ id: 'fundsSaid', words: said, wordsAttrs: { id: 'fundsSaidText' } })
+      : null;
   const fr = fundsRing();
   const mr = cardRing('memory-track', 'memory');
   const amount = el('span', { class: 'big', id: 'fundsAmount' });
@@ -62,8 +69,8 @@ export function fundsScreen(ctx) {
       el('button', { type: 'button', class: 'btn primary', id: 'startFresh', onclick: () => (actions.startFresh(), toast(t('funds.started'))) }, icon('trash', 20), el('span', { text: t('funds.startFresh') })),
     ),
   );
-  const listen = listenButton({ t, reader, id: 'fundsListen', pieces: () => [amount.textContent, freeTag.hidden ? '' : t('funds.freeTag'), said ?? '', fundsNote.textContent, freeNote.hidden ? '' : freeNote.textContent] });
-  const main = el('main', { class: 'screen sub funds', 'data-screen': 'funds' }, listenHeader(t('funds.title'), back, t('common.back'), listen.node), el('div', { class: 'scroll' }, done, vaultBox, fundsCard, askBtn, stack.node, memCard));
+  const listen = listenButton({ t, reader, id: 'fundsListen', pieces: () => [added?.words ?? '', amount.textContent, freeTag.hidden ? '' : t('funds.freeTag'), said ?? '', fundsNote.textContent, freeNote.hidden ? '' : freeNote.textContent] });
+  const main = el('main', { class: 'screen sub funds', 'data-screen': 'funds' }, listenHeader(t('funds.title'), back, t('common.back'), listen.node), el('div', { class: 'scroll' }, ...(done ? [done, askBtn, vaultBox, fundsCard] : [vaultBox, fundsCard, askBtn]), stack.node, memCard));
 
   const vaultRows = () => {
     const rows = [];
@@ -134,7 +141,8 @@ export function fundsScreen(ctx) {
     freeTag.hidden = !freeZero;
     ringBox.classList.toggle('free', freeZero);
     ringBox.setAttribute('aria-label', `${amount.textContent}. ${freeZero && v.hasKey ? t('funds.ask') : t('funds.addMoney')}`);
-    askBtn.hidden = !(freeZero && v.hasKey);
+    // Ask now: what to do next on a free model at $0, and after a way added money.
+    askBtn.hidden = !(freeZero && v.hasKey) && !(done && v.hasKey);
     // A free model costs nothing: never "not enough" for it.
     // A paid model at $0 with free models listed: not "not enough", but the free questions there.
     const freeHere = v.hasKey && !v.modelFree && !(v.balanceMsub > 0) && v.freeModels && !(v.freeLeft > 0);
@@ -176,6 +184,17 @@ export function fundsScreen(ctx) {
 // in memory only, for the one screen change; it is not stored, since the note it came from still has it.
 let handoff = null;
 
+// What a way added, for Funds' success panel once the way goes back there (done(result)). In memory
+// only, for the one screen change.
+let addedNow = null;
+
+/** What a way just added ({amount, plus, words}), once: Funds shows it in the success panel. */
+export function takeAdded() {
+  const a = addedNow;
+  addedNow = null;
+  return a;
+}
+
 /**
  * Hosts one fund module's view. The module builds its own body from the inputs it was given.
  * open(id, {token}) switches to another fund module and hands it the token.
@@ -186,17 +205,56 @@ export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { 
   const entry = registry.list('fund').find((x) => x.instance.id === id);
   if (!entry || !entry.instance.available(state.S.methods)) {
     const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('ways.title'), back, t('common.back')), sayEl('p', { class: 'hint pad' }, t('addFunds.unavailable'), '', 'alert'));
-    return { node: main, focus: main.querySelector('h1') };
+    // Opened before the engine's ways or the fund modules arrived (the app opened on this address): the
+    // way's own screen once it is there.
+    const update = () => {
+      const now = registry.list('fund').find((x) => x.instance.id === id);
+      if (now?.instance.available(state.S.methods)) queueMicrotask(() => nav('fund', { id }, { replace: true }));
+    };
+    return { node: main, update, focus: main.querySelector('h1') };
   }
   const open = (to, { token } = {}) => {
     handoff = { id: to, token };
     nav('fund', { id: to }, { replace: true });
   };
-  const view = entry.instance.view({ done: () => backTo('funds'), open, token: given?.token });
+  /** Back to Funds; with what was added, Funds says so in the success panel. */
+  const done = (result) => {
+    addedNow = result?.words ? result : null;
+    backTo('funds');
+  };
+  let panel = null;
+  const balanceNow = () => state.view().balanceText ?? '';
+  /**
+   * The money is in, and the way says so here: the success panel in place of the way's own screen, with
+   * Ask now and Done (to Funds). extra: the way's nodes that still matter under it (an address that
+   * takes more).
+   */
+  const added = ({ amount = '', plus = true, words, wordsAttrs = {}, extra = [] }) => {
+    if (panel) return;
+    panel = addedPanel({ id: 'fundAdded', amount, plus, words, wordsAttrs, balance: balanceNow() });
+    const ask = el('button', { type: 'button', class: 'btn primary block', id: 'fundAsk', onclick: () => nav('home') }, icon('mic', 22), el('span', { text: t('funds.ask') }));
+    const finish = el('button', { type: 'button', class: 'btn block', id: 'fundDone', onclick: () => done() }, el('span', { text: t('fund.done') }));
+    view.node.replaceWith(el('div', { class: 'fund-view fund-added' }, el('div', { class: 'scroll fund-body' }, panel, ...extra), el('div', { class: 'foot' }, ask, finish)));
+    listen.update();
+  };
+  const view = entry.instance.view({ done, added, open, token: given?.token });
   const listen = screenListen({ t, reader, id: 'fundListen', root: () => main });
-  const main = el('main', { class: 'screen sub fund', 'data-screen': 'fund', 'data-fund': id }, listenHeader(t(`fund.${id}.name`), back, t('common.back'), listen.node), view.node);
+  // The way's picture at the top, as on its card in Add money. The two card ways draw the printed card
+  // themselves.
+  const hero = CARD_WAYS.includes(id) ? null : wayHero(id, entry.instance);
+  const main = el('main', { class: 'screen sub fund', 'data-screen': 'fund', 'data-fund': id }, listenHeader(t(`fund.${id}.name`), back, t('common.back'), listen.node), hero, view.node);
+  // The hero steps down to a band where a code or the success panel is the thing to see, and leaves a
+  // short phone's camera its room while it scans (style.css, .way-hero). Set from here: a :has() rule was
+  // not always drawn again when a way changed its own screen.
+  const fit = () => {
+    main.classList.toggle('hero-band', !!main.querySelector('.qr, .added'));
+    main.classList.toggle('scanning', !!main.querySelector('.scanner:not([hidden])'));
+  };
+  const watch = new MutationObserver(fit);
+  watch.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  fit();
   listen.update();
-  return { node: main, update: () => (view.update?.(), listen.update()), destroy: () => (view.destroy?.(), listen.destroy()), focus: main.querySelector('h1') };
+  return { node: main, update: () => (view.update?.(), panel?.setBalance(balanceNow()), listen.update()), destroy: () => (watch.disconnect(), view.destroy?.(), listen.destroy()), focus: main.querySelector('h1') };
 }
 
 export function takeOutScreen({ t, state, back, actions, format, vault, qr, wallet, reader }) {
@@ -204,6 +262,9 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
   const msg = msgLine();
   const out = el('div', { class: 'token-out', id: 'tokenOut' });
   const input = el('input', { id: 'outAmount', class: 'field-input', inputmode: 'decimal', autocomplete: 'off', 'aria-label': t('out.amountLabel') });
+  // The unit in the field, as Lightning's amount has it: "$" before dollars, "sat" after sats.
+  const usd = (S.unit ?? 'usd') === 'usd';
+  const amountField = el('div', { class: 'amount-field' }, usd ? el('span', { class: 'amount-unit before', 'aria-hidden': 'true', text: '$' }) : null, input, usd ? null : el('span', { class: 'amount-unit after', 'aria-hidden': 'true', text: 'sat' }));
   const go = el('button', { type: 'button', class: 'btn primary block', id: 'outBtn' }, icon('takeout', 20), el('span', { text: t('out.create') }));
   const lock = wallet.lockKey();
   const form = el(
@@ -213,9 +274,10 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     lock ? sayEl('p', { class: 'note', id: 'outLocked' }, t('out.locked', { key: `${lock.slice(0, 10)}...${lock.slice(-6)}` }), '', 'lock') : null,
     el('p', { class: 'note', id: 'outAll' }),
     el('label', { for: 'outAmount', class: 'label', text: t('out.amountLabel') }),
-    input,
+    amountField,
     msg,
   );
+  let main = null;
   let players = [];
   const stopPlayers = () => {
     for (const p of players) p.stop();
@@ -251,13 +313,17 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
     const can = v.refundable > 0;
     form.hidden = !can;
     go.hidden = !can;
+    // While eCash waits to be saved, its code is the thing to see: the hero steps down to a band.
+    main?.classList.toggle('hero-band', kept.length > 0);
+    // One lit button: while eCash waits to be saved, I saved it is the one; Take out waits beside it.
+    go.classList.toggle('primary', !kept.length);
     if (can) {
       form.querySelector('#outAll').textContent = t('out.all', { amount: format.units(v.refundable, S.unit) });
       if (!input.value) input.value = format.plain(v.refundable, S.unit);
     }
     if (!can && !kept.length) {
       shown = null;
-      out.replaceChildren(el('p', { class: 'hint', id: 'outNone', text: t('out.none') }));
+      out.replaceChildren(sayEl('p', { class: 'hint out-none', id: 'outNone' }, t('out.none'), '', 'coins'));
     }
   };
   go.addEventListener('click', async () => {
@@ -279,7 +345,9 @@ export function takeOutScreen({ t, state, back, actions, format, vault, qr, wall
   });
   draw();
   const listen = screenListen({ t, reader, id: 'outListen', root: () => main });
-  const main = el('main', { class: 'screen sub take-out', 'data-screen': 'takeOut' }, listenHeader(t('out.title'), back, t('common.back'), listen.node), el('div', { class: 'scroll' }, out, form), el('div', { class: 'foot' }, go));
+  // You get eCash: eCash's picture at the top, as on its card in Add money.
+  main = el('main', { class: 'screen sub take-out', 'data-screen': 'takeOut' }, listenHeader(t('out.title'), back, t('common.back'), listen.node), wayHero('ecash', null), el('div', { class: 'scroll' }, out, form), el('div', { class: 'foot' }, go));
+  main.classList.toggle('hero-band', vault.outgoing().length > 0);
   listen.update();
   return { node: main, update: draw, destroy: () => (stopPlayers(), listen.destroy()), focus: main.querySelector('h1') };
 }

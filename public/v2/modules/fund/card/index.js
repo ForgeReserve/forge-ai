@@ -18,6 +18,7 @@
 // price to change it (when the engine changes units).
 import { inviteField } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
+import { wayHero } from '../../../screens/wallet-art.js';
 import { showOffer } from '../../../core/getapp.js';
 
 const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
@@ -147,7 +148,8 @@ export function create(inputs) {
       // ------------------------------------------------------------ the app
 
       const hold = (line = t('fund.card.keep')) => {
-        body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'card-hold', id: 'cardHold' }, t('fund.card.hold')), ui.sayEl('p', { class: 'note', id: 'cardHoldLine' }, line), msg, failedList()));
+        // Hold the card to the phone: the tap, as Add money's card draws it.
+        body.replaceChildren(...kids(wayHero('card', null), ui.sayEl('p', { class: 'card-hold', id: 'cardHold' }, t('fund.card.hold')), ui.sayEl('p', { class: 'note', id: 'cardHoldLine' }, line), msg, failedList()));
         // The iPhone: waiting for the card is the NFC sheet. It opens now (this follows a press) unless a
         // card is being handled, whose sheet closes when it is done; Scan opens it again.
         foot.replaceChildren(...kids(nfc.sheet && btn({ class: 'btn primary block', id: 'cardScan', onclick: () => reader?.again() }, 'nfc', t('fund.card.scan'))));
@@ -201,7 +203,7 @@ export function create(inputs) {
 
       const working = (text) => {
         msg.set('');
-        body.replaceChildren(...kids(art(summary ? format.units(summary.balance, summary.unit) : null), ui.el('p', { class: 'status-line', id: 'cardStatus', role: 'status', text })));
+        body.replaceChildren(...kids(art(summary ? format.units(summary.balance, summary.unit) : null), ui.sayEl('p', { class: 'status-line', id: 'cardStatus', role: 'status' }, text, 'wait')));
         foot.replaceChildren();
       };
 
@@ -254,7 +256,7 @@ export function create(inputs) {
       /** A card this engine cannot take from: said once, nothing asked of the card. */
       const refuse = (text) => {
         body.replaceChildren(...kids(art(), ui.el('p', { class: 'msg err', id: 'cardResult', role: 'status', text })));
-        foot.replaceChildren(...kids(btn({ class: 'btn block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
+        foot.replaceChildren(...kids(btn({ class: 'btn primary block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
       };
 
       /**
@@ -281,7 +283,7 @@ export function create(inputs) {
           return;
         }
         body.replaceChildren(...kids(art(), ui.sayEl('p', { class: 'msg err', id: 'cardResult', role: 'status' }, words, 'err')));
-        foot.replaceChildren(...kids(btn({ class: 'btn block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
+        foot.replaceChildren(...kids(btn({ class: 'btn primary block', id: 'cardAgain', onclick: () => ((next = 'read'), (summary = null), hold()) }, 'again', t('fund.card.tryAgain'))));
       };
 
       /** Tokens the read finished (a tap that broke earlier) go where they belong. */
@@ -367,7 +369,7 @@ export function create(inputs) {
           await handFinished();
           next = 'read';
           if (!summary.balance) {
-            toastAndDone(null);
+            addedDone(null);
             return;
           }
           takeInfo(await cards.flow.mintInfo(summary, { acceptUnlisted }));
@@ -491,6 +493,7 @@ export function create(inputs) {
         await wallet.refresh();
         if (r.error) return failed({ code: 'mint_unavailable', kept: true });
         const words = r.replay ? t('fund.ecash.replay') : t('fund.card.added', { amount: format.units(r.credited, r.unit) });
+        const amount = r.replay ? '' : format.units(r.credited, r.unit);
         if (job.changeOwed) {
           // The eCash is here; the card's change waits for one more tap (it is read again then).
           summary = null;
@@ -500,13 +503,11 @@ export function create(inputs) {
           hold(t('fund.card.changeOwed'));
           return;
         }
-        toastAndDone(words, choice.plan.amount === summary.balance);
+        addedDone(words, amount, choice.plan.amount === summary.balance);
       };
 
-      const toastAndDone = (words, empty = false) => {
-        if (words) ui.toast(empty ? `${words} ${t('fund.card.emptyNow')}` : words);
-        done();
-      };
+      /** Back to Funds, which says what was added in its success panel (and that the card is empty now). */
+      const addedDone = (words, amount = '', empty = false) => done(words ? { words: empty ? `${words} ${t('fund.card.emptyNow')}` : words, amount } : undefined);
 
       startReading().catch((e) => failed(e));
       return {

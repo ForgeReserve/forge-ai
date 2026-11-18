@@ -277,6 +277,31 @@ export function meterBar({ id, label }) {
 }
 
 /**
+ * The one success panel of Add money, on a way's screen and on Funds: a lit check, the amount added in
+ * large type, the words that say it (a status line, headline first: say) and, when given, the funds now
+ * as Add money's balance pill. amount: text, shown with a plus ('' for none; plus: false for free
+ * questions, which are not money). wordsAttrs: the words line's attributes (its id, read by tests and
+ * Listen). balance: the funds now as text, or null. Returns the panel; panel.setBalance(text) updates it.
+ */
+export function addedPanel({ id = null, amount = '', plus = true, words = '', wordsAttrs = {}, balance = null }) {
+  const pillText = el('span', { text: balance ?? '' });
+  const pill = balance == null ? null : el('span', { class: 'way-bal added-bal' }, el('span', { class: 'way-bal-ring', 'aria-hidden': 'true' }), pillText);
+  const node = el(
+    'section',
+    { class: 'added', id },
+    el('span', { class: 'added-mark', 'aria-hidden': 'true' }, icon('check', 40, 3)),
+    // The words say the amount too: the big one is for the eye.
+    amount ? el('b', { class: 'added-amount', 'aria-hidden': 'true', text: plus ? `+${amount}` : amount }) : null,
+    sayEl('p', { role: 'status', ...wordsAttrs, class: `status-line added-words ${wordsAttrs.class ?? ''}`.trim() }, words),
+    pill,
+  );
+  node.setBalance = (text) => {
+    if (pill) pillText.textContent = text ?? '';
+  };
+  return node;
+}
+
+/**
  * A status line under a form: role=status, with a kind of '', 'err', 'ok' or 'wait'. The words go in
  * headline first, with the kind's icon (say). A message without a kind that ends in no full stop is a
  * step under way ("Adding your eCash"): it shows the wait icon.

@@ -154,6 +154,12 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
 
+      - name: Natural voice files, kept between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/v2/voice/phonon
+          key: phonon-${{ hashFiles('scripts/phonon/lock.json') }}
+
       - name: Natural voice files
         # Not in git: fetched pinned by commit and SHA-256 (scripts/phonon/lock.json), as the Dockerfile does.
         run: node scripts/phonon-model.ts
@@ -278,6 +284,12 @@ jobs:
         run: |
           corepack enable
           pnpm install --frozen-lockfile
+
+      - name: Natural voice files, kept between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/v2/voice/phonon
+          key: phonon-${{ hashFiles('scripts/phonon/lock.json') }}
 
       - name: Natural voice files
         run: node scripts/phonon-model.ts

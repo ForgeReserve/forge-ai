@@ -69,11 +69,12 @@ export function create(inputs) {
           // A faucet voucher is always free questions: it goes to the free balance even when the
           // engine's credit mint has not been read yet.
           const r = await (wallet.topupFree ?? wallet.topup)(voucher.token);
-          const words = t('fund.free.added', { count: r.credited ?? voucher.questions ?? questions });
-          ui.toast(words);
+          const count = r.credited ?? voucher.questions ?? questions;
+          const words = t('fund.free.added', { count });
           msg.set(words, 'ok');
           await wallet.refresh();
-          done();
+          // Funds says it in its success panel: free questions, not money.
+          done({ words, amount: t('fund.note.free', { count }), plus: false });
         } catch (e) {
           // The voucher is kept on the phone and sent again later (core/vault.js).
           msg.set(e?.retryable ? t('fund.free.kept') : t('fund.failed', { message: e?.message ?? String(e) }), 'err');

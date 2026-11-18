@@ -9,7 +9,7 @@ export function create(inputs) {
     group: 'depends',
     icon: 'bolt',
     available: (methods) => !!methods?.lightning?.enabled,
-    view({ done }) {
+    view({ added }) {
       const L = wallet.methods()?.lightning ?? {};
       const units = wallet.key() && wallet.unit() ? [wallet.unit()] : (L.units ?? ['usd']);
       let unit = wallet.unit() ?? (units.includes('usd') ? 'usd' : units[0]);
@@ -52,21 +52,20 @@ export function create(inputs) {
           if (r.body?.key) wallet.setKey(r.body.key);
           if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
           const f = r.body;
-          const st = ui.sayEl('p', { class: 'status-line', id: 'lnStatus', role: 'status' }, t('fund.lightning.waiting'));
+          const st = ui.sayEl('p', { class: 'status-line', id: 'lnStatus', role: 'status' }, t('fund.lightning.waiting'), 'wait');
           body.replaceChildren(ui.el('div', { class: 'amount-tag', text: format.units(f.amount, f.unit) }), requestQR(inputs, { uri: 'lightning:' + f.request, copyText: f.request, copyLabel: t('fund.lightning.copy'), qrLabel: t('fund.lightning.qr'), openLabel: t('fund.lightning.open') }), st);
           foot.replaceChildren();
           const update = (x) => {
             if (x.state === 'done') {
-              ui.say(st, t('fund.lightning.paid', { amount: format.units(x.credited, x.unit) }));
-              st.className = 'status-line ok';
+              // Paid: the success panel takes the invoice's place (screens/funds.js).
               wallet.refresh();
-              foot.replaceChildren(ui.el('button', { type: 'button', class: 'btn primary block', id: 'fundDone', text: t('fund.done'), onclick: done }));
+              added({ amount: format.units(x.credited, x.unit), words: t('fund.lightning.paid', { amount: format.units(x.credited, x.unit) }), wordsAttrs: { id: 'lnStatus' } });
               return true;
             }
-            if (x.state === 'minting') ui.say(st, t('fund.lightning.minting'));
+            if (x.state === 'minting') ui.say(st, t('fund.lightning.minting'), 'wait');
             if (x.state === 'expired' || x.state === 'failed') {
-              ui.say(st, x.state === 'expired' ? t('fund.lightning.expired') : t('fund.failed', { message: x.error ?? '' }));
               st.className = 'status-line err';
+              ui.say(st, x.state === 'expired' ? t('fund.lightning.expired') : t('fund.failed', { message: x.error ?? '' }), 'err');
               return true;
             }
             return false;

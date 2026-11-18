@@ -114,13 +114,27 @@ async function fileOk(file: string, f: LockFile): Promise<boolean> {
   return existsSync(file) && statSync(file).size === f.size && (await sha256(file)) === f.sha256;
 }
 
+const DOWNLOAD_TRIES = 4;
+const DOWNLOAD_WAIT_MS = 5000;
+
 async function download(f: LockFile, to: string): Promise<void> {
   mkdirSync(STAGE, { recursive: true });
   const tmp = join(STAGE, f.path.replace('/', '__'));
   rmSync(tmp, { force: true });
-  const res = await fetch(f.url, { redirect: 'follow' });
-  if (!res.ok || !res.body) throw new Error(`${f.path}: HTTP ${res.status}`);
-  await pipeline(Readable.fromWeb(res.body as any), createWriteStream(tmp));
+  // The host sometimes answers 502 or cuts a large file part way: try again a few times before giving up.
+  // A file that arrives whole and does not match the lock is never retried.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(f.url, { redirect: 'follow' });
+      if (!res.ok || !res.body) throw new Error(`${f.path}: HTTP ${res.status}`);
+      await pipeline(Readable.fromWeb(res.body as any), createWriteStream(tmp));
+      break;
+    } catch (e) {
+      rmSync(tmp, { force: true });
+      if (attempt >= DOWNLOAD_TRIES) throw e;
+      await new Promise((r) => setTimeout(r, DOWNLOAD_WAIT_MS * attempt));
+    }
+  }
   if (!(await fileOk(tmp, f))) {
     rmSync(tmp, { force: true });
     throw new Error(`${f.path}: size or sha256 does not match the lock`);

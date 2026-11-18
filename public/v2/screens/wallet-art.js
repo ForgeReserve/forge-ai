@@ -552,6 +552,14 @@ export function cardArt(id, mod, label) {
   return el('span', { class: 'way-art-disc', role: 'img', 'aria-label': label }, icon(mod?.icon ?? 'plus', 72, 1.6));
 }
 
+/**
+ * A way's card as the hero at the top of its own screen (and Take funds out's): the picture on the
+ * card's own ground, as on Add money, so a person knows where they are without reading. Only a picture.
+ */
+export function wayHero(id, mod) {
+  return el('div', { class: 'way-hero', 'data-way': id, 'aria-hidden': 'true' }, cardArt(id, mod, null));
+}
+
 /** The small picture on a More tile. */
 export function spotArt(id, mod) {
   if (SPOT[id]) return svg(SPOT[id](prefix()), { w: 64, h: 64, box: '0 0 100 100', cls: 'way-spot' });
