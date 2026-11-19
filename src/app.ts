@@ -109,6 +109,9 @@ export const ISOLATION_HEADERS = Object.freeze({
   'Cross-Origin-Resource-Policy': 'same-origin',
 });
 
+/** The landing page's Content-Security-Policy (/about/): files from this origin only, no inline code, never framed. */
+export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
 async function isolated(c: Context, next: () => Promise<void>) {
   await next();
   for (const [k, v] of Object.entries(ISOLATION_HEADERS)) c.header(k, v);
@@ -1322,6 +1325,13 @@ export function createApp(d: Deps) {
     // The public API guide (public/docs/, generated from docs/API.md by scripts/build-docs.ts). /docs/
     // and its files are plain static files below; /docs moves to /docs/ so the page's links resolve.
     app.get('/docs', (c) => c.redirect('/docs/', 301));
+    // The landing page (public/about/), static like /docs/. It loads only its own files and the app's
+    // font and look from this origin, so its policy allows nothing else.
+    app.get('/about', (c) => c.redirect('/about/', 301));
+    app.use('/about/*', async (c, next) => {
+      await next();
+      c.header('Content-Security-Policy', ABOUT_CSP);
+    });
     // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
     // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
     // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same

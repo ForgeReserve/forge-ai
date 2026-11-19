@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forge AI, private AI for activists</title>
+<meta name="description" content="Private AI for activists and anyone who cannot risk being linked to a question. Ask by voice. Pay for each question with eCash. No account.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="canonical" href="https://ai.forge-reserve.com/about/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Forge AI">
+<meta property="og:title" content="Forge AI, private AI for activists">
+<meta property="og:description" content="Ask by voice. Pay for each question with eCash. No account.">
+<meta property="og:url" content="https://ai.forge-reserve.com/about/">
+<meta property="og:image" content="https://ai.forge-reserve.com/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta property="og:image:alt" content="The Forge AI anvil">
+<meta name="twitter:card" content="summary">
+<link rel="preload" href="/v2/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/about/about.css">
+<script type="module" src="/about/about.js"></script>
+</head>
+<body>
+<!-- The landing page (served at /about by src/app.ts): one screen, no scroll. One phone moves through four
+     moments (Talk, Private, Pay, Share unseen); the row of icons under the title shows which one is on and
+     picks one. about.js runs the moments and the download buttons; about.css draws the phone, the rings
+     and all of the motion. Icons are the app's own (public/v2/core/ui.js). The phone pictures come from
+     scripts/about-shots.ts. No file here comes from another site. -->
+<a class="skip" href="#moments">Skip to the moments</a>
+<header class="top">
+  <a class="brand" href="/about/" aria-label="Forge AI">
+    <svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg>
+    <span class="word">FORGE <span class="ai">AI</span></span>
+  </a>
+  <nav class="actions" aria-label="Get Forge AI">
+    <a class="act act-open" id="topOpen" href="/v2/">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      <span>Open the app</span>
+    </a>
+    <button class="act act-dl" id="topDownload" type="button" popovertarget="download" aria-controls="download" aria-expanded="false">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>
+      <span class="act-word">Download</span>
+    </button>
+    <a class="act act-icon" id="topCode" href="https://github.com/ForgeReserve/forge-ai" aria-label="The code on GitHub">
+      <svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </nav>
+  <!-- The download buttons, in a small panel under Download. Put each app's link in its data-href; while
+       it is empty, the button shows Soon and is no link (about.js). -->
+  <div class="dl-pop" id="download" popover role="dialog" aria-label="Download">
+    <div class="dl-row">
+      <a class="dl" id="dlAndroid" data-download="android" data-href="">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M7 10.5L5 7.5M17 10.5l2-3"/><path d="M9 14h.01M15 14h.01"/></svg>
+        <span class="dl-name">Android</span>
+        <span class="soon">Soon</span>
+      </a>
+      <a class="dl" id="dlIphone" data-download="iphone" data-href="">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c-1.5-1.2-5-1.6-6.5 1.2-1.6 3 .3 8 2.3 10.4 1.1 1.3 2.1 1.6 3.2 1 .6-.3 1.4-.3 2 0 1.1.6 2.1.3 3.2-1 1.4-1.7 2.6-4.4 2.8-6.6"/><path d="M12 8c1.2-1 3.6-1.5 5.3-.3"/><path d="M12 8c0-2 1-4 3-5"/></svg>
+        <span class="dl-name">iPhone</span>
+        <span class="soon">Soon</span>
+      </a>
+    </div>
+    <a class="dl-web" id="dlWeb" href="/v2/">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+      <span>Open it in the browser</span>
+    </a>
+  </div>
+</header>
+
+<main class="hero" id="main" data-moment="talk" data-step="0" data-frame="talk-a" data-play="intro">
+  <h1 id="title"><span class="t-a">Private AI for activists</span> <span class="t-b">and anyone who cannot risk being linked to a question.</span></h1>
+
+  <!-- The four moments. Each tab's ring fills while its moment shows; Pause stops them. -->
+  <div class="rail" id="moments">
+    <div class="tabs" role="tablist" aria-label="What it does">
+      <button class="tab" type="button" role="tab" id="tab-talk" data-moment="talk" aria-selected="true" aria-controls="cap-talk">
+        <span class="tile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg><span class="prog" aria-hidden="true"><span class="half ha"><span class="arc"></span></span><span class="half hb"><span class="arc"></span></span></span></span>
+        <span class="tab-word">Talk</span>
+      </button>
+      <button class="tab" type="button" role="tab" id="tab-private" data-moment="private" aria-selected="false" aria-controls="cap-private" tabindex="-1">
+        <span class="tile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="prog" aria-hidden="true"><span class="half ha"><span class="arc"></span></span><span class="half hb"><span class="arc"></span></span></span></span>
+        <span class="tab-word">Private</span>
+      </button>
+      <button class="tab" type="button" role="tab" id="tab-pay" data-moment="pay" aria-selected="false" aria-controls="cap-pay" tabindex="-1">
+        <span class="tile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span class="prog" aria-hidden="true"><span class="half ha"><span class="arc"></span></span><span class="half hb"><span class="arc"></span></span></span></span>
+        <span class="tab-word">Pay</span>
+      </button>
+      <button class="tab" type="button" role="tab" id="tab-share" data-moment="share" aria-selected="false" aria-controls="cap-share" tabindex="-1">
+        <span class="tile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 5"/></svg><span class="prog" aria-hidden="true"><span class="half ha"><span class="arc"></span></span><span class="half hb"><span class="arc"></span></span></span></span>
+        <span class="tab-word">Share unseen</span>
+      </button>
+    </div>
+    <button class="play" type="button" id="play" aria-label="Pause" aria-controls="stage">
+      <svg class="ico i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12"/><path d="M15 6v12"/></svg>
+      <svg class="ico i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+    </button>
+  </div>
+
+  <div class="caps">
+    <div class="cap" id="cap-talk" role="tabpanel" aria-labelledby="tab-talk"><p>Hold the button and ask out loud. Forge reads the answer to you.</p></div>
+    <div class="cap" id="cap-private" role="tabpanel" aria-labelledby="tab-private"><p>Private models run in sealed hardware. Your chats stay on your phone.</p></div>
+    <div class="cap" id="cap-pay" role="tabpanel" aria-labelledby="tab-pay"><p>Pay for each question with eCash. The payment goes to <a href="https://bellows.forgereserve.org">Bellows</a>, the open engine that answers.</p></div>
+    <div class="cap" id="cap-share" role="tabpanel" aria-labelledby="tab-share"><p>Your phone covers faces and writing in a photo. Look before you share.</p></div>
+  </div>
+
+  <figure class="stage" id="stage" aria-label="The Forge AI app on a phone">
+    <div class="aura" aria-hidden="true"></div>
+    <div class="rings" aria-hidden="true"><div class="rings-in">
+      <svg class="track" viewBox="0 0 600 600">
+        <defs>
+          <linearGradient id="ringGold" gradientUnits="userSpaceOnUse" x1="80" y1="40" x2="520" y2="560"><stop offset="0" stop-color="#F7DC95"/><stop offset="0.5" stop-color="#E2B552"/><stop offset="1" stop-color="#C08A2A"/></linearGradient>
+          <linearGradient id="ringTeal" gradientUnits="userSpaceOnUse" x1="80" y1="40" x2="520" y2="560"><stop offset="0" stop-color="#8EF3DE"/><stop offset="0.5" stop-color="#3FCFB4"/><stop offset="1" stop-color="#1F9E87"/></linearGradient>
+          <filter id="ringGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        <circle cx="300" cy="300" r="280" class="tr-gold"/>
+        <circle cx="300" cy="300" r="252" class="tr-teal"/>
+      </svg>
+      <span class="q q1"><svg viewBox="0 0 600 600"><path class="g-glow" d="M300 20A280 280 0 0 1 580 300"/><path class="g" d="M300 20A280 280 0 0 1 580 300"/><path class="t-glow" d="M300 48A252 252 0 0 1 552 300"/><path class="t" d="M300 48A252 252 0 0 1 552 300"/></svg></span>
+      <span class="q q2"><svg viewBox="0 0 600 600"><path class="g-glow" d="M580 300A280 280 0 0 1 300 580"/><path class="g" d="M580 300A280 280 0 0 1 300 580"/><path class="t-glow" d="M552 300A252 252 0 0 1 300 552"/><path class="t" d="M552 300A252 252 0 0 1 300 552"/></svg></span>
+      <span class="q q3"><svg viewBox="0 0 600 600"><path class="g-glow" d="M300 580A280 280 0 0 1 20 300"/><path class="g" d="M300 580A280 280 0 0 1 20 300"/><path class="t-glow" d="M300 552A252 252 0 0 1 48 300"/><path class="t" d="M300 552A252 252 0 0 1 48 300"/></svg></span>
+      <span class="q q4"><svg viewBox="0 0 600 600"><path class="g-glow" d="M20 300A280 280 0 0 1 300 20"/><path class="g" d="M20 300A280 280 0 0 1 300 20"/><path class="t-glow" d="M48 300A252 252 0 0 1 300 48"/><path class="t" d="M48 300A252 252 0 0 1 300 48"/></svg></span>
+      <span class="tips"><span class="tip tip-g"></span><span class="tip tip-t"></span></span>
+    </div></div>
+
+    <div class="phone-in">
+      <div class="phone-float">
+        <div class="phone">
+          <span class="keys" aria-hidden="true"></span>
+          <div class="screen">
+            <div class="status" aria-hidden="true">
+              <span class="clock">9:41</span>
+              <span class="cam"></span>
+              <svg class="sys" viewBox="0 0 64 16"><g fill="currentColor"><rect x="0" y="10" width="3" height="5" rx="1"/><rect x="5" y="7.5" width="3" height="7.5" rx="1"/><rect x="10" y="5" width="3" height="10" rx="1"/><rect x="15" y="2.5" width="3" height="12.5" rx="1"/></g><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M24.5 6.5a9 9 0 0 1 12 0"/><path d="M27 9.5a5 5 0 0 1 7 0"/></g><circle cx="30.5" cy="13" r="1.4" fill="currentColor"/><rect x="41" y="3" width="19" height="10" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.2"/><rect x="43" y="5" width="13" height="6" rx="1.5" fill="currentColor"/><path d="M61.5 6.5v3" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <div class="shots">
+              <img class="frame" data-frame="talk-a" src="/about/shots/home.webp" width="600" height="1298" fetchpriority="high" alt="The Forge AI home screen: a gold ring for money and a green ring for memory around one big button, Hold to talk. Private is on and the balance is five dollars.">
+              <img class="frame" data-frame="talk-b" src="/about/shots/answer.webp" width="600" height="1298" decoding="async" alt="An answer on the phone. The question reads: How do I keep my phone safe at a march? The answer lists three steps, with Copy, Ask again, Burn and Listen buttons.">
+              <img class="frame" data-frame="private" src="/about/shots/private.webp" width="600" height="1298" decoding="async" alt="Private by default: a padlock inside the two rings, and the Private only switch turned on.">
+              <img class="frame" data-frame="pay-a" src="/about/shots/add-money.webp" width="600" height="1298" decoding="async" alt="Add money on the phone: a card with a paper note and a Scan button, and round icons for the other ways to pay.">
+              <img class="frame" data-frame="pay-b" src="/about/shots/pay-card.webp" width="600" height="1298" decoding="async" alt="Add money on the phone at Cards: a Cashu card and a Fedimint card to tap, marked as working in the app only.">
+              <img class="frame" data-frame="share" src="/about/shots/share-unseen.webp" width="600" height="1298" decoding="async" alt="Share unseen on the phone: an old public photo of three astronauts with their faces and name tags covered, and a list of what was removed.">
+              <span class="touch" aria-hidden="true"><span class="finger"></span><span class="ripple"></span><span class="ripple r2"></span></span>
+              <span class="beam-box" aria-hidden="true"><span class="beam"></span></span>
+            </div>
+            <span class="glass" aria-hidden="true"><span class="sheen"></span></span>
+          </div>
+        </div>
+      </div>
+      <span class="floor" aria-hidden="true"></span>
+    </div>
+
+    <ul class="chips" aria-hidden="true">
+      <li class="chip c1" data-for="talk"><span class="chip-ico i-ink"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span><span class="chip-t">Ask out loud</span></li>
+      <li class="chip c2" data-for="talk"><span class="chip-ico i-teal"><svg class="ico" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg></span><span class="chip-t">Hear the answer</span></li>
+      <li class="chip c1" data-for="private"><span class="chip-ico i-teal"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg></span><span class="chip-t">Sealed hardware</span></li>
+      <li class="chip c2" data-for="private"><span class="chip-ico i-ink"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M3 3l18 18"/></svg></span><span class="chip-t">No account</span></li>
+      <li class="chip c1" data-for="pay"><span class="chip-ico i-gold"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="8" y="8" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/><path d="M13 8h3v2M8 13v3h2"/></svg></span><span class="chip-t">Paper note</span></li>
+      <li class="chip c2" data-for="pay"><span class="chip-ico i-blue"><svg class="ico" viewBox="0 0 24 24"><path d="M7 9a4.5 4.5 0 0 1 0 6"/><path d="M10.5 6.5a8 8 0 0 1 0 11"/><path d="M14 4a11.5 11.5 0 0 1 0 16"/></svg></span><span class="chip-t">Card<small>Android app</small></span></li>
+      <li class="chip c1" data-for="share"><span class="chip-ico i-blue"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg></span><span class="chip-t">Faces covered</span></li>
+      <li class="chip c2" data-for="share"><span class="chip-ico i-ink"><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/><path d="M3 3l18 18"/></svg></span><span class="chip-t">Details removed</span></li>
+    </ul>
+  </figure>
+</main>
+</body>
+</html>
