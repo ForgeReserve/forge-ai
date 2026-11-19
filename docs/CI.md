@@ -15,6 +15,7 @@ Require **`ci-ok`** and nothing else. It always runs and always reports. It fail
 | `e2e` | End to end tests against the local mints. | Unless only the native apps changed. A docs-only change runs `test/e2e/docs.e2e.test.ts` alone. |
 | `ui (1)` to `ui (6)` | The UI tests in six parts, in the runner's Chrome against a local gateway and the local mints. Each part keeps its files' times as an artifact (`ui-times-<part>`). | Unless only the native apps changed. A docs-only change runs one job, `ui (docs)`, with `test/ui/docs.ui.test.ts` alone. |
 | `android` | Debug builds of both APKs, their JVM tests, and the 16 KB page check. | When `android/`, `public/` (but not `public/docs/`) or `capacitor.config.json` changed, and on any change that runs everything. |
+| `receiver` | The Fedimint receiver ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md)): `cargo fmt --check`, clippy and its tests against in-process federations, in `services/fedimint-receiver/`. | When anything under `services/fedimint-receiver/` changed, and on any change that runs everything. |
 | `repeat (<file>)` | Runs each UI test file the pull request added or changed 5 more times. | Pull requests that change a UI test file or a helper in `test/ui/`. |
 | `ci-ok` | Checks the results above against what `changes` said. | Always |
 
@@ -31,13 +32,22 @@ The rules are in `scripts/ci-changes.ts` and tested in `test/unit/ci.test.ts`. T
 | Only docs: `docs/**`, `public/docs/**`, `*.md` outside `public/` | `check`, the docs page's own e2e and UI tests (`ui (docs)`); no Android, no repeat |
 | Only `android/` | `check`, `android` |
 | Only `ios/` | `check` (its unit tests read the iPhone project files; CI builds no iPhone app) |
+| Only `services/fedimint-receiver/` | `check`, `receiver` |
 | Native apps and docs, nothing else | `check`, the docs page's own tests, and `android` when `android/` changed |
-| Anything else: `src/`, `public/`, `test/`, `config/`, a new top-level file | `check`, `e2e`, all six UI parts, and `android` when `public/` or `capacitor.config.json` changed |
+| Anything else: `src/`, `public/`, `test/`, `config/`, a new top-level file | `check`, `e2e`, all six UI parts, `android` when `public/` or `capacitor.config.json` changed, and `receiver` when `services/fedimint-receiver/` changed |
 | The changes cannot be read, or the pull request lists no file | Everything |
 
 A Markdown file under `public/` (the licences in `public/vendor/licenses/`, a sources list) is served and goes into the app bundle, so it counts as the web app, not as docs.
 
 The Android bundle is made from `public/` (by `scripts/android-web.ts` and `scripts/lib/android-web.ts`), `capacitor.config.json`, the voice and speech files fetched by `scripts/phonon-model.ts` and `scripts/asr-model.ts`, and the Capacitor runtime in `node_modules` (`android/settings.gradle`). Everything outside `android/` that `android/app/build.gradle` reads is listed there.
+
+## The receiver job
+
+The Fedimint receiver is a Rust crate that compiles fedimint, RocksDB and AWS-LC, so its job runs only when its own directory changes, or when everything runs (a push to `main`, a change to CI or the tooling). A gateway or app change does not pay for it. Running on every push to `main` also keeps the cache fresh where pull requests can read it: a pull request reads the caches of its own branch and of `main`.
+
+`actions/cache` keeps the Cargo registry and `services/fedimint-receiver/target` under a key from `Cargo.lock` and `rust-toolchain.toml`, so a run with the same lockfile builds only the receiver itself. The job builds with the crate's `ci` profile (no debug info, no incremental state) to keep the cache small. rustup installs the toolchain `rust-toolchain.toml` names. The job does not build the Docker image.
+
+Measured on a Mac with Apple silicon (2026-11-19), `cargo test --profile ci`: from nothing, 175 seconds to compile, then about 30 seconds of tests; with the dependencies built and only the receiver changed, 43 seconds in all, tests included. The `ci` build of `target/` is 3.3 GB, which is what the cache holds. A GitHub runner has fewer cores, so expect a cold run of 10 minutes or more; the first CI runs will give the real figures.
 
 ## The UI split
 

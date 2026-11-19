@@ -36,6 +36,7 @@ Open http://localhost:8787/v2/. [docs/DEVELOPING.md](docs/DEVELOPING.md) explain
 | Writing a module | [docs/modules/first-module.md](docs/modules/first-module.md) |
 | The app, and the Android and iPhone apps | [docs/APP.md](docs/APP.md), [docs/ANDROID.md](docs/ANDROID.md), [docs/IOS.md](docs/IOS.md) |
 | Running a gateway in production | [docs/OPERATING.md](docs/OPERATING.md) |
+| The Fedimint receiver (built and tested; the gateway does not use it yet) | [docs/FEDIMINT-RECEIVER.md](docs/FEDIMINT-RECEIVER.md) |
 | Tests and CI | [docs/CI.md](docs/CI.md) |
 | What is planned | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | The sealed engine, a separate project | [Bellows](https://github.com/ForgeReserve/bellows) |
