@@ -7,7 +7,8 @@ import { type Gateway, startGateway } from '../e2e/helpers.ts';
 // every part of it is inside the window, whichever words the title shows. The three actions sit at the
 // top right. The moments (Talk, Private, Pay, Share unseen) move on by themselves, can be picked by tap or
 // keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; the title's
-// last words turn with them and stop with them, and a screen reader hears one sentence. The download
+// last words turn on a quicker clock of their own and stop whenever the moments stop, and a screen
+// reader hears one sentence. The download
 // buttons show Soon while their links are empty and become links once set. What was meant for the
 // Classic page at / goes on to /classic/. Nothing is asked of another site and nothing is logged as an
 // error.
@@ -34,7 +35,9 @@ interface Opened {
 /** The title as one sentence: what a screen reader reads, and what shows under reduced motion. */
 const SENTENCE = 'Private AI for activists and anyone who cannot risk being linked to a question.';
 /** The words that turn after "Private AI for", in order (public/about/index.html). */
-const WHOS = ['activists', 'journalists', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers', 'anyone who cannot risk being linked to a question'];
+const WHOS = ['activists', 'journalists', 'anyone who cannot risk being linked to a question', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers'];
+/** The phrase in the list, set smaller on two lines and shown longer. */
+const LONG = WHOS[2]!;
 
 const SIZES = [
   [1280, 720],
@@ -204,7 +207,7 @@ describe('the landing page in a browser', () => {
     await faster(page, 10);
     const where = async () => Promise.all(['h1', '.rail', '.caps', '.phone-in'].map((sel) => box(page, sel).then((b) => [b.x, b.y, b.width, b.height].map(Math.round).join(','))));
     const at = await where();
-    for (const words of [...WHOS.slice(1), WHOS[0]!, WHOS.at(-1)!]) {
+    for (const words of [...WHOS.slice(1), WHOS[0]!, LONG]) {
       await show(page, words, 200);
       expect(await showing(page)).toBe(words);
       expect(await where(), words).toEqual(at);
@@ -237,65 +240,117 @@ describe('the landing page in a browser', () => {
     }
   });
 
-  it('turns the title with the moments, through its list in order and round again, the phrase for two halves', async () => {
+  it('turns the title on its own clock, through its list in order and round again: a word about 2 s, the phrase about 5 s, whatever the moments do', async () => {
     const { page, errors } = await open([1440, 900]);
     expect(await showing(page)).toBe('activists');
-    // Each word that comes, and each end of half a ring (what moves the title on), in order.
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    // The moments slowed to a crawl (a ring takes ten minutes): the title keeps its own pace.
+    await page.evaluate(() => (document.querySelector('.hero') as HTMLElement).style.setProperty('--dur', '600s'));
+    // Each word that comes, with the time it came, and each time a ring's half ends.
     await page.evaluate(() => {
-      const log: string[] = [];
+      const log: [string, number][] = [];
       (window as any).log = log;
       new MutationObserver(() => {
-        const on = document.querySelector('#whos .who.on')!.textContent!;
-        if (log.findLast((x) => x !== '|') !== on) log.push(on);
+        const on = document.querySelector('#whos .who.on')?.textContent;
+        if (on && log.findLast((x) => x[0] !== '|')?.[0] !== on) log.push([on, performance.now()]);
       }).observe(document.getElementById('whos')!, { attributes: true, subtree: true });
-      document.querySelector('.hero')!.addEventListener('animationend', (e) => (e as AnimationEvent).animationName === 'arc' && log.push('|'));
+      document.querySelector('.hero')!.addEventListener('animationend', (e) => (e as AnimationEvent).animationName === 'arc' && log.push(['|', performance.now()]));
     });
-    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
-    await faster(page, 25);
-    await expect.poll(() => page.evaluate(() => (window as any).log.filter((x: string) => x !== '|').length), { timeout: 20_000 }).toBeGreaterThanOrEqual(WHOS.length + 1);
-    const log: string[] = await page.evaluate(() => (window as any).log);
-    const words = log.filter((x) => x !== '|');
+    const RATE = 4;
+    await faster(page, RATE);
+    await expect.poll(() => page.evaluate(() => (window as any).log.filter((x: [string]) => x[0] !== '|').length), { timeout: 20_000 }).toBeGreaterThanOrEqual(WHOS.length + 2);
+    const log: [string, number][] = await page.evaluate(() => (window as any).log);
+    // No ring ended: the title did not wait for the moments.
+    expect(log.filter((x) => x[0] === '|')).toEqual([]);
+    const words = log.map((x) => x[0]);
     expect(words.slice(0, WHOS.length + 1)).toEqual([...WHOS.slice(1), WHOS[0], WHOS[1]]);
-    // How many halves each showed for: one each, two for the phrase. (A word comes in at the end of a
-    // half; the mark for that half follows it.)
-    const spans = words.slice(0, WHOS.length).map((w, i) => {
-      const from = log.indexOf(w);
-      const to = log.indexOf(words[i + 1]!, from + 1);
-      return [w, log.slice(from, to).filter((x) => x === '|').length];
-    });
-    expect(Object.fromEntries(spans)).toEqual(Object.fromEntries([...WHOS.slice(1), WHOS[0]!].map((w) => [w, w === WHOS.at(-1) ? 2 : 1])));
+    // How long each stayed, at the page's own speed: a word about 2 s, the phrase about 5 s.
+    for (let i = 0; i < WHOS.length; i++) {
+      const [w, at] = log[i]!;
+      const stayed = ((log[i + 1]![1] - at) * RATE) / 1000;
+      if (w === LONG) {
+        expect(stayed, w).toBeGreaterThanOrEqual(4.5);
+        expect(stayed, w).toBeLessThanOrEqual(6);
+      } else {
+        expect(stayed, w).toBeGreaterThanOrEqual(1.8);
+        expect(stayed, w).toBeLessThanOrEqual(2.8);
+      }
+    }
+    // The clock is the word's own animation: 2 s for a word, 5 s for the phrase.
+    const holds = await page.evaluate(() =>
+      [...document.querySelectorAll('#whos .who')].map((w) => {
+        const had = w.classList.contains('on');
+        w.classList.add('on');
+        const a = w.getAnimations().find((x) => (x as CSSAnimation).animationName === 'who-hold');
+        const d = a?.effect?.getComputedTiming().duration;
+        if (!had) w.classList.remove('on');
+        return [w.textContent, d];
+      }),
+    );
+    expect(Object.fromEntries(holds)).toEqual(Object.fromEntries(WHOS.map((w) => [w, w === LONG ? 5000 : 2000])));
     expect(errors).toEqual([]);
     await page.context().close();
   });
 
-  it('stops the title with Pause, under the mouse and while the page is out of sight', async () => {
+  it('stops the title whenever the moments stop: Pause, a moment picked, the mouse, focus and the page out of sight; it goes on from where it was', async () => {
     const { page, errors } = await open([1440, 900]);
     await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    /** How far the word on show is through its time (ms at the page's speed), once a pause or a play has taken hold. */
+    const through = () =>
+      page.evaluate(async () => {
+        const a = document.querySelector('#whos .who.on')!.getAnimations().find((x) => (x as CSSAnimation).animationName === 'who-hold')!;
+        await a.ready;
+        return a.currentTime as number;
+      });
+    /** Waits longer than any word stays at this speed, and expects the same word, no further through. */
+    const holdsStill = async () => {
+      const [w, t] = [await showing(page), await through()];
+      await page.waitForTimeout(1500);
+      expect(await showing(page)).toBe(w);
+      expect(await through()).toBe(t);
+      return [w, t] as const;
+    };
+
+    // Pause stops it part way through a word; Play goes on from there, not from the start of the word.
+    await page.waitForTimeout(800);
     await page.click('#play');
-    await faster(page, 25);
-    const paused = await showing(page);
-    await page.waitForTimeout(1500); // more than a whole round of the moments at this speed
-    expect(await showing(page)).toBe(paused);
+    await faster(page, 10);
+    const [paused, at] = await holdsStill();
+    expect(at).toBeGreaterThan(0);
     await page.click('#play');
+    expect(await through()).toBeGreaterThanOrEqual(at - 0.5); // (to within the rounding of the time)
     await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(paused);
+
+    // A moment picked stops the moments, and the title with them; Play starts both. (Picked without the
+    // mouse, which would hold it anyway.)
+    await page.evaluate(() => document.getElementById('tab-pay')!.click());
+    expect((await state(page)).play).toBe('stopped');
+    const [picked] = await holdsStill();
+    await page.click('#play');
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(picked);
 
     // The mouse over the phone holds it.
     const phone = await box(page, '.phone');
     await page.mouse.move(phone.x + phone.width / 2, phone.y + phone.height / 2);
-    const held = await showing(page);
-    await page.waitForTimeout(1500);
-    expect(await showing(page)).toBe(held);
+    const [held] = await holdsStill();
     await page.mouse.move(5, 450);
     await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(held);
+
+    // Keyboard focus on the tabs holds it.
+    await page.focus('#tab-pay');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.querySelector('.hero')!.classList.contains('held'))).toBe(true);
+    const [focused] = await holdsStill();
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(focused);
 
     // Out of sight (another tab, a locked phone), it holds too.
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    const away = await showing(page);
-    await page.waitForTimeout(1500);
-    expect(await showing(page)).toBe(away);
+    const [away] = await holdsStill();
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
       document.dispatchEvent(new Event('visibilitychange'));
@@ -314,7 +369,7 @@ describe('the landing page in a browser', () => {
     await faster(page, 25);
     await expect.poll(() => showing(page), { timeout: 10_000 }).not.toBe('activists');
     expect(await headingName(page)).toBe(SENTENCE);
-    await show(page, WHOS.at(-1)!);
+    await show(page, LONG);
     expect(await headingName(page)).toBe(SENTENCE);
     expect(errors).toEqual([]);
     await page.context().close();

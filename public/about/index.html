@@ -28,9 +28,9 @@
 <body>
 <!-- The landing page (served at / by src/app.ts; its files are under /about/): one screen, no scroll.
      One phone moves through four moments (Talk, Private, Pay, Share unseen); the row of icons under the
-     title shows which one is on and picks one. The title's last words turn with the moments. about.js
-     runs the moments, the title and the download buttons; about.css draws the phone, the rings and all of
-     the motion. Icons are the app's own (public/v2/core/ui.js). The phone pictures come from
+     title shows which one is on and picks one. The title's last words turn on a quicker clock of their
+     own and stop when the moments do. about.js runs the moments, the title and the download buttons;
+     about.css draws the phone, the rings and all of the motion. Icons are the app's own (public/v2/core/ui.js). The phone pictures come from
      scripts/about-shots.ts. No file here comes from another site. -->
 <a class="skip" href="#moments">Skip to the moments</a>
 <header class="top">
@@ -76,20 +76,21 @@
 
 <main class="hero" id="main" data-moment="talk" data-step="0" data-frame="talk-a" data-play="intro">
   <!-- The title. A screen reader reads the whole sentence (.t-still), and so does a phone set to reduce
-       motion, where it shows as it is. Otherwise "Private AI for" stays and the words after it turn, one
-       each half turn of a moment's ring (about.js), in the order below. Edit the list here: one word each
-       (at most 14 letters, as whistleblowers), and class="who long" for a phrase, which is set smaller and
-       shows for two turns. The first is the one that shows before the page moves. -->
+       motion, where it shows as it is. Otherwise "Private AI for" stays and the words after it turn on
+       their own clock (about 2 s a word, about.css), in the order below, and round again. Edit the list
+       here: one word each (at most 14 letters, as whistleblowers), and class="who long" for a phrase,
+       which is set smaller on two lines and stays long enough to read (about 5 s). The first is the one
+       that shows before the page moves. -->
   <h1 id="title"><span class="t-still"><span class="t-a">Private AI for activists</span> <span class="t-b">and anyone who cannot risk being linked to a question.</span></span><span class="t-turn" aria-hidden="true"><span class="t-for">Private AI for</span>
     <span class="whos" id="whos">
       <span class="who on">activists</span>
       <span class="who">journalists</span>
+      <span class="who long">anyone who cannot risk being linked to a question</span>
       <span class="who">researchers</span>
       <span class="who">survivors</span>
       <span class="who">organizers</span>
       <span class="who">whistleblowers</span>
       <span class="who">lawyers</span>
-      <span class="who long">anyone who cannot risk being linked to a question</span>
     </span></span></h1>
 
   <!-- The four moments. Each tab's ring fills while its moment shows; Pause stops them. -->
