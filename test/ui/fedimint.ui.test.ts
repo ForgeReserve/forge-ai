@@ -65,10 +65,45 @@ beforeEach(() => {
 /**
  * The app with a reader whose card is `card`, and ForgeTill played from Node: the pairing (address and
  * token) is held here, as the plugin holds it in the Keystore, and the page never sees the token.
+ * iphone: the iPhone app, which reads cards and has no ForgeTill. camera: false for a phone with none to
+ * scan with. voice: a phone voice for Listen, which records what it read (__spoken).
  */
-async function appWithCard(card: FakeFedimintCard) {
+async function appWithCard(card: FakeFedimintCard, { iphone = false, camera = true, voice = false } = {}) {
   const ctx = await browser.newContext(PHONE);
   await pastFirstRun(ctx);
+  await ctx.addInitScript(
+    ({ camera, voice }) => {
+      const w = window as any;
+      if (!camera) Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+      if (!voice) return;
+      w.__spoken = [];
+      w.SpeechSynthesisUtterance = class {
+        text: string;
+        voice: unknown = null;
+        lang = '';
+        rate = 1;
+        onend: null | (() => void) = null;
+        onerror: null | ((e: unknown) => void) = null;
+        constructor(text: string) {
+          this.text = text;
+        }
+      };
+      Object.defineProperty(window, 'speechSynthesis', {
+        configurable: true,
+        value: {
+          getVoices: () => [{ name: 'Phone voice', lang: 'en-US', localService: true }],
+          speak: (u: any) => {
+            w.__spoken.push(u.text);
+            setTimeout(() => u.onend?.(), 20);
+          },
+          cancel: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        },
+      });
+    },
+    { camera, voice },
+  );
   const field = { card };
   await ctx.exposeFunction('__cardTx', async (hex: string) => {
     const answer = await field.card.transceive(Array.from(Buffer.from(hex, 'hex')));
@@ -119,11 +154,12 @@ async function appWithCard(card: FakeFedimintCard) {
     }
     return undefined;
   });
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((iphone) => {
     const w = window as any;
     w.__native = { calls: [] as any[], listeners: [] as any[], cardId: 0 };
     w.Capacitor = {
       isNativePlatform: () => true,
+      ...(iphone ? { getPlatform: () => 'ios', Plugins: { ForgeBars: {}, ForgeNfc: {} } } : {}),
       nativePromise: async (plugin: string, method: string, opts: any) => {
         w.__native.calls.push({ plugin, method, opts });
         if (plugin === 'ForgeNfc' && method === 'status') return { available: true, enabled: true };
@@ -153,7 +189,7 @@ async function appWithCard(card: FakeFedimintCard) {
       w.__native.cardId += 1;
       for (const l of w.__native.listeners) if (l.plugin === 'ForgeNfc' && l.event === 'card') l.fn({ id: w.__native.cardId, isoDep: true });
     };
-  });
+  }, iphone);
   // Nothing leaves this computer: Forge's own engine (the app's default) is answered with a refusal.
   await ctx.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => route.abort('blockedbyclient'));
   const page = await ctx.newPage();
@@ -232,6 +268,105 @@ describe('Tap a Fedimint card', () => {
     expect(await page.getAttribute('.card-art', 'aria-label')).toBe('A Fedimint card');
     expect(await page.textContent('#fedAppOnly')).toBe('Android app only. Fedimint cards work in the Forge app for Android. A web page cannot talk to a card.');
     expect(await page.getAttribute('#fedGetApp', 'href')).toBe('/download');
+    await ctx.close();
+  }, 60_000);
+
+  it('in the app with no till: what a till is and the steps come first, Scan is the lit button, and Listen reads them', async () => {
+    const { ctx, page, errors } = await appWithCard(new FakeFedimintCard(), { voice: true });
+    await page.goto(`${app}/#/funds/add`);
+    await openWay(page, 'fedimint');
+    await page.waitForSelector('#fedSteps');
+    // One plain line each: the card needs a till, and what a till does. Neither hides behind an info button.
+    expect(await page.textContent('#fedNeedTill')).toBe('This card needs a till.');
+    expect(await page.textContent('#fedTillWhat')).toBe('A till takes the money from the card and adds it to your funds.');
+    expect(await page.locator('.till-need .info-btn').count()).toBe(0);
+    // Three numbered steps, each its picture and a few words.
+    expect(await page.getAttribute('#fedSteps', 'aria-label')).toBe('How to set a till');
+    const steps = page.locator('#fedSteps > li');
+    expect(await steps.allTextContents()).toEqual(['Get the pay code from the person who runs the till.', 'Scan it or paste it.', 'Then pay with the card.']);
+    for (let i = 0; i < 3; i++) expect(await steps.nth(i).locator('.add-home-ico svg').count()).toBe(1);
+    // The number of each step sits on its picture (style.css .till-steps).
+    expect(await page.evaluate(() => [...document.querySelectorAll('#fedSteps .add-home-ico')].every((n) => getComputedStyle(n, '::after').content.startsWith('counter(step)')))).toBe(true);
+    // Scan is the next step, so it is the lit button; Use this till waits for a code, enabled.
+    expect(await page.getAttribute('#fedScan', 'class')).toMatch(/\bprimary\b/);
+    expect(await page.getAttribute('#fedUseTill', 'class')).not.toMatch(/\bprimary\b/);
+    expect(await page.isEnabled('#fedUseTill')).toBe(true);
+    expect(await page.textContent('label[for=fedPairText]')).toBe('Or paste the pay code');
+    // All of it is above the paste field, in the order it is read.
+    const y = async (sel: string) => (await page.locator(sel).boundingBox())!.y;
+    expect(await y('#fedNeedTill')).toBeLessThan(await y('#fedSteps'));
+    expect(await y('#fedSteps')).toBeLessThan(await y('#fedScan'));
+    expect(await y('#fedScan')).toBeLessThan(await y('#fedPairText'));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(412);
+    // Listen reads the title, the two lines and the steps.
+    await page.waitForSelector('#fundListen:not([hidden])');
+    await page.click('#fundListen');
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__spoken.join(' | ')), { timeout: 10_000 })
+      .toBe('Tap a Fedimint card | This card needs a till. | A till takes the money from the card and adds it to your funds. | Get the pay code from the person who runs the till. | Scan it or paste it. | Then pay with the card.');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('in the app with no camera: the step says paste, and Use this till is the lit button', async () => {
+    const { ctx, page, errors } = await appWithCard(new FakeFedimintCard(), { camera: false });
+    await page.goto(`${app}/#/funds/add/fedimint`);
+    await page.waitForSelector('#fedSteps');
+    expect(await page.locator('#fedScan').count()).toBe(0);
+    expect(await page.locator('#fedSteps > li').nth(1).textContent()).toBe('Paste it below.');
+    expect(await page.textContent('label[for=fedPairText]')).toBe('Paste the pay code');
+    expect(await page.getAttribute('#fedUseTill', 'class')).toMatch(/\bprimary\b/);
+    // PR 58's message, in its no-camera words.
+    await page.click('#fedUseTill');
+    await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('No pay code yet. Paste it here.');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('in the app: a code pasted lights Use this till; the till set, the screen says so and what comes next, and Change the till goes back', async () => {
+    const { ctx, page, errors } = await appWithCard(new FakeFedimintCard());
+    await page.goto(`${app}/#/funds/add/fedimint`);
+    await page.waitForSelector('#fedSteps');
+    await page.fill('#fedPairText', till.pairText());
+    // A code is there: confirming it is the next step.
+    expect(await page.getAttribute('#fedUseTill', 'class')).toMatch(/\bprimary\b/);
+    expect(await page.getAttribute('#fedScan', 'class')).not.toMatch(/\bprimary\b/);
+    // Emptied again, Scan is lit again.
+    await page.fill('#fedPairText', '');
+    expect(await page.getAttribute('#fedScan', 'class')).toMatch(/\bprimary\b/);
+    await page.fill('#fedPairText', till.pairText());
+    await page.click('#fedUseTill');
+    await page.waitForSelector('#fedTillReady');
+    expect(await page.locator('#fedSteps').count()).toBe(0);
+    expect(await page.textContent('#fedTillSet')).toBe('Till set.');
+    expect(await page.locator('#fedTillSet svg').count()).toBe(1);
+    expect(await page.textContent('#fedNext')).toBe('Choose how much, then hold the card to the phone.');
+    // First on the screen, before the amount; the till and its change below.
+    expect((await page.locator('#fedTillReady').boundingBox())!.y).toBeLessThan((await page.locator('#fedAmount').boundingBox())!.y);
+    expect(await page.textContent('#fedTillUrl')).toBe(till.url);
+    expect(await page.textContent('#fedChangeTill')).toBe('Change the till');
+    await page.click('#fedChangeTill');
+    await page.waitForSelector('#fedSteps');
+    expect(await page.textContent('#fedNeedTill')).toBe('This card needs a till.');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('in the iPhone app: no till part, so the Fedimint card is not offered, and its address says the Android app, with nothing to tap', async () => {
+    const { ctx, page, errors } = await appWithCard(new FakeFedimintCard(), { iphone: true });
+    await page.goto(`${app}/#/funds/add`);
+    await page.waitForSelector('#tab-card');
+    await page.waitForSelector('#wayGo', { state: 'attached' });
+    expect(await page.locator('#tab-fedimint, #more-fedimint, #pair-fedimint').count()).toBe(0);
+    await page.goto(`${app}/#/funds/add/fedimint`);
+    await page.waitForSelector('#fundUnavailable');
+    expect(await page.textContent('#fundUnavailable')).toBe('Fedimint cards need the Android app for now. The iPhone app cannot pay with them yet.');
+    expect(await page.locator('#fundUnavailable .say-head').textContent()).toBe('Fedimint cards need the Android app for now.');
+    // Back is the only button besides the line's own info button: no scan, no paste, no Get the app.
+    const buttons = await page.locator('[data-screen=fund] button, [data-screen=fund] a, [data-screen=fund] textarea, [data-screen=fund] input').evaluateAll((n) => n.map((x) => x.className));
+    expect(buttons).toEqual(['round', 'info-btn']);
+    expect(await page.evaluate(() => (window as any).__native.calls.some((c: any) => c.plugin === 'ForgeTill'))).toBe(false);
+    expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
 
