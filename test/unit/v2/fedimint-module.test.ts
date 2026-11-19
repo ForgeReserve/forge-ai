@@ -75,7 +75,7 @@ describe('the Tap a Fedimint card module', () => {
     // The request reached the till: the card may have paid.
     expect(M.thrownWords('not_stored_after', t)).toBe(en['fund.fedimint.noAnswer']);
     expect(M.thrownWords('not_stored_after', t)).not.toMatch(/Nothing was sent/);
-    expect(M.thrownWords('other_till', t, { till: 'https://till.example.org' })).toBe("Another till. This payment went through the till till.example.org. Scan that till's pay code again to finish it.");
+    expect(M.thrownWords('other_till', t, { till: 'https://till.example.org' })).toBe("Another till. This payment went through the till till.example.org. Scan that till's pairing code again to finish it.");
     expect(M.thrownWords('link', t)).toBe(en['fund.fedimint.unreachable']);
     for (const k of ['cardPaysPlusMargin', 'splitPlusMargin', 'feeTooHigh', 'tillBusy', 'otherTill']) expect(en[`fund.fedimint.${k}`], k).toBeTruthy();
   });

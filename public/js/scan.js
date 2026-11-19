@@ -23,7 +23,7 @@
   }
 
   /* Feeds scanned texts; result() once done() is true. any: every code counts, for a caller that reads
-     the text itself (an invite code, an event link, a till's pay code). */
+     the text itself (an invite code, an event link, a till's pairing code). */
   function Assembler(any) { this.kind = null; this.inner = null; this.value = null; this.any = !!any; }
   Assembler.prototype.add = function (raw) {
     var text = String(raw || "").trim();

@@ -5,7 +5,7 @@
 // the invoice, and the engine credits the funds. The work is core/till.js; this file is the screen.
 //
 // Only the Android app can do this: a web page cannot talk to the card, and the till's pay token is
-// kept by the app (ForgeTill). The till is paired once, by scanning the pay code the till shows.
+// kept by the app (ForgeTill). The till is paired once, by scanning the pairing code the till shows.
 //
 // Every payment is stored on the phone before the till hears of it, and stays until the engine
 // credited it or the till gave the card its money back. A failed payment is listed with Get it back.

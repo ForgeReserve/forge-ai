@@ -47,7 +47,7 @@ class TillPlugin : Plugin() {
         call.resolve(JSObject().put("paired", p != null).put("url", p?.url))
     }
 
-    /** {text}: a scanned pay code. Resolves {url}; rejects with code pos, insecure or invalid. */
+    /** {text}: a scanned pairing code. Resolves {url}; rejects with code pos, insecure or invalid. */
     @PluginMethod
     fun pair(call: PluginCall) {
         when (val r = TillRules.parsePairing(call.getString("text"))) {
@@ -56,7 +56,7 @@ class TillPlugin : Plugin() {
                 store().pairing = r.pairing
                 call.resolve(JSObject().put("url", r.pairing.url))
             }
-            is TillRules.Parsed.No -> call.reject("This is not a till's pay code.", r.why.name.lowercase())
+            is TillRules.Parsed.No -> call.reject("This is not a till's pairing code.", r.why.name.lowercase())
         }
     }
 

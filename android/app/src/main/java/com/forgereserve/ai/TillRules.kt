@@ -10,7 +10,7 @@ import java.security.MessageDigest
 import java.util.Base64
 
 /**
- * The rules for talking to a till (slice A14, TillPlugin): what a pay code is, which requests the
+ * The rules for talking to a till (slice A14, TillPlugin): what a pairing code is, which requests the
  * page may send with the till's pay token, and the card link's frames. Plain Kotlin with no Android
  * types, so the JVM unit tests cover it (app/src/test). The till is fedimintcard's
  * `till serve --pay-enabled`; its routes are in fedimintcard-pay docs/PAY.md, POS-LINK.md and
@@ -36,7 +36,7 @@ object TillRules {
         override fun toString() = "Pairing(url=$url, token=<hidden>)" // never log the token
     }
 
-    /** Why a scanned code is not a pay code. */
+    /** Why a scanned code is not a pairing code. */
     enum class Refusal { POS, INSECURE, INVALID }
 
     sealed class Parsed {
