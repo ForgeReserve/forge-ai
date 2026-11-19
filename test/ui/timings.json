@@ -1,6 +1,7 @@
 {
   "source": "Vitest JSON reports, 2026-11-17: .tmp/ui-times",
   "files": {
+    "test/ui/about.ui.test.ts": 6,
     "test/ui/addfunds.ui.test.ts": 28.8,
     "test/ui/addmoney.ui.test.ts": 75,
     "test/ui/android.ui.test.ts": 62.1,

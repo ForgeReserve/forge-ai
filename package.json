@@ -27,7 +27,8 @@
     "test-token": "tsx scripts/test-token.ts",
     "print-notes": "node scripts/print-notes.ts",
     "issue-credits": "node scripts/issue-credits.ts",
-    "build:docs": "node scripts/build-docs.ts"
+    "build:docs": "node scripts/build-docs.ts",
+    "about:shots": "node scripts/about-shots.ts"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^4.13.0",

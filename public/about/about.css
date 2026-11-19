@@ -1,0 +1,152 @@
+/* The landing page at /about. The app's Midnight look (public/v2/modules/look/midnight) by default;
+   about.js puts in the look this phone keeps from the app, as /download does. Inter from this origin. */
+@font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+:root {
+  --bg: #0B0D10; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
+  --line: #2A2F3A; --line-2: #333946;
+  --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55; --memory: #3FCFB4; --memory-track: #16302C;
+  --gold: #D4A544; --gold-ink: #D4A544; --gold-tint: #2A2416; --gold-line: #6B5527; --gold-track: #3A3320;
+  --danger: #F0685A; --danger-tint: #2E1A1C;
+  --primary: #F1EFE9; --primary-ink: #0B0D10;
+  --shadow-primary: inset 0 -5px 0 rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5);
+  --shadow-raised: inset 0 -5px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --focus: #7FB4FF;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gutter: 16px;
+  color-scheme: dark;
+}
+:root[data-scheme="light"] { color-scheme: light; }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 88px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body { margin: 0; background: var(--bg); color: var(--text-body); font-family: var(--font); font-size: 18px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+h1, h2 { color: var(--ink); margin: 0; line-height: 1.15; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: var(--gold-ink); text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 8px; }
+img { display: block; max-width: 100%; height: auto; }
+
+.ico { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gh { width: 24px; height: 24px; flex: none; }
+
+.skip { position: absolute; left: var(--gutter); top: -100px; z-index: 30; background: var(--primary); color: var(--primary-ink); padding: 10px 16px; border-radius: 12px; font-weight: 700; text-decoration: none; }
+.skip:focus { top: 10px; }
+
+/* ---------- the top bar: the brand on the left, the three actions on the right ---------- */
+.top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px max(var(--gutter), env(safe-area-inset-right)) 8px max(var(--gutter), env(safe-area-inset-left)); background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; color: var(--ink); text-decoration: none; font-weight: 800; letter-spacing: 0.08em; font-size: 15px; white-space: nowrap; }
+.brand svg { width: 30px; height: 21px; color: var(--gold); }
+.brand .ai { color: var(--gold); }
+.actions { display: flex; align-items: center; gap: 6px; }
+.act { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; min-width: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 15px; font-weight: 650; white-space: nowrap; }
+.act:hover { border-color: var(--text-2); }
+.act-open { background: var(--primary); color: var(--primary-ink); border-color: transparent; box-shadow: var(--shadow-primary); }
+.act-open:hover { border-color: transparent; }
+.act-icon { padding: 0; }
+/* A phone: each action is an icon over a short word, so all three fit beside the brand at 320 px. */
+@media (max-width: 559px) {
+  .brand .word { display: none; }
+  .act { flex-direction: column; gap: 2px; min-width: 56px; padding: 4px 8px; font-size: 12px; font-weight: 650; border-radius: 12px; min-height: 52px; }
+  .act .ico, .act .gh { width: 22px; height: 22px; }
+}
+
+/* ---------- buttons ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 0 24px; border-radius: 18px; font-size: 18px; font-weight: 700; text-decoration: none; }
+.btn.primary { background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); }
+.btn.big { min-height: 64px; padding: 0 28px; font-size: 19px; }
+.hero .btn.big { width: 100%; max-width: 420px; }
+
+/* The download buttons: a link once its data-href is set (about.js); until then Soon, and no link. */
+.downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 420px; }
+.dl { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 112px; padding: 14px 10px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow-raised); color: var(--ink); text-decoration: none; font-weight: 700; font-size: 17px; text-align: center; }
+.dl .ico { width: 30px; height: 30px; }
+.dl[href]:hover { background: var(--surface-2); }
+.dl:not([href]) { color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); background: transparent; cursor: default; }
+.soon { padding: 2px 10px; border-radius: 999px; background: var(--gold-tint); color: var(--gold-ink); border: 1px solid var(--gold-line); font-size: 13px; font-weight: 700; }
+
+/* ---------- page layout ---------- */
+main { max-width: 1120px; margin: 0 auto; padding: 0 max(var(--gutter), env(safe-area-inset-right)) 0 max(var(--gutter), env(safe-area-inset-left)); }
+section { padding: 56px 0; }
+section + section { border-top: 1px solid var(--line); }
+
+.rings { width: 72px; height: 72px; }
+@media (min-width: 820px) { .hero .rings { width: 88px; height: 88px; } }
+.rings circle { fill: none; stroke-width: 18; }
+.ring-gold { stroke: var(--gold); }
+.ring-teal { stroke: var(--memory); }
+.rings .ring-core { fill: var(--primary); stroke: none; }
+.ring-mic { fill: none; stroke: var(--primary-ink); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+
+.hero { display: grid; grid-template-columns: 1fr; gap: 40px; padding-top: 40px; }
+.hero-text { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; }
+.hero h1 { font-size: clamp(30px, 7.4vw, 50px); font-weight: 800; max-width: 17ch; }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.chips li { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-raised); color: var(--ink); font-weight: 650; font-size: 16px; }
+.chips li:nth-child(1) .ico { color: var(--ink); }
+.chips li:nth-child(2) .ico { color: var(--teal); }
+.chips li:nth-child(3) .ico { color: var(--gold); }
+.chips li:nth-child(4) .ico { color: var(--text-2); }
+
+/* A phone, drawn around each screenshot. */
+.phone { margin: 0 auto; width: min(300px, 78vw); padding: 10px; border-radius: 46px; background: #1A1D24; box-shadow: inset 0 0 0 2px #2E333D, inset 0 0 0 6px #0E1014, 0 30px 70px rgba(0,0,0,0.45); position: relative; }
+.phone::before, .phone::after { content: ""; position: absolute; width: 4px; border-radius: 2px; background: #2E333D; }
+.phone::before { left: -3px; top: 22%; height: 56px; }
+.phone::after { right: -3px; top: 28%; height: 84px; }
+.phone img { width: 100%; border-radius: 36px; background: #0B0D10; }
+
+.feature { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; }
+.feature-text { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 34rem; }
+.feature h2 { font-size: clamp(28px, 6vw, 40px); font-weight: 800; }
+.feature p { font-size: 19px; }
+
+.badge { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 20px; background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-raised); }
+.badge .ico, .badge .gh { width: 32px; height: 32px; }
+.badge.teal { background: var(--teal-tint); color: var(--teal); }
+.badge.gold { background: var(--gold-tint); color: var(--gold-ink); }
+.badge.red { background: var(--danger-tint); color: var(--danger); }
+
+.tiles, .ways { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.tiles { max-width: 440px; margin: 0 auto; }
+.tiles li, .ways li { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 120px; padding: 16px 10px; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow-raised); color: var(--ink); font-weight: 700; font-size: 16px; text-align: center; }
+.tiles li .ico { width: 36px; height: 36px; color: var(--teal); }
+.ways { grid-template-columns: repeat(3, 1fr); max-width: 440px; }
+.ways li { min-height: 104px; font-size: 15px; }
+.ways li .ico { width: 34px; height: 34px; color: var(--gold); }
+
+.more { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.card { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 22px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); }
+.card .badge { width: 56px; height: 56px; border-radius: 18px; }
+.card .badge .ico, .card .badge .gh { width: 28px; height: 28px; }
+.card h2 { font-size: 24px; font-weight: 800; }
+.card p { font-size: 17px; }
+.text-link { display: inline-flex; align-items: center; min-height: 48px; font-weight: 700; }
+
+.end { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 64px 0 72px; }
+.end h2 { font-size: clamp(30px, 6vw, 40px); font-weight: 800; }
+.end p { font-size: 19px; }
+.rings.small { width: 64px; height: 64px; }
+
+.foot { border-top: 1px solid var(--line); padding: 24px max(var(--gutter), env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left)); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; max-width: 1120px; margin: 0 auto; color: var(--text-2); font-size: 15px; }
+.foot nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.foot a { display: inline-flex; align-items: center; min-height: 48px; color: var(--text-body); font-weight: 600; text-decoration: none; }
+.foot a:hover { color: var(--ink); text-decoration: underline; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .act, .dl, .btn { transition: background-color 0.15s, border-color 0.15s, transform 0.15s; }
+  .btn:active, .dl[href]:active, .act:active { transform: translateY(1px); }
+}
+
+/* ---------- a wide screen: text and phone side by side ---------- */
+@media (min-width: 820px) {
+  section { padding: 88px 0; }
+  .hero { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; padding-top: 64px; }
+  .hero-phone { width: 300px; }
+  .feature { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; }
+  .feature .phone { width: 280px; }
+  .feature.flip .feature-text { order: 2; }
+  .more { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+}
+@media (min-width: 1080px) {
+  .more { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
