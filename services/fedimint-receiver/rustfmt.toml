@@ -1,0 +1,3 @@
+# The sources are written wide, as the other Rust in this family of repositories.
+max_width = 140
+use_small_heuristics = "Max"

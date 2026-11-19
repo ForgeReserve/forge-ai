@@ -1,0 +1,104 @@
+[package]
+name = "fedimint-receiver"
+description = "Holds Fedimint eCash for the Forge AI gateway: joins federations and receives out-of-band notes"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+default-run = "fedimint-receiver"
+
+[features]
+default = []
+# The `devfed` binary: a federation in this process for the gateway's end to end tests.
+devfed = [
+    "dep:fedimint-dummy-client",
+    "dep:fedimint-dummy-server",
+    "dep:fedimint-mint-server",
+    "dep:fedimint-mintv2-server",
+    "dep:fedimint-testing",
+]
+# Crash points for the restart tests (tests/receive.rs). Never in a release build.
+test-hooks = []
+
+[[bin]]
+name = "fedimint-receiver"
+path = "src/main.rs"
+
+[[bin]]
+name = "devfed"
+path = "src/bin/devfed.rs"
+required-features = ["devfed"]
+
+# Every version is exact; Cargo.lock is committed. Fedimint's crates move together, so all of them
+# are the same release.
+[dependencies]
+anyhow = "=1.0.104"
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
+fedimint-api-client = "=0.13.0"
+fedimint-bip39 = "=0.13.0"
+fedimint-client = "=0.13.0"
+fedimint-connectors = "=0.13.0"
+fedimint-core = "=0.13.0"
+fedimint-mint-client = "=0.13.0"
+fedimint-mint-common = "=0.13.0"
+fedimint-mintv2-client = "=0.13.0"
+fedimint-mintv2-common = "=0.13.0"
+fedimint-rocksdb = "=0.13.0"
+futures = "=0.3.34"
+hex = "=0.4.3"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+# Not used here: netwatch 0.5 (under fedimint's iroh connector) needs socket2's "all" feature and
+# does not ask for it, so a build without the test dependencies fails on macOS. fedimint-sdk
+# carries the same line for the same reason.
+socket2 = { version = "=0.5.10", features = ["all"] }
+tokio = { version = "=1.54.1", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt"] }
+
+# devfed only.
+fedimint-dummy-client = { version = "=0.13.0", optional = true }
+fedimint-dummy-server = { version = "=0.13.0", optional = true }
+fedimint-mint-server = { version = "=0.13.0", optional = true }
+fedimint-mintv2-server = { version = "=0.13.0", optional = true }
+fedimint-testing = { version = "=0.13.0", optional = true }
+
+[dev-dependencies]
+# The tests build the receiver with its crash points (`test-hooks`) and use the development
+# federation (`devfed`).
+fedimint-receiver = { path = ".", features = ["devfed", "test-hooks"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json"] }
+tempfile = "=3.27.0"
+
+# Fedimint's own [profile.dev.package] settings do not reach a crate that depends on it: without
+# these the in-process federation's cryptography runs unoptimised and the tests crawl.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package]
+bitcoin_hashes = { opt-level = 3 }
+bls12_381 = { opt-level = 3 }
+fedimint-threshold-crypto = { opt-level = 3 }
+ff = { opt-level = 3 }
+group = { opt-level = 3 }
+librocksdb-sys = { opt-level = 3 }
+pairing = { opt-level = 3 }
+rand_chacha = { opt-level = 3 }
+ring = { opt-level = 3 }
+rustls = { opt-level = 3 }
+secp256k1 = { opt-level = 3 }
+secp256k1-sys = { opt-level = 3 }
+subtle = { opt-level = 3 }
+
+# CI: no debug info and no incremental state, so the cached build stays small.
+[profile.ci]
+inherits = "dev"
+debug = false
+incremental = false
+
+[profile.ci.build-override]
+debug = false
+opt-level = 1
+
+[profile.release]
+strip = true
