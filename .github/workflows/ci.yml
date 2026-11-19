@@ -289,6 +289,13 @@ jobs:
           rustup toolchain install
           cargo --version
 
+      - name: Protocol buffer compiler
+        # A test dependency (the in-process federation's Lightning client) builds its protocol files with protoc.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends protobuf-compiler
+          protoc --version
+
       - name: Format
         run: cargo fmt --check
 

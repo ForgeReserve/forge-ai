@@ -233,6 +233,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+Clippy and the tests need `protoc` (the protocol buffer compiler) on the machine: a test dependency builds with it. The service itself builds without it.
+
 The tests run the real binary in a child process and speak to it over HTTP, against federations of four guardians started in the test process (`src/devfed.rs`). Notes come from a separate client of the federation, made with `send_oob_notes` (mint v1, as a till's wallet makes them) or mintv2's `send`. A restart is a real one: the child is killed with SIGKILL, or aborts at a crash point (the `test-hooks` feature, built only for tests), and a new process opens the same data directory.
 
 | Test | What it shows |
