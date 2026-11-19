@@ -231,7 +231,7 @@ The engine runs no Fedimint client, so it never takes Fedimint notes. A Fedimint
 
 A payment is tied to the till it was made through. While one is not finished, Change the till and Forget this till are off, and a payment made through another till is never sent to the one paired now (its `pay_id` would name another pay there): the row names the till it needs. A payment that waits on the engine or the till is looked at again when Funds opens, when the connection comes back and when the app starts. Erase everything warns about one that is not finished. Not covered: putting the unspent fee reserve back on the card (the till does not), a till that is offline (it refuses a pay), and an iPhone: the iPhone app reads cards but has no till part (ForgeTill is Android's), so Tap a Fedimint card is not offered there, and its address says "Fedimint cards need the Android app for now." with nothing to tap (the module's `unavailable`, shown by `screens/funds.js`).
 
-Tested against a mock till that implements the documented routes, auth scope and states over real HTTP and a real card link (`test/support/mocktill.ts`), with a fake card. A real till and a real Fedimint card are not tested yet.
+Tested against a mock till that implements the documented routes, auth scope and states over real HTTP and a real card link (`test/support/mocktill.ts`), with a fake card. The mock stands in for the till alone: the Android plugins (`TillPlugin.kt`, `NfcPlugin.kt`) do not run in these tests. A real payment has been made by hand, once: a Pixel paired from the StartOS package's Pair a paying app, a real Fedimint card and its PIN, and the till paid the engine's invoice. A refund to the card through a real till has not been run.
 
 ## The gateway's wallet
 
