@@ -314,6 +314,18 @@ dialog.voice-dl::backdrop { background: rgba(0, 0, 0, 0.45); }
 .card-get { font-size: 18px; font-weight: 700; color: var(--gold-ink); }
 /* Tap a Fedimint card: the price before the tap, and the till it pays through */
 .till-most { font-size: 16px; font-weight: 600; }
+/* Tap a Fedimint card with no till: what a till is, then the steps, numbered on their pictures. */
+.card-art.small { width: min(150px, 100%); }
+.till-need > p.note { font-size: 15px; font-weight: 500; color: var(--text-body); text-align: left; }
+.till-steps { counter-reset: step; }
+.till-steps .add-home-step { counter-increment: step; font-size: 16px; }
+.till-steps .add-home-ico { position: relative; }
+.till-steps .add-home-ico::after { content: counter(step) / ""; position: absolute; top: -6px; left: -6px; width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 800; }
+/* The till is set: said first, with what comes next. */
+.till-ready { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 18px; background: var(--teal-tint); }
+.till-ready > p { margin: 0; }
+.till-ready > #fedTillSet { font-weight: 700; color: var(--teal); }
+.till-ready > p.note { text-align: left; color: var(--ink); }
 .till-box { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
 .till-box p { margin: 0; overflow-wrap: anywhere; }
 .card-view .till-box .note { text-align: left; }

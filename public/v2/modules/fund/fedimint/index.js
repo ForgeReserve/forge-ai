@@ -99,6 +99,11 @@ export function create(inputs) {
     // iPhone app: it reads cards but has no till yet (ForgeTill is Android's), and no app to point to.
     available: (methods) => nfc?.listed?.() !== false && !(nfc?.supported?.() && !till?.supported?.()) && !!methods?.lightning?.enabled,
     usable: () => ready(),
+    /**
+     * Why the way is not offered, when it is this phone and not the engine: the iPhone app reads cards
+     * but has no till. The screen at its address says so, with nothing to tap (screens/funds.js).
+     */
+    unavailable: (methods) => (nfc?.supported?.() && !till?.supported?.() && !!methods?.lightning?.enabled ? 'fund.fedimint.iphone' : null),
     /** The row's line: what is needed while no till is set. */
     sub: () => (ready() && !till.settings.get() ? 'fund.fedimint.subNoTill' : 'fund.fedimint.sub'),
     view({ done }) {
@@ -115,10 +120,10 @@ export function create(inputs) {
       let want = null;
       let busy = false;
 
-      const art = (amountText) =>
+      const art = (amountText, small = false) =>
         ui.el(
           'div',
-          { class: 'card-art', 'data-brand': 'fedimint', role: 'img', 'aria-label': t('fund.fedimint.picture') },
+          { class: `card-art${small ? ' small' : ''}`, 'data-brand': 'fedimint', role: 'img', 'aria-label': t('fund.fedimint.picture') },
           // The card as it is printed (screens/brands/cards.js), with what it holds over it once read.
           cardFace('fedimint'),
           amountText ? ui.el('span', { class: 'card-art-amount', text: amountText }) : null,
@@ -152,6 +157,7 @@ export function create(inputs) {
         paste.addEventListener('input', () => {
           paste.removeAttribute('aria-invalid');
           paste.removeAttribute('aria-describedby');
+          lit();
         });
         const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
         const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
@@ -203,19 +209,43 @@ export function create(inputs) {
               t('fund.fedimint.scanTill'),
             )
           : null;
+        // What a till is and the steps, before anything is tapped: one plain line, then three steps, each
+        // its picture and a few words.
+        const step = (ico, key) => ui.el('li', { class: 'add-home-step' }, ui.el('span', { class: 'add-home-ico', 'aria-hidden': 'true' }, ui.icon(ico, 26)), ui.sayEl('span', {}, t(key)));
+        const need = ui.el(
+          'section',
+          { class: 'add-home till-need', 'aria-labelledby': 'fedNeedTill' },
+          ui.sayEl('p', { id: 'fedNeedTill' }, t('fund.fedimint.needTill'), '', 'card'),
+          ui.sayEl('p', { class: 'note', id: 'fedTillWhat' }, t('fund.fedimint.tillWhat')),
+          ui.el(
+            'ol',
+            { class: 'add-home-steps till-steps', id: 'fedSteps', 'aria-label': t('fund.fedimint.stepsLabel') },
+            step('user', 'fund.fedimint.stepCode'),
+            step(scanBtn ? 'qr' : 'paste', scanBtn ? 'fund.fedimint.stepScan' : 'fund.fedimint.stepPaste'),
+            step('nfc', 'fund.fedimint.stepTap'),
+          ),
+        );
         body.replaceChildren(
           ...kids(
-            art(),
-            ui.sayEl('p', { id: 'fedNeedTill' }, t('fund.fedimint.needTill')),
+            art(undefined, true),
+            need,
             why ? ui.sayEl('p', { class: 'msg err' }, why, 'err') : null,
             scanBtn,
             box,
-            ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPairText', class: 'label', text: t('fund.fedimint.pasteLabel') }), paste),
+            ui.el('div', { class: 'field' }, ui.el('label', { for: 'fedPairText', class: 'label', text: t(scanBtn ? 'fund.fedimint.pasteLabel' : 'fund.fedimint.pasteOnly') }), paste),
             msg,
           ),
         );
-        // With no camera to scan the code, using the pasted one is the one lit button.
-        foot.replaceChildren(btn({ class: scanBtn ? 'btn block' : 'btn primary block', id: 'fedUseTill', onclick: () => use(paste.value) }, 'check', t('fund.fedimint.useTill')));
+        // Use this till confirms a code: lit once one is pasted, or always with no camera to scan one.
+        // It is never off: with nothing there it says so (use).
+        const useBtn = btn({ class: 'btn block', id: 'fedUseTill', onclick: () => use(paste.value) }, 'check', t('fund.fedimint.useTill'));
+        const lit = () => {
+          const has = !scanBtn || !!paste.value.trim();
+          useBtn.classList.toggle('primary', has);
+          scanBtn?.classList.toggle('primary', !has);
+        };
+        lit();
+        foot.replaceChildren(useBtn);
         return { stop: stopScan };
       };
 
@@ -386,10 +416,18 @@ export function create(inputs) {
             go.disabled = false;
           }
         });
+        // The till is set: said first, with what comes next. Changing it is in the till's box below.
+        const ready = ui.el(
+          'section',
+          { class: 'till-ready', id: 'fedTillReady', 'aria-labelledby': 'fedTillSet' },
+          ui.sayEl('p', { id: 'fedTillSet' }, t('fund.fedimint.tillSet'), 'ok'),
+          ui.sayEl('p', { class: 'note', id: 'fedNext' }, t('fund.fedimint.next'), '', 'nfc'),
+        );
         body.replaceChildren(
           ...kids(
             art(),
             waitingList(),
+            ready,
             invite.node,
             ui.el('label', { for: 'fedAmount', class: 'label', text: t('fund.fedimint.amount') }),
             field,

@@ -233,7 +233,9 @@ export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { 
   handoff = null;
   const entry = registry.list('fund').find((x) => x.instance.id === id);
   if (!entry || !entry.instance.available(state.S.methods)) {
-    const main = el('main', { class: 'screen sub', 'data-screen': 'fund' }, backHeader(t('ways.title'), back, t('common.back')), sayEl('p', { class: 'hint pad' }, t('addFunds.unavailable'), '', 'alert'));
+    // A way that says why it cannot be used on this phone (unavailable(methods), a string key) says that.
+    const why = entry?.instance.unavailable?.(state.S.methods);
+    const main = el('main', { class: 'screen sub', 'data-screen': 'fund', ...(why ? { 'data-fund': id } : {}) }, backHeader(t('ways.title'), back, t('common.back')), sayEl('p', { class: 'hint pad', id: 'fundUnavailable' }, t(why || 'addFunds.unavailable'), '', why ? 'phone' : 'alert'));
     // Opened before the engine's ways or the fund modules arrived (the app opened on this address): the
     // way's own screen once it is there.
     const update = () => {

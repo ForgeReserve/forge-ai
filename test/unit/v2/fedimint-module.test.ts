@@ -23,7 +23,7 @@ describe('the Tap a Fedimint card module', () => {
     expect(order.indexOf('fedimint')).toBe(order.indexOf('card') + 1);
     expect(Object.keys(R.inputsFor('fund', { t: 1, nfc: 2, till: 3, state: 4 })).sort()).toEqual(['nfc', 't', 'till']);
     expect(en['fund.fedimint.name']).toBe('Tap a Fedimint card');
-    for (const k of ['sub', 'subNoTill', 'appOnly', 'needTill']) expect(en[`fund.fedimint.${k}`]).toBeTruthy();
+    for (const k of ['sub', 'subNoTill', 'appOnly', 'needTill', 'tillWhat', 'stepCode', 'stepScan', 'stepPaste', 'stepTap', 'next', 'iphone']) expect(en[`fund.fedimint.${k}`]).toBeTruthy();
   });
 
   it('is listed where the engine takes Lightning, usable only in the app, and says when a till is needed', () => {
@@ -44,8 +44,14 @@ describe('the Tap a Fedimint card module', () => {
     // or not, as in an iPhone app with no reader at all.
     const ios = M.create({ t, nfc: NATIVE.nativeNfc(async () => ({}), () => ({}), { sheet: true }), till: { ...ADAPTERS.adapters.till, settings } });
     expect(ios.available({ lightning: { enabled: true } })).toBe(false);
+    // Its address says why: this phone, not the engine. Without Lightning it is the engine.
+    expect(ios.unavailable({ lightning: { enabled: true } })).toBe('fund.fedimint.iphone');
+    expect(ios.unavailable({ lightning: { enabled: false } })).toBeNull();
     const old = M.create({ t, nfc: NATIVE.NO_READER, till: { ...ADAPTERS.adapters.till, settings } });
     expect(old.available({ lightning: { enabled: true } })).toBe(false);
+    expect(old.unavailable({ lightning: { enabled: true } })).toBeNull();
+    expect(web.unavailable({ lightning: { enabled: true } })).toBeNull();
+    expect(app.unavailable({ lightning: { enabled: true } })).toBeNull();
   });
 
   it('says what the till refused in plain words, with the PIN tries left', () => {
