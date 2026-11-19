@@ -253,8 +253,10 @@ jobs:
           fi
 
   # The Fedimint receiver (services/fedimint-receiver, docs/FEDIMINT-RECEIVER.md): formatting, clippy and its
-  # tests against in-process federations. Only when its directory changes (or everything runs), so other
-  # changes do not pay for compiling fedimint. The dependencies' build is cached by Cargo.lock.
+  # tests against in-process federations, then the gateway's Fedimint top-ups end to end against the built
+  # receiver and devfed binaries (test/fedimint/). Only when the receiver's directory or the gateway's
+  # Fedimint code changes (or everything runs), so other changes do not pay for compiling fedimint. The
+  # dependencies' build is cached by Cargo.lock.
   receiver:
     needs: changes
     if: needs.changes.outputs.receiver == 'true'
@@ -304,6 +306,27 @@ jobs:
 
       - name: Tests against in-process federations
         run: cargo test --profile ci --locked
+
+      - name: The receiver and devfed binaries
+        run: cargo build --profile ci --locked --features devfed --bins
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install
+        working-directory: .
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Gateway Fedimint top-ups against the real receiver and a real federation
+        # A missing binary fails the file; nothing in it is skipped (test/fedimint/topup.fedimint.test.ts).
+        working-directory: .
+        env:
+          FORGE_FEDIMINT_BIN_DIR: services/fedimint-receiver/target/ci
+        run: pnpm test:fedimint
 
   # On a pull request, each UI test file it adds or changes (or that imports a changed helper in test/ui)
   # runs 5 more times, so a test that passes four times in five fails here before it reaches main. A long

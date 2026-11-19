@@ -11,6 +11,11 @@ services:
       FORGE_TRUST_PROXY: "true"
       HOST: 0.0.0.0
       PORT: "8787"
+      # Fedimint notes in top-ups (docs/FEDIMINT-RECEIVER.md, Turning it on): off while FORGE_FEDIMINT_URL is
+      # empty. Set it in .env to http://fedimint-receiver:8790 and start the fedimint profile. The token is the
+      # receiver's own (FEDIMINT_RECEIVER_TOKEN) unless FORGE_FEDIMINT_TOKEN is set.
+      FORGE_FEDIMINT_URL: ${FORGE_FEDIMINT_URL:-}
+      FORGE_FEDIMINT_TOKEN: ${FORGE_FEDIMINT_TOKEN:-${FEDIMINT_RECEIVER_TOKEN:-}}
     volumes:
       - forge-data:/data
     expose:
@@ -35,7 +40,8 @@ services:
       - caddy-config:/config
 
   # Fedimint eCash receiver (docs/FEDIMINT-RECEIVER.md). Off by default: the "fedimint" profile
-  # starts it (docker compose --profile fedimint up -d), and the gateway does not call it yet.
+  # starts it (docker compose --profile fedimint up -d), and the gateway calls it only once
+  # FORGE_FEDIMINT_URL is set.
   # Reachable on the compose network only (no ports). Set FEDIMINT_RECEIVER_TOKEN in .env, and
   # FEDIMINT_RECEIVER_MNEMONIC to keep the seed out of the volume; without a token it does not start.
   fedimint-receiver:

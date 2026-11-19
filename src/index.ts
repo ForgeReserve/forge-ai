@@ -22,6 +22,8 @@ setInterval(() => {
 }, 60_000).unref();
 // Funding poller: watches unpaid quotes, finishes interrupted mints and melts (crash recovery included).
 deps.funding.start();
+// Fedimint top-ups whose outcome was unknown: asked about again every 30 s (src/fedimint.ts).
+deps.fedimint?.start();
 // Other-mint discovery: serves the stored set at once, refreshes from the Nostr relays in the background.
 deps.discovery.start();
 
@@ -34,6 +36,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     log.info('shutdown', { signal: sig });
     deps.funding.stop();
+    deps.fedimint?.stop();
     deps.discovery.stop();
     server.close(() => {
       deps.db.close();

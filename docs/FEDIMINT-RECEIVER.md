@@ -1,8 +1,8 @@
 # Fedimint receiver
 
-> **The gateway does not use this service yet.** This is the first step of accepting Fedimint eCash: the service and its tests. The gateway's top-up does not call it, the app does not offer it, and `docker compose up` does not start it.
+> **Off unless the operator turns it on.** `docker compose up` does not start the service, and the gateway calls it only once `FORGE_FEDIMINT_URL` is set ([Turning it on](#turning-it-on)). Then `POST /v1/wallet/topup` takes Fedimint notes as well as Cashu ([PAYMENTS.md, Fedimint notes](PAYMENTS.md#fedimint-notes)). The app does not offer it yet.
 
-`services/fedimint-receiver` is a small Rust service that holds Fedimint eCash for the gateway. The gateway will hand it notes a user pastes or a till hands over; the service checks them, reissues them into its own wallet, and says how much arrived. One process holds any number of federations. A federation is accepted once it has been joined: the joined federations are the allowlist.
+`services/fedimint-receiver` is a small Rust service that holds Fedimint eCash for the gateway. The gateway hands it notes a user pastes; the service checks them, reissues them into its own wallet, and says how much arrived. One process holds any number of federations. A federation is accepted once it has been joined: the joined federations are the allowlist.
 
 It is built on `fedimint-client` 0.13.0 with the mint v1 and mintv2 client modules, pinned to exact versions, with `Cargo.lock` committed.
 
@@ -145,7 +145,7 @@ The same record, without `repeat`. States:
 
 ## What the gateway must do to call it safely
 
-For step 2. The service is safe to call twice; the gateway's job is to credit once and only the right account.
+The service is safe to call twice; the gateway's job is to credit once and only the right account. The gateway's top-up (`src/fedimint.ts`, [PAYMENTS.md, Fedimint notes](PAYMENTS.md#fedimint-notes)) follows these rules; its key for a top-up is `forge:<balance id>`, so the same balance giving the same notes again resumes its own receive.
 
 1. **Credit only on `done`, and credit `net_msat` from the `done` record**, never the pending quote and never `gross_msat`.
 2. **Compare `key`.** A repeat with a different key gets the first caller's record. If `key` is not the gateway's own key for this top-up, the notes were already given by someone else: refuse, do not credit.
@@ -155,6 +155,21 @@ For step 2. The service is safe to call twice; the gateway's job is to credit on
 6. **`failed` with `issuance_failed`** needs an operator; never credit it and never tell the user the notes are lost.
 7. **Network errors and `5xx` are unknowns.** Retry `POST /receive` with the same notes and key: it returns the existing record if the first call got through.
 8. Run `/parse` first to show the amount and federation before taking the notes; it is cheap and touches nothing.
+
+## Turning it on
+
+What the operator does, on the gateway's host, with the Docker setup in `docker-compose.yml`. No step prints the receiver's token, its words or an invite code; keep them out of shell history and chat.
+
+1. **The receiver's secrets**, in `.env`: `FEDIMINT_RECEIVER_TOKEN` (for example `openssl rand -hex 24`), and `FEDIMINT_RECEIVER_MNEMONIC`, 12 BIP39 words with an offline copy ([Storage, the seed and recovery](#storage-the-seed-and-recovery)). Without the words the service makes its own in its volume, and the volume becomes the only backup.
+2. **Start the receiver:** `docker build -t forge-fedimint-receiver services/fedimint-receiver`, then `docker compose --profile fedimint up -d fedimint-receiver`. It has no published port; the gateway reaches it on the compose network.
+3. **Point the gateway at it**, in `.env`: `FORGE_FEDIMINT_URL=http://fedimint-receiver:8790`. The compose file gives the gateway the receiver's own token as `FORGE_FEDIMINT_TOKEN` unless that is set too. Optional: `FORGE_FEDIMINT_MAX_SAT` (largest top-up, default 100,000 sat) and `FORGE_FEDIMINT_FEDERATION_CAP_SAT` (most Forge holds of one federation, default 1,000,000 sat). Then recreate the gateway so it reads them: `docker compose --profile fedimint up -d`. The gateway refuses to start with a URL and no token, or with no `sat` in `FORGE_UNITS`.
+4. **Join a federation.** With its invite code on stdin, so it stays out of the command line: `docker compose exec -T gateway node src/admin.ts fedimint:join < invite.txt` (or `--max-sat N` and `--cap-sat N` for this federation's own lower caps). The gateway asks the receiver to join (the receiver reads the federation's config from its guardians and refuses one with no mint module it takes), then writes the federation's row, active. It prints the federation's id, name, the notes it takes and its caps, never the invite. Joining again refreshes the name and modules and keeps the state and caps unless new ones are given.
+5. **Check:** `docker compose exec gateway node src/admin.ts fedimint:list` shows each federation with `joined: true` and its balance at the receiver, and `GET /v1/wallet/fund/methods` lists it under `fedimint.federations`. Try one small top-up and watch for the `fedimint_topup_credited` log line before telling anyone.
+6. **Stop taking one federation's notes:** `fedimint:pause <federation id>`; `fedimint:resume <federation id>` takes them again. Notes already on their way are finished.
+
+**Turning it off.** Unset `FORGE_FEDIMINT_URL` and recreate the gateway: notes are no longer taken and the methods no longer list `fedimint`. Keep the receiver running while any Fedimint top-up is still `prepared` (`fedimint:list`, `pending`): with the URL unset the gateway does not ask about them, and they are finished only once it is set again.
+
+**What each refusal means** for the person and the operator is in [PAYMENTS.md, Fedimint notes](PAYMENTS.md#fedimint-notes), with the solvency rule: take out stays Cashu, so Fedimint-funded sat balances are backed by Fedimint notes at the receiver, and Cashu take outs can fail with `wallet_insufficient` until the operator moves value from the receiver into Cashu (there is no tooling for that move yet).
 
 ## Compatibility
 
@@ -258,4 +273,26 @@ Unit tests cover reading notes (encodings, ids, a repeated note, junk) and the s
 
 **Not covered by a test:** `ambiguous_federation` (it needs two federations whose ids share 4 bytes); `fee_exceeds_value` (the test federations' wallets round notes up to economical sizes); `unreachable` on join; `issuance_failed`; a federation that is down while a receive is pending; any federation older than 0.13.0; a real federation of any kind.
 
-In CI the `receiver` job runs these three commands when anything under `services/fedimint-receiver/` changes, and on every push to `main` ([CI.md](CI.md)).
+### The gateway against it
+
+`test/fedimint/topup.fedimint.test.ts` runs the gateway (in the test process, on a SQLite file) against the receiver binary as a child process and two `devfed` federations, with the admin CLI as a child process too:
+
+```sh
+cd services/fedimint-receiver && cargo build --features devfed --bins && cd ../..
+pnpm test:fedimint        # FORGE_FEDIMINT_BIN_DIR: where the two binaries are (default: target/debug)
+```
+
+| Test | What it shows |
+| --- | --- |
+| joins the federation through `pnpm admin fedimint:join` | The invite on stdin; the row written active with the default caps; the invite in neither the CLI's output nor the receiver's log; the federation listed in `GET /v1/wallet/fund/methods`. |
+| credits a top-up once, for exactly the net value | Real notes from the federation's own client; the receiver's record is `done` under the balance's key with a fee above 0; the balance, the answer and the receiver's balance all rose by `net_msat`, not the face value. |
+| the same notes again | From the same balance: a replay, nothing more credited. From another balance (with its own invite): `token_spent`, no balance opened, the invite still open. |
+| notes of a federation not joined | `federation_not_joined`; the notes are then spent by their own federation, so nothing took them. |
+| a paused federation | Refused while paused, through the CLI; taken after `fedimint:resume`. |
+| the caps | A federation's own `--max-sat` refuses larger notes (`amount_too_large`); a `--cap-sat` just above what the receiver holds refuses notes that would go over (`federation_full`) and the receiver's balance is unchanged; raised again, the same notes go in. |
+| the gateway dies after its row, and after the receive | A crash point in the gateway, then a new gateway on the same database: startup recovery and the sweep credit the `done` record once, a retry is a replay, and a further restart credits nothing more. |
+| the receiver down, then back | A top-up answered `topup_pending` while the federation works, the notes already dropped from the gateway's row; the receiver killed (SIGKILL): a sweep credits nothing and new notes are refused with `fedimint_unavailable`, untouched; the receiver restarted on the same data and address: the sweep credits once, and the refused notes then go in. |
+
+A missing binary fails the file: nothing in it is skipped. Every branch of the gateway's side, including what the real receiver cannot be made to do on demand (`issuance_failed`, a lost answer, a 5xx, a pending record that waits), is in `test/unit/fedimint.test.ts` against a stand-in receiver.
+
+In CI the `receiver` job runs the three cargo commands above, then builds the two binaries and runs `pnpm test:fedimint` on them, when anything under `services/fedimint-receiver/`, `src/fedimint.ts` or `test/fedimint/` changes, and on every push to `main` ([CI.md](CI.md)).

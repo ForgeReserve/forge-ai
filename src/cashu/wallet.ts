@@ -780,7 +780,8 @@ export class GatewayWallet {
   /** Startup recovery for every interrupted mint operation. */
   async recover(): Promise<{ incoming: number; outgoing: number; errors: number }> {
     let errors = 0;
-    const inc = this.db.prepare("SELECT * FROM incoming WHERE status = 'prepared'").all() as unknown as IncomingRow[];
+    // Fedimint top-ups share the table and have their own recovery (src/fedimint.ts sweep).
+    const inc = this.db.prepare("SELECT * FROM incoming WHERE status = 'prepared' AND purpose != 'fedimint'").all() as unknown as IncomingRow[];
     for (const r of inc) {
       try {
         await this.recoverIncoming(r);
@@ -790,7 +791,7 @@ export class GatewayWallet {
       }
     }
     // status=new rows never reached the mint; the client still holds a valid token, so forget them.
-    this.db.prepare("DELETE FROM incoming WHERE status = 'new'").run();
+    this.db.prepare("DELETE FROM incoming WHERE status = 'new' AND purpose != 'fedimint'").run();
     const out = this.db.prepare("SELECT * FROM outgoing WHERE status IN ('reserved', 'prepared')").all() as unknown as OutgoingRow[];
     for (const r of out) {
       try {

@@ -41,19 +41,24 @@ CREATE TABLE IF NOT EXISTS ledger (
 );
 
 -- Incoming tokens (topups and NUT-24 payments). token_hash makes redemption idempotent.
+-- A Fedimint top-up (purpose fedimint, src/fedimint.ts) has id and token_hash fm:<notes_id>, mint
+-- fedimint:<federation id>, amount the notes' face value in msat (not units), and status prepared (on
+-- its way to the receiver), done, rejected, or stuck (the federation took the notes and issued nothing:
+-- an operator must look). Its notes column holds the notes text until the receiver has a record of them.
 CREATE TABLE IF NOT EXISTS incoming (
   id TEXT PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,
   mint TEXT NOT NULL,
   unit TEXT NOT NULL,
   amount INTEGER NOT NULL,
-  purpose TEXT NOT NULL,            -- topup | nut24
+  purpose TEXT NOT NULL,            -- topup | nut24 | foreign | fedimint
   account_id TEXT,
   request_id TEXT,
-  status TEXT NOT NULL,             -- new | prepared | done | rejected
+  status TEXT NOT NULL,             -- new | prepared | done | rejected | stuck (fedimint only)
   preview TEXT,                     -- serialized SwapPreview (NUT-19 replay)
   counters TEXT,                    -- JSON {keysetId,start,count} (NUT-09 restore)
   error TEXT,
+  notes TEXT,                       -- fedimint: the notes, until the receiver has a record of them
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -186,6 +191,21 @@ CREATE TABLE IF NOT EXISTS operator_mints (
   added_at INTEGER NOT NULL
 );
 
+-- Fedimint federations the operator joined (pnpm admin fedimint:join, src/fedimint.ts). Notes are taken
+-- from one only while its row is active AND the receiver reports it joined. max_sat and cap_sat override
+-- FORGE_FEDIMINT_MAX_SAT (per payment) and FORGE_FEDIMINT_FEDERATION_CAP_SAT (holdings) when set.
+CREATE TABLE IF NOT EXISTS federations (
+  id TEXT PRIMARY KEY,              -- the federation id (hex)
+  name TEXT,
+  invite TEXT NOT NULL,             -- the invite code it was joined with; never logged
+  modules TEXT NOT NULL,            -- JSON: every module in its config
+  receives TEXT NOT NULL,           -- JSON: the kinds of notes the receiver takes from it
+  state TEXT NOT NULL CHECK (state IN ('active', 'paused')),
+  max_sat INTEGER,
+  cap_sat INTEGER,
+  joined_at INTEGER NOT NULL
+);
+
 -- Revenue exports from the admin page or CLI. The token itself is never stored here (the payout row
 -- in outgoing holds it for re-delivery, as for every payout); this is the operator's history.
 CREATE TABLE IF NOT EXISTS revenue_exports (
@@ -276,6 +296,7 @@ const ADDED_COLUMNS: Array<[table: string, column: string, decl: string]> = [
   ['reservations', 'shortfall_msub', 'INTEGER'],
   ['accounts', 'pass_id', 'TEXT'],
   ['accounts', 'sibling_of', 'TEXT'],
+  ['incoming', 'notes', 'TEXT'],
 ];
 
 export type DB = DatabaseSync;

@@ -15,7 +15,7 @@ Require **`ci-ok`** and nothing else. It always runs and always reports. It fail
 | `e2e` | End to end tests against the local mints. | Unless only the native apps changed. A docs-only change runs `test/e2e/docs.e2e.test.ts` alone. |
 | `ui (1)` to `ui (6)` | The UI tests in six parts, in the runner's Chrome against a local gateway and the local mints. Each part keeps its files' times as an artifact (`ui-times-<part>`). | Unless only the native apps changed. A docs-only change runs one job, `ui (docs)`, with `test/ui/docs.ui.test.ts` alone. |
 | `android` | Debug builds of both APKs, their JVM tests, and the 16 KB page check. | When `android/`, `public/` (but not `public/docs/`) or `capacitor.config.json` changed, and on any change that runs everything. |
-| `receiver` | The Fedimint receiver ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md)): `cargo fmt --check`, clippy and its tests against in-process federations, in `services/fedimint-receiver/`. | When anything under `services/fedimint-receiver/` changed, and on any change that runs everything. |
+| `receiver` | The Fedimint receiver ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md)): `cargo fmt --check`, clippy and its tests against in-process federations, in `services/fedimint-receiver/`; then its two binaries built and the gateway's Fedimint top-ups end to end against them (`pnpm test:fedimint`). | When anything under `services/fedimint-receiver/` changed, or the gateway's Fedimint code (`src/fedimint.ts`, `test/fedimint/`), and on any change that runs everything. |
 | `repeat (<file>)` | Runs each UI test file the pull request added or changed 5 more times. | Pull requests that change a UI test file or a helper in `test/ui/`. |
 | `ci-ok` | Checks the results above against what `changes` said. | Always |
 
@@ -34,7 +34,7 @@ The rules are in `scripts/ci-changes.ts` and tested in `test/unit/ci.test.ts`. T
 | Only `ios/` | `check` (its unit tests read the iPhone project files; CI builds no iPhone app) |
 | Only `services/fedimint-receiver/` | `check`, `receiver` |
 | Native apps and docs, nothing else | `check`, the docs page's own tests, and `android` when `android/` changed |
-| Anything else: `src/`, `public/`, `test/`, `config/`, a new top-level file | `check`, `e2e`, all six UI parts, `android` when `public/` or `capacitor.config.json` changed, and `receiver` when `services/fedimint-receiver/` changed |
+| Anything else: `src/`, `public/`, `test/`, `config/`, a new top-level file | `check`, `e2e`, all six UI parts, `android` when `public/` or `capacitor.config.json` changed, and `receiver` when `services/fedimint-receiver/`, `src/fedimint.ts` or `test/fedimint/` changed |
 | The changes cannot be read, or the pull request lists no file | Everything |
 
 A Markdown file under `public/` (the licences in `public/vendor/licenses/`, a sources list) is served and goes into the app bundle, so it counts as the web app, not as docs.
@@ -43,11 +43,13 @@ The Android bundle is made from `public/` (by `scripts/android-web.ts` and `scri
 
 ## The receiver job
 
-The Fedimint receiver is a Rust crate that compiles fedimint, RocksDB and AWS-LC, so its job runs only when its own directory changes, or when everything runs (a push to `main`, a change to CI or the tooling). A gateway or app change does not pay for it. Running on every push to `main` also keeps the cache fresh where pull requests can read it: a pull request reads the caches of its own branch and of `main`.
+The Fedimint receiver is a Rust crate that compiles fedimint, RocksDB and AWS-LC, so its job runs only when its own directory or the gateway's Fedimint code (`src/fedimint.ts`, `test/fedimint/`) changes, or when everything runs (a push to `main`, a change to CI or the tooling). Any other gateway or app change does not pay for it: the unit tests run the gateway's Fedimint code against a stand-in receiver in every `check`, and a gateway change that breaks the real pairing outside those two paths is caught on the next push to `main`, not on its pull request.
+
+After the receiver's own checks the job builds its two binaries with the same `ci` profile (`cargo build --features devfed --bins`, mostly linking: the dependencies are built by then), installs the gateway's packages, and runs `pnpm test:fedimint` with `FORGE_FEDIMINT_BIN_DIR` pointing at them. The file fails, never skips, when a binary is missing, and Vitest fails when the path holds no test file, so a green job means the test ran. Running on every push to `main` also keeps the cache fresh where pull requests can read it: a pull request reads the caches of its own branch and of `main`.
 
 `actions/cache` keeps the Cargo registry and `services/fedimint-receiver/target` under a key from `Cargo.lock` and `rust-toolchain.toml`, so a run with the same lockfile builds only the receiver itself. The job builds with the crate's `ci` profile (no debug info, no incremental state) to keep the cache small. rustup installs the toolchain `rust-toolchain.toml` names. The job does not build the Docker image.
 
-Measured on a Mac with Apple silicon (2026-11-19), `cargo test --profile ci`: from nothing, 175 seconds to compile, then about 30 seconds of tests; with the dependencies built and only the receiver changed, 43 seconds in all, tests included. The `ci` build of `target/` is 3.3 GB, which is what the cache holds. A GitHub runner has fewer cores, so expect a cold run of 10 minutes or more; the first CI runs will give the real figures.
+Measured on a Mac with Apple silicon (2026-11-19), `cargo test --profile ci`: from nothing, 175 seconds to compile, then about 30 seconds of tests; with the dependencies built and only the receiver changed, 43 seconds in all, tests included. The `ci` build of `target/` is 3.3 GB, which is what the cache holds. A GitHub runner has fewer cores, so expect a cold run of 10 minutes or more; the first CI runs will give the real figures. The gateway end to end step adds the binaries' build (2 minutes 42 seconds on the same Mac for a dev build of both from a cold target directory; far less once the tests have built the dependencies), the package install, and about 10 seconds of tests.
 
 ## The UI split
 

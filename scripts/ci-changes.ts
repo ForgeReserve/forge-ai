@@ -39,6 +39,19 @@ export type Kind = 'all' | 'docs' | 'android' | 'ios' | 'web' | 'receiver' | 'ot
 /** The Fedimint receiver's directory: its job runs only when something in it changes (or everything runs). */
 export const RECEIVER_DIR = 'services/fedimint-receiver/';
 
+/**
+ * The gateway's Fedimint code and its end to end test, which the receiver job runs against the real
+ * receiver and a real federation (test/fedimint/). A change to one of these runs that job as well; the
+ * rest of the gateway's code does not (its unit tests run a stand-in receiver in every check).
+ */
+export const FEDIMINT_GATEWAY_PATHS = ['src/fedimint.ts', 'test/fedimint/'];
+
+/** True for a path the receiver job's end to end test depends on outside the receiver's directory. */
+export function touchesFedimintGateway(path: string): boolean {
+  const p = path.replace(/^\.\//, '');
+  return FEDIMINT_GATEWAY_PATHS.some((f) => (f.endsWith('/') ? p.startsWith(f) : p === f));
+}
+
 export function kindOf(path: string): Kind {
   const p = path.replace(/^\.\//, '');
   const base = posix.basename(p);
@@ -75,7 +88,7 @@ export interface Decision {
   e2e: 'all' | 'docs' | 'none';
   ui: 'all' | 'docs' | 'none';
   android: boolean;
-  /** The Fedimint receiver's build and tests. */
+  /** The Fedimint receiver's build and tests, and the gateway's Fedimint end to end test against it. */
   receiver: boolean;
   /** The ui job's matrix: part numbers, or "docs" for the docs page's test alone. */
   uiParts: (number | 'docs')[];
@@ -230,8 +243,11 @@ export function decide(event: string, changes: Change[] | null, repeatInput?: Om
   const android = has('android') || has('web');
   reasons.push(android ? 'android/ or what the Android bundle is made from (public/, capacitor.config.json) changed: the Android build runs' : 'nothing under android/ or what the Android bundle is made from changed: the Android build is skipped');
   if (has('ios')) reasons.push('ios/ changed: CI builds no iPhone app; the unit tests check its project files (test/unit/ios.test.ts)');
-  const receiver = has('receiver');
-  reasons.push(receiver ? `${RECEIVER_DIR} changed: the Fedimint receiver is built and tested` : `nothing under ${RECEIVER_DIR} changed: the Fedimint receiver's build is skipped`);
+  const gatewayFedimint = kinds.filter((c) => touchesFedimintGateway(c.path));
+  const receiver = has('receiver') || gatewayFedimint.length > 0;
+  if (has('receiver')) reasons.push(`${RECEIVER_DIR} changed: the Fedimint receiver is built and tested, and the gateway's Fedimint end to end test runs against it`);
+  else if (receiver) reasons.push(`the gateway's Fedimint code changed (${gatewayFedimint.map((c) => c.path).join(', ')}): the receiver is built and its end to end test with the gateway runs`);
+  else reasons.push(`nothing under ${RECEIVER_DIR} or in the gateway's Fedimint code changed: the Fedimint receiver's build is skipped`);
   return withRepeats({
     everything: false,
     reasons,

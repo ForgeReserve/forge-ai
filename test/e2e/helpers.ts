@@ -8,6 +8,7 @@ import { createApp, type Deps, startupRecovery } from '../../src/app.ts';
 import type { WalletFaults } from '../../src/cashu/wallet.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
+import type { FedimintFaults } from '../../src/fedimint.ts';
 import type { FundingFaults } from '../../src/funding.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { fixedRateSource } from '../../src/rates.ts';
@@ -170,6 +171,8 @@ export async function startGateway(
     dbPath?: string;
     faults?: WalletFaults;
     fundingFaults?: FundingFaults;
+    /** Fedimint top-ups: crash points, and how long a request waits for a pending receive. */
+    fedimint?: { faults?: FedimintFaults; waitMs?: number; pollMs?: number };
     recover?: boolean;
     /** Adds the audio models (testAudio) and their private mock supplier. */
     audio?: boolean;
@@ -203,6 +206,7 @@ export async function startGateway(
     env: env as NodeJS.ProcessEnv,
     faults: opts.faults,
     fundingFaults: opts.fundingFaults,
+    fedimint: opts.fedimint,
     faucet: opts.faucetNow ? { now: opts.faucetNow } : undefined,
     freeVoice: opts.freeVoiceNow ? { now: opts.freeVoiceNow } : undefined,
   });

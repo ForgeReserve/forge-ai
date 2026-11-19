@@ -29,7 +29,7 @@ NUT-24 does not specify change. Forge AI's choice (header, final stream event, r
 
 ## Flow 2: prepaid balance
 
-1. `POST /v1/wallet/topup` with a token (and an invite for a new balance). The gateway returns a new `sk-forge-...` key, or credits the key in `Authorization`. A client may also choose its own key (`sk-forge-` plus 24 to 64 URL-safe characters) so that a lost response never loses the key. A token in the other unit from the balance's is refused untouched (`wrong_unit`); it can be changed instead (Changing units, below).
+1. `POST /v1/wallet/topup` with a token, or Fedimint notes where the gateway takes them ([Fedimint notes](#fedimint-notes)), and an invite for a new balance. The gateway returns a new `sk-forge-...` key, or credits the key in `Authorization`. A client may also choose its own key (`sk-forge-` plus 24 to 64 URL-safe characters) so that a lost response never loses the key. A token in the other unit from the balance's is refused untouched (`wrong_unit`); it can be changed instead (Changing units, below).
 2. Each request reserves its worst-case cost against the balance (`available = balance - active reservations`), runs, then settles: it charges the actual cost (capped at the reservation) and releases the rest. Settlement is idempotent.
 3. `POST /v1/wallet/refund` debits whole units and issues a token. `GET /v1/wallet/refunds` re-delivers every token issued to the key.
 
@@ -209,9 +209,64 @@ For a card from another mint, `/v1/wallet/fund/card/mint` also answers `max`: th
 
 Not covered: the card's clock and limits (`SET_HEADER`, the no-PIN allowance), the owner's commands, a card's DLEQ store, the NFC tag application, and a 0.x or Foxy 1.x card, which is refused as needing an update before anything is asked of it.
 
+### Fedimint notes
+
+The gateway takes Fedimint eCash in the same top-up as Cashu once the operator turns it on: `FORGE_FEDIMINT_URL` and `FORGE_FEDIMINT_TOKEN` name the Fedimint receiver (`services/fedimint-receiver`, [FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md), where the steps to turn it on are). With `FORGE_FEDIMINT_URL` unset, nothing on this page changes: the gateway never asks a receiver and `GET /v1/wallet/fund/methods` has no `fedimint`. The gateway runs no Fedimint client itself; the receiver holds the notes, and the gateway keeps the balances (`src/fedimint.ts`).
+
+**Which token is which.** `POST /v1/wallet/topup` reads `token` as before. Anything that starts with `cashu` (whatever comes before it is spaces, in any case) goes the Cashu way, exactly as without Fedimint. Anything else that looks like the notes the receiver reads, `fedimint` and base32 or base64 and base64url text (whitespace anywhere is ignored, as fedimint's own parsers ignore it), is Fedimint notes. The receiver decides whether it really is notes: text it cannot read is `400 invalid_token`.
+
+**Where it lands.** Fedimint notes go to a sat balance only, credited in exact msat (a sat balance counts msat). Forge takes no fee. The federation charges its own fee to reissue the notes into the receiver's wallet, so the balance gets `net_msat` of the receiver's record, the notes' face value less that fee. A dollar key answers `400 wrong_unit`; with no key, the sat balance is opened as for Cashu (an invite while invite-only, or `X-Forge-Sibling`).
+
+**A federation is accepted** only when it has a row in the gateway's `federations` table with state `active` (the operator joins it with `pnpm admin fedimint:join`) AND the receiver reports it joined. `pnpm admin fedimint:pause <id>` stops taking its notes at once, without leaving the federation; `fedimint:resume` takes them again. Notes already on their way when it is paused are finished.
+
+**The steps.**
+
+1. `POST /parse` at the receiver: the notes' value, federation and `notes_id`, with nothing spent. The refusals below come here, before any balance is opened.
+2. The balance is opened (or found), as for a Cashu top-up.
+3. The gateway writes its own `incoming` row, id `fm:<notes_id>`, `purpose = 'fedimint'`, `status = 'prepared'`, holding the notes text, BEFORE it calls the receiver. The holdings cap is checked again in the same step.
+4. `POST /receive` with the notes and this top-up's key, `forge:<balance id>`. The receiver answers the first caller's record to everyone: a record whose `key` is not this balance's means someone else gave those notes first, and the top-up is refused (`token_spent`), nothing credited.
+5. Only a `done` record is credited: `net_msat` from it, in one transaction with marking the row `done` (a row that is no longer `prepared` is never credited again). The answer waits up to 8 seconds for a `pending` receive to finish.
+
+Once the receiver has a record of the notes (any answer carrying one), the gateway drops the notes text from its row: `GET /receive/{notes_id}` is all it needs from then on, so the bearer notes are not kept on the gateway longer than the first call needs. A row ends `done`, `rejected` (refused, spent elsewhere, or given first by someone else) or `stuck` (below).
+
+**Refusals: nothing was spent, the notes are still the holder's.**
+
+| Answer | Why |
+| - | - |
+| `400 federation_not_joined` | The notes' federation has not been joined, has no row, or the notes name it by a short prefix that several joined federations share. Carries `fedimint: {federation_id, federation_prefix}` (`federation_id` is `null` when the notes do not carry it) |
+| `400 federation_paused` | The operator paused that federation |
+| `400 notes_unsupported` | Notes of a mint module the receiver does not take from that federation |
+| `400 invalid_token` | Not notes the receiver reads, signatures that do not verify, or more than `FORGE_MAX_TOKEN_BYTES` |
+| `400 amount_too_large` | The notes' face value is over the per-payment cap: `FORGE_FEDIMINT_MAX_SAT` (default 100,000 sat), or the federation's own lower `max_sat`. Carries `max: {sat}` |
+| `400 federation_full` | Taking them would put the federation's holdings over its cap: `FORGE_FEDIMINT_FEDERATION_CAP_SAT` (default 1,000,000 sat), or the federation's own `cap_sat` |
+| `400 insufficient_amount` | The federation's fee to take the notes is at least what they are worth |
+| `503 fedimint_unavailable` | The receiver did not answer before anything was taken. Try again later |
+| `409 token_in_flight` | The same notes are being taken by another request right now |
+
+**Refusals after the receiver took a look.** `400 token_spent`: the notes were spent elsewhere first (the federation refused them), were given to the receiver first by someone else, or are already the top-up of another balance. Sending the same notes again to the same key is a replay (`replay: true`, nothing credited).
+
+**The holdings cap** counts the receiver's balance for the federation, plus every Fedimint top-up of it still `prepared` or `stuck`, plus every one that ended `done` since that balance was read (it may or may not be in it, so it is counted: the check errs towards refusing). The count and the row's insert happen together, so two top-ups at once cannot both take the last room. Nothing is taken out of the receiver yet (take out stays Cashu, below), so its holdings only grow until the operator moves value out.
+
+**Not known yet.** A `pending` record after the wait, no answer, or a `5xx` from the receiver answers `503 topup_pending` with the balance's `key` (when the gateway made it) and `account_id`, as a Cashu swap with an unknown outcome does. The row stays `prepared`. Startup recovery (the `startup_recovery` log line carries `fedimint_checked` and `fedimint_credited` while the feature is on) and a sweep every 30 seconds ask the receiver about every `prepared` row: `POST /receive` again with the same notes and key while the gateway still holds the notes (the receiver returns its record if the first call got through), `GET /receive/{notes_id}` after. Retrying the top-up with the same key and notes does the same at once. A receiver that answers `404` for a receive it had recorded has lost it: the row stays `prepared` and `fedimint_receive_missing` is logged for an operator.
+
+**`issuance_failed`.** The federation took the notes but the receiver's new notes were not issued: value may be stuck. The top-up answers `502 issuance_failed` with the `key` and `account_id`, nothing is credited, and the row is marked `stuck` with the receiver's reason (`fedimint_issuance_failed` is logged as an error). The balance is kept even when empty (`releaseIfEmpty` leaves it), the sweep does not touch the row again, and `pnpm admin fedimint:list` counts it under `stuck`. An operator looks at the receiver's record (`GET /receive/{notes_id}`) and settles it by hand. The person is never told the notes are lost.
+
+**Crash safety.**
+
+| The gateway dies | What is stored | What happens |
+| - | - | - |
+| before its row | nothing | Nothing reached the receiver; the notes are still the holder's |
+| after its row, before `POST /receive` | the row, with the notes | Recovery posts the notes (the receiver has no record), then credits the `done` record once |
+| after `POST /receive`, before the credit | the row (with the notes, or without once acknowledged) | Recovery reads the record (by `POST` again or `GET`) and credits `done` once |
+| after the credit | the row `done`, the ledger line (`topup`, ref `fm:<notes_id>`) | Nothing left to do; the same notes again are a replay |
+
+**Solvency: take out stays Cashu.** `POST /v1/wallet/refund` pays out Cashu from the gateway's wallet, as before, and never Fedimint notes. A sat balance funded with Fedimint notes is backed by those notes in the receiver's wallet, not by Cashu at the Forge mint. So the gateway's Cashu sat holdings can fall below what sat balances add up to. A take out the Cashu wallet cannot cover answers `503 wallet_insufficient` until the operator moves value from the receiver into Cashu (a rebalance; there is no tooling for it yet). `revenue:show` and the admin page count every sat balance against Cashu only, so they show less sweepable revenue, never more: Fedimint-funded balances are never exported as revenue.
+
+Tested in `test/unit/fedimint.test.ts` against a stand-in receiver over HTTP (every branch above, a crash at each point, the timer), and end to end in `test/fedimint/topup.fedimint.test.ts` against the real receiver binary and real federations from its `devfed` binary ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md), Tests). Not covered by a test: `ambiguous_federation` and `issuance_failed` from a real receiver (the receiver cannot make either happen on demand; the stand-in covers the gateway's side), a federation of any real network, and a rebalance.
+
 ### A Fedimint card, through a till (the v2 Android app)
 
-The engine runs no Fedimint client, so it never takes Fedimint notes. A Fedimint card's notes can only be redeemed by a till: fedimintcard's `till serve --pay-enabled`, whose pay route is documented in fedimintcard-pay `docs/PAY.md`, `POS-LINK.md` and `TILL-API.md`. The till charges the card and pays a Lightning invoice from its own wallet; to the engine this is an ordinary Lightning funding. The phone follows those documents (`public/v2/core/till.js`, the module `public/v2/modules/fund/fedimint/`):
+The engine runs no Fedimint client of its own. With the receiver turned on it takes Fedimint notes in a top-up (above), but a Fedimint card's notes reach it only through a till: fedimintcard's `till serve --pay-enabled`, whose pay route is documented in fedimintcard-pay `docs/PAY.md`, `POS-LINK.md` and `TILL-API.md`. The till charges the card and pays a Lightning invoice from its own wallet; to the engine this is an ordinary Lightning funding. The phone follows those documents (`public/v2/core/till.js`, the module `public/v2/modules/fund/fedimint/`):
 
 1. **Pairing, once.** The till's owner runs `till pair --scope pay` and the person scans the QR code (or pastes its text, `fedimintcard-till-pay:<url>?t=<token>`). The Android app keeps the address and the pay token sealed with a key in the Android Keystore (`TillPlugin.kt`, ForgeTill) and adds the token to each request itself, so the page does not hold it after pairing. The app sends only `POST /v1/pay`, `GET /v1/pay/{id}?client_ref=`, `POST /v1/pay/{id}/refund` and `GET /v1/health`, and opens the card link. With no till paired the screen says first, before anything is tapped, "This card needs a till." and what a till does ("A till takes the money from the card and adds it to your funds."), then three numbered steps, each a picture and a few words: get the pairing code from the person who runs the till, scan it or paste it (paste it below, on a phone with no camera), then pay with the card. Scan is the lit button; once a code is pasted, Use this till is (with no camera it always is). Use this till with nothing scanned or pasted says "No pairing code yet." in the message line and puts the focus in the paste field (the button is never off). Once paired, the screen opens on "Till set." and what comes next ("Choose how much, then hold the card to the phone."), with the till's address, Change the till and Forget this till in its box under the amount. A till's own POS code (`fedimintcard-till:`) is refused, and so is plain http to another computer: the PIN and the token would cross the network in clear. The till must be on https (as the StartOS package is); http is taken only for this phone itself, for tests.
 2. **The invoice.** `POST /v1/wallet/fund/lightning` for the amount, as the Lightning row does. The phone reads the invoice's amount from it.
@@ -318,6 +373,7 @@ The gateway tracks in memory which reservations belong to requests it is still s
 - Payouts come from one mint. With several trusted mints, a refund needs one mint to hold enough.
 - Sub-unit balance remainders cannot be withdrawn.
 - A change of units at the Forge mint pays an invoice of the Forge mint from the Forge mint in another unit. It works only where the mint's Lightning backends can make that payment (Changing units). The local test mints cannot show it.
+- Fedimint-funded sat balances are backed by Fedimint notes at the receiver, while take out pays Cashu: take out can answer `wallet_insufficient` until the operator rebalances ([Fedimint notes](#fedimint-notes)).
 - Other-mint funding trusts the token's mint for as long as the melt takes. A mint that takes the token and never pays leaves the funding in `melting`; the token's value is then lost to the user, as it would be with any wallet melting at that mint.
 - A foreign mint's address is checked against private ranges when quoted, but DNS can change between that check and later requests (rebinding). The gateway sends such a mint only Cashu API calls.
 - An on-chain address that receives a deposit after its watch window is not credited automatically. The quote stays at the mint; an operator can extend `expires_at` in `fundings` and set `state` back to `pending`.
