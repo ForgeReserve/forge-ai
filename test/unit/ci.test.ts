@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type Change, decide, importsOf, kindOf, MAX_REPEAT_FILES, outputs, parseDiff, REPEATS, repeatPlan, type RepeatInput, summary, verdict } from '../../scripts/ci-changes.ts';
+import { type Change, decide, importsOf, kindOf, MAX_REPEAT_FILES, outputs, parseDiff, REPEATS, repeatPlan, type RepeatInput, summary, touchesFedimintGateway, verdict } from '../../scripts/ci-changes.ts';
 import { PARTS, readTimings, refreshed, reportTimes, split, uiFiles } from '../../scripts/ui-split.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -184,6 +184,24 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
     // With a gateway change beside it, both run.
     expect(decide('pull_request', [ch('src/app.ts'), ch('services/fedimint-receiver/Cargo.toml')])).toMatchObject({ receiver: true, e2e: 'all', ui: 'all' });
     expect(summary(decide('pull_request', [ch('src/app.ts')]))).toContain('| receiver | skipped |');
+  });
+
+  it("runs the receiver job, with its end to end test, when the gateway's Fedimint code changes", () => {
+    for (const p of ['src/fedimint.ts', 'test/fedimint/topup.fedimint.test.ts', './test/fedimint/other.ts']) {
+      expect(touchesFedimintGateway(p), p).toBe(true);
+      const d = decide('pull_request', [ch(p)]);
+      // The gateway's own code: everything a gateway change runs, and the receiver job besides.
+      expect(d, p).toMatchObject({ everything: false, receiver: true, e2e: 'all', ui: 'all' });
+      expect(d.reasons.join(' '), p).toContain("the gateway's Fedimint code changed");
+    }
+    for (const p of ['src/fedimint.tsx', 'src/funding.ts', 'test/unit/fedimint.test.ts', 'test/support/fakereceiver.ts', 'test/fedimintx/a.ts']) {
+      expect(touchesFedimintGateway(p), p).toBe(false);
+      expect(decide('pull_request', [ch(p)]).receiver, p).toBe(false);
+    }
+    // ci-ok counts it: the receiver job is required whenever the rules ask for it.
+    expect(outputs(decide('pull_request', [ch('src/fedimint.ts')])).receiver).toBe('true');
+    expect(existsSync(join(ROOT, 'src/fedimint.ts'))).toBe(true);
+    expect(existsSync(join(ROOT, 'test/fedimint'))).toBe(true);
   });
 
   it('runs Android only for android/ or what its bundle is made from', () => {
@@ -406,5 +424,16 @@ describe('the CI workflow uses these rules', () => {
     expect(j).toMatch(/uses: actions\/cache@[0-9a-f]{40} # v\d/);
     expect(j).toContain("hashFiles('services/fedimint-receiver/Cargo.lock'");
     expect(existsSync(join(ROOT, 'services/fedimint-receiver/Cargo.lock'))).toBe(true);
+  });
+
+  it('runs the gateway Fedimint end to end test in the receiver job, on the binaries that job built', () => {
+    const j = job('receiver');
+    const build = j.indexOf('cargo build --profile ci --locked --features devfed --bins');
+    const run = j.indexOf('run: pnpm test:fedimint');
+    expect(build, 'binaries built').toBeGreaterThan(j.indexOf('cargo test --profile ci --locked'));
+    expect(run, 'e2e after the build').toBeGreaterThan(build);
+    expect(j).toContain('FORGE_FEDIMINT_BIN_DIR: services/fedimint-receiver/target/ci');
+    expect(j).toContain('pnpm install --frozen-lockfile');
+    expect(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['test:fedimint']).toBe('vitest run test/fedimint');
   });
 });

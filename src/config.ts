@@ -178,6 +178,17 @@ export const EnvSchema = z.object({
   /** How long a challenge may be worked on at the base difficulty. Doubled for each bit over the base, up to an hour. */
   FORGE_FAUCET_CHALLENGE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
 
+  // ---------------------------------------------------------------- Fedimint notes (docs/PAYMENTS.md, Fedimint notes)
+  // Everything here is off until FORGE_FEDIMINT_URL is set.
+  /** The Fedimint receiver (services/fedimint-receiver), e.g. http://fedimint-receiver:8790. Unset: no Fedimint notes are taken. */
+  FORGE_FEDIMINT_URL: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  /** The receiver's bearer token (its FEDIMINT_RECEIVER_TOKEN). Required with FORGE_FEDIMINT_URL. */
+  FORGE_FEDIMINT_TOKEN: z.string().optional().or(z.literal('').transform(() => undefined)),
+  /** Largest Fedimint top-up, in sat (the notes' face value). A federation's own max_sat may be lower. */
+  FORGE_FEDIMINT_MAX_SAT: z.coerce.number().int().min(1).default(100_000),
+  /** Most Forge holds of one federation's eCash, in sat; a top-up that would go over is refused. A federation's own cap_sat overrides it. */
+  FORGE_FEDIMINT_FEDERATION_CAP_SAT: z.coerce.number().int().min(1).default(1_000_000),
+
   // ---------------------------------------------------------------- the Android app (docs/ANDROID.md)
   /**
    * The release APK that /download offers, with its SHA-256 shown on the page. Unset (or no file there):
@@ -445,5 +456,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, catalogOverr
   if (creditMint && trustedMints.includes(creditMint)) throw new Error('FORGE_CREDIT_MINT must not be one of FORGE_TRUSTED_MINTS: credits are never money');
   if (env.FORGE_FAUCET_ENABLED && !creditMint) throw new Error('FORGE_FAUCET_ENABLED needs FORGE_CREDIT_MINT');
   if (env.FORGE_FAUCET_POW_MAX_BITS < env.FORGE_FAUCET_POW_BITS) throw new Error('FORGE_FAUCET_POW_MAX_BITS must be at least FORGE_FAUCET_POW_BITS');
+  if (env.FORGE_FEDIMINT_URL && !env.FORGE_FEDIMINT_TOKEN) throw new Error('FORGE_FEDIMINT_URL needs FORGE_FEDIMINT_TOKEN (the receiver\'s FEDIMINT_RECEIVER_TOKEN)');
+  if (env.FORGE_FEDIMINT_URL && !env.FORGE_UNITS.includes('sat')) throw new Error('FORGE_FEDIMINT_URL needs sat in FORGE_UNITS: Fedimint notes are credited in sats');
   return { env, catalog: { ...cat.data, models, audio }, trustedMints, creditMint };
 }

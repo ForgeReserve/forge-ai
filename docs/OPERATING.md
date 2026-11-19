@@ -86,6 +86,10 @@ Environment variables, validated with zod at startup. `src/config.ts` is the com
 | `FORGE_FOREIGN_MAX_DISCOVERED` | `25` | Most discovered mints accepted at once, best reviewed first |
 | `FORGE_FOREIGN_MAX_SAT` / `FORGE_FOREIGN_MAX_USD` | `100000` / `5000` | Largest token from another mint, in sat / cents |
 | `FORGE_FUND_MAX_PENDING` | `5` | Unfinished fundings per balance |
+| `FORGE_FEDIMINT_URL` | unset | The Fedimint receiver, e.g. `http://fedimint-receiver:8790`. Set: `POST /v1/wallet/topup` takes Fedimint notes of the joined, active federations ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md#turning-it-on)). Unset or empty: off |
+| `FORGE_FEDIMINT_TOKEN` | unset | The receiver's bearer token (its `FEDIMINT_RECEIVER_TOKEN`; `docker-compose.yml` passes that one unless this is set). Required with the URL |
+| `FORGE_FEDIMINT_MAX_SAT` | `100000` | Largest Fedimint top-up, in sat of face value. A federation's own `--max-sat` may be lower |
+| `FORGE_FEDIMINT_FEDERATION_CAP_SAT` | `1000000` | Most Forge holds of one federation, in sat; a top-up that would go over is refused. A federation's own `--cap-sat` overrides it |
 | `FORGE_ADMIN_TOKEN_HASH` | unset | SHA-256 (hex) of the admin token. Unset: `/admin` answers 404. See [ADMIN.md](ADMIN.md) |
 | `FORGE_ADMIN_ORIGIN` | request `Host` | Origin admin changes must come from |
 | `FORGE_ADMIN_RATE_LIMIT_RPM` | `120` | Admin API requests per minute per IP |
@@ -148,6 +152,9 @@ pnpm admin balances:list
 pnpm admin revenue:show                                # wallet holdings vs customer balances and owed payouts
 pnpm admin revenue:export --unit usd [--mint URL] [--amount N]   # sweep revenue as an eCash token
 pnpm admin prices:show [--unit sat]
+pnpm admin fedimint:join [--max-sat N] [--cap-sat N] < invite.txt   # join a federation (invite on stdin, never printed)
+pnpm admin fedimint:list                               # federations: state, caps, joined, balance, pending, stuck
+pnpm admin fedimint:pause <federation-id>              # stop taking its notes; fedimint:resume takes them again
 ```
 
 `revenue:export` never exports eCash that backs customer balances or unpaid change. Exports are recorded in `revenue_exports` (amount, lock, token hash; never the token). The admin page at `/admin/` does the same tasks and more; see [ADMIN.md](ADMIN.md).

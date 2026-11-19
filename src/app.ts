@@ -19,6 +19,7 @@ import { checkFreeQuestion, CREDIT_MSUB, type FreeRules } from './credits.ts';
 import { type DB, now, tx } from './db.ts';
 import { apkSource, PRIVATE_VOICE_APK_URL, registerAppLinks, registerDownloadRoutes } from './download.ts';
 import { type Faucet, FaucetError } from './faucet.ts';
+import { FedimintPending, type FedimintService } from './fedimint.ts';
 import { type FreeVoice, FreeVoiceError } from './free-voice.ts';
 import { FOREIGN_MINTS_PATH, type FundingService } from './funding.ts';
 import type { MintDiscovery } from './mint-discovery.ts';
@@ -50,6 +51,8 @@ export interface Deps {
   faucet?: Faucet;
   /** Free voice questions, when both their limits are above 0 (src/free-voice.ts). */
   freeVoice?: FreeVoice;
+  /** Fedimint notes in a top-up, when FORGE_FEDIMINT_URL is set (src/fedimint.ts). */
+  fedimint?: FedimintService;
   publicDir?: string;
 }
 
@@ -285,6 +288,8 @@ export function createApp(d: Deps) {
     }
     const token = String(body?.token ?? '');
     const invite = typeof body?.invite === 'string' ? body.invite : c.req.header('x-forge-invite');
+    // Fedimint notes in the same field, when the gateway takes them; a Cashu token never goes this way.
+    if (d.fedimint?.isNotes(token)) return fedimintTopup(c, d.fedimint, token, invite);
     const t = await wallet.inspect(token);
 
     // Credits open or fill a free balance, never a paid one (src/accounts.ts).
@@ -344,6 +349,55 @@ export function createApp(d: Deps) {
       throw e;
     }
   });
+
+  /**
+   * A top-up with Fedimint notes (docs/PAYMENTS.md, Fedimint notes): read and checked at the receiver
+   * first, then the sat balance is opened (as for Cashu), then the receive. Credited in exact msat, on the
+   * receiver's done record only. An outcome not known yet answers 503 topup_pending with the key, as an
+   * unknown Cashu swap does; the same key and notes later, or the sweep, finish it.
+   */
+  const fedimintTopup = async (c: Context, fm: FedimintService, token: string, invite: string | undefined) => {
+    const plan = await fm.check(token);
+    const opened = openAccount({ db, ledger, invites, inviteOnly: env.FORGE_INVITE_ONLY }, { key: bearer(c), invite, unit: 'sat', sibling: sibling(c) });
+    const acct = opened.account;
+    const key = opened.generatedKey;
+    try {
+      const r = await fm.receive(plan, acct.id);
+      const a = ledger.get(acct.id)!;
+      log.info('topup', { account: a.id, unit: a.unit, amount_msat: r.creditedMsat, replay: r.replay, free: false, method: 'fedimint', federation: r.federationId });
+      return c.json({
+        key,
+        account_id: a.id,
+        unit: a.unit,
+        free: false,
+        credited: r.creditedMsat / MSUB_PER_UNIT,
+        credited_msub: r.creditedMsat,
+        replay: r.replay,
+        balance_msub: a.balance_msub,
+        balance: a.balance_msub / MSUB_PER_UNIT,
+        fedimint: { federation_id: r.federationId, notes_id: r.notesId },
+      });
+    } catch (e) {
+      if (!(e instanceof PaymentError) || e.status >= 500) {
+        // Unknown (pending at the receiver, no answer, a crash point) or held for an operator: the balance
+        // stays, with the key handed back, so the notes are credited to it once the outcome is known.
+        const held = e instanceof PaymentError;
+        if (!(e instanceof FedimintPending)) log.warn(held ? 'topup_held' : 'topup_pending', { account: acct.id, err: errText(e) });
+        if (held) return apiError(c, e.status, e.code, e.message, {}, { key, account_id: acct.id });
+        return c.json(
+          {
+            error: { message: 'topup outcome pending; retry with this key and the same notes', type: 'topup_pending', code: 'topup_pending' },
+            key,
+            account_id: acct.id,
+          },
+          503,
+        );
+      }
+      // Refused, and nothing was spent: undo the empty balance so the invite can be used again.
+      if (opened.created) releaseIfEmpty(db, acct.id);
+      throw e;
+    }
+  };
 
   // The least a transcription costs the operator: the cheapest one, at the shortest recording taken.
   const transcribers = config.catalog.audio.filter((m) => m.kind === 'transcription');
@@ -518,6 +572,8 @@ export function createApp(d: Deps) {
       // Two balances (docs/PAYMENTS.md): the key of a paid balance opens the one in the other unit, once,
       // with no invite, sent in this header on a top-up or a funding.
       sibling: { enabled: true, header: SIBLING_HEADER },
+      // Fedimint notes in POST /v1/wallet/topup (credited in sats): listed only when the gateway takes them.
+      ...(d.fedimint ? { fedimint: await d.fedimint.methods() } : {}),
     }),
   );
 
@@ -1327,6 +1383,8 @@ export async function startupRecovery(d: Deps, olderThanMs = 0): Promise<void> {
   // 'prepared' swap in-process once the mint answers, and answers 404 when there is nothing to owe.
   d.db.prepare("UPDATE requests SET status = 'failed' WHERE payment = 'nut24' AND status = 'new' AND created_at <= ?").run(Date.now() - olderThanMs);
   const released = d.ledger.releaseStale(olderThanMs);
+  // Fedimint top-ups left prepared: credited now if the receiver finished them (the sweep keeps asking).
+  const fm = d.fedimint ? await d.fedimint.sweep().catch((e) => (log.warn('fedimint_recovery_failed', { err: errText(e) }), undefined)) : undefined;
   const stuck = d.db
     .prepare("SELECT id, unit, paid_units, lock_pubkey FROM requests WHERE payment = 'nut24' AND status IN ('paid', 'running') AND created_at <= ?")
     .all(Date.now() - olderThanMs) as Array<{ id: string; unit: Unit; paid_units: number; lock_pubkey: string | null }>;
@@ -1337,5 +1395,12 @@ export async function startupRecovery(d: Deps, olderThanMs = 0): Promise<void> {
       d.db.prepare("UPDATE requests SET status = 'aborted', change_units = ? WHERE id = ?").run(r.paid_units, r.id);
     });
   }
-  log.info('startup_recovery', { incoming: w.incoming, outgoing: w.outgoing, errors: w.errors, released_reservations: released, aborted_nut24: stuck.length });
+  log.info('startup_recovery', {
+    incoming: w.incoming,
+    outgoing: w.outgoing,
+    errors: w.errors,
+    released_reservations: released,
+    aborted_nut24: stuck.length,
+    ...(fm ? { fedimint_checked: fm.checked, fedimint_credited: fm.credited } : {}),
+  });
 }

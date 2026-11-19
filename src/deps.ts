@@ -4,6 +4,7 @@ import { type Config, normalizeMintUrl } from './config.ts';
 import { CreditKeysets, freeRules, mintCredits } from './credits.ts';
 import { openDb } from './db.ts';
 import { Faucet } from './faucet.ts';
+import { type FedimintFaults, FedimintService, ReceiverClient } from './fedimint.ts';
 import { FreeVoice } from './free-voice.ts';
 import { Invites, Ledger, Passes } from './ledger.ts';
 import { BUILTIN_SOURCES, RateOracle, type RateSource } from './rates.ts';
@@ -21,6 +22,8 @@ export function buildDeps(
     env?: NodeJS.ProcessEnv;
     faults?: WalletFaults;
     fundingFaults?: FundingFaults;
+    /** Tests: crash points in a Fedimint top-up, and how long a top-up waits for a pending receive. */
+    fedimint?: { faults?: FedimintFaults; waitMs?: number; pollMs?: number };
     /** Tests: stand-ins for the Nostr relays and the mint probe used by other-mint discovery. */
     discovery?: { query?: RelayQuery; probe?: (url: string) => Promise<MintProbe>; now?: () => number };
     /** Tests: the faucet's clock and voucher maker. */
@@ -114,6 +117,18 @@ export function buildDeps(
     rates,
     funding,
     discovery,
+    // Fedimint notes in POST /v1/wallet/topup (src/fedimint.ts): off while FORGE_FEDIMINT_URL is unset.
+    fedimint: env.FORGE_FEDIMINT_URL
+      ? new FedimintService({
+          db,
+          ledger,
+          client: new ReceiverClient(env.FORGE_FEDIMINT_URL, env.FORGE_FEDIMINT_TOKEN!),
+          maxSat: env.FORGE_FEDIMINT_MAX_SAT,
+          capSat: env.FORGE_FEDIMINT_FEDERATION_CAP_SAT,
+          maxNotesBytes: env.FORGE_MAX_TOKEN_BYTES,
+          ...opts.fedimint,
+        })
+      : undefined,
     free,
     faucet,
     // Free voice questions (src/free-voice.ts): off when either limit is 0.

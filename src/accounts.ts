@@ -148,7 +148,8 @@ export function releaseIfEmpty(db: DB, accountId: string): boolean {
     ).n;
     if (busy > 0) return false;
     const pendingIn = (
-      db.prepare("SELECT COUNT(*) AS n FROM incoming WHERE account_id = ? AND status = 'prepared'").get(accountId) as { n: number }
+      // A Fedimint top-up that is stuck waits for an operator: its balance is kept for it.
+      db.prepare("SELECT COUNT(*) AS n FROM incoming WHERE account_id = ? AND status IN ('prepared', 'stuck')").get(accountId) as { n: number }
     ).n;
     if (pendingIn > 0) return false;
     db.prepare("UPDATE invites SET status = 'open', account_id = NULL, redeemed_at = NULL WHERE account_id = ?").run(accountId);

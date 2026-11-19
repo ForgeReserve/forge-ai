@@ -306,6 +306,15 @@ A balance has one unit for life. A client that holds a paid balance in one unit 
 
 If the mint does not answer while a new balance is being opened, the answer is `503 topup_pending` with the new `key`. Retry with that key and the same token to finish.
 
+### Top up with Fedimint notes
+
+Where `fedimint.enabled` in `GET /v1/wallet/fund/methods` is true, `POST /v1/wallet/topup` also takes Fedimint eCash notes in the same `token` field, from the federations listed under `fedimint.federations`. They go to a sat balance, credited in exact millisatoshis: the notes' value less the federation's own fee to take them. The gateway takes no fee. Anything that starts with `cashu` is read as a Cashu token, as before.
+
+- A federation not listed answers `400 federation_not_joined`, and the notes stay yours. So do `federation_paused`, `notes_unsupported`, `amount_too_large` (over `fedimint.max`, or the federation's own `max`), `federation_full` and `insufficient_amount`.
+- The answer adds `credited_msub` (what was added, in millisatoshis; `credited` is the same in sats and may have a fraction) and `fedimint: {federation_id, notes_id}`.
+- The federation can take a few seconds. When it has not finished, the answer is `503 topup_pending` with `key` and `account_id`: send the same notes with that key again later, or just check the balance, which is credited once the federation finishes. Sending the same notes again to the same key is safe (`replay: true`); to another key it answers `400 token_spent`.
+- `502 issuance_failed`: the federation took the notes but has not issued their value yet. Nothing is credited and the notes are not lost; the operator settles it.
+
 ### Lightning
 
 `POST /v1/wallet/fund/lightning` returns a BOLT11 invoice from the Forge mint in `request`. Pay it from any Lightning wallet. The funding goes `pending`, then `minting`, then `done`, and the balance is credited exactly the invoice amount. Unpaid past its expiry, it ends `expired`. `lightning.min` and `lightning.max` in `GET /v1/wallet/fund/methods` give the limits per unit.
@@ -625,7 +634,7 @@ Adds an eCash token to a balance, or opens one with it.
 
 | Body field | Rule |
 | - | - |
-| `token` | Required. A `cashuB` token from an accepted mint |
+| `token` | Required. A `cashuB` token from an accepted mint, or Fedimint notes where `fedimint.enabled` ([Top up with Fedimint notes](#top-up-with-fedimint-notes)) |
 | `invite` | For a new balance while invite-only. Also accepted as `X-Forge-Invite` |
 
 Bearer: an existing key to top up, a new key of the right shape to choose your own, or none to have one made. `X-Forge-Sibling`: in place of an invite, the key of the client's balance in the other unit ([A second balance](#a-second-balance)).
@@ -635,7 +644,7 @@ Bearer: an existing key to top up, a new key of the right shape to choose your o
   "replay": false, "balance_msub": 500000, "balance": 500 }
 ```
 
-`credited` is in whole units, after the mint's input fees. Errors: the token errors, `409 wrong_balance`, `400 wrong_unit` (the balance has another unit; with `convert` when the token can be changed, see [Change units](#change-units)), `403 invite_required`, `403 sibling_refused`, `503 topup_pending` (retry with the returned `key` and the same token).
+`credited` is in whole units, after the mint's input fees (for Fedimint notes, sats with `credited_msub` beside it). Errors: the token errors, the Fedimint refusals ([Top up with Fedimint notes](#top-up-with-fedimint-notes)), `409 wrong_balance`, `400 wrong_unit` (the balance has another unit; with `convert` when the token can be changed, see [Change units](#change-units)), `403 invite_required`, `403 sibling_refused`, `503 topup_pending` (retry with the returned `key` and the same token).
 
 ### `GET /v1/wallet`
 
@@ -732,9 +741,12 @@ What this gateway can take now. No key needed.
   "free_voice": { "enabled": true, "per_day": 20 },
   "free": { "enabled": false, "questions": null },
   "open": { "enabled": true, "free_models": ["..."] },
-  "sibling": { "enabled": true, "header": "X-Forge-Sibling" }
+  "sibling": { "enabled": true, "header": "X-Forge-Sibling" },
+  "fedimint": { "enabled": true, "unit": "sat", "max": 100000, "federations": [{ "id": "5eb868aa...", "name": "Example", "max": 100000 }] }
 }
 ```
+
+`fedimint` is there only on a gateway that takes Fedimint notes ([Top up with Fedimint notes](#top-up-with-fedimint-notes)); `enabled` is false while no federation is taken right now. Its figures are an example, not read from the hosted gateway.
 
 The figures above were read from the hosted gateway on 16 November 2026 (`convert` added since). `usd` limits are in cents. `convert.units`: the balance units eCash from the gateway's own mints can be changed into ([Change units](#change-units)). `sibling`: the header that opens a client's balance in the other unit with the key of the one it holds ([A second balance](#a-second-balance)); a gateway without it needs an invite for every new balance.
 
@@ -853,13 +865,13 @@ Every error from an API route has the same shape:
 { "error": { "message": "balance too low: need 5410 msub, available 0 msub", "type": "insufficient_balance", "code": "insufficient_balance" } }
 ```
 
-`type` and `code` are the same. Some errors add fields beside `error`: `payment_request`, `amount`, `unit` and `mints` on a 402; `free_voice` on `free_voice_limit`; `free_models` on `not_free_model`; `unlisted` on `mint_unlisted`; `next_at` and `retry_after` on faucet refusals; `key` and `account_id` on `topup_pending`; `mint_code` on `mint_refused`. A path the gateway does not know answers `404` in plain text.
+`type` and `code` are the same. Some errors add fields beside `error`: `payment_request`, `amount`, `unit` and `mints` on a 402; `free_voice` on `free_voice_limit`; `free_models` on `not_free_model`; `unlisted` on `mint_unlisted`; `next_at` and `retry_after` on faucet refusals; `key` and `account_id` on `topup_pending` and `issuance_failed`; `fedimint` on `federation_not_joined`, `federation_paused`, `notes_unsupported` and `federation_full`; `max` on a Fedimint `amount_too_large`; `mint_code` on `mint_refused`. A path the gateway does not know answers `404` in plain text.
 
 | Status | Code | Meaning |
 | - | - | - |
 | 400 | `invalid_request` | The body or a header is malformed. The message says which |
 | 400 | `invalid_amount` | An amount out of range |
-| 400 | `invalid_token` | Not a `cashuB` token, too large, empty, or not decodable |
+| 400 | `invalid_token` | Not a `cashuB` token or Fedimint notes the gateway reads, too large, empty, or not decodable |
 | 400 | `untrusted_mint` | The token's mint is not accepted here |
 | 400 | `wrong_unit` | The unit is not taken here, or does not match the balance or quote. A top-up whose eCash can be changed adds `convert` ([Change units](#change-units)) |
 | 400 | `insufficient_amount` | The token is worth less than needed, after fees |
@@ -875,7 +887,11 @@ Every error from an API route has the same shape:
 | 400 | `use_topup` | A token from the gateway's own mint sent to other-mint funding |
 | 400 | `mint_not_allowed` | That mint's eCash is not accepted |
 | 400 | `mint_check_failed` | An unlisted mint failed the gateway's live check |
-| 400 | `amount_too_large` | A token over the other-mint cap |
+| 400 | `amount_too_large` | A token over the other-mint cap, or Fedimint notes over the Fedimint cap |
+| 400 | `federation_not_joined` | Fedimint notes of a federation this gateway does not take |
+| 400 | `federation_paused` | Fedimint notes of a federation the operator paused |
+| 400 | `notes_unsupported` | Fedimint notes of a kind not taken from that federation |
+| 400 | `federation_full` | The gateway holds as much of that federation's eCash as it takes |
 | 400 | `token_mismatch` | Confirm sent a token other than the quoted one |
 | 400 | `foreign_mint_error` | The other mint cannot pay Lightning invoices (503 when it did not answer) |
 | 400 | `mint_refused` | The card's mint refused the swap |
@@ -914,7 +930,9 @@ Every error from an API route has the same shape:
 | 429 | `faucet_empty`, `faucet_limit` | No vouchers now, or none left for this address today |
 | 500 | `internal_error` | Something failed in the gateway |
 | 502 | `upstream_error` | The model's supplier failed. Nothing was charged |
+| 502 | `issuance_failed` | The federation took the Fedimint notes but has not issued their value: nothing credited, the operator settles it |
 | 503 | `mint_unavailable` | A mint did not answer. Retry with the same token |
+| 503 | `fedimint_unavailable` | The gateway cannot take Fedimint notes right now. Nothing was spent |
 | 503 | `rate_unavailable` | No BTC/USD rate: sat pricing is paused, usd works |
 | 503 | `topup_pending` | The top-up's outcome is not known yet: retry with the returned key |
 | 503 | `wallet_insufficient`, `wallet_inconsistent` | The gateway cannot make that payout right now |
