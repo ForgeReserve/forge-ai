@@ -20,7 +20,8 @@ function site() {
     mkdirSync(join(dir, p, '..'), { recursive: true });
     writeFileSync(join(dir, p), body);
   };
-  put('index.html', '<!doctype html><title>v1</title>');
+  put('about/index.html', '<!doctype html><title>landing</title>');
+  put('classic/index.html', '<!doctype html><title>v1</title>');
   put('app.js', 'export {};');
   put('sw.js', "const V = '__FORGE_SW_VERSION__';");
   put('v2/index.html', '<!doctype html><title>v2</title>');
@@ -55,7 +56,7 @@ describe('cross-origin isolation', () => {
   });
 
   it('leaves v1 and the engine API as they were', async () => {
-    for (const p of ['/', '/app.js', '/sw.js', '/v1/models']) {
+    for (const p of ['/', '/classic/', '/app.js', '/sw.js', '/v1/models']) {
       const r = await get(p);
       expect(r.headers.get('cross-origin-embedder-policy'), p).toBeNull();
       expect(r.headers.get('cross-origin-opener-policy'), p).toBeNull();

@@ -109,7 +109,7 @@ export const ISOLATION_HEADERS = Object.freeze({
   'Cross-Origin-Resource-Policy': 'same-origin',
 });
 
-/** The landing page's Content-Security-Policy (/about/): files from this origin only, no inline code, never framed. */
+/** The landing page's Content-Security-Policy (the page at /, and its files under /about/): files from this origin only, no inline code, never framed. */
 export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 async function isolated(c: Context, next: () => Promise<void>) {
@@ -1280,7 +1280,7 @@ export function createApp(d: Deps) {
   // ------------------------------------------------------------------ operator admin (404 unless FORGE_ADMIN_TOKEN_HASH is set)
   app.route('/', createAdminRouter(d));
 
-  // ------------------------------------------------------------------ static chat page
+  // ------------------------------------------------------------------ static pages: the landing page at /, the Classic chat page at /classic/, the v2 app at /v2/
   if (d.publicDir) {
     // Revalidate the page and its modules on every load (a cheap 304 when unchanged), so a phone never
     // pairs a new index.html with a cached, older app.js.
@@ -1325,13 +1325,30 @@ export function createApp(d: Deps) {
     // The public API guide (public/docs/, generated from docs/API.md by scripts/build-docs.ts). /docs/
     // and its files are plain static files below; /docs moves to /docs/ so the page's links resolve.
     app.get('/docs', (c) => c.redirect('/docs/', 301));
-    // The landing page (public/about/), static like /docs/. It loads only its own files and the app's
-    // font and look from this origin, so its policy allows nothing else.
-    app.get('/about', (c) => c.redirect('/about/', 301));
+    // The landing page is the site's front page: public/about/index.html, served at / under its own
+    // policy. It loads only its own files (under /about/) and the app's font and look from this origin,
+    // so its policy allows nothing else. Its old address, /about/, moves to /.
+    const landingPage = (c: Context) => {
+      let html: string;
+      try {
+        html = readFileSync(join(publicDir, 'about', 'index.html'), 'utf8');
+      } catch {
+        return c.notFound();
+      }
+      c.header('Content-Security-Policy', ABOUT_CSP);
+      return c.html(html);
+    };
+    app.get('/', landingPage);
+    app.get('/index.html', landingPage);
+    for (const p of ['/about', '/about/', '/about/index.html']) app.get(p, (c) => c.redirect('/', 301));
     app.use('/about/*', async (c, next) => {
       await next();
       c.header('Content-Security-Policy', ABOUT_CSP);
     });
+    // The Classic chat page (public/classic/index.html) is a static page like /docs/. Its scripts,
+    // styles, icons, manifest and worker stay at the root (/app.js, /js/, /sw.js and the rest), where the
+    // v2 app and other pages import them from too.
+    app.get('/classic', (c) => c.redirect('/classic/', 301));
     // The v2 app is cross-origin isolated, so the on-device voice (public/v2/vendor/phonon-tts) can run
     // its model on several threads (WebAssembly threads need SharedArrayBuffer). The page then loads
     // only same-origin files and CORS requests, which is all it ever loads. /vendor/ gets the same

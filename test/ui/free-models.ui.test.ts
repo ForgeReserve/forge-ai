@@ -539,7 +539,7 @@ describe('free models in the v1 app', () => {
   it('says Free in the model menu', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
     const page = await ctx.newPage();
-    await page.goto(`${g.url}/`);
+    await page.goto(`${g.url}/classic/`);
     // The menu is drawn when it opens, once the models are in.
     await page.waitForFunction(() => !document.querySelector('#modelName .skel'));
     await page.click('#modelBtn');

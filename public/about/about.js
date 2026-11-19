@@ -1,5 +1,8 @@
-// The landing page at /about: the look this phone keeps from the app (else Midnight), the download panel,
-// and the moments.
+// The landing page at /: the look this phone keeps from the app (else Midnight), the download panel,
+// the moments and the title that turns with them.
+//
+// First, an address meant for the Classic chat page (at / before it moved to /classic/) goes on there
+// (forward.js).
 //
 // Download buttons: each button's link is its data-href in index.html. While that is empty the button
 // shows Soon and is no link; once it is set the button links there and Soon goes.
@@ -11,7 +14,16 @@
 // - data-play: intro (the way in), playing, or stopped (Pause, a moment picked, or reduced motion).
 // - .held: a short pause while the mouse is over the moments, keyboard focus is on a tab or a link in
 //   the words, or the page is out of sight.
+//
+// The title: the words after "Private AI for" (the list in index.html) move on at the end of each half
+// of the selected tab's ring, with the phone's screens, so the page changes on one beat and the title
+// stops whenever the moments do. A phrase (.long) stays for two halves. Under reduced motion the title is
+// the whole sentence and never turns (about.css).
+import { classicAddress } from '/about/forward.js';
 import { applyPageLook } from '/v2/core/pagelook.js';
+
+const classic = classicAddress(location.hash, matchMedia('(display-mode: standalone)').matches || navigator.standalone === true);
+if (classic) location.replace(classic);
 
 applyPageLook();
 
@@ -76,6 +88,22 @@ function frame(name) {
   );
 }
 
+/** The title's words, in order, and the one showing. */
+const whos = [...document.querySelectorAll('#whos .who')];
+let who = Math.max(0, whos.findIndex((w) => w.classList.contains('on')));
+let halves = 0;
+
+/** At the end of each half of a ring: the title's next words (a phrase after its second half). */
+function turn() {
+  if (whos.length < 2 || still.matches) return;
+  if (++halves < (whos[who].classList.contains('long') ? 2 : 1)) return;
+  halves = 0;
+  for (const w of whos) w.classList.remove('was');
+  whos[who].classList.replace('on', 'was');
+  who = (who + 1) % whos.length;
+  whos[who].classList.add('on');
+}
+
 /** Shows moment i (its first screen) and starts its ring again. */
 function select(i) {
   now = (i + tabs.length) % tabs.length;
@@ -106,6 +134,7 @@ const stop = () => setPlay('stopped');
 // The clock: the selected tab's ring (see the top of this file).
 hero.addEventListener('animationend', (e) => {
   if (e.animationName !== 'arc' || e.target.closest('[role=tab]') !== tabs[now]) return;
+  turn();
   if (e.target.parentElement.classList.contains('ha')) {
     const next = FRAMES[tabs[now].dataset.moment][1];
     if (next) frame(next);

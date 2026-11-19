@@ -97,7 +97,7 @@ export function lookScreen({ t, state, back, actions, registry, native = null })
       coverNote,
       // Classic is the v1 chat page, a link rather than a mode module.
       // The Android app carries only this app, so it has no Classic to open.
-      native ? null : el('a', { class: 'mode-card', href: '/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
+      native ? null : el('a', { class: 'mode-card', href: '/classic/', id: 'modeClassic' }, icon('chat', 22), el('span', {}, el('b', { text: t('look.classic') }), el('small', { text: t('look.classicSub') }))),
       el('h2', { class: 'caps', text: t('look.look') }),
       group,
       follow,

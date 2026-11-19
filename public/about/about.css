@@ -1,7 +1,8 @@
-/* The landing page at /about: one screen, no scroll. The app's Midnight look (public/v2/modules/look/midnight)
-   by default; about.js puts in the look this phone keeps from the app, as /download does. Inter from this
-   origin. Every moving part moves by transform and opacity only, stops with the moments (data-play,
-   .held), and is replaced by a still picture under prefers-reduced-motion (the end of this file). */
+/* The landing page at / (its files under /about/): one screen, no scroll. The app's Midnight look
+   (public/v2/modules/look/midnight) by default; about.js puts in the look this phone keeps from the app,
+   as /download does. Inter from this origin. Every moving part moves by transform and opacity only,
+   stops with the moments (data-play, .held), and is replaced by a still picture under
+   prefers-reduced-motion (the end of this file). */
 @font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
   --bg: #0B0D10; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
@@ -83,6 +84,9 @@ img { display: block; }
 .dl-web { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border-radius: 16px; color: var(--ink); font-weight: 600; font-size: 15px; text-decoration: none; }
 .dl-web .ico { width: 20px; height: 20px; color: var(--teal); }
 .dl-web:hover { background: var(--surface-2); }
+/* The Classic chat page, for the few who still use it: a quiet line under the rest. */
+.dl-classic { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: -6px; border-radius: 14px; color: var(--text-2); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.dl-classic:hover { color: var(--ink); }
 
 /* ---------- the page: a title, the moments and the phone, in one screen ---------- */
 .hero {
@@ -99,10 +103,30 @@ img { display: block; }
 .hero[data-moment="share"] { --dur: 6.5s; }
 
 h1 {
-  grid-area: title; margin: 2px 0 0; max-width: 22em; color: var(--ink);
+  grid-area: title; position: relative; margin: 2px 0 0; max-width: 22em; color: var(--ink);
   font-size: clamp(19px, min(6.4vw, 3.5vh), 30px); line-height: 1.12; font-weight: 650; letter-spacing: -0.025em; text-wrap: balance;
+  container-type: inline-size;
 }
 h1 .t-b { color: var(--text-2); font-weight: 560; }
+
+/* The title that turns: "Private AI for" stays, and the words after it change with the moments
+   (about.js). The words share one cell, so the tallest sets the title's height whichever shows, and
+   nothing on the page moves when they change. Sizes follow the title's width: a word fills it (the
+   longest, whistleblowers, just fits) and a phrase (.long) takes two lines at the size of "Private AI
+   for", about as tall as one word. The whole sentence (.t-still) is what a screen reader reads, and
+   what shows under reduced motion (the end of this file). */
+.t-still { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.t-turn { --big: calc(100cqi / 7); display: block; }
+.t-for { display: block; font-size: calc(var(--big) * 0.5); line-height: 1.18; font-weight: 600; letter-spacing: -0.02em; color: var(--text-2); }
+.whos { display: grid; font-size: var(--big); line-height: 1.06; font-weight: 700; letter-spacing: -0.035em; color: var(--ink); }
+.who {
+  grid-area: 1 / 1; align-self: start; opacity: 0; visibility: hidden; transform: translateY(0.24em);
+  transition: opacity 0.22s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+}
+.who.was { transform: translateY(-0.12em); }
+.who.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.5s ease 0.14s, transform 0.9s var(--out) 0.14s, visibility 0s; }
+.who.long { font-size: 0.5em; line-height: 1.06; font-weight: 650; letter-spacing: -0.025em; text-wrap: balance; }
+.who.long.was { transform: translateY(-0.24em); }
 
 /* The moments: four tabs with the app's icons, each in a tile whose ring fills while it shows. */
 .rail { grid-area: rail; display: flex; align-items: flex-start; gap: 2px; padding-top: 6px; }
@@ -375,7 +399,7 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
   .aura { animation: fade-in 1.6s ease 0.2s both, breathe 7s ease-in-out 1.8s infinite alternate; }
   .phone-float { animation: float 9s ease-in-out 1.6s infinite alternate; }
   .tip { animation: glow 2.4s ease-in-out infinite alternate; }
-  .act, .play, .tab, .dl, .dl-web { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
+  .act, .play, .tab, .dl, .dl-web, .dl-classic { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
   .act:active, .play:active { transform: scale(0.97); }
   .dl-pop { opacity: 0; transform: translateY(-8px) scale(0.98); transform-origin: top right; transition: opacity 0.2s ease, transform 0.3s var(--out), overlay 0.3s allow-discrete, display 0.3s allow-discrete; }
   .dl-pop:popover-open { opacity: 1; transform: none; }
@@ -401,6 +425,8 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
 /* ---------- reduced motion: a still picture. Full rings, no timer, no glint; a tap still changes the moment. ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .play, .prog, .tips, .touch, .beam-box, .sheen { display: none; }
+  .play, .prog, .tips, .touch, .beam-box, .sheen, .t-turn { display: none; }
   .q { opacity: 1; transform: none; }
+  /* The title as one sentence, as it was before it turned. */
+  .t-still { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
 }

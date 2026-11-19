@@ -30,7 +30,7 @@ import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { ExportError, exportHistory, holdings, issueExport, oweExport, planExport, revenue } from './revenue.ts';
 
-export const BETA_LINK = 'https://ai.forge-reserve.com';
+export const BETA_LINK = 'https://ai.forge-reserve.com/v2/';
 const DAY = 86_400_000;
 
 function sha256hex(s: string): string {

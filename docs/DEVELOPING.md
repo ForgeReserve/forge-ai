@@ -74,7 +74,7 @@ Before you push a change that a phone shows, run `pnpm test:ui:linux`: it runs t
 | - | - |
 | `src/` | The gateway: one Node server (Hono, with SQLite through `node:sqlite`). `src/suppliers/` holds the model suppliers |
 | `public/v2/` | The Forge app. Its modules are in `public/v2/modules/` |
-| `public/` | The Classic chat page at `/`, the admin page (`public/admin/`), and the built docs (`public/docs/`) |
+| `public/` | The landing page at `/` (`public/about/`), the Classic chat page at `/classic/` (`public/classic/index.html`, its scripts and styles at the root of `public/`), the admin page (`public/admin/`), and the built docs (`public/docs/`) |
 | `android/`, `ios/` | The Android and iPhone apps (Capacitor) |
 | `config/` | The model catalogs: `models.json` and `models.dev.json` (with mock models) |
 | `docs/` | Design and reference pages. `docs/modules/` is the module guide |

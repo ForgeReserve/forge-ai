@@ -75,8 +75,8 @@ describe('API guide at /docs', () => {
     expect(api).toContain('href="/docs/modules/first-module"');
   });
 
-  it('is linked from the v1 page at the root', async () => {
-    const v1 = await (await fetch(`${g.url}/`)).text();
+  it('is linked from the v1 page at /classic/', async () => {
+    const v1 = await (await fetch(`${g.url}/classic/`)).text();
     expect(v1).toContain('href="/docs/"');
   });
 });

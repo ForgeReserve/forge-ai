@@ -2,12 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { type Gateway, startGateway } from '../e2e/helpers.ts';
 
-// The landing page at /about in a real browser. It is one screen: at each of six sizes (three computer
-// screens, three phones) the page is exactly as tall and wide as the window and every part of it is
-// inside the window. The three actions sit at the top right. The moments (Talk, Private, Pay, Share
-// unseen) move on by themselves, can be picked by tap or keyboard, stop with Pause, pause under the
-// mouse, and stand still under reduced motion. The download buttons show Soon while their links are
-// empty and become links once set. Nothing is asked of another site and nothing is logged as an error.
+// The landing page, the site's front page at /, in a real browser. It is one screen: at each of six
+// sizes (three computer screens, three phones) the page is exactly as tall and wide as the window and
+// every part of it is inside the window, whichever words the title shows. The three actions sit at the
+// top right. The moments (Talk, Private, Pay, Share unseen) move on by themselves, can be picked by tap or
+// keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; the title's
+// last words turn with them and stop with them, and a screen reader hears one sentence. The download
+// buttons show Soon while their links are empty and become links once set. What was meant for the
+// Classic page at / goes on to /classic/. Nothing is asked of another site and nothing is logged as an
+// error.
 let g: Gateway;
 let browser: Browser;
 
@@ -28,6 +31,11 @@ interface Opened {
   away: string[];
 }
 
+/** The title as one sentence: what a screen reader reads, and what shows under reduced motion. */
+const SENTENCE = 'Private AI for activists and anyone who cannot risk being linked to a question.';
+/** The words that turn after "Private AI for", in order (public/about/index.html). */
+const WHOS = ['activists', 'journalists', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers', 'anyone who cannot risk being linked to a question'];
+
 const SIZES = [
   [1280, 720],
   [1440, 900],
@@ -39,7 +47,7 @@ const SIZES = [
 
 async function open(
   [width, height]: readonly [number, number],
-  { links, still = false, look }: { links?: Record<string, string>; still?: boolean; look?: object } = {},
+  { links, still = false, look, path = '/' }: { links?: Record<string, string>; still?: boolean; look?: object; path?: string } = {},
 ): Promise<Opened> {
   const mobile = width < 600;
   const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 2, reducedMotion: still ? 'reduce' : 'no-preference' });
@@ -61,20 +69,36 @@ async function open(
     if (new URL(r.url()).origin !== g.url) away.push(r.url());
   });
   if (links)
-    await page.route('**/about/', async (route) => {
-      const res = await route.fetch();
-      let body = await res.text();
-      for (const [k, v] of Object.entries(links)) body = body.replace(`data-download="${k}" data-href=""`, `data-download="${k}" data-href="${v}"`);
-      await route.fulfill({ response: res, body });
-    });
-  // The page at /about/, through the move from /about (a moved request is not routed, so a test that changes the page opens /about/).
-  await page.goto(`${g.url}${links ? '/about/' : '/about'}`);
+    await page.route(
+      (u) => u.pathname === '/',
+      async (route) => {
+        const res = await route.fetch();
+        let body = await res.text();
+        for (const [k, v] of Object.entries(links)) body = body.replace(`data-download="${k}" data-href=""`, `data-download="${k}" data-href="${v}"`);
+        await route.fulfill({ response: res, body });
+      },
+    );
+  await page.goto(`${g.url}${path}`);
   await page.waitForLoadState('networkidle');
   return { page, errors, away };
 }
 
 /** The moments' state: which moment, which screen, playing or stopped. */
 const state = (page: Page) => page.evaluate(() => ({ ...(document.querySelector('.hero') as HTMLElement).dataset }));
+
+/** The title's words that show now. */
+const showing = (page: Page) => page.evaluate(() => document.querySelector('#whos .who.on')?.textContent);
+
+/** Shows these words in the title, as about.js does when they come round, and waits for them to settle (about 1 s at the page's speed). */
+async function show(page: Page, words: string, wait = 1100) {
+  await page.evaluate((w) => {
+    for (const e of document.querySelectorAll('#whos .who')) e.classList.toggle('on', e.textContent === w);
+  }, words);
+  await page.waitForTimeout(wait);
+}
+
+/** The heading's name as a screen reader gets it. */
+const headingName = async (page: Page) => /^- heading "(.*)" \[level=1\]$/.exec((await page.locator('h1').ariaSnapshot()).trim())?.[1];
 
 /** Plays the page's animations this many times faster (the moments' clock is a CSS animation). */
 async function faster(page: Page, rate: number) {
@@ -119,7 +143,7 @@ const overlap = (a: { x: number; y: number; width: number; height: number }, b: 
 describe('the landing page in a browser', () => {
   it.each(SIZES)('is one screen at %i by %i, with its actions in the top right', async (width, height) => {
     const { page, errors, away } = await open([width, height]);
-    expect(new URL(page.url()).pathname).toBe('/about/');
+    expect(new URL(page.url()).pathname).toBe('/');
     expect(await page.title()).toBe('Forge AI, private AI for activists');
     // After the way in: no scroll either way, and nothing outside the window.
     await page.waitForTimeout(2000);
@@ -172,7 +196,126 @@ describe('the landing page in a browser', () => {
     expect(imgs.filter((i) => i.shown).length).toBeGreaterThanOrEqual(1);
     // The way in moves by transform and opacity only: nothing shifted.
     expect(await page.evaluate(() => (window as any).shifts)).toBe(0);
+
+    // Whichever words the title shows, the page keeps its place: the title, the tabs, the words and the
+    // phone stay where they are, nothing shows outside the window, the words fit the title's width, and
+    // nothing shifts. The longest (the phrase) last.
+    await page.evaluate(() => document.querySelector('.hero')!.classList.add('held'));
+    await faster(page, 10);
+    const where = async () => Promise.all(['h1', '.rail', '.caps', '.phone-in'].map((sel) => box(page, sel).then((b) => [b.x, b.y, b.width, b.height].map(Math.round).join(','))));
+    const at = await where();
+    for (const words of [...WHOS.slice(1), WHOS[0]!, WHOS.at(-1)!]) {
+      await show(page, words, 200);
+      expect(await showing(page)).toBe(words);
+      expect(await where(), words).toEqual(at);
+      const f2 = await fit(page);
+      expect(f2.scroll, words).toEqual([width, height]);
+      expect(f2.outside, words).toEqual([]);
+      const wide = await page.evaluate(() => {
+        const on = document.querySelector('#whos .who.on')!;
+        const r = document.createRange();
+        r.selectNodeContents(on);
+        const right = Math.max(...[...r.getClientRects()].map((x) => x.right));
+        return { right, edge: document.querySelector('h1')!.getBoundingClientRect().right, lines: new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size };
+      });
+      expect(wide.right, words).toBeLessThanOrEqual(wide.edge + 0.5);
+      expect(wide.lines, words).toBe(words.includes(' ') ? 2 : 1);
+    }
+    expect(await page.evaluate(() => (window as any).shifts)).toBe(0);
     expect(away).toEqual([]);
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('moves its old address, /about, to /', async () => {
+    for (const old of ['/about', '/about/']) {
+      const { page, errors } = await open([390, 844], { path: old });
+      expect(new URL(page.url()).pathname, old).toBe('/');
+      expect(await page.title()).toBe('Forge AI, private AI for activists');
+      expect(errors).toEqual([]);
+      await page.context().close();
+    }
+  });
+
+  it('turns the title with the moments, through its list in order and round again, the phrase for two halves', async () => {
+    const { page, errors } = await open([1440, 900]);
+    expect(await showing(page)).toBe('activists');
+    // Each word that comes, and each end of half a ring (what moves the title on), in order.
+    await page.evaluate(() => {
+      const log: string[] = [];
+      (window as any).log = log;
+      new MutationObserver(() => {
+        const on = document.querySelector('#whos .who.on')!.textContent!;
+        if (log.findLast((x) => x !== '|') !== on) log.push(on);
+      }).observe(document.getElementById('whos')!, { attributes: true, subtree: true });
+      document.querySelector('.hero')!.addEventListener('animationend', (e) => (e as AnimationEvent).animationName === 'arc' && log.push('|'));
+    });
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await faster(page, 25);
+    await expect.poll(() => page.evaluate(() => (window as any).log.filter((x: string) => x !== '|').length), { timeout: 20_000 }).toBeGreaterThanOrEqual(WHOS.length + 1);
+    const log: string[] = await page.evaluate(() => (window as any).log);
+    const words = log.filter((x) => x !== '|');
+    expect(words.slice(0, WHOS.length + 1)).toEqual([...WHOS.slice(1), WHOS[0], WHOS[1]]);
+    // How many halves each showed for: one each, two for the phrase. (A word comes in at the end of a
+    // half; the mark for that half follows it.)
+    const spans = words.slice(0, WHOS.length).map((w, i) => {
+      const from = log.indexOf(w);
+      const to = log.indexOf(words[i + 1]!, from + 1);
+      return [w, log.slice(from, to).filter((x) => x === '|').length];
+    });
+    expect(Object.fromEntries(spans)).toEqual(Object.fromEntries([...WHOS.slice(1), WHOS[0]!].map((w) => [w, w === WHOS.at(-1) ? 2 : 1])));
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('stops the title with Pause, under the mouse and while the page is out of sight', async () => {
+    const { page, errors } = await open([1440, 900]);
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await page.click('#play');
+    await faster(page, 25);
+    const paused = await showing(page);
+    await page.waitForTimeout(1500); // more than a whole round of the moments at this speed
+    expect(await showing(page)).toBe(paused);
+    await page.click('#play');
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(paused);
+
+    // The mouse over the phone holds it.
+    const phone = await box(page, '.phone');
+    await page.mouse.move(phone.x + phone.width / 2, phone.y + phone.height / 2);
+    const held = await showing(page);
+    await page.waitForTimeout(1500);
+    expect(await showing(page)).toBe(held);
+    await page.mouse.move(5, 450);
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(held);
+
+    // Out of sight (another tab, a locked phone), it holds too.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const away = await showing(page);
+    await page.waitForTimeout(1500);
+    expect(await showing(page)).toBe(away);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(away);
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('gives a screen reader one sentence that never changes, and no live region in the title', async () => {
+    const { page, errors } = await open([390, 844]);
+    expect(await headingName(page)).toBe(SENTENCE);
+    expect(await page.locator('h1 [aria-live], h1[aria-live]').count()).toBe(0);
+    expect(await page.getAttribute('.t-turn', 'aria-hidden')).toBe('true');
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await faster(page, 25);
+    await expect.poll(() => showing(page), { timeout: 10_000 }).not.toBe('activists');
+    expect(await headingName(page)).toBe(SENTENCE);
+    await show(page, WHOS.at(-1)!);
+    expect(await headingName(page)).toBe(SENTENCE);
     expect(errors).toEqual([]);
     await page.context().close();
   });
@@ -270,12 +413,17 @@ describe('the landing page in a browser', () => {
   ] as const)('stands still under reduced motion at %i by %i', async (width, height) => {
     const { page, errors } = await open([width, height], { still: true });
     expect(await state(page)).toMatchObject({ play: 'stopped', moment: 'talk', frame: 'talk-a' });
+    // The title is the whole sentence, as it was before it turned, and its turning part never shows.
+    expect(await page.isVisible('.t-turn')).toBe(false);
+    expect((await page.innerText('h1')).replace(/\s+/g, ' ').trim()).toBe(SENTENCE);
+    expect(await headingName(page)).toBe(SENTENCE);
     // No animation at all, no Pause (nothing moves), the rings drawn whole, and still one screen.
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
     expect(await page.isVisible('#play')).toBe(false);
     expect(await page.locator('.q').evaluateAll((qs) => qs.map((q) => getComputedStyle(q).opacity))).toEqual(['1', '1', '1', '1']);
     await page.waitForTimeout(1000);
     expect((await state(page)).moment).toBe('talk');
+    expect(await showing(page)).toBe('activists');
     const f = await fit(page);
     expect(f.scroll).toEqual([width, height]);
     expect(f.outside).toEqual([]);
@@ -308,8 +456,12 @@ describe('the landing page in a browser', () => {
     expect(await page.textContent('#dlAndroid')).toContain('Android');
     expect(await page.textContent('#dlIphone')).toContain('iPhone');
     expect(await page.getAttribute('#dlWeb', 'href')).toBe('/v2/');
+    // One quiet way to the Classic page, under the rest, big enough to tap.
+    expect(await page.getAttribute('#dlClassic', 'href')).toBe('/classic/');
+    expect(await page.textContent('#dlClassic')).toBe('Classic app');
     // The panel is inside the window.
     await page.waitForTimeout(400);
+    expect((await box(page, '#dlClassic')).height).toBeGreaterThanOrEqual(44);
     const p = await box(page, '#download');
     expect(p.x).toBeGreaterThanOrEqual(0);
     expect(p.x + p.width).toBeLessThanOrEqual(width);
@@ -342,6 +494,41 @@ describe('the landing page in a browser', () => {
     await page.waitForURL(/\/download\/?$/);
     expect(errors).toEqual([]);
     await page.context().close();
+  });
+
+  it.each([
+    ['/#/c/c_0123456789abcdef', '/classic/#/c/c_0123456789abcdef'],
+    ['/#new', '/classic/#new'],
+    ['/#fund', '/classic/#fund'],
+  ])('sends %s, meant for the Classic page when it was at /, on to %s', async (from, to) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    // Every address the tab shows (the Classic page then takes its shortcut's hash off).
+    const seen: string[] = [];
+    page.on('framenavigated', (f) => f === page.mainFrame() && seen.push(f.url()));
+    await page.goto(`${g.url}${from}`);
+    await page.waitForURL((u) => u.pathname === '/classic/');
+    await expect.poll(() => seen).toContain(`${g.url}${to}`);
+    expect(await page.title()).toBe('Forge AI');
+    // The Classic page acts on it: Add funds opens the wallet.
+    if (to.endsWith('#fund')) await page.waitForSelector('#walletDialog[open]');
+    await ctx.close();
+  });
+
+  it('sends the Classic app put on a home screen (it opens at /) on to /classic/, and leaves a browser tab here', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    // As Safari has it in an app put on the Home Screen.
+    await ctx.addInitScript(() => Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true }));
+    const page = await ctx.newPage();
+    await page.goto(`${g.url}/`);
+    await page.waitForURL(`${g.url}/classic/`);
+    await ctx.close();
+    // A tab with the skip link's hash stays.
+    const { page: tab, errors } = await open([390, 844], { path: '/#moments' });
+    await tab.waitForTimeout(500);
+    expect(new URL(tab.url()).pathname).toBe('/');
+    expect(errors).toEqual([]);
+    await tab.context().close();
   });
 
   it('opens the app from Open the app', async () => {

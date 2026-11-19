@@ -1,22 +1,23 @@
 {
-  "source": "Vitest JSON reports, 2026-11-17: .tmp/ui-times",
+  "source": "Vitest JSON reports, 2026-11-19: .tmp/ui-times-landing/report.json",
   "files": {
-    "test/ui/about.ui.test.ts": 36.8,
+    "test/ui/about.ui.test.ts": 64.1,
     "test/ui/addfunds.ui.test.ts": 28.8,
     "test/ui/addmoney.ui.test.ts": 75,
-    "test/ui/android.ui.test.ts": 62.1,
+    "test/ui/android.ui.test.ts": 43.3,
     "test/ui/answer-ux.ui.test.ts": 50,
     "test/ui/card.ui.test.ts": 53.3,
+    "test/ui/classic.ui.test.ts": 12.3,
     "test/ui/convert.ui.test.ts": 13.1,
-    "test/ui/docs.ui.test.ts": 11.5,
+    "test/ui/docs.ui.test.ts": 8.2,
     "test/ui/fedimint.ui.test.ts": 29.7,
     "test/ui/firstrun.ui.test.ts": 44.5,
-    "test/ui/free-models.ui.test.ts": 35.5,
+    "test/ui/free-models.ui.test.ts": 19,
     "test/ui/free-voice.ui.test.ts": 4.8,
     "test/ui/free.ui.test.ts": 11.2,
     "test/ui/game.ui.test.ts": 77.9,
     "test/ui/getapp.ui.test.ts": 12,
-    "test/ui/history.ui.test.ts": 76.9,
+    "test/ui/history.ui.test.ts": 51.6,
     "test/ui/home-art.ui.test.ts": 15,
     "test/ui/join.ui.test.ts": 9.7,
     "test/ui/layout.ui.test.ts": 20.9,
@@ -33,7 +34,7 @@
     "test/ui/search.ui.test.ts": 4.7,
     "test/ui/talk-still.ui.test.ts": 20,
     "test/ui/two-balances.ui.test.ts": 6,
-    "test/ui/v2.ui.test.ts": 51.8,
+    "test/ui/v2.ui.test.ts": 41.9,
     "test/ui/voice.ui.test.ts": 78.3
   }
 }

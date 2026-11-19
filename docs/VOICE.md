@@ -89,7 +89,7 @@ Where the phone runs the native voice, the lab adds "Natural voice, native (Andr
 
 ## What cross-origin isolation changes
 
-With `require-corp`, the v2 page may only load other sites' files that opt in. The v2 app loads none: it talks to its engine with CORS requests (allowed), and every script, style, image and worker is its own. Checked with every UI and e2e test passing with the headers on: private (EHBP) answers, Lightning and eCash funding, camera notes, photos shared in, card taps, the Android bundle. Classic (v1) at `/` gets no new headers.
+With `require-corp`, the v2 page may only load other sites' files that opt in. The v2 app loads none: it talks to its engine with CORS requests (allowed), and every script, style, image and worker is its own. Checked with every UI and e2e test passing with the headers on: private (EHBP) answers, Lightning and eCash funding, camera notes, photos shared in, card taps, the Android bundle. Classic (v1) at `/classic/` gets no new headers.
 
 ## The voice lab
 

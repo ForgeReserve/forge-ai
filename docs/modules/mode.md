@@ -159,7 +159,7 @@ More, Mode and look ([`public/v2/screens/settings.js`](https://github.com/ForgeR
 
 ## Platforms
 
-A mode works the same on the website and in both apps. Classic, the chat page at `/`, is a plain link in Mode and look on the website; the apps do not show it.
+A mode works the same on the website and in both apps. Classic, the chat page at `/classic/`, is a plain link in Mode and look on the website; the apps do not show it.
 
 ## A minimal mode
 

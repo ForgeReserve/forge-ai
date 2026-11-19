@@ -115,7 +115,7 @@ Verified so far: the e2e suite runs these flows against a fake enclave (header a
 
 ## Chat page
 
-The page at `/` is static files from the gateway's own origin (`public/`), with no build step and nothing loaded from another origin: no CDN, web fonts, analytics or remote images. Third-party libraries are vendored in `public/vendor/` with their licenses in `public/vendor/licenses/`, rebuilt by `scripts/vendor.sh` from versions pinned in `scripts/vendor/package-lock.json`.
+The Classic chat page at `/classic/` is static files from the gateway's own origin (`public/`), with no build step and nothing loaded from another origin: no CDN, web fonts, analytics or remote images. Third-party libraries are vendored in `public/vendor/` with their licenses in `public/vendor/licenses/`, rebuilt by `scripts/vendor.sh` from versions pinned in `scripts/vendor/package-lock.json`.
 
 What the browser stores, all of it local to that browser:
 

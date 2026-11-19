@@ -132,7 +132,9 @@ describe('admin invites and waitlist', () => {
     const res = (await (await call(`/admin/api/waitlist/${email.id}/invite`, { method: 'POST', body: {} })).json()) as any;
     expect(res.code).toMatch(/^inv-/);
     expect(res.message).toContain(res.code);
-    expect(res.message).toContain('https://ai.forge-reserve.com');
+    // The link opens the app (the front page is the landing page), where the code is asked for.
+    expect(res.message).toContain('Open https://ai.forge-reserve.com/v2/, add funds with eCash, Lightning or bitcoin, and enter the code when it asks for an invite.');
+    expect(res.link).toBe('https://ai.forge-reserve.com/v2/');
     expect(res.message).not.toMatch(/—/);
     expect(res.mailto).toMatch(/^mailto:alice@example\.com\?subject=/);
     expect(decodeURIComponent(res.mailto)).toContain(res.code);
