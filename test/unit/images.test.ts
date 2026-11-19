@@ -10,9 +10,11 @@ const PINNED = /^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f
 
 function references(): { file: string; ref: string }[] {
   const out: { file: string; ref: string }[] = [];
-  for (const line of read('Dockerfile').split('\n')) {
-    const m = /^FROM\s+(\S+)/i.exec(line.trim());
-    if (m) out.push({ file: 'Dockerfile', ref: m[1]! });
+  for (const file of ['Dockerfile', 'services/fedimint-receiver/Dockerfile']) {
+    for (const line of read(file).split('\n')) {
+      const m = /^FROM\s+(\S+)/i.exec(line.trim());
+      if (m) out.push({ file, ref: m[1]! });
+    }
   }
   for (const file of ['docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml']) {
     for (const line of read(file).split('\n')) {
@@ -31,7 +33,7 @@ function references(): { file: string; ref: string }[] {
 describe('container images (report section 9)', () => {
   it('finds the image references it guards', () => {
     const files = new Set(references().map((r) => r.file));
-    expect(files).toEqual(new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml', 'docs/ADMIN.md', '.env.example', 'scripts/ui-linux.sh']));
+    expect(files).toEqual(new Set(['Dockerfile', 'services/fedimint-receiver/Dockerfile', 'docker-compose.yml', 'docker-compose.test.yml', 'deploy/credit-mint/docker-compose.yml', 'docs/ADMIN.md', '.env.example', 'scripts/ui-linux.sh']));
   });
 
   it('pins every image to a version and a digest, never a moving tag alone', () => {
@@ -54,7 +56,7 @@ describe('CI workflow', () => {
     for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
     expect(ci).toMatch(/^permissions: \{\}$/m);
     const jobs = ci.slice(ci.indexOf('\njobs:\n')).match(/^ {2}[\w-]+:$/gm) ?? [];
-    expect(jobs.map((j) => j.trim())).toEqual(['changes:', 'check:', 'e2e:', 'ui:', 'android:', 'repeat:', 'ci-ok:']);
+    expect(jobs.map((j) => j.trim())).toEqual(['changes:', 'check:', 'e2e:', 'ui:', 'android:', 'receiver:', 'repeat:', 'ci-ok:']);
     expect(ci.match(/^ {6}contents: (\w+)$/gm)).toEqual(jobs.map(() => '      contents: read'));
   });
 

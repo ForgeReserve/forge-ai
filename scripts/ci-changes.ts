@@ -31,9 +31,13 @@ export const MAX_REPEAT_JOBS = 12;
 /**
  * all: the build, the tooling or CI itself, so everything runs. docs: words only. android, ios: the
  * native apps. web: what the Android bundle is made from (public/ and capacitor.config.json), which the
- * browser tests also serve. other: everything else (the gateway, the tests, ...).
+ * browser tests also serve. receiver: the Fedimint receiver (services/fedimint-receiver/, its own Rust
+ * build, which nothing else reads). other: everything else (the gateway, the tests, ...).
  */
-export type Kind = 'all' | 'docs' | 'android' | 'ios' | 'web' | 'other';
+export type Kind = 'all' | 'docs' | 'android' | 'ios' | 'web' | 'receiver' | 'other';
+
+/** The Fedimint receiver's directory: its job runs only when something in it changes (or everything runs). */
+export const RECEIVER_DIR = 'services/fedimint-receiver/';
 
 export function kindOf(path: string): Kind {
   const p = path.replace(/^\.\//, '');
@@ -42,6 +46,7 @@ export function kindOf(path: string): Kind {
   if (['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'docker-compose.test.yml'].includes(p)) return 'all';
   if (/^vitest\.config\.[^/]+$/.test(p) || /^tsconfig[^/]*\.json$/.test(base)) return 'all';
   if (p.startsWith('docs/') || p.startsWith('public/docs/')) return 'docs';
+  if (p.startsWith(RECEIVER_DIR)) return 'receiver';
   // A Markdown file under public/ is served and bundled with the app (licences, sources): not docs.
   if (p.endsWith('.md') && !p.startsWith('public/')) return 'docs';
   if (p.startsWith('android/')) return 'android';
@@ -70,6 +75,8 @@ export interface Decision {
   e2e: 'all' | 'docs' | 'none';
   ui: 'all' | 'docs' | 'none';
   android: boolean;
+  /** The Fedimint receiver's build and tests. */
+  receiver: boolean;
   /** The ui job's matrix: part numbers, or "docs" for the docs page's test alone. */
   uiParts: (number | 'docs')[];
   repeat: RepeatEntry[];
@@ -192,6 +199,7 @@ export function decide(event: string, changes: Change[] | null, repeatInput?: Om
     e2e: 'all',
     ui: 'all',
     android: true,
+    receiver: true,
     uiParts: Array.from({ length: PARTS }, (_, i) => i + 1),
     repeat: [],
     repeatNotes: [],
@@ -218,16 +226,19 @@ export function decide(event: string, changes: Change[] | null, repeatInput?: Om
   const browser: Decision['ui'] = code ? 'all' : has('docs') ? 'docs' : 'none';
   if (browser === 'all') reasons.push('code, tests or the web app changed: the end to end tests and every UI part run');
   else if (browser === 'docs') reasons.push('docs changed and no code: only the docs pages are checked in a browser (test/e2e/docs.e2e.test.ts, test/ui/docs.ui.test.ts), with the unit tests that compare the docs with the code');
-  else reasons.push('only the native apps changed: no browser or end to end test reads them, so those are skipped');
+  else reasons.push('only the native apps or the Fedimint receiver changed: no browser or end to end test reads them, so those are skipped');
   const android = has('android') || has('web');
   reasons.push(android ? 'android/ or what the Android bundle is made from (public/, capacitor.config.json) changed: the Android build runs' : 'nothing under android/ or what the Android bundle is made from changed: the Android build is skipped');
   if (has('ios')) reasons.push('ios/ changed: CI builds no iPhone app; the unit tests check its project files (test/unit/ios.test.ts)');
+  const receiver = has('receiver');
+  reasons.push(receiver ? `${RECEIVER_DIR} changed: the Fedimint receiver is built and tested` : `nothing under ${RECEIVER_DIR} changed: the Fedimint receiver's build is skipped`);
   return withRepeats({
     everything: false,
     reasons,
     e2e: browser,
     ui: browser,
     android,
+    receiver,
     uiParts: browser === 'all' ? Array.from({ length: PARTS }, (_, i) => i + 1) : browser === 'docs' ? ['docs'] : [],
     repeat: [],
     repeatNotes: [],
@@ -240,6 +251,7 @@ const RUNS = (d: Decision) => ({
   e2e: d.e2e !== 'none',
   ui: d.ui !== 'none',
   android: d.android,
+  receiver: d.receiver,
   repeat: d.repeat.length > 0,
 });
 
@@ -248,6 +260,7 @@ export interface Outputs {
   e2e: string;
   ui: string;
   android: string;
+  receiver: string;
   ui_parts: string;
   repeat: string;
   repeat_count: string;
@@ -258,6 +271,7 @@ export function outputs(d: Decision): Outputs {
     e2e: d.e2e,
     ui: d.ui,
     android: String(d.android),
+    receiver: String(d.receiver),
     ui_parts: JSON.stringify(d.uiParts.length ? d.uiParts : [0]),
     repeat: JSON.stringify(d.repeat.length ? d.repeat : [{ file: '', runs: 0, label: 'none' }]),
     repeat_count: String(d.repeat.length),
@@ -274,6 +288,7 @@ export function summary(d: Decision): string {
   lines.push(`| e2e | ${d.e2e === 'all' ? 'yes' : d.e2e === 'docs' ? 'docs page only (test/e2e/docs.e2e.test.ts)' : 'skipped'} |`);
   lines.push(`| ui | ${d.ui === 'all' ? `yes, in ${d.uiParts.length} parts` : d.ui === 'docs' ? 'docs page only (test/ui/docs.ui.test.ts)' : 'skipped'} |`);
   lines.push(`| android | ${run.android ? 'yes' : 'skipped'} |`);
+  lines.push(`| receiver | ${run.receiver ? 'yes' : 'skipped'} |`);
   lines.push(`| repeat | ${run.repeat ? `${new Set(d.repeat.map((r) => r.file)).size} changed UI test file(s), ${REPEATS} extra runs each, in ${d.repeat.length} job(s)` : 'nothing to run again'} |`);
   lines.push('', '**Why:**', '', ...d.reasons.map((r) => `- ${md(r)}`));
   if (d.repeat.length || d.repeatNotes.length) {
@@ -311,6 +326,7 @@ export function verdict(needs: Record<string, Need>): { ok: boolean; lines: stri
     e2e: o.e2e !== 'none',
     ui: o.ui !== 'none',
     android: o.android !== 'false',
+    receiver: o.receiver !== 'false',
     repeat: (o.repeat_count ?? '0') !== '0',
   };
   for (const [job, want] of Object.entries(wanted)) {

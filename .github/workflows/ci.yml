@@ -28,6 +28,7 @@ jobs:
       e2e: ${{ steps.rules.outputs.e2e }}
       ui: ${{ steps.rules.outputs.ui }}
       android: ${{ steps.rules.outputs.android }}
+      receiver: ${{ steps.rules.outputs.receiver }}
       ui_parts: ${{ steps.rules.outputs.ui_parts }}
       repeat: ${{ steps.rules.outputs.repeat }}
       repeat_count: ${{ steps.rules.outputs.repeat_count }}
@@ -251,6 +252,52 @@ jobs:
             exit 1
           fi
 
+  # The Fedimint receiver (services/fedimint-receiver, docs/FEDIMINT-RECEIVER.md): formatting, clippy and its
+  # tests against in-process federations. Only when its directory changes (or everything runs), so other
+  # changes do not pay for compiling fedimint. The dependencies' build is cached by Cargo.lock.
+  receiver:
+    needs: changes
+    if: needs.changes.outputs.receiver == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: services/fedimint-receiver
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cargo registry and the dependencies' build, kept between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            services/fedimint-receiver/target
+          key: receiver-${{ runner.os }}-${{ hashFiles('services/fedimint-receiver/Cargo.lock', 'services/fedimint-receiver/rust-toolchain.toml') }}
+          restore-keys: receiver-${{ runner.os }}-
+
+      - name: Toolchain
+        # rustup reads rust-toolchain.toml and installs that version with rustfmt and clippy.
+        run: |
+          rustup toolchain install
+          cargo --version
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --profile ci --locked --all-targets -- -D warnings
+
+      - name: Tests against in-process federations
+        run: cargo test --profile ci --locked
+
   # On a pull request, each UI test file it adds or changes (or that imports a changed helper in test/ui)
   # runs 5 more times, so a test that passes four times in five fails here before it reaches main. A long
   # file's runs are spread over several jobs (scripts/ci-changes.ts).
@@ -323,7 +370,7 @@ jobs:
   # was skipped although this change needs it; a job skipped by the rules is fine.
   ci-ok:
     if: always()
-    needs: [changes, check, e2e, ui, android, repeat]
+    needs: [changes, check, e2e, ui, android, receiver, repeat]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
