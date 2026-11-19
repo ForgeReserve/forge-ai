@@ -156,12 +156,13 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
         m.speed === 'fast' ? tag('rabbit', t('model.fast'), 'speed') : m.speed === 'slow' ? tag('turtle', t('model.slow'), 'slow') : null,
         priv ? tag('lock', t('model.private'), 'teal') : tag('unlock', t('model.standard'), 'warn'),
         free ? tag('gift', t('model.free'), 'free') : null,
-        m.capabilities?.vision ? tag('image', t('model.images')) : null,
+        // Sees photos: the photo picture alone, named for screen readers, so the row stays short.
+        canSee(m) ? el('span', { class: 'tag photo', role: 'img', 'aria-label': t('model.seesPhotos'), title: t('model.seesPhotos') }, icon('image', 14)) : null,
         m.capabilities?.reasoning ? tag('bulb', t('model.reasoning')) : null,
       ),
     );
     const speed = m.speed === 'fast' ? t('model.fastSub') : m.speed === 'slow' ? t('model.slowSub') : null;
-    return option(card, [speed, free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
+    return option(card, [speed, canSee(m) ? t('model.seesPhotosSub') : null, free ? t('model.freeSub') : p ? t('model.price', p) : null, priv ? null : t('model.standardWarn')].filter(Boolean), t('model.info', { name: m.name ?? m.id }));
   };
   // What Private and Standard mean, behind the info mark beside their headings (the words the Private chip
   // at the top left of the home describes itself with).

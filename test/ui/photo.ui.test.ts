@@ -641,6 +641,8 @@ describe('Share unseen', () => {
     expect(await page.isVisible('#modelPhotoNone')).toBe(false);
     // No money on this phone: the Add money mark, as in the full list.
     expect(await page.getAttribute('[data-model="tinfoil/enc-see"] .model-poor', 'aria-label')).toBe('Add money first');
+    // Every model here sees photos, and carries the photo badge as in the full list.
+    expect(await page.getAttribute('[data-model="tinfoil/enc-see"] .tag.photo', 'aria-label')).toBe('Sees photos');
     // While the list is open the photo is in memory only: nothing waits in storage.
     expect(await kv('pending')).toBeFalsy();
     const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));

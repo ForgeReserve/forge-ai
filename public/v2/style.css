@@ -359,6 +359,7 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .tag.warn { background: var(--low-tint); color: var(--low-ink); }
 /* A free model in the model list: costs nothing, needs a balance key. */
 .tag.free { background: var(--gold-tint); color: var(--gold-ink); }
+.tag.photo { padding: 3px 8px; }
 .model-card .free-text { color: var(--gold-ink); }
 .teal-panel { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 20px; background: var(--teal-tint); border: 1px solid var(--teal-line); }
 .teal-panel > span { flex: 1; display: flex; flex-direction: column; gap: 4px; }
