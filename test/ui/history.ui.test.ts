@@ -438,13 +438,13 @@ describe('Auto-delete', () => {
 describe('Erase everything', () => {
   it('warns about the balance, offers Take funds out, needs a hold, and leaves nothing behind', async () => {
     const { ctx, page, errors } = await phone();
-    // The Classic app on the same site: its worker, caches, database and settings go too.
-    await page.goto(`${g.url}/`);
+    // The Classic app on the same site (at /classic/): its worker, caches, database and settings go too.
+    await page.goto(`${g.url}/classic/`);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.evaluate(() => localStorage.setItem('forge.settings', '{"theme":"dark"}'));
     await ready(page);
     await ask(page, 'Something to erase marker-lima-95');
-    // Both workers (Classic at /, v2 at /v2/) are installed before erasing.
+    // Both workers (Classic's, scope /, and v2's at /v2/) are installed before erasing.
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).filter((r) => r.active).length), { timeout: 15_000 }).toBe(2);
     const before = await leftovers(page);
     expect(before.localStorage).toBeGreaterThan(0);

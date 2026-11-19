@@ -1,7 +1,8 @@
-/* The landing page at /about: one screen, no scroll. The app's Midnight look (public/v2/modules/look/midnight)
-   by default; about.js puts in the look this phone keeps from the app, as /download does. Inter from this
-   origin. Every moving part moves by transform and opacity only, stops with the moments (data-play,
-   .held), and is replaced by a still picture under prefers-reduced-motion (the end of this file). */
+/* The landing page at / (its files under /about/): one screen, no scroll. The app's Midnight look
+   (public/v2/modules/look/midnight) by default; about.js puts in the look this phone keeps from the app,
+   as /download does. Inter from this origin. Every moving part moves by transform and opacity only,
+   stops with the moments (data-play, .held), and is replaced by a still picture under
+   prefers-reduced-motion (the end of this file). */
 @font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
   --bg: #0B0D10; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
@@ -83,6 +84,9 @@ img { display: block; }
 .dl-web { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border-radius: 16px; color: var(--ink); font-weight: 600; font-size: 15px; text-decoration: none; }
 .dl-web .ico { width: 20px; height: 20px; color: var(--teal); }
 .dl-web:hover { background: var(--surface-2); }
+/* The Classic chat page, for the few who still use it: a quiet line under the rest. */
+.dl-classic { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: -6px; border-radius: 14px; color: var(--text-2); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.dl-classic:hover { color: var(--ink); }
 
 /* ---------- the page: a title, the moments and the phone, in one screen ---------- */
 .hero {
@@ -375,7 +379,7 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
   .aura { animation: fade-in 1.6s ease 0.2s both, breathe 7s ease-in-out 1.8s infinite alternate; }
   .phone-float { animation: float 9s ease-in-out 1.6s infinite alternate; }
   .tip { animation: glow 2.4s ease-in-out infinite alternate; }
-  .act, .play, .tab, .dl, .dl-web { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
+  .act, .play, .tab, .dl, .dl-web, .dl-classic { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
   .act:active, .play:active { transform: scale(0.97); }
   .dl-pop { opacity: 0; transform: translateY(-8px) scale(0.98); transform-origin: top right; transition: opacity 0.2s ease, transform 0.3s var(--out), overlay 0.3s allow-discrete, display 0.3s allow-discrete; }
   .dl-pop:popover-open { opacity: 1; transform: none; }

@@ -44,8 +44,8 @@ describe('v2 shell', () => {
     for (const p of ['/js/ui.js', '/js/files.js', '/js/extract.js', '/js/markdown.js', '/js/qr.js', '/js/scan.js', '/js/lockkey.js', '/vendor/marked.js', '/vendor/purify.js']) expect((await fetch(g.url + p)).status, p).toBe(200);
   });
 
-  it('leaves v1 where it was, with its worker passing /v2/ by', async () => {
-    const v1 = await (await fetch(`${g.url}/`)).text();
+  it('leaves v1 at /classic/, with its worker passing /v2/ by', async () => {
+    const v1 = await (await fetch(`${g.url}/classic/`)).text();
     expect(v1).toContain('<link rel="manifest" href="/manifest.webmanifest">');
     const sw = await (await fetch(`${g.url}/sw.js`)).text();
     expect(sw).toContain('v2\\/|v2$');

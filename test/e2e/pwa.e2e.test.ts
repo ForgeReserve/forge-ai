@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Gateway, startGateway } from './helpers.ts';
 
-// The installable app: manifest, icons, service worker and offline page, served by the gateway.
+// The installable Classic app (at /classic/): manifest, icons, service worker and offline page, served by
+// the gateway. The front page (/) is the landing page, which the worker never keeps.
 describe('PWA files', () => {
   let g: Gateway;
   beforeAll(async () => {
@@ -22,7 +23,8 @@ describe('PWA files', () => {
     expect(body).toContain(`const VERSION = "${version}"`);
     expect(body).not.toContain('__FORGE_');
     const shell = JSON.parse(/const SHELL = (\[.*\]);/.exec(body)![1]!);
-    expect(shell).toContain('/');
+    expect(shell[0]).toBe('/classic/');
+    expect(shell).not.toContain('/');
     expect(shell).toContain('/offline.html');
     // Everything precached must exist.
     for (const p of shell) expect((await fetch(g.url + p)).status, p).toBe(200);
@@ -34,7 +36,8 @@ describe('PWA files', () => {
     expect(r.headers.get('content-type')).toMatch(/manifest\+json/);
     expect(r.headers.get('cache-control')).toBe('no-cache');
     const m = JSON.parse(await r.text());
-    expect(m).toMatchObject({ name: 'Forge AI', short_name: 'Forge AI', start_url: '/', scope: '/', display: 'standalone' });
+    // The same id as before the move, so an installed Classic app stays the same app; it opens at /classic/.
+    expect(m).toMatchObject({ id: '/', name: 'Forge AI', short_name: 'Forge AI', start_url: '/classic/', scope: '/', display: 'standalone' });
     expect(m.theme_color).toMatch(/^#[0-9a-f]{6}$/i);
     expect(m.background_color).toMatch(/^#[0-9a-f]{6}$/i);
     const sizes = m.icons.map((i: any) => `${i.sizes}:${i.purpose}`);
@@ -45,15 +48,15 @@ describe('PWA files', () => {
       expect(ir.headers.get('content-type')).toMatch(new RegExp('^' + i.type.replace('+', '\\+')));
     }
     expect(m.shortcuts.map((s: any) => [s.name, s.url])).toEqual([
-      ['New chat', '/#new'],
-      ['Add funds', '/#fund'],
+      ['New chat', '/classic/#new'],
+      ['Add funds', '/classic/#fund'],
     ]);
     const touch = await fetch(`${g.url}/icons/apple-touch-icon.png`);
     expect(touch.status).toBe(200);
   });
 
   it('links the manifest and iOS meta from the page, and serves the offline page', async () => {
-    const html = await (await fetch(`${g.url}/`)).text();
+    const html = await (await fetch(`${g.url}/classic/`)).text();
     expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest">');
     expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">');
     expect(html).toContain('name="apple-mobile-web-app-capable" content="yes"');
@@ -61,7 +64,11 @@ describe('PWA files', () => {
     expect(html).toContain('name="apple-mobile-web-app-title" content="Forge AI"');
     const off = await fetch(`${g.url}/offline.html`);
     expect(off.status).toBe(200);
-    expect(await off.text()).toContain("You're offline. Your chats are saved on this device.");
+    const offline = await off.text();
+    expect(offline).toContain("You're offline. Your chats are saved on this device.");
+    expect(offline).toContain('<a href="/classic/">Open Forge AI</a>');
+    // The landing page at / is no app to install.
+    expect(await (await fetch(`${g.url}/`)).text()).not.toContain('rel="manifest"');
   });
 
   it('serves the pdf.js worker and its licenses from our own origin', async () => {

@@ -2,12 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { type Gateway, startGateway } from '../e2e/helpers.ts';
 
-// The landing page at /about in a real browser. It is one screen: at each of six sizes (three computer
-// screens, three phones) the page is exactly as tall and wide as the window and every part of it is
-// inside the window. The three actions sit at the top right. The moments (Talk, Private, Pay, Share
-// unseen) move on by themselves, can be picked by tap or keyboard, stop with Pause, pause under the
-// mouse, and stand still under reduced motion. The download buttons show Soon while their links are
-// empty and become links once set. Nothing is asked of another site and nothing is logged as an error.
+// The landing page, the site's front page at /, in a real browser. It is one screen: at each of six
+// sizes (three computer screens, three phones) the page is exactly as tall and wide as the window and
+// every part of it is inside the window. The three actions sit at the top right. The moments (Talk,
+// Private, Pay, Share unseen) move on by themselves, can be picked by tap or keyboard, stop with Pause,
+// pause under the mouse, and stand still under reduced motion. The download buttons show Soon while their
+// links are empty and become links once set. What was meant for the Classic page at / goes on to
+// /classic/. Nothing is asked of another site and nothing is logged as an error.
 let g: Gateway;
 let browser: Browser;
 
@@ -39,7 +40,7 @@ const SIZES = [
 
 async function open(
   [width, height]: readonly [number, number],
-  { links, still = false, look }: { links?: Record<string, string>; still?: boolean; look?: object } = {},
+  { links, still = false, look, path = '/' }: { links?: Record<string, string>; still?: boolean; look?: object; path?: string } = {},
 ): Promise<Opened> {
   const mobile = width < 600;
   const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 2, reducedMotion: still ? 'reduce' : 'no-preference' });
@@ -61,14 +62,16 @@ async function open(
     if (new URL(r.url()).origin !== g.url) away.push(r.url());
   });
   if (links)
-    await page.route('**/about/', async (route) => {
-      const res = await route.fetch();
-      let body = await res.text();
-      for (const [k, v] of Object.entries(links)) body = body.replace(`data-download="${k}" data-href=""`, `data-download="${k}" data-href="${v}"`);
-      await route.fulfill({ response: res, body });
-    });
-  // The page at /about/, through the move from /about (a moved request is not routed, so a test that changes the page opens /about/).
-  await page.goto(`${g.url}${links ? '/about/' : '/about'}`);
+    await page.route(
+      (u) => u.pathname === '/',
+      async (route) => {
+        const res = await route.fetch();
+        let body = await res.text();
+        for (const [k, v] of Object.entries(links)) body = body.replace(`data-download="${k}" data-href=""`, `data-download="${k}" data-href="${v}"`);
+        await route.fulfill({ response: res, body });
+      },
+    );
+  await page.goto(`${g.url}${path}`);
   await page.waitForLoadState('networkidle');
   return { page, errors, away };
 }
@@ -119,7 +122,7 @@ const overlap = (a: { x: number; y: number; width: number; height: number }, b: 
 describe('the landing page in a browser', () => {
   it.each(SIZES)('is one screen at %i by %i, with its actions in the top right', async (width, height) => {
     const { page, errors, away } = await open([width, height]);
-    expect(new URL(page.url()).pathname).toBe('/about/');
+    expect(new URL(page.url()).pathname).toBe('/');
     expect(await page.title()).toBe('Forge AI, private AI for activists');
     // After the way in: no scroll either way, and nothing outside the window.
     await page.waitForTimeout(2000);
@@ -175,6 +178,16 @@ describe('the landing page in a browser', () => {
     expect(away).toEqual([]);
     expect(errors).toEqual([]);
     await page.context().close();
+  });
+
+  it('moves its old address, /about, to /', async () => {
+    for (const old of ['/about', '/about/']) {
+      const { page, errors } = await open([390, 844], { path: old });
+      expect(new URL(page.url()).pathname, old).toBe('/');
+      expect(await page.title()).toBe('Forge AI, private AI for activists');
+      expect(errors).toEqual([]);
+      await page.context().close();
+    }
   });
 
   it('moves through the moments by itself, two screens for Talk and Pay', async () => {
@@ -308,8 +321,12 @@ describe('the landing page in a browser', () => {
     expect(await page.textContent('#dlAndroid')).toContain('Android');
     expect(await page.textContent('#dlIphone')).toContain('iPhone');
     expect(await page.getAttribute('#dlWeb', 'href')).toBe('/v2/');
+    // One quiet way to the Classic page, under the rest, big enough to tap.
+    expect(await page.getAttribute('#dlClassic', 'href')).toBe('/classic/');
+    expect(await page.textContent('#dlClassic')).toBe('Classic app');
     // The panel is inside the window.
     await page.waitForTimeout(400);
+    expect((await box(page, '#dlClassic')).height).toBeGreaterThanOrEqual(44);
     const p = await box(page, '#download');
     expect(p.x).toBeGreaterThanOrEqual(0);
     expect(p.x + p.width).toBeLessThanOrEqual(width);
@@ -342,6 +359,41 @@ describe('the landing page in a browser', () => {
     await page.waitForURL(/\/download\/?$/);
     expect(errors).toEqual([]);
     await page.context().close();
+  });
+
+  it.each([
+    ['/#/c/c_0123456789abcdef', '/classic/#/c/c_0123456789abcdef'],
+    ['/#new', '/classic/#new'],
+    ['/#fund', '/classic/#fund'],
+  ])('sends %s, meant for the Classic page when it was at /, on to %s', async (from, to) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    // Every address the tab shows (the Classic page then takes its shortcut's hash off).
+    const seen: string[] = [];
+    page.on('framenavigated', (f) => f === page.mainFrame() && seen.push(f.url()));
+    await page.goto(`${g.url}${from}`);
+    await page.waitForURL((u) => u.pathname === '/classic/');
+    await expect.poll(() => seen).toContain(`${g.url}${to}`);
+    expect(await page.title()).toBe('Forge AI');
+    // The Classic page acts on it: Add funds opens the wallet.
+    if (to.endsWith('#fund')) await page.waitForSelector('#walletDialog[open]');
+    await ctx.close();
+  });
+
+  it('sends the Classic app put on a home screen (it opens at /) on to /classic/, and leaves a browser tab here', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    // As Safari has it in an app put on the Home Screen.
+    await ctx.addInitScript(() => Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true }));
+    const page = await ctx.newPage();
+    await page.goto(`${g.url}/`);
+    await page.waitForURL(`${g.url}/classic/`);
+    await ctx.close();
+    // A tab with the skip link's hash stays.
+    const { page: tab, errors } = await open([390, 844], { path: '/#moments' });
+    await tab.waitForTimeout(500);
+    expect(new URL(tab.url()).pathname).toBe('/');
+    expect(errors).toEqual([]);
+    await tab.context().close();
   });
 
   it('opens the app from Open the app', async () => {

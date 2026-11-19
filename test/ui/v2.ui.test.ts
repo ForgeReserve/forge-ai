@@ -214,8 +214,8 @@ describe('v2 in a phone-sized browser', () => {
   it('carries a v1 balance over, and adds a file to the next question', async () => {
     const { ctx, page } = await phone();
     const key = await fundedKey();
-    // v1 stores the key; v2 on the same origin reads the same one.
-    await page.goto(`${g.url}/`);
+    // v1 (the Classic page at /classic/) stores the key; v2 on the same origin reads the same one.
+    await page.goto(`${g.url}/classic/`);
     await page.evaluate((k) => localStorage.setItem('forge.balanceKey', k), key);
     // v1's worker has the whole origin until v2's own takes /v2/ over. That first takeover is not a new
     // build of v2, so the page must not reload under the person's finger (it once did, when v1's worker

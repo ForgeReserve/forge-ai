@@ -1,5 +1,8 @@
-// The landing page at /about: the look this phone keeps from the app (else Midnight), the download panel,
+// The landing page at /: the look this phone keeps from the app (else Midnight), the download panel,
 // and the moments.
+//
+// First, an address meant for the Classic chat page (at / before it moved to /classic/) goes on there
+// (forward.js).
 //
 // Download buttons: each button's link is its data-href in index.html. While that is empty the button
 // shows Soon and is no link; once it is set the button links there and Soon goes.
@@ -11,7 +14,11 @@
 // - data-play: intro (the way in), playing, or stopped (Pause, a moment picked, or reduced motion).
 // - .held: a short pause while the mouse is over the moments, keyboard focus is on a tab or a link in
 //   the words, or the page is out of sight.
+import { classicAddress } from '/about/forward.js';
 import { applyPageLook } from '/v2/core/pagelook.js';
+
+const classic = classicAddress(location.hash, matchMedia('(display-mode: standalone)').matches || navigator.standalone === true);
+if (classic) location.replace(classic);
 
 applyPageLook();
 

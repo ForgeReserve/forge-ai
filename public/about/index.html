@@ -10,12 +10,12 @@
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="canonical" href="https://ai.forge-reserve.com/about/">
+<link rel="canonical" href="https://ai.forge-reserve.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Forge AI">
 <meta property="og:title" content="Forge AI, private AI for activists">
 <meta property="og:description" content="Ask by voice. Pay for each question with eCash. No account.">
-<meta property="og:url" content="https://ai.forge-reserve.com/about/">
+<meta property="og:url" content="https://ai.forge-reserve.com/">
 <meta property="og:image" content="https://ai.forge-reserve.com/icons/icon-512.png">
 <meta property="og:image:width" content="512">
 <meta property="og:image:height" content="512">
@@ -26,14 +26,15 @@
 <script type="module" src="/about/about.js"></script>
 </head>
 <body>
-<!-- The landing page (served at /about by src/app.ts): one screen, no scroll. One phone moves through four
-     moments (Talk, Private, Pay, Share unseen); the row of icons under the title shows which one is on and
-     picks one. about.js runs the moments and the download buttons; about.css draws the phone, the rings
-     and all of the motion. Icons are the app's own (public/v2/core/ui.js). The phone pictures come from
-     scripts/about-shots.ts. No file here comes from another site. -->
+<!-- The landing page (served at / by src/app.ts; its files are under /about/): one screen, no scroll.
+     One phone moves through four moments (Talk, Private, Pay, Share unseen); the row of icons under the
+     title shows which one is on and picks one. about.js runs the moments and the download buttons;
+     about.css draws the phone, the rings and all of the motion. Icons are the app's own
+     (public/v2/core/ui.js). The phone pictures come from scripts/about-shots.ts. No file here comes from
+     another site. -->
 <a class="skip" href="#moments">Skip to the moments</a>
 <header class="top">
-  <a class="brand" href="/about/" aria-label="Forge AI">
+  <a class="brand" href="/" aria-label="Forge AI">
     <svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg>
     <span class="word">FORGE <span class="ai">AI</span></span>
   </a>
@@ -69,6 +70,7 @@
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
       <span>Open it in the browser</span>
     </a>
+    <a class="dl-classic" id="dlClassic" href="/classic/">Classic app</a>
   </div>
 </header>
 
