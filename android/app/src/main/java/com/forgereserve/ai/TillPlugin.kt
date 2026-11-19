@@ -138,7 +138,7 @@ class TillPlugin : Plugin() {
     @PluginMethod
     fun linkSend(call: PluginCall) {
         val link = call.getInt("sock")?.let { links[it] } ?: return call.reject("The link is closed.", "link_closed")
-        val frame = TillRules.answerFrame(call.getString("type"), call.getLong("id"), call.getString("rapdu")) ?: return call.reject("Not an answer.", "bad_frame")
+        val frame = TillRules.answerFrame(call.getString("type"), TillRules.wholeNumber(call.data.opt("id")), call.getString("rapdu")) ?: return call.reject("Not an answer.", "bad_frame")
         pool.execute { link.answer(frame) }
         call.resolve()
     }

@@ -106,6 +106,13 @@ class TillRulesTest {
         assertNull(TillRules.answerFrame("rapdu", 7, "90"))
         assertNull(TillRules.answerFrame("ready", 7, "9000"))
         assertNull(TillRules.answerFrame("rapdu", null, "9000"))
+        // The id as the bridge hands it over: an Int for the small numbers a till counts with.
+        assertEquals("{\"type\":\"rapdu\",\"id\":1,\"rapdu\":\"9000\"}", TillRules.answerFrame("rapdu", TillRules.wholeNumber(1 as Any), "9000"))
+        assertEquals(5000000000L, TillRules.wholeNumber(5000000000L))
+        assertEquals(3L, TillRules.wholeNumber(3.0))
+        assertNull(TillRules.wholeNumber(3.5))
+        assertNull(TillRules.wholeNumber("1"))
+        assertNull(TillRules.wholeNumber(null))
     }
 
     @Test

@@ -354,7 +354,8 @@ export function nativeTill(call, on) {
         const l = links.get(ev?.sock);
         if (!l) return;
         const frame = await l.onApdu({ id: ev.id, apdu: ev.apdu });
-        call('ForgeTill', 'linkSend', { sock: ev.sock, ...frame }).catch(() => {});
+        // An answer the app would not send leaves the till waiting: say so, where a developer can see it.
+        call('ForgeTill', 'linkSend', { sock: ev.sock, ...frame }).catch((e) => console.warn('till link: answer not sent', e?.code ?? ''));
       }),
       on('ForgeTill', 'closed', (ev) => links.delete(ev?.sock)),
     ]));

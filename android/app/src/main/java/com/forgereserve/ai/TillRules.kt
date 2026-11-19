@@ -169,6 +169,18 @@ object TillRules {
         Regex("\"$name\"\\s*:\\s*\"([^\"\\\\]*)\"").find(text)?.groupValues?.get(1)
 
     /**
+     * A whole number as the page gives it. The bridge hands a small number over as an Int and a large
+     * one as a Long (PluginCall.getLong takes a Long alone, so it loses every command id), and a number
+     * with nothing after the point may come as a Double. Null for anything else.
+     */
+    fun wholeNumber(value: Any?): Long? = when (value) {
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> if (value.isFinite() && value == Math.floor(value) && Math.abs(value) <= 9007199254740992.0) value.toLong() else null
+        else -> null
+    }
+
+    /**
      * The phone's answer to the till's command [id], from what the page gave: the card's answer as
      * hex (`rapdu`), or `lost` when the card left. Null when the page gave something else.
      */
