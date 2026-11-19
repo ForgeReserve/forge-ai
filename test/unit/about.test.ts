@@ -117,10 +117,32 @@ describe('the page source', () => {
     }
   });
 
+  it('has four moments, each a tab with its words and its screens in the phone', () => {
+    const tabs = [...html.matchAll(/<button class="tab"[^>]*>/g)].map((m) => m[0]);
+    expect(tabs.map((t) => /data-moment="([a-z]+)"/.exec(t)?.[1])).toEqual(['talk', 'private', 'pay', 'share']);
+    for (const t of tabs) {
+      const moment = /data-moment="([a-z]+)"/.exec(t)![1];
+      expect(t).toContain('role="tab"');
+      expect(t).toContain(`aria-controls="cap-${moment}"`);
+      expect(html).toContain(`id="cap-${moment}" role="tabpanel" aria-labelledby="tab-${moment}"`);
+      expect(html, moment).toMatch(new RegExp(`<img class="frame" data-frame="${moment}(-a)?"`));
+    }
+    // Pause, and the way to Bellows in the words for paying.
+    expect(html).toMatch(/<button class="play" type="button" id="play" aria-label="Pause"/);
+    expect(/<div class="cap" id="cap-pay"[^]*?<\/div>/.exec(html)?.[0]).toContain('href="https://bellows.forgereserve.org"');
+    // The page and its style keep no inline style, and the moving parts move by transform and opacity.
+    const css = readFileSync(join(ABOUT, 'about.css'), 'utf8');
+    for (const [, body] of css.matchAll(/@keyframes [a-z0-9-]+ \{([^]*?)\n?\}\n/g)) expect(body).not.toMatch(/\b(top|left|right|bottom|width|height|margin|padding)\s*:/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
+  });
+
   it('follows the house style: eCash, no long dashes, no "crypto"', () => {
     const words = html.replace(/<[^>]+>/g, ' ');
     expect(words).not.toMatch(/[\u2014\u2013]/);
     expect(words).not.toMatch(/crypto/i);
+    // Bellows is never said to run in sealed hardware; cards are for the Android app.
+    expect(words).not.toMatch(/enclave/i);
+    expect(words).toMatch(/Card\s*<small>Android app<\/small>|Card\s+Android app/);
     for (const m of words.matchAll(/\becash\b/gi)) expect(m[0]).toBe('eCash');
   });
 

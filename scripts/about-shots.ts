@@ -1,6 +1,7 @@
 /**
  * Makes the phone screenshots on the landing page (public/about/, served at /about): the v2 app at a
- * phone's size, with made-up words and a test balance, saved as WebP in public/about/shots/.
+ * phone's size, with made-up words and a test balance, saved as WebP in public/about/shots/: the home, an
+ * answer, Private only, Add money (the paper note's card and the cards' card) and Share unseen.
  *
  *   pnpm mint:up                       # once: the local test mints
  *   pnpm about:shots                   # writes public/about/shots/*.webp
@@ -160,12 +161,24 @@ try {
     await ctx.close();
   }
 
-  // 3. Add money: the wallet cards, one way per card.
+  // 3. Add money: the wallet cards, one way per card. First the paper note's card, then the cards' card.
   {
     const { ctx, page } = await phone(await fundedKey(500));
     await page.goto(`${g.url}/v2/#/funds/add`);
     await page.waitForSelector('[data-screen=addFunds]');
     await shot(page, 'add-money');
+    await page.click('#tab-cards');
+    await page.waitForSelector('#tab-cards[aria-selected=true]');
+    await shot(page, 'pay-card');
+    await ctx.close();
+  }
+
+  // 3b. Private only: the first run's last step, with the switch on.
+  {
+    const { ctx, page } = await phone(key);
+    await page.goto(`${g.url}/v2/#/start/private`);
+    await page.waitForSelector('[data-step=private] #privateToggle[aria-checked=true]');
+    await shot(page, 'private');
     await ctx.close();
   }
 
