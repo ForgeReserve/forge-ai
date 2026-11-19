@@ -5,6 +5,10 @@
 // pending, the token stays and is sent again later with the same balance key. If the engine refuses it
 // (spent, wrong mint), it stays marked as refused, so the person can copy it back out.
 //
+// Fedimint notes go the same way as a Cashu token (kind: 'fedimint', with their notesId), with one more
+// state: 'stuck', when the engine says the federation took them and nothing was credited
+// (issuance_failed). A stuck entry is never sent again; it stays, with its id, until the person removes it.
+//
 // Out: a refund token stays here until the person says they saved it.
 //
 // Every incoming entry records the engine it was sent to (its base: '' for the page's own origin). Only
@@ -79,10 +83,16 @@ export function createVault(storage) {
       for (const x of v.in) if (x.id === id) Object.assign(x, { state: 'pending', code });
       write(v);
     },
-    /** The person removed a refused token by hand (after copying it). */
+    /** Taken and not credited (Fedimint issuance_failed): never sent again, kept for whoever helps. */
+    stuck(id, code, message) {
+      const v = read();
+      for (const x of v.in) if (x.id === id) Object.assign(x, { state: 'stuck', code, message });
+      write(v);
+    },
+    /** The person removed a refused or stuck token by hand (after copying it, or its id). */
     discard(id) {
       const v = read();
-      v.in = v.in.filter((x) => x.id !== id || x.state !== 'refused');
+      v.in = v.in.filter((x) => x.id !== id || (x.state !== 'refused' && x.state !== 'stuck'));
       write(v);
     },
     /** Keeps a refund token until the person confirms they saved it. */
@@ -108,10 +118,18 @@ export function createVault(storage) {
  * sibling: the key of the balance the phone has in the other unit, which opens this one with no invite
  * (docs/PAYMENTS.md, Two balances). It goes with `key`, the new balance's key the phone made and kept
  * before sending, so a lost answer costs nothing: sent again, the same key finds the balance.
+ * extra: fields kept with the entry (kind and notesId for Fedimint notes).
  * Returns {credited, unit, replay}, plus free: true when the token went on a free balance. Throws EngineError (with .retryable) when the token was not credited.
+ *
+ * Fedimint notes (docs/PAYMENTS.md, Fedimint notes): issuance_failed marks the entry stuck. A
+ * fedimint_unavailable is a refusal with nothing taken only when these notes were not on their way
+ * already: the engine asks the receiver to read the notes before it looks for an earlier top-up of them,
+ * so notes sent before with an outcome not known yet (a pending entry) stay pending, and the error says
+ * so (retryable).
  */
-export async function topupWithVault({ engine, vault, token, key, invite, sibling, setKey, setFreeKey, via = 'topup' }) {
-  const entry = vault.hold(token, via, { engine: engineOf(engine) });
+export async function topupWithVault({ engine, vault, token, key, invite, sibling, setKey, setFreeKey, via = 'topup', extra = {} }) {
+  const resent = vault.incoming().find((x) => x.token === token)?.state === 'pending';
+  const entry = vault.hold(token, via, { engine: engineOf(engine), ...extra });
   let r;
   try {
     r = await engine.topup(key, token, invite, sibling);
@@ -128,7 +146,9 @@ export async function topupWithVault({ engine, vault, token, key, invite, siblin
     return { credited: r.body?.credited ?? 0, unit: r.body?.unit, replay: !!r.body?.replay, ...(r.body?.free === true ? { free: true } : {}) };
   }
   const err = errorFrom(r.status, r.body);
-  if (err.retryable) vault.pending(entry.id, err.code);
+  if (resent && err.code === 'fedimint_unavailable') err.retryable = true;
+  if (err.code === 'issuance_failed') vault.stuck(entry.id, err.code, err.message);
+  else if (err.retryable) vault.pending(entry.id, err.code);
   else vault.refused(entry.id, err.code, err.message);
   throw err;
 }
