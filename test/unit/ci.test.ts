@@ -141,13 +141,18 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
       ['test/ui/ways.ts', 'other'],
       ['docker-compose.yml', 'other'],
       ['Dockerfile', 'other'],
+      ['services/fedimint-receiver/src/wallet.rs', 'receiver'],
+      ['services/fedimint-receiver/Cargo.lock', 'receiver'],
+      ['services/fedimint-receiver/Dockerfile', 'receiver'],
+      ['services/other-thing/main.rs', 'other'],
+      ['docs/FEDIMINT-RECEIVER.md', 'docs'],
     ];
     for (const [p, k] of cases) expect(kindOf(p), p).toBe(k);
   });
 
   it('runs everything on a push to main, on any event but a pull request, and when the changes cannot be read', () => {
     for (const d of [decide('push', null), decide('push', [ch('docs/API.md')]), decide('workflow_dispatch', null), decide('pull_request', null), decide('pull_request', [])]) {
-      expect(d).toMatchObject({ everything: true, e2e: 'all', ui: 'all', android: true, uiParts: Array.from({ length: PARTS }, (_, i) => i + 1) });
+      expect(d).toMatchObject({ everything: true, e2e: 'all', ui: 'all', android: true, receiver: true, uiParts: Array.from({ length: PARTS }, (_, i) => i + 1) });
     }
     expect(decide('push', [ch('test/ui/game.ui.test.ts')], ctx()).repeat).toEqual([]);
   });
@@ -155,15 +160,30 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
   it('runs everything when the build, the tooling or CI changes, even beside docs', () => {
     for (const p of ['.github/workflows/ci.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'docker-compose.test.yml', 'vitest.config.ts', 'tsconfig.json', 'scripts/android-web.ts']) {
       const d = decide('pull_request', [ch('docs/API.md'), ch(p)]);
-      expect(d, p).toMatchObject({ everything: true, e2e: 'all', ui: 'all', android: true });
+      expect(d, p).toMatchObject({ everything: true, e2e: 'all', ui: 'all', android: true, receiver: true });
       expect(d.reasons.join(' ')).toContain(p);
     }
   });
 
   it("checks a docs-only change with the unit tests and the docs pages' own browser and end to end tests, and skips Android", () => {
     const d = decide('pull_request', [ch('docs/API.md'), ch('README.md'), ch('public/docs/index.html'), ch('docs/modules/fund.md', 'A')]);
-    expect(d).toMatchObject({ everything: false, e2e: 'docs', ui: 'docs', android: false, uiParts: ['docs'], repeat: [] });
-    expect(outputs(d)).toMatchObject({ e2e: 'docs', ui: 'docs', android: 'false', ui_parts: '["docs"]', repeat_count: '0' });
+    expect(d).toMatchObject({ everything: false, e2e: 'docs', ui: 'docs', android: false, receiver: false, uiParts: ['docs'], repeat: [] });
+    expect(outputs(d)).toMatchObject({ e2e: 'docs', ui: 'docs', android: 'false', receiver: 'false', ui_parts: '["docs"]', repeat_count: '0' });
+  });
+
+  it('builds and tests the Fedimint receiver only when its directory changes, and nothing else for it alone', () => {
+    const alone = decide('pull_request', [ch('services/fedimint-receiver/src/wallet.rs')]);
+    expect(alone).toMatchObject({ everything: false, receiver: true, e2e: 'none', ui: 'none', android: false, uiParts: [] });
+    expect(outputs(alone)).toMatchObject({ receiver: 'true', e2e: 'none', ui: 'none' });
+    expect(summary(alone)).toContain('| receiver | yes |');
+    // Its docs page alone is docs; the gateway, the app or the compose file alone do not build it.
+    expect(decide('pull_request', [ch('docs/FEDIMINT-RECEIVER.md')]).receiver).toBe(false);
+    for (const p of ['src/app.ts', 'public/v2/app.js', 'docker-compose.yml', 'android/app/build.gradle']) {
+      expect(decide('pull_request', [ch(p)]).receiver, p).toBe(false);
+    }
+    // With a gateway change beside it, both run.
+    expect(decide('pull_request', [ch('src/app.ts'), ch('services/fedimint-receiver/Cargo.toml')])).toMatchObject({ receiver: true, e2e: 'all', ui: 'all' });
+    expect(summary(decide('pull_request', [ch('src/app.ts')]))).toContain('| receiver | skipped |');
   });
 
   it('runs Android only for android/ or what its bundle is made from', () => {
@@ -289,22 +309,23 @@ describe('which changed UI test files run again', () => {
 });
 
 describe('ci-ok, the one check to require', () => {
-  const changes = (o: Record<string, string>) => ({ result: 'success', outputs: { e2e: 'all', ui: 'all', android: 'true', repeat_count: '0', ...o } });
-  const all = (r: string) => ({ check: { result: r }, e2e: { result: r }, ui: { result: r }, android: { result: r }, repeat: { result: r } });
+  const changes = (o: Record<string, string>) => ({ result: 'success', outputs: { e2e: 'all', ui: 'all', android: 'true', receiver: 'true', repeat_count: '0', ...o } });
+  const all = (r: string) => ({ check: { result: r }, e2e: { result: r }, ui: { result: r }, android: { result: r }, receiver: { result: r }, repeat: { result: r } });
 
   it('passes when every job passed', () => {
     expect(verdict({ changes: changes({ repeat_count: '2' }), ...all('success') }).ok).toBe(true);
   });
 
   it('passes when the jobs a change does not need were skipped by the rules', () => {
-    const v = verdict({ changes: changes({ e2e: 'docs', ui: 'docs', android: 'false' }), ...all('success'), android: { result: 'skipped' }, repeat: { result: 'skipped' } });
+    const v = verdict({ changes: changes({ e2e: 'docs', ui: 'docs', android: 'false', receiver: 'false' }), ...all('success'), android: { result: 'skipped' }, receiver: { result: 'skipped' }, repeat: { result: 'skipped' } });
     expect(v.ok).toBe(true);
     expect(v.lines).toContain('android: skipped by the rules (not needed for this change)');
+    expect(v.lines).toContain('receiver: skipped by the rules (not needed for this change)');
   });
 
   it('fails when a needed job failed, was cancelled or was skipped', () => {
     for (const r of ['failure', 'cancelled', 'skipped']) {
-      for (const job of ['check', 'e2e', 'ui', 'android']) expect(verdict({ changes: changes({}), ...all('success'), [job]: { result: r } }).ok, `${job} ${r}`).toBe(false);
+      for (const job of ['check', 'e2e', 'ui', 'android', 'receiver']) expect(verdict({ changes: changes({}), ...all('success'), [job]: { result: r } }).ok, `${job} ${r}`).toBe(false);
       expect(verdict({ changes: changes({ repeat_count: '1' }), ...all('success'), repeat: { result: r } }).ok).toBe(false);
     }
   });
@@ -317,6 +338,7 @@ describe('ci-ok, the one check to require', () => {
 
   it('fails a job that failed even when the rules did not need it', () => {
     expect(verdict({ changes: changes({ android: 'false' }), ...all('success'), android: { result: 'failure' } }).ok).toBe(false);
+    expect(verdict({ changes: changes({ receiver: 'false' }), ...all('success'), receiver: { result: 'failure' } }).ok).toBe(false);
   });
 });
 
@@ -336,11 +358,13 @@ describe('the CI workflow uses these rules', () => {
     expect(job('ui')).toContain("if: needs.changes.outputs.ui != 'none'");
     expect(job('ui')).toContain('part: ${{ fromJSON(needs.changes.outputs.ui_parts) }}');
     expect(job('android')).toContain("if: needs.changes.outputs.android == 'true'");
+    expect(job('receiver')).toContain("if: needs.changes.outputs.receiver == 'true'");
+    expect(job('changes')).toContain('receiver: ${{ steps.rules.outputs.receiver }}');
     expect(job('repeat')).toContain("if: github.event_name == 'pull_request' && needs.changes.outputs.repeat_count != '0'");
     expect(job('repeat')).toContain('include: ${{ fromJSON(needs.changes.outputs.repeat) }}');
     const ok = job('ci-ok');
     expect(ok).toContain('if: always()');
-    expect(ok).toContain('needs: [changes, check, e2e, ui, android, repeat]');
+    expect(ok).toContain('needs: [changes, check, e2e, ui, android, receiver, repeat]');
     expect(ok).toContain('NEEDS: ${{ toJSON(needs) }}');
     expect(ok).toContain('run: node scripts/ci-changes.ts verdict');
   });
@@ -373,5 +397,14 @@ describe('the CI workflow uses these rules', () => {
     expect(job('ui')).toContain('pnpm exec vitest run test/ui/docs.ui.test.ts');
     expect(existsSync(join(ROOT, 'test/e2e/docs.e2e.test.ts'))).toBe(true);
     expect(existsSync(join(ROOT, 'test/ui/docs.ui.test.ts'))).toBe(true);
+  });
+
+  it('checks the Fedimint receiver with fmt, clippy and its tests, in its own directory, with the dependency build cached by its lockfile', () => {
+    const j = job('receiver');
+    expect(j).toContain('working-directory: services/fedimint-receiver');
+    for (const step of ['cargo fmt --check', 'cargo clippy --profile ci --locked --all-targets -- -D warnings', 'cargo test --profile ci --locked']) expect(j, step).toContain(step);
+    expect(j).toMatch(/uses: actions\/cache@[0-9a-f]{40} # v\d/);
+    expect(j).toContain("hashFiles('services/fedimint-receiver/Cargo.lock'");
+    expect(existsSync(join(ROOT, 'services/fedimint-receiver/Cargo.lock'))).toBe(true);
   });
 });
