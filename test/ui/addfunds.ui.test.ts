@@ -239,6 +239,30 @@ describe('Add money as wallet cards', () => {
     await ctx.close();
   }, 60_000);
 
+  it('a tap on a printed card while its tab is still scrolling to it opens that card', async () => {
+    const { ctx, page, errors } = await phone();
+    await page.goto(`${g.url}/v2/#/funds/add`);
+    await page.waitForSelector('#pair-card', { state: 'attached' });
+    // The tab, then at once a tap on the Cashu card (its pointer down, a few frames of the scroll, its
+    // click), as a quick person does. The scroll is still going: the card nearest the middle is another.
+    const r = await page.evaluate(async () => {
+      const frame = () => new Promise((res) => requestAnimationFrame(() => res(null)));
+      (document.querySelector('#tab-cards') as HTMLElement).click();
+      const card = document.querySelector('#pair-card') as HTMLElement;
+      card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100 }));
+      for (let i = 0; i < 3; i++) await frame();
+      const onShow = document.querySelector('.way-card.now')?.getAttribute('data-way');
+      card.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 100 }));
+      card.click();
+      return onShow;
+    });
+    // The tap neither took over the tab's scroll nor only scrolled back: the card opens.
+    expect(r).toBe('cards');
+    await page.waitForSelector('[data-fund=card]');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('respects reduced motion: a tab jumps to its card, with no swipe hint', async () => {
     const { ctx, page } = await phone();
     await page.emulateMedia({ reducedMotion: 'reduce' });
