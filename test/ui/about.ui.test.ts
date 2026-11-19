@@ -4,11 +4,13 @@ import { type Gateway, startGateway } from '../e2e/helpers.ts';
 
 // The landing page, the site's front page at /, in a real browser. It is one screen: at each of six
 // sizes (three computer screens, three phones) the page is exactly as tall and wide as the window and
-// every part of it is inside the window. The three actions sit at the top right. The moments (Talk,
-// Private, Pay, Share unseen) move on by themselves, can be picked by tap or keyboard, stop with Pause,
-// pause under the mouse, and stand still under reduced motion. The download buttons show Soon while their
-// links are empty and become links once set. What was meant for the Classic page at / goes on to
-// /classic/. Nothing is asked of another site and nothing is logged as an error.
+// every part of it is inside the window, whichever words the title shows. The three actions sit at the
+// top right. The moments (Talk, Private, Pay, Share unseen) move on by themselves, can be picked by tap or
+// keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; the title's
+// last words turn with them and stop with them, and a screen reader hears one sentence. The download
+// buttons show Soon while their links are empty and become links once set. What was meant for the
+// Classic page at / goes on to /classic/. Nothing is asked of another site and nothing is logged as an
+// error.
 let g: Gateway;
 let browser: Browser;
 
@@ -28,6 +30,11 @@ interface Opened {
   /** Every request to another origin. */
   away: string[];
 }
+
+/** The title as one sentence: what a screen reader reads, and what shows under reduced motion. */
+const SENTENCE = 'Private AI for activists and anyone who cannot risk being linked to a question.';
+/** The words that turn after "Private AI for", in order (public/about/index.html). */
+const WHOS = ['activists', 'journalists', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers', 'anyone who cannot risk being linked to a question'];
 
 const SIZES = [
   [1280, 720],
@@ -78,6 +85,20 @@ async function open(
 
 /** The moments' state: which moment, which screen, playing or stopped. */
 const state = (page: Page) => page.evaluate(() => ({ ...(document.querySelector('.hero') as HTMLElement).dataset }));
+
+/** The title's words that show now. */
+const showing = (page: Page) => page.evaluate(() => document.querySelector('#whos .who.on')?.textContent);
+
+/** Shows these words in the title, as about.js does when they come round, and waits for them to settle (about 1 s at the page's speed). */
+async function show(page: Page, words: string, wait = 1100) {
+  await page.evaluate((w) => {
+    for (const e of document.querySelectorAll('#whos .who')) e.classList.toggle('on', e.textContent === w);
+  }, words);
+  await page.waitForTimeout(wait);
+}
+
+/** The heading's name as a screen reader gets it. */
+const headingName = async (page: Page) => /^- heading "(.*)" \[level=1\]$/.exec((await page.locator('h1').ariaSnapshot()).trim())?.[1];
 
 /** Plays the page's animations this many times faster (the moments' clock is a CSS animation). */
 async function faster(page: Page, rate: number) {
@@ -175,6 +196,32 @@ describe('the landing page in a browser', () => {
     expect(imgs.filter((i) => i.shown).length).toBeGreaterThanOrEqual(1);
     // The way in moves by transform and opacity only: nothing shifted.
     expect(await page.evaluate(() => (window as any).shifts)).toBe(0);
+
+    // Whichever words the title shows, the page keeps its place: the title, the tabs, the words and the
+    // phone stay where they are, nothing shows outside the window, the words fit the title's width, and
+    // nothing shifts. The longest (the phrase) last.
+    await page.evaluate(() => document.querySelector('.hero')!.classList.add('held'));
+    await faster(page, 10);
+    const where = async () => Promise.all(['h1', '.rail', '.caps', '.phone-in'].map((sel) => box(page, sel).then((b) => [b.x, b.y, b.width, b.height].map(Math.round).join(','))));
+    const at = await where();
+    for (const words of [...WHOS.slice(1), WHOS[0]!, WHOS.at(-1)!]) {
+      await show(page, words, 200);
+      expect(await showing(page)).toBe(words);
+      expect(await where(), words).toEqual(at);
+      const f2 = await fit(page);
+      expect(f2.scroll, words).toEqual([width, height]);
+      expect(f2.outside, words).toEqual([]);
+      const wide = await page.evaluate(() => {
+        const on = document.querySelector('#whos .who.on')!;
+        const r = document.createRange();
+        r.selectNodeContents(on);
+        const right = Math.max(...[...r.getClientRects()].map((x) => x.right));
+        return { right, edge: document.querySelector('h1')!.getBoundingClientRect().right, lines: new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size };
+      });
+      expect(wide.right, words).toBeLessThanOrEqual(wide.edge + 0.5);
+      expect(wide.lines, words).toBe(words.includes(' ') ? 2 : 1);
+    }
+    expect(await page.evaluate(() => (window as any).shifts)).toBe(0);
     expect(away).toEqual([]);
     expect(errors).toEqual([]);
     await page.context().close();
@@ -188,6 +235,89 @@ describe('the landing page in a browser', () => {
       expect(errors).toEqual([]);
       await page.context().close();
     }
+  });
+
+  it('turns the title with the moments, through its list in order and round again, the phrase for two halves', async () => {
+    const { page, errors } = await open([1440, 900]);
+    expect(await showing(page)).toBe('activists');
+    // Each word that comes, and each end of half a ring (what moves the title on), in order.
+    await page.evaluate(() => {
+      const log: string[] = [];
+      (window as any).log = log;
+      new MutationObserver(() => {
+        const on = document.querySelector('#whos .who.on')!.textContent!;
+        if (log.findLast((x) => x !== '|') !== on) log.push(on);
+      }).observe(document.getElementById('whos')!, { attributes: true, subtree: true });
+      document.querySelector('.hero')!.addEventListener('animationend', (e) => (e as AnimationEvent).animationName === 'arc' && log.push('|'));
+    });
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await faster(page, 25);
+    await expect.poll(() => page.evaluate(() => (window as any).log.filter((x: string) => x !== '|').length), { timeout: 20_000 }).toBeGreaterThanOrEqual(WHOS.length + 1);
+    const log: string[] = await page.evaluate(() => (window as any).log);
+    const words = log.filter((x) => x !== '|');
+    expect(words.slice(0, WHOS.length + 1)).toEqual([...WHOS.slice(1), WHOS[0], WHOS[1]]);
+    // How many halves each showed for: one each, two for the phrase. (A word comes in at the end of a
+    // half; the mark for that half follows it.)
+    const spans = words.slice(0, WHOS.length).map((w, i) => {
+      const from = log.indexOf(w);
+      const to = log.indexOf(words[i + 1]!, from + 1);
+      return [w, log.slice(from, to).filter((x) => x === '|').length];
+    });
+    expect(Object.fromEntries(spans)).toEqual(Object.fromEntries([...WHOS.slice(1), WHOS[0]!].map((w) => [w, w === WHOS.at(-1) ? 2 : 1])));
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('stops the title with Pause, under the mouse and while the page is out of sight', async () => {
+    const { page, errors } = await open([1440, 900]);
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await page.click('#play');
+    await faster(page, 25);
+    const paused = await showing(page);
+    await page.waitForTimeout(1500); // more than a whole round of the moments at this speed
+    expect(await showing(page)).toBe(paused);
+    await page.click('#play');
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(paused);
+
+    // The mouse over the phone holds it.
+    const phone = await box(page, '.phone');
+    await page.mouse.move(phone.x + phone.width / 2, phone.y + phone.height / 2);
+    const held = await showing(page);
+    await page.waitForTimeout(1500);
+    expect(await showing(page)).toBe(held);
+    await page.mouse.move(5, 450);
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(held);
+
+    // Out of sight (another tab, a locked phone), it holds too.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const away = await showing(page);
+    await page.waitForTimeout(1500);
+    expect(await showing(page)).toBe(away);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => showing(page), { timeout: 5000 }).not.toBe(away);
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('gives a screen reader one sentence that never changes, and no live region in the title', async () => {
+    const { page, errors } = await open([390, 844]);
+    expect(await headingName(page)).toBe(SENTENCE);
+    expect(await page.locator('h1 [aria-live], h1[aria-live]').count()).toBe(0);
+    expect(await page.getAttribute('.t-turn', 'aria-hidden')).toBe('true');
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    await faster(page, 25);
+    await expect.poll(() => showing(page), { timeout: 10_000 }).not.toBe('activists');
+    expect(await headingName(page)).toBe(SENTENCE);
+    await show(page, WHOS.at(-1)!);
+    expect(await headingName(page)).toBe(SENTENCE);
+    expect(errors).toEqual([]);
+    await page.context().close();
   });
 
   it('moves through the moments by itself, two screens for Talk and Pay', async () => {
@@ -283,12 +413,17 @@ describe('the landing page in a browser', () => {
   ] as const)('stands still under reduced motion at %i by %i', async (width, height) => {
     const { page, errors } = await open([width, height], { still: true });
     expect(await state(page)).toMatchObject({ play: 'stopped', moment: 'talk', frame: 'talk-a' });
+    // The title is the whole sentence, as it was before it turned, and its turning part never shows.
+    expect(await page.isVisible('.t-turn')).toBe(false);
+    expect((await page.innerText('h1')).replace(/\s+/g, ' ').trim()).toBe(SENTENCE);
+    expect(await headingName(page)).toBe(SENTENCE);
     // No animation at all, no Pause (nothing moves), the rings drawn whole, and still one screen.
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
     expect(await page.isVisible('#play')).toBe(false);
     expect(await page.locator('.q').evaluateAll((qs) => qs.map((q) => getComputedStyle(q).opacity))).toEqual(['1', '1', '1', '1']);
     await page.waitForTimeout(1000);
     expect((await state(page)).moment).toBe('talk');
+    expect(await showing(page)).toBe('activists');
     const f = await fit(page);
     expect(f.scroll).toEqual([width, height]);
     expect(f.outside).toEqual([]);

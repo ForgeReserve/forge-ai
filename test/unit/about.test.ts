@@ -1,7 +1,7 @@
 // The landing page (public/about/), the site's front page at /: under its own strict policy (the page and
 // its files under /about/, nothing else), with nothing from another site, pictures sized as their files
-// are, and the words in the house style. The Classic chat page it took the place of is at /classic/, and
-// what was meant for it at / goes on there (forward.js).
+// are, the words in the house style, and a title whose last words turn. The Classic chat page it took
+// the place of is at /classic/, and what was meant for it at / goes on there (forward.js).
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +20,8 @@ const PUBLIC = resolve(import.meta.dirname, '..', '..', 'public');
 const ABOUT = join(PUBLIC, 'about');
 const html = readFileSync(join(ABOUT, 'index.html'), 'utf8');
 const classic = readFileSync(join(PUBLIC, 'classic', 'index.html'), 'utf8');
+/** The sentence the title says, as it read before it turned. */
+const SENTENCE = 'Private AI for activists and anyone who cannot risk being linked to a question.';
 
 function gateway() {
   const e = { FORGE_DB_PATH: ':memory:', FORGE_TRUSTED_MINTS: 'http://127.0.0.1:1', FORGE_FOREIGN_DISCOVERY_RELAYS: '' };
@@ -229,4 +231,25 @@ describe('the page source', () => {
     expect(/<div class="dl-pop"[^]*?<\/div>\n<\/header>/.exec(html)?.[0]).toContain('<a class="dl-classic" id="dlClassic" href="/classic/">Classic app</a>');
   });
 
+  it('has a title that says one sentence and turns its last words, in the order of the list', () => {
+    const h1 = /<h1 id="title">([^]*?)<\/h1>/.exec(html)![1]!;
+    const text = (s: string) => s.replace(/<!--[^]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // What a screen reader reads, and what shows under reduced motion: the whole sentence, as before.
+    const still = /<span class="t-still">([^]*?<\/span>)<\/span>/.exec(h1)![1]!;
+    expect(text(still)).toBe(SENTENCE);
+    expect(still).toContain('<span class="t-a">Private AI for activists</span>');
+    // The part that turns is hidden from screen readers and holds no live region.
+    const turn = /<span class="t-turn" aria-hidden="true">([^]*)<\/span>$/.exec(h1)![1]!;
+    expect(turn).not.toMatch(/aria-live|role=/);
+    expect(text(/<span class="t-for">([^<]*)<\/span>/.exec(turn)![1]!)).toBe('Private AI for');
+    const whos = [...turn.matchAll(/<span class="(who[^"]*)">([^<]*)<\/span>/g)].map((m) => ({ cls: m[1]!, words: m[2]! }));
+    expect(whos.map((w) => w.words)).toEqual(['activists', 'journalists', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers', 'anyone who cannot risk being linked to a question']);
+    // The first shows before the page moves; only the phrase is long; every word fits the width it is set for.
+    expect(whos.map((w) => w.cls)).toEqual(['who on', 'who', 'who', 'who', 'who', 'who', 'who', 'who long']);
+    for (const w of whos.filter((w) => w.cls !== 'who long')) expect(w.words, w.words).toMatch(/^[a-z]{1,14}$/);
+    // The title, the description and the social cards stay as they were.
+    expect(html).toContain('<title>Forge AI, private AI for activists</title>');
+    expect(html).toContain(`<meta name="description" content="${SENTENCE.replace(/\.$/, '')}. Ask by voice. Pay for each question with eCash. No account.">`);
+    expect(html).toContain('<meta property="og:title" content="Forge AI, private AI for activists">');
+  });
 });

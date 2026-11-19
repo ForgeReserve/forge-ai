@@ -103,10 +103,30 @@ img { display: block; }
 .hero[data-moment="share"] { --dur: 6.5s; }
 
 h1 {
-  grid-area: title; margin: 2px 0 0; max-width: 22em; color: var(--ink);
+  grid-area: title; position: relative; margin: 2px 0 0; max-width: 22em; color: var(--ink);
   font-size: clamp(19px, min(6.4vw, 3.5vh), 30px); line-height: 1.12; font-weight: 650; letter-spacing: -0.025em; text-wrap: balance;
+  container-type: inline-size;
 }
 h1 .t-b { color: var(--text-2); font-weight: 560; }
+
+/* The title that turns: "Private AI for" stays, and the words after it change with the moments
+   (about.js). The words share one cell, so the tallest sets the title's height whichever shows, and
+   nothing on the page moves when they change. Sizes follow the title's width: a word fills it (the
+   longest, whistleblowers, just fits) and a phrase (.long) takes two lines at the size of "Private AI
+   for", about as tall as one word. The whole sentence (.t-still) is what a screen reader reads, and
+   what shows under reduced motion (the end of this file). */
+.t-still { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.t-turn { --big: calc(100cqi / 7); display: block; }
+.t-for { display: block; font-size: calc(var(--big) * 0.5); line-height: 1.18; font-weight: 600; letter-spacing: -0.02em; color: var(--text-2); }
+.whos { display: grid; font-size: var(--big); line-height: 1.06; font-weight: 700; letter-spacing: -0.035em; color: var(--ink); }
+.who {
+  grid-area: 1 / 1; align-self: start; opacity: 0; visibility: hidden; transform: translateY(0.24em);
+  transition: opacity 0.22s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+}
+.who.was { transform: translateY(-0.12em); }
+.who.on { opacity: 1; visibility: visible; transform: none; transition: opacity 0.5s ease 0.14s, transform 0.9s var(--out) 0.14s, visibility 0s; }
+.who.long { font-size: 0.5em; line-height: 1.06; font-weight: 650; letter-spacing: -0.025em; text-wrap: balance; }
+.who.long.was { transform: translateY(-0.24em); }
 
 /* The moments: four tabs with the app's icons, each in a tile whose ring fills while it shows. */
 .rail { grid-area: rail; display: flex; align-items: flex-start; gap: 2px; padding-top: 6px; }
@@ -405,6 +425,8 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
 /* ---------- reduced motion: a still picture. Full rings, no timer, no glint; a tap still changes the moment. ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .play, .prog, .tips, .touch, .beam-box, .sheen { display: none; }
+  .play, .prog, .tips, .touch, .beam-box, .sheen, .t-turn { display: none; }
   .q { opacity: 1; transform: none; }
+  /* The title as one sentence, as it was before it turned. */
+  .t-still { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
 }
