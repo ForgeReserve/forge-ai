@@ -1,5 +1,5 @@
 // The landing page at /: the look this phone keeps from the app (else Midnight), the download panel,
-// the moments and the title that turns with them.
+// the moments and the title that turns.
 //
 // First, an address meant for the Classic chat page (at / before it moved to /classic/) goes on there
 // (forward.js).
@@ -15,10 +15,12 @@
 // - .held: a short pause while the mouse is over the moments, keyboard focus is on a tab or a link in
 //   the words, or the page is out of sight.
 //
-// The title: the words after "Private AI for" (the list in index.html) move on at the end of each half
-// of the selected tab's ring, with the phone's screens, so the page changes on one beat and the title
-// stops whenever the moments do. A phrase (.long) stays for two halves. Under reduced motion the title is
-// the whole sentence and never turns (about.css).
+// The title: the words after "Private AI for" (the list in index.html) move on by a clock of their own,
+// quicker than the moments: the word on show runs a CSS animation (who-hold in about.css, 2 s for a word,
+// 5 s for a phrase) and the next word comes when it ends. It is paused by the same rule as the rings, so
+// whatever pauses the moments (Pause, a moment picked, the mouse, focus, the page out of sight) pauses the
+// title, and it goes on from where it stopped. Under reduced motion the title is the whole sentence and
+// never turns (about.css).
 import { classicAddress } from '/about/forward.js';
 import { applyPageLook } from '/v2/core/pagelook.js';
 
@@ -88,21 +90,19 @@ function frame(name) {
   );
 }
 
-/** The title's words, in order, and the one showing. */
+/** The title's words, in order. */
 const whos = [...document.querySelectorAll('#whos .who')];
-let who = Math.max(0, whos.findIndex((w) => w.classList.contains('on')));
-let halves = 0;
 
-/** At the end of each half of a ring: the title's next words (a phrase after its second half). */
-function turn() {
-  if (whos.length < 2 || still.matches) return;
-  if (++halves < (whos[who].classList.contains('long') ? 2 : 1)) return;
-  halves = 0;
-  for (const w of whos) w.classList.remove('was');
-  whos[who].classList.replace('on', 'was');
-  who = (who + 1) % whos.length;
-  whos[who].classList.add('on');
-}
+// The title's clock: when the word on show has stayed its time, the next word (and after the last, the
+// first). The new word's own animation starts with its class.
+whos[0]?.parentElement.addEventListener('animationend', (e) => {
+  if (e.animationName !== 'who-hold' || whos.length < 2 || still.matches) return;
+  const who = whos.indexOf(e.target);
+  if (who < 0 || !e.target.classList.contains('on')) return;
+  for (const w of whos) w.classList.remove('was', 'on');
+  e.target.classList.add('was');
+  whos[(who + 1) % whos.length].classList.add('on');
+});
 
 /** Shows moment i (its first screen) and starts its ring again. */
 function select(i) {
@@ -134,7 +134,6 @@ const stop = () => setPlay('stopped');
 // The clock: the selected tab's ring (see the top of this file).
 hero.addEventListener('animationend', (e) => {
   if (e.animationName !== 'arc' || e.target.closest('[role=tab]') !== tabs[now]) return;
-  turn();
   if (e.target.parentElement.classList.contains('ha')) {
     const next = FRAMES[tabs[now].dataset.moment][1];
     if (next) frame(next);

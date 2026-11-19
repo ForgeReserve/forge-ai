@@ -243,13 +243,43 @@ describe('the page source', () => {
     expect(turn).not.toMatch(/aria-live|role=/);
     expect(text(/<span class="t-for">([^<]*)<\/span>/.exec(turn)![1]!)).toBe('Private AI for');
     const whos = [...turn.matchAll(/<span class="(who[^"]*)">([^<]*)<\/span>/g)].map((m) => ({ cls: m[1]!, words: m[2]! }));
-    expect(whos.map((w) => w.words)).toEqual(['activists', 'journalists', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers', 'anyone who cannot risk being linked to a question']);
+    expect(whos.map((w) => w.words)).toEqual(['activists', 'journalists', 'anyone who cannot risk being linked to a question', 'researchers', 'survivors', 'organizers', 'whistleblowers', 'lawyers']);
     // The first shows before the page moves; only the phrase is long; every word fits the width it is set for.
-    expect(whos.map((w) => w.cls)).toEqual(['who on', 'who', 'who', 'who', 'who', 'who', 'who', 'who long']);
+    expect(whos.map((w) => w.cls)).toEqual(['who on', 'who', 'who long', 'who', 'who', 'who', 'who', 'who']);
     for (const w of whos.filter((w) => w.cls !== 'who long')) expect(w.words, w.words).toMatch(/^[a-z]{1,14}$/);
     // The title, the description and the social cards stay as they were.
     expect(html).toContain('<title>Forge AI, private AI for activists</title>');
     expect(html).toContain(`<meta name="description" content="${SENTENCE.replace(/\.$/, '')}. Ask by voice. Pay for each question with eCash. No account.">`);
     expect(html).toContain('<meta property="og:title" content="Forge AI, private AI for activists">');
+  });
+
+  it('turns the title on its own clock: a CSS animation per word, quicker than the moments, paused with them', () => {
+    const css = readFileSync(join(ABOUT, 'about.css'), 'utf8');
+    const js = readFileSync(join(ABOUT, 'about.js'), 'utf8');
+    const secs = (v: string) => Number(/^([\d.]+)s$/.exec(v)![1]);
+    const rule = (sel: string) => new RegExp(`\\n${sel.replace(/[.()]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)![1]!;
+    // How long a word and the phrase stay: a word about 2 s, the phrase long enough to read (about 5 s).
+    const word = secs(/--hold: ([\d.]+s)/.exec(rule('.who'))![1]!);
+    const phrase = secs(/--hold: ([\d.]+s)/.exec(rule('.who.long'))![1]!);
+    expect(word).toBeGreaterThanOrEqual(1.5);
+    expect(word).toBeLessThanOrEqual(2.5);
+    expect(phrase).toBeGreaterThanOrEqual(4);
+    expect(phrase).toBeLessThanOrEqual(6);
+    // Quicker than every moment's half ring, which used to move it.
+    const durs = [...css.matchAll(/\.hero\[data-moment="[a-z]+"\] \{ --dur: ([\d.]+)s; \}/g)].map((m) => Number(m[1]));
+    expect(durs).toHaveLength(4);
+    expect(word).toBeLessThan(Math.min(...durs) / 2);
+    // The word on show runs the clock, and the clock is paused by the rule that pauses the rings.
+    expect(rule('.who.on')).toMatch(/animation: who-hold var\(--hold\) linear;/);
+    expect(css).toMatch(/\.hero:is\(\[data-play="intro"\], \[data-play="stopped"\], \.held\) :is\([^)]*\.arc[^)]*\.who\) \{ animation-play-state: paused !important; \}/);
+    // A quick, calm change: the old word is gone before the new one comes, and the new one settles in well under a second.
+    const out = secs(/opacity ([\d.]+s) ease/.exec(rule('.who'))![1]!);
+    const [, inFade, inDelay, inMove] = /opacity ([\d.]+s) ease ([\d.]+s), transform ([\d.]+s) var\(--out\) \2/.exec(rule('.who.on'))!.map(String);
+    expect(secs(inDelay!)).toBeGreaterThanOrEqual(out * 0.8);
+    expect(secs(inDelay!) + Math.max(secs(inFade!), secs(inMove!))).toBeLessThanOrEqual(0.8);
+    // about.js moves the title on only when that clock ends: no timer of its own, nothing tied to the rings.
+    expect(js).toMatch(/e\.animationName !== 'who-hold'/);
+    expect(js).not.toMatch(/setInterval|requestAnimationFrame/);
+    expect(js).not.toMatch(/\bturn\(\)|halves/);
   });
 });
