@@ -181,6 +181,7 @@ export default {
   'add.reading': 'Reading {name}',
   'add.added': 'Added {name}',
   'add.noPhotos': 'No photos with this model. Choose another model in More.',
+  'add.noPhotosAny': 'No model can see photos now.',
   'add.tooMany': 'No room for more. That is the most this question can hold.',
   // Share unseen (photos)
   'photo.title': 'Share unseen',
@@ -249,7 +250,11 @@ export default {
   'photo.ask': 'Ask about it',
   'photo.save': 'Save',
   'photo.shared': 'Shared',
-  'photo.saved': 'Saved to this phone',
+  'photo.saved': 'Saved',
+  'photo.savedPhotos': 'Saved to Photos',
+  'photo.downloading': 'Download started. Look in your downloads.',
+  'photo.saveDenied': 'Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share.',
+  'photo.saveFailed': 'Not saved. Try again, or tap Share.',
 
   // More sheet
   'more.title': 'More',
@@ -759,6 +764,8 @@ export default {
   'fund.fedimint.useTill': 'Use this till',
   'fund.fedimint.tillSet': 'Till set.',
   'fund.fedimint.notPayCode': 'Not a till pay code.',
+  'fund.fedimint.noPayCode': 'No pay code yet. Scan it or paste it.',
+  'fund.fedimint.noPayCodePaste': 'No pay code yet. Paste it here.',
   'fund.fedimint.posCode': 'Wrong code. This code is for the phones that run the till. Ask for its pay code.',
   'fund.fedimint.insecure': 'Till not on https. This till is not on https. The app pays only through a till on https.',
   'fund.fedimint.tillLabel': 'Till',
@@ -1266,6 +1273,9 @@ export default {
   'model.fastSub': 'Fast. The first words come in a few seconds.',
   'model.chosenMark': 'Chosen',
   'model.needsMoney': 'Add money first',
+  'model.photoLead': 'Pick a model that can see photos.',
+  'model.photoNoPrivate': 'No private model can see photos.',
+  'model.photoStandard': 'Use Standard',
   // The first run's last step: Start free as a choice beside Start, and Scan for the code.
   'startFree.scanLabel': 'Scan the invite code with the camera',
   'home.modelChip': '{name} is chosen. Change the model',

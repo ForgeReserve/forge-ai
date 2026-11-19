@@ -57,11 +57,38 @@ describe('iPhone app project', () => {
     expect(read('ios/App/App/Base.lproj/LaunchScreen.storyboard')).toContain('red="0.043137254901960784" green="0.050980392156862744" blue="0.062745098039215685"');
   });
 
-  it('registers its plugins, ForgeBars, ForgeNfc and ForgeSpeech, as the page calls them', () => {
+  it('registers its plugins, ForgeBars, ForgeNfc, ForgeSpeech and ForgeShare, as the page calls them', () => {
     expect(read('ios/App/App/BarsPlugin.swift')).toContain('public let jsName = "ForgeBars"');
-    for (const p of ['BarsPlugin', 'NfcPlugin', 'SpeechPlugin']) expect(read('ios/App/App/ForgeViewController.swift')).toContain(`registerPluginInstance(${p}())`);
+    for (const p of ['BarsPlugin', 'NfcPlugin', 'SpeechPlugin', 'SharePlugin']) expect(read('ios/App/App/ForgeViewController.swift')).toContain(`registerPluginInstance(${p}())`);
     expect(read('ios/App/App/Base.lproj/Main.storyboard')).toContain('customClass="ForgeViewController" customModule="App"');
-    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift', 'NfcPlugin.swift', 'NfcRules.swift', 'SpeechPlugin.swift', 'SpeechRules.swift']) expect(project).toContain(`${f} in Sources`);
+    for (const f of ['ForgeViewController.swift', 'BarsPlugin.swift', 'NfcPlugin.swift', 'NfcRules.swift', 'SpeechPlugin.swift', 'SpeechRules.swift', 'SharePlugin.swift']) expect(project).toContain(`${f} in Sources`);
+  });
+
+  it("ForgeShare saves to Photos with add-only access, the file's exact bytes, and Android's save codes", () => {
+    const swift = read('ios/App/App/SharePlugin.swift');
+    const kotlin = read('android/app/src/main/java/com/forgereserve/ai/SharePlugin.kt');
+    expect(swift).toContain('public let jsName = "ForgeShare"');
+    // Save only: the share sheet is the web view's (navigator.share). Android's plugin has save too.
+    expect([...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1])).toEqual(['save']);
+    expect(kotlin).toMatch(/@PluginMethod\s+fun save\(/);
+    expect(swift).toContain('@objc func save(_ call: CAPPluginCall)');
+    // Add-only: Forge can add a photo and never sees the library.
+    expect(swift).toContain('PHPhotoLibrary.requestAuthorization(for: .addOnly)');
+    expect(swift).not.toMatch(/for: \.readWrite|PHAsset\.fetch|PHFetchOptions/);
+    // The bytes as they are: no image is decoded or encoded again, so nothing is added to the file.
+    expect(swift).toContain('PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: options)');
+    expect(swift).not.toMatch(/UIImage|jpegData|pngData|UIImageWriteToSavedPhotosAlbum|creationRequestForAsset\(from|CGImageDestination/);
+    expect(swift).not.toMatch(/FileManager|write\(to|UserDefaults|CAPLog/);
+    // Saved only on Photos' word.
+    expect(swift).toMatch(/if ok \{\s*call\.resolve\(\["saved": true\]\)/);
+    // Android's codes for save, and denied for a refused permission (Android's save screen needs none).
+    const codes = (src: string) => [...new Set([...src.matchAll(/reject\("[^"]+", "(\w+)"\)/g)].map((m) => m[1]))].sort();
+    const kotlinCodes = new Set(codes(kotlin));
+    expect(codes(swift)).toEqual(['bad_file', 'bad_type', 'denied', 'save_failed']);
+    for (const c of codes(swift).filter((c) => c !== 'denied')) expect(kotlinCodes, c).toContain(c);
+    expect(plistString('NSPhotoLibraryAddUsageDescription')).toMatch(/only when you pick Save/);
+    // Never asks to read the library.
+    expect(plist).not.toContain('NSPhotoLibraryUsageDescription');
   });
 
   it("ForgeSpeech has the Android plugin's methods, events and error codes", () => {

@@ -373,6 +373,8 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .switch[aria-checked="true"] .knob { background: var(--surface); }
 .dashed-box { padding: 14px; border-radius: 18px; border: 2px dashed var(--dash); }
 .dashed-box p { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
+/* Choose a model for a photo, with no model listed: the line, then Use Standard under it. */
+#modelPhotoNone .row-btns { margin-top: 12px; }
 
 /* Toast */
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); max-width: min(440px, calc(100% - 32px)); padding: 12px 18px; border-radius: 16px; background: var(--primary); color: var(--primary-ink); font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 200ms, transform 200ms var(--ease); z-index: 10; }

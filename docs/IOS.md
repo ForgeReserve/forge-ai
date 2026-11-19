@@ -7,16 +7,16 @@ Forge for iPhone is the v2 web app in a Capacitor shell (`ios/`, Capacitor 6.2.3
 - Name **Forge**, bundle id `com.forgereserve.ai`, iPhone only, iOS 16.4 and up, portrait.
 - The same web bundle as the APK (`scripts/lib/android-web.ts`): the v2 app, what it imports, the icons and the natural voice (Phonon 31m and its voices, 65 MB), so answers are read aloud offline from the first open. The app is about 93 MB.
 - One flavour: the universal app. There is no Forge Private Voice for iPhone.
-- No analytics, no tracking, no third-party SDK. Its own native code is ForgeBars, ForgeNfc and ForgeSpeech (below).
+- No analytics, no tracking, no third-party SDK. Its own native code is ForgeBars, ForgeNfc, ForgeSpeech and ForgeShare's Save (below).
 
 ## What the iPhone app does in place of the Android app's plugins
 
-The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/native.js`). ForgeBars, ForgeNfc and ForgeSpeech are there; every other part is `null`, so the page does what it does in Safari on an iPhone.
+The page sees Capacitor's bridge with `getPlatform()` `ios` (`public/v2/core/native.js`). ForgeBars, ForgeNfc, ForgeSpeech and ForgeShare (Save only) are there; every other part is `null`, so the page does what it does in Safari on an iPhone.
 
 | Android feature (plugin) | iPhone app |
 |---|---|
 | Status and navigation bars (ForgeBars) | Native: `BarsPlugin.swift` sets the status bar text, light on Midnight, Dark and the first run, dark on Light (the Android rule, BarRules.kt). The page draws under the status bar and the home indicator itself (`viewport-fit=cover`, `env(safe-area-inset-*)`). |
-| Share out and Save (ForgeShare) | Web: `navigator.share` with the photo file (the iOS share sheet), as in Safari. Saving to Photos needs `NSPhotoLibraryAddUsageDescription`, which is set. |
+| Share out and Save (ForgeShare) | Share: web, `navigator.share` with the photo file (the iOS share sheet), as in Safari. Save: native, `SharePlugin.swift` puts the photo into Photos (Save to Photos, below). |
 | Photos shared in (ForgeShareIn) | Not available: there is no share extension yet. |
 | Event links, `/j#<pass>` (ForgeJoin) | Not in the app: on an iPhone `/j` opens the web app in Safari (`/v2/#join=<pass>`), as before. No Universal Links yet. |
 | Card taps, Cashu eCash cards (ForgeNfc) | Native: `NfcPlugin.swift`, below. Tap a card is listed and works as on Android, a press then a tap on iOS's NFC sheet. |
@@ -59,6 +59,16 @@ What iOS changes, and how the page follows it:
 cd ios/App
 xcodebuild test -workspace App.xcworkspace -scheme AppTests -destination 'name=<a simulator>'
 ```
+
+## Save to Photos (ForgeShare)
+
+In Share unseen, **Save** puts the clean photo into the Photos library. A web download does not work here: WKWebView drops it without a word, so the app said "Saved" while nothing was saved. `ios/App/App/SharePlugin.swift` is ForgeShare with one method, `save` (Android's ForgeShare also has `share` and `forget`; the share sheet here is the web view's own, and the app writes no files).
+
+- `save({name, mime, data})` takes the file the page made (`public/v2/core/photo.js` `makeFile`), in base64. It asks for add-only access (`PHPhotoLibrary.requestAuthorization(for: .addOnly)`): Forge can add a photo and never sees the library. iOS asks once, with the words of `NSPhotoLibraryAddUsageDescription`.
+- The file goes in as its exact bytes (`PHAssetCreationRequest` `addResource(with: .photo, data:)`): the app does not decode it, encode it again or add anything to it. Photos names it `photo.jpg`. Photos itself writes a small Exif block into the file it keeps: in the Simulator (iOS 26.5) the picture data was the same, byte for byte, and in front of it Photos put the size, resolution, colour space and Exif version, with no time, place or device.
+- It resolves `{saved: true}` only once Photos says the change is done. It rejects with `denied` (the person said no, or it is restricted), `save_failed`, `bad_type` (not a JPEG or PNG) or `bad_file`. Nothing is written anywhere else or logged.
+- The page (`core/native.js`, used when `Capacitor.Plugins` lists ForgeShare) says **Saved to Photos** only after that answer. A refusal says "Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share."; a failure says "Not saved. Try again, or tap Share.", in the red line above the buttons. An app built before ForgeShare keeps the web download.
+- `test/unit/ios.test.ts` checks the source (add-only, the bytes as they are, no image encoding, the codes); `test/unit/v2/native.test.ts` and `test/ui/photo.ui.test.ts` check the page against a stand-in for the plugin: saved, refused, failed.
 
 ## Hold to talk on the phone (ForgeSpeech)
 
@@ -138,7 +148,7 @@ Card taps need the **NFC Tag Reading** capability on the App ID `com.forgereserv
 - Camera: "Forge uses the camera to read a code, or to take a photo when you ask it to."
 - Microphone: "Forge uses the microphone only while you hold the talk button, to hear a question you speak."
 - Speech recognition: "Forge turns a question you speak into words on this phone. Your voice stays on it, unless you pick This browser." One permission covers both recognisers: ForgeSpeech, which hears on the phone, and WebKit's This browser in Voice, which may send the sound to Apple. It speaks of the recognisers only: a recording the app sends to the engine (Online, picked, or chosen by the app after Apple's recogniser heard nothing in two presses in a row while there was sound, docs/VOICE.md) uses the microphone's permission, and the app says so on the answer screen and in More, Voice.
-- Adding to Photos: "Forge saves a photo to your library only when you pick Save."
+- Adding to Photos: "Forge saves a photo to your library only when you pick Save." Asked the first time Save is tapped in Share unseen (ForgeShare), for add-only access.
 - NFC: "Forge reads an eCash card only when you hold it to the phone to add money." iOS shows no prompt for it: the NFC sheet itself is the permission.
 
 Capacitor grants the web view's own camera and microphone prompt once iOS has, so the person sees one prompt, not two.
@@ -170,6 +180,7 @@ A long press on a control selected its words and brought up Copy, Look Up and Tr
 - A real card tap: the Simulator has no NFC. Nothing in `NfcPlugin.swift` past `status` and the refusals has run: the sheet, a card's connection, a command, the 5 second limit, a card lost mid-command, the sheet's words.
 - Hold to talk on the phone (ForgeSpeech) past `available` and the refusals: no request has run, so the permission prompts, live words, the joining after a pause, a silent hold on a phone, Apple's error codes as they really come, the audio session's effect on playback afterwards, a call or a route change mid-hold and airplane mode are all untested (Checking it on an iPhone, above). Which languages an iPhone hears on the phone is not known.
 - Anything on a real iPhone: signing, the permission prompts, the camera reading a real code, Hold to talk with a real microphone, the ring switch and `navigator.audioSession`, the share sheet and Save to Photos, screen sizes other than the iPhone 17's.
+- Save to Photos (ForgeShare) on an iPhone: the add-only prompt and its words, a refusal and Allow in Settings afterwards, the photo showing in the Photos app, and what Photos writes into the file there. In the Simulator (2026-11-18, iOS 26.5, a probe in the installed copy only): with access allowed `save` resolved `{saved: true}` and the file appeared in the library; with access refused it rejected `denied` and nothing was added; a text file was refused `bad_type`. The prompt itself was not answered there.
 - Paid requests, funding, Start free with a code: not run against the production engine.
 - WebKit's own speech recogniser on a phone: in the Simulator it started and stopped without error.
 - Dark look (only Midnight and Light were looked at).

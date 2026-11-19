@@ -642,6 +642,14 @@ describe('shared in from another app', () => {
     expect(en['photo.missed']).toMatch(/did not reach Forge/);
   });
 
+  it('Choose a model for a photo has its own route, under Share unseen', async () => {
+    const R = await imp('core/router.js');
+    expect(R.parse('#/photo/model')).toEqual({ name: 'modelPhoto', params: {} });
+    expect(R.href('modelPhoto')).toBe('#/photo/model');
+    // With no history (the page opened on it), Back goes to Share unseen.
+    expect(R.parentOf('modelPhoto')).toBe('photo');
+  });
+
   it('a new worker activating clears its old caches but keeps a shared photo waiting for the page', async () => {
     const store = new Set(['forge2-runtime-v0', 'forge2-share', 'forge2-runtime-v1', 'forge-shell-v9']);
     const on: Record<string, ((e: any) => void)[]> = {};

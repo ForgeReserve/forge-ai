@@ -111,6 +111,27 @@ describe('the native bridge', () => {
     expect(await nat.share.save(file)).toEqual({ saved: false });
   });
 
+  it('says Saved only for a save the phone confirmed; a web download only started', async () => {
+    expect(PH.saveOutcome({ saved: true })).toBe('saved');
+    expect(PH.saveOutcome({ saved: true, to: 'photos' })).toBe('savedPhotos');
+    expect(PH.saveOutcome({ saved: false })).toBe('notSaved');
+    expect(PH.saveOutcome({ started: true })).toBe('downloading');
+    expect(PH.saveOutcome(undefined)).toBe('notSaved');
+    // With no share sheet for files, Share saves: what it says is what the save came to.
+    const file = new File([new Uint8Array([1])], 'p.jpg', { type: 'image/jpeg' });
+    const noSheet = (save: () => any) => ({ canShareFiles: () => false, files: async () => {}, save });
+    expect(await PH.shareOrSave(file, noSheet(() => ({ started: true })))).toBe('downloading');
+    expect(await PH.shareOrSave(file, noSheet(async () => ({ saved: true, to: 'photos' })))).toBe('savedPhotos');
+    await expect(
+      PH.shareOrSave(
+        file,
+        noSheet(async () => {
+          throw Object.assign(new Error('no'), { code: 'denied' });
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'denied' });
+  });
+
   it('a sheet that fails to open is an error, not a share', async () => {
     const { win } = fakeCapacitor({
       'ForgeShare.share': () => {
@@ -437,6 +458,37 @@ describe('the iPhone app (ios/, docs/IOS.md)', () => {
     ]);
     // A refused permission keeps its code, as on Android.
     await expect(nat.speech.start({ locale: 'en-US' })).rejects.toMatchObject({ code: 'permission' });
+  });
+
+  it('saves to Photos through ForgeShare, and says Saved only once Photos has the photo', async () => {
+    let answer: () => any = () => ({ saved: true });
+    const f = iosCapacitor({ 'ForgeShare.save': () => answer() }, ['ForgeBars', 'ForgeNfc', 'ForgeShare']);
+    const nat = N.createNative(f.win);
+    // Save only: the share sheet stays the web view's own (navigator.share), as in Safari.
+    expect(Object.keys(nat.share)).toEqual(['save']);
+    for (const k of ['shareIn', 'forget', 'join', 'till', 'voice', 'asr']) expect(nat[k], k).toBeNull();
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 1])], 'photo.jpg', { type: 'image/jpeg' });
+    const r = await nat.share.save(file);
+    expect(r).toEqual({ saved: true, to: 'photos' });
+    expect(PH.saveOutcome(r)).toBe('savedPhotos');
+    // The file's exact bytes go over the bridge.
+    expect(f.calls).toEqual([['ForgeShare', 'save', { name: 'photo.jpg', mime: 'image/jpeg', data: '/9j/AQ==' }]]);
+    // Refused: Photos is not allowed (the person said no, or it is restricted). The code is kept.
+    answer = () => {
+      throw Object.assign(new Error('Forge may not add to Photos.'), { code: 'denied' });
+    };
+    await expect(nat.share.save(file)).rejects.toMatchObject({ code: 'denied' });
+    answer = () => {
+      throw Object.assign(new Error('The photo could not be saved.'), { code: 'save_failed' });
+    };
+    await expect(nat.share.save(file)).rejects.toMatchObject({ code: 'save_failed' });
+    // An answer that does not say saved is a failure, never a save.
+    answer = () => ({});
+    await expect(nat.share.save(file)).rejects.toMatchObject({ code: 'save_failed' });
+  });
+
+  it('a build without ForgeShare keeps the website Save, as before', () => {
+    expect(N.createNative(iosCapacitor({}, ['ForgeBars', 'ForgeNfc', 'ForgeSpeech']).win).share).toBeNull();
   });
 
   it('a build without ForgeSpeech leaves Hold to talk to the engine, as before', () => {

@@ -110,8 +110,17 @@ export function closePhoto(photo) {
 }
 
 /**
+ * What a save came to, from the share adapter's answer: 'savedPhotos' (the iPhone app's Photos has it),
+ * 'saved' (the Android app wrote it where the person picked), 'notSaved' (the save screen was closed) or
+ * 'downloading' (a web page hands the file to the browser, which never says where it went). Only the
+ * first two are a save the phone confirmed.
+ */
+export const saveOutcome = (r) => (r?.saved === true ? (r.to === 'photos' ? 'savedPhotos' : 'saved') : r?.started ? 'downloading' : 'notSaved');
+
+/**
  * Shares a file through the phone's share sheet, or saves it where there is no sheet for files.
- * Resolves 'shared', 'opened' (the Android app's sheet opened), 'cancelled' or 'saved'.
+ * Resolves 'shared', 'opened' (the Android app's sheet opened), 'cancelled', or what the save came to
+ * (saveOutcome). A save that failed throws, with its code.
  */
 export async function shareOrSave(file, share) {
   if (share.canShareFiles([file])) {
@@ -124,8 +133,7 @@ export async function shareOrSave(file, share) {
       throw e;
     }
   }
-  share.save(file);
-  return 'saved';
+  return saveOutcome(await share.save(file));
 }
 
 // ------------------------------------------------------------------ shared in from another app

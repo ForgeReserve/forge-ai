@@ -6,14 +6,17 @@
 // The photo lives in this screen's memory only. Leaving the screen lets go of it; nothing stores it.
 import { countKinds, dragBox, hitCover, tapBox } from '../core/covers.js';
 import { changeRows, runFilters, withId } from '../core/filters.js';
-import { closePhoto, drawCovered, makeFile, openPhoto, shareOrSave, takeShared } from '../core/photo.js';
+import { closePhoto, drawCovered, makeFile, openPhoto, saveOutcome, shareOrSave, takeShared } from '../core/photo.js';
 import { el, icon, msgLine, say, sayEl } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
 
 const STATE_TEXT = { removed: 'photo.state.removed', covered: 'photo.state.covered', none: 'photo.state.none', failed: 'photo.state.failed', uncovered: 'photo.state.uncovered' };
 const STEP_TEXT = { running: 'photo.stepState.running', done: 'photo.stepState.done', failed: 'photo.stepState.failed', waiting: 'photo.stepState.waiting' };
 const BLOCK_LABEL = { face: 'photo.block.face', writing: 'photo.block.writing', mine: 'photo.block.mine' };
-const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'photo.bad', unsafe: 'photo.unsafe' };
+const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'photo.bad', unsafe: 'photo.unsafe', denied: 'photo.saveDenied', save_failed: 'photo.saveFailed', bad_file: 'photo.saveFailed', bad_type: 'photo.saveFailed' };
+// What the screen says once the photo went out. Saved only for a save the phone confirmed; a web page
+// says only that the download started (core/photo.js saveOutcome).
+const DONE_TEXT = { shared: 'photo.shared', saved: 'photo.saved', savedPhotos: 'photo.savedPhotos', downloading: 'photo.downloading' };
 /** A press that moves less than this (CSS pixels) is a tap. */
 const TAP_SLOP = 10;
 
@@ -281,7 +284,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     return makeFile(photo, covers, filters);
   }
 
-  const act = (fn) => async () => {
+  const act = (fn, failed = 'photo.shareFailed') => async () => {
     if (busy || !photo) return;
     if (result?.steps.some((s) => !s.ok) && !confirmedFailed) {
       confirmedFailed = true;
@@ -293,7 +296,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     try {
       await fn();
     } catch (e) {
-      status.set(t(ERRORS[e?.code] ?? 'photo.shareFailed'), 'err');
+      status.set(t(ERRORS[e?.code] ?? failed), 'err');
     } finally {
       busy = false;
     }
@@ -306,8 +309,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       id: 'photoShare',
       onclick: act(async () => {
         const r = await shareOrSave(await file(), share);
-        if (r === 'shared') ui.toast(t('photo.shared'));
-        if (r === 'saved') ui.toast(t('photo.saved'), 3500);
+        if (DONE_TEXT[r]) ui.toast(t(DONE_TEXT[r]), r === 'shared' ? undefined : 3500);
       }),
     },
     icon('send', 20),
@@ -320,11 +322,13 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       type: 'button',
       class: 'btn',
       id: 'photoSave',
+      // In the Android app the person picks where to save, and may close that screen instead (nothing is
+      // said then). In the iPhone app it goes to Photos, once allowed. A refusal or a failure is said in
+      // the line above the buttons, with what to do.
       onclick: act(async () => {
-        // In the Android app the person picks where to save, and may close that screen instead.
-        const r = await share.save(await file());
-        if (r?.saved !== false) ui.toast(t('photo.saved'), 3500);
-      }),
+        const r = saveOutcome(await share.save(await file()));
+        if (DONE_TEXT[r]) ui.toast(t(DONE_TEXT[r]), 3500);
+      }, 'photo.saveFailed'),
     },
     icon('download', 20),
     el('span', { text: t('photo.save') }),
