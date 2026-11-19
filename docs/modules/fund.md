@@ -173,7 +173,7 @@ The till a Fedimint card pays through. Only the Android app has one; elsewhere `
 | - | - |
 | `supported()` | `true` in the Android app. |
 | `status()` | Resolves `{paired, url}`. |
-| `pair(text)` | Pairs with a till from the pay code it shows. Throws `{code: 'app_only'}` outside the Android app. |
+| `pair(text)` | Pairs with a till from the pairing code it shows. Throws `{code: 'app_only'}` outside the Android app. |
 | `forget()` | Forgets the paired till. |
 | `pays` | The payments on this phone (`createTillPays` in [`public/v2/core/till.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js)): `all`, `get`, `waiting`, `start`, `reprice`, `pay`, `check`, `refund`, `credited`, `drop`. |
 | `settings` | The till's address and margin (`createTillSettings`): `get`, `marginKnown`, `paired`, `forget`, `setMargin`, `learn`. |

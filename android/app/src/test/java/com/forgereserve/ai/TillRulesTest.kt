@@ -25,7 +25,7 @@ class TillRulesTest {
 
     @Test
     fun refusesAPosCodePlainHttpAndAnythingElse() {
-        // A till's own POS code opens the whole till: never taken for a pay code.
+        // A till's own POS code opens the whole till: never taken for the pairing code a paying app scans.
         assertEquals(TillRules.Refusal.POS, no("fedimintcard-till:http://192.168.1.5:9877?t=$token"))
         // The PIN and the token would cross the network in clear.
         assertEquals(TillRules.Refusal.INSECURE, no("fedimintcard-till-pay:http://192.168.1.5:9877?t=$token"))

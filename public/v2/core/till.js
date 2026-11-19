@@ -25,7 +25,7 @@
 // sees the token. Pure apart from the storage and transport it is given; tested in Node.
 
 export const PAY_SCHEME = 'fedimintcard-till-pay:';
-/** A till's own pairing code, for its POS phones. Never taken for a pay code. */
+/** A till's own pairing code, for its POS phones. Never taken for the pairing code a paying app scans. */
 export const POS_SCHEME = 'fedimintcard-till:';
 
 /** POST /v1/pay can take up to 120 s at the till (PAY.md: a read timeout of at least 120 s). */
@@ -50,7 +50,7 @@ const TOKEN = /^[0-9a-f]{64}$/i;
 /**
  * Reads the text of the QR code `till pair --scope pay` prints: `fedimintcard-till-pay:<url>?t=<token>`.
  * Returns {ok: true, url, token} or {ok: false, why}:
- *   'pos'      a till's own pairing code for its POS phones (fedimintcard-till:), not a pay code
+ *   'pos'      a till's own pairing code for its POS phones (fedimintcard-till:), not the one a paying app scans
  *   'insecure' plain http to another computer: the PIN and the token would cross the network in clear
  *   'invalid'  anything else
  * The url is scheme, host and port only, without a trailing slash, as the till makes it.

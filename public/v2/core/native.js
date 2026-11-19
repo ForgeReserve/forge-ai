@@ -365,7 +365,7 @@ export function nativeTill(call, on) {
       const r = await call('ForgeTill', 'status').catch(() => null);
       return { paired: r?.paired === true, url: typeof r?.url === 'string' ? r.url : null };
     },
-    /** Pairs with the till in a scanned pay code. Resolves {url}; rejects with {code} when it is not one. */
+    /** Pairs with the till in a scanned pairing code. Resolves {url}; rejects with {code} when it is not one. */
     async pair(text) {
       const r = await call('ForgeTill', 'pair', { text });
       return { url: r?.url ?? null };

@@ -207,14 +207,14 @@ async function appWithCard(card: FakeFedimintCard, { iphone = false, camera = tr
 const tap = (page: Page) => page.evaluate(() => (window as any).__tap());
 const tillPays = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('forge2.tillpays') ?? '{"pays":[]}').pays);
 
-/** Opens Tap a Fedimint card, pairs with the mock till by pasting its pay code, and sees the price. */
+/** Opens Tap a Fedimint card, pairs with the mock till by pasting its pairing code, and sees the price. */
 async function pairAndPrice(page: Page) {
   await page.goto(`${app}/#/funds/add`);
   await openWay(page, 'fedimint');
   await page.waitForSelector('#fedNeedTill');
   // Nothing pasted or scanned yet (or only spaces): the message line says so, the focus goes to the field,
   // and the field is described by the message for a screen reader. The button stays enabled.
-  const noCode = (await page.locator('#fedScan').count()) ? 'No pay code yet. Scan it or paste it.' : 'No pay code yet. Paste it here.';
+  const noCode = (await page.locator('#fedScan').count()) ? 'No pairing code yet. Scan it or paste it.' : 'No pairing code yet. Paste it here.';
   for (const text of ['', '  \n ']) {
     await page.fill('#fedPairText', text);
     expect(await page.isEnabled('#fedUseTill')).toBe(true);
@@ -233,7 +233,7 @@ async function pairAndPrice(page: Page) {
   // A till's own POS code is refused.
   await page.fill('#fedPairText', `fedimintcard-till:${till.url}?t=${till.posToken}`);
   await page.click('#fedUseTill');
-  await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('Wrong code. This code is for the phones that run the till. Ask for its pay code.');
+  await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('Wrong code. This code is for the phones that run the till. Ask for the pairing code for a paying app.');
   await page.fill('#fedPairText', till.pairText());
   await page.click('#fedUseTill');
   await page.waitForSelector('#fedGetPrice');
@@ -283,7 +283,7 @@ describe('Tap a Fedimint card', () => {
     // Three numbered steps, each its picture and a few words.
     expect(await page.getAttribute('#fedSteps', 'aria-label')).toBe('How to set a till');
     const steps = page.locator('#fedSteps > li');
-    expect(await steps.allTextContents()).toEqual(['Get the pay code from the person who runs the till.', 'Scan it or paste it.', 'Then pay with the card.']);
+    expect(await steps.allTextContents()).toEqual(['Get the pairing code from the person who runs the till.', 'Scan it or paste it.', 'Then pay with the card.']);
     for (let i = 0; i < 3; i++) expect(await steps.nth(i).locator('.add-home-ico svg').count()).toBe(1);
     // The number of each step sits on its picture (style.css .till-steps).
     expect(await page.evaluate(() => [...document.querySelectorAll('#fedSteps .add-home-ico')].every((n) => getComputedStyle(n, '::after').content.startsWith('counter(step)')))).toBe(true);
@@ -291,7 +291,7 @@ describe('Tap a Fedimint card', () => {
     expect(await page.getAttribute('#fedScan', 'class')).toMatch(/\bprimary\b/);
     expect(await page.getAttribute('#fedUseTill', 'class')).not.toMatch(/\bprimary\b/);
     expect(await page.isEnabled('#fedUseTill')).toBe(true);
-    expect(await page.textContent('label[for=fedPairText]')).toBe('Or paste the pay code');
+    expect(await page.textContent('label[for=fedPairText]')).toBe('Or paste the pairing code');
     // All of it is above the paste field, in the order it is read.
     const y = async (sel: string) => (await page.locator(sel).boundingBox())!.y;
     expect(await y('#fedNeedTill')).toBeLessThan(await y('#fedSteps'));
@@ -303,7 +303,7 @@ describe('Tap a Fedimint card', () => {
     await page.click('#fundListen');
     await expect
       .poll(() => page.evaluate(() => (window as any).__spoken.join(' | ')), { timeout: 10_000 })
-      .toBe('Tap a Fedimint card | This card needs a till. | A till takes the money from the card and adds it to your funds. | Get the pay code from the person who runs the till. | Scan it or paste it. | Then pay with the card.');
+      .toBe('Tap a Fedimint card | This card needs a till. | A till takes the money from the card and adds it to your funds. | Get the pairing code from the person who runs the till. | Scan it or paste it. | Then pay with the card.');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
@@ -314,11 +314,11 @@ describe('Tap a Fedimint card', () => {
     await page.waitForSelector('#fedSteps');
     expect(await page.locator('#fedScan').count()).toBe(0);
     expect(await page.locator('#fedSteps > li').nth(1).textContent()).toBe('Paste it below.');
-    expect(await page.textContent('label[for=fedPairText]')).toBe('Paste the pay code');
+    expect(await page.textContent('label[for=fedPairText]')).toBe('Paste the pairing code');
     expect(await page.getAttribute('#fedUseTill', 'class')).toMatch(/\bprimary\b/);
     // PR 58's message, in its no-camera words.
     await page.click('#fedUseTill');
-    await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('No pay code yet. Paste it here.');
+    await expect.poll(() => page.textContent('.fedimint-view .msg')).toBe('No pairing code yet. Paste it here.');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
@@ -370,7 +370,7 @@ describe('Tap a Fedimint card', () => {
     await ctx.close();
   }, 60_000);
 
-  it('in the app: pair by the pay code, the price before the tap, a wrong PIN, then the till pays and the funds rise', async () => {
+  it('in the app: pair by the pairing code, the price before the tap, a wrong PIN, then the till pays and the funds rise', async () => {
     const card = new FakeFedimintCard({ balanceMsat: 50_000_000 });
     const { ctx, page, errors } = await appWithCard(card);
     const rec = await pairAndPrice(page);

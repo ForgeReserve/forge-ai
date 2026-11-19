@@ -88,7 +88,7 @@ Pays the engine's Lightning invoice from a Fedimint card, through a till. The en
 
 - **Id:** `forge.fund.fedimint`, known in the app as `fedimint`.
 - **Folder:** [`public/v2/modules/fund/fedimint/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/fedimint)
-- **Needs:** `nfc`; `till`, paired once by scanning the till's pay code with `scan`; `engine.fundLightning` for [`POST /v1/wallet/fund/lightning`](../API.md#post-v1-wallet-fund-lightning) and `engine.funding` for [`GET /v1/wallet/fund/{id}`](../API.md#get-v1-wallet-fund-id). Its payments are kept by [`public/v2/core/till.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js).
+- **Needs:** `nfc`; `till`, paired once by scanning the till's pairing code with `scan`; `engine.fundLightning` for [`POST /v1/wallet/fund/lightning`](../API.md#post-v1-wallet-fund-lightning) and `engine.funding` for [`GET /v1/wallet/fund/{id}`](../API.md#get-v1-wallet-fund-id). Its payments are kept by [`public/v2/core/till.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/till.js).
 - **Works on:** the Android app, with a paired till, while the engine has Lightning. The website lists it and says it needs the Android app. The iPhone app leaves it out: it reads cards, but has no till.
 - **On Add money:** the printed Fedimint card, with the word Fedimint, beside the Cashu card on the Cards wallet card (a card of its own when Tap a Cashu card is not there).
 - **Costs:** the invoice, plus the till's fee and margin, shown before the tap. A failed payment offers the money back to the same card.

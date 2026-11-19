@@ -19,7 +19,7 @@ const invoice = (sats: number) => `lnbcrt${sats * 10}n1p${randomBytes(12).toStri
 const token = 'ab'.repeat(32);
 
 describe('pairing with a till', () => {
-  it('takes the pay code a till shows, and nothing else', () => {
+  it('takes the pairing code a till shows, and nothing else', () => {
     expect(T.parsePairing(`fedimintcard-till-pay:https://till.example.org?t=${token}`)).toEqual({ ok: true, url: 'https://till.example.org', token });
     expect(T.parsePairing(` fedimintcard-till-pay:https://Till.example.org:9877/?t=${token.toUpperCase()} `)).toEqual({ ok: true, url: 'https://till.example.org:9877', token });
     expect(T.parsePairing(`fedimintcard-till-pay:http://127.0.0.1:9877?t=${token}`).ok).toBe(true);
