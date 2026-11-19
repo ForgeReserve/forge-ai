@@ -40,11 +40,12 @@ export type Kind = 'all' | 'docs' | 'android' | 'ios' | 'web' | 'receiver' | 'ot
 export const RECEIVER_DIR = 'services/fedimint-receiver/';
 
 /**
- * The gateway's Fedimint code and its end to end test, which the receiver job runs against the real
- * receiver and a real federation (test/fedimint/). A change to one of these runs that job as well; the
- * rest of the gateway's code does not (its unit tests run a stand-in receiver in every check).
+ * The Fedimint top-up code and its end to end test, which the receiver job runs against the real
+ * receiver and a real federation (test/fedimint/): the gateway's side, and the v2 app's client that the
+ * test drives (how the phone reads notes, sends them and keeps them). A change to one of these runs that
+ * job as well; the rest of the code does not (the unit tests run a stand-in receiver in every check).
  */
-export const FEDIMINT_GATEWAY_PATHS = ['src/fedimint.ts', 'test/fedimint/'];
+export const FEDIMINT_GATEWAY_PATHS = ['src/fedimint.ts', 'test/fedimint/', 'public/v2/core/fedinote.js', 'public/v2/core/vault.js', 'public/v2/core/engine.js'];
 
 /** True for a path the receiver job's end to end test depends on outside the receiver's directory. */
 export function touchesFedimintGateway(path: string): boolean {
@@ -246,8 +247,8 @@ export function decide(event: string, changes: Change[] | null, repeatInput?: Om
   const gatewayFedimint = kinds.filter((c) => touchesFedimintGateway(c.path));
   const receiver = has('receiver') || gatewayFedimint.length > 0;
   if (has('receiver')) reasons.push(`${RECEIVER_DIR} changed: the Fedimint receiver is built and tested, and the gateway's Fedimint end to end test runs against it`);
-  else if (receiver) reasons.push(`the gateway's Fedimint code changed (${gatewayFedimint.map((c) => c.path).join(', ')}): the receiver is built and its end to end test with the gateway runs`);
-  else reasons.push(`nothing under ${RECEIVER_DIR} or in the gateway's Fedimint code changed: the Fedimint receiver's build is skipped`);
+  else if (receiver) reasons.push(`the Fedimint top-up code changed (${gatewayFedimint.map((c) => c.path).join(', ')}): the receiver is built and its end to end test with the gateway and the app's client runs`);
+  else reasons.push(`nothing under ${RECEIVER_DIR} or in the Fedimint top-up code changed: the Fedimint receiver's build is skipped`);
   return withRepeats({
     everything: false,
     reasons,

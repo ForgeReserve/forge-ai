@@ -135,7 +135,7 @@ Encryption for enclave models:
 - "Encrypt in browser" (on by default) uses Tinfoil's SDK (`tinfoil` 1.4.0, vendored as `public/vendor/tinfoil.js` and loaded only when an encrypted request is first sent). It verifies the enclave attestation in the browser, then encrypts each request to the enclave's key. The gateway origin proxies `/attestation` and `/.well-known/hpke-keys`, and over HTTPS the SDK fetches the attestation bundle through it. The bundle still contains Tinfoil's verification code paths, which can contact Tinfoil and Sigstore hosts during verification; which requests it makes behind this gateway has not been measured.
 - Unchecking it sends plaintext to the gateway, labelled as such under the message box.
 
-Camera scanning (eCash, Other mint, balance key) runs entirely in the browser with BarcodeDetector or jsQR; frames never leave the page.
+Camera scanning (eCash, Cashu or Fedimint, and a balance key) runs entirely in the browser with BarcodeDetector or jsQR; frames never leave the page.
 
 ### Attached files
 

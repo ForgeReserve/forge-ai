@@ -29,7 +29,7 @@ describe('string table', () => {
   });
 
   it('has a name and a line for every bundled fund module and look', () => {
-    for (const id of ['note', 'ecash', 'lightning', 'onchain', 'othermint']) for (const k of ['name', 'sub']) expect(en[`fund.${id}.${k}`], `${id}.${k}`).toBeTruthy();
+    for (const id of ['note', 'ecash', 'lightning', 'onchain']) for (const k of ['name', 'sub']) expect(en[`fund.${id}.${k}`], `${id}.${k}`).toBeTruthy();
     for (const id of ['light', 'dark', 'midnight']) for (const k of ['name', 'sub']) expect(en[`look.${id}.${k}`]).toBeTruthy();
   });
 

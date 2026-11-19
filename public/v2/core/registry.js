@@ -184,7 +184,6 @@ export const BUNDLED = [
   { kind: 'fund', folder: 'ecash' },
   { kind: 'fund', folder: 'lightning' },
   { kind: 'fund', folder: 'onchain' },
-  { kind: 'fund', folder: 'othermint' },
   // Forge Private Voice's own speech to text first (its APK only), then the phone's own on-device
   // recogniser in the Android or iPhone app where it has the language: both free and private.
   { kind: 'voice-in', folder: 'bundled' },

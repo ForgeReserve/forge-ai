@@ -186,15 +186,15 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
     expect(summary(decide('pull_request', [ch('src/app.ts')]))).toContain('| receiver | skipped |');
   });
 
-  it("runs the receiver job, with its end to end test, when the gateway's Fedimint code changes", () => {
-    for (const p of ['src/fedimint.ts', 'test/fedimint/topup.fedimint.test.ts', './test/fedimint/other.ts']) {
+  it('runs the receiver job, with its end to end test, when the Fedimint top-up code changes', () => {
+    for (const p of ['src/fedimint.ts', 'test/fedimint/topup.fedimint.test.ts', './test/fedimint/other.ts', 'public/v2/core/fedinote.js', 'public/v2/core/vault.js', 'public/v2/core/engine.js']) {
       expect(touchesFedimintGateway(p), p).toBe(true);
       const d = decide('pull_request', [ch(p)]);
       // The gateway's own code: everything a gateway change runs, and the receiver job besides.
       expect(d, p).toMatchObject({ everything: false, receiver: true, e2e: 'all', ui: 'all' });
-      expect(d.reasons.join(' '), p).toContain("the gateway's Fedimint code changed");
+      expect(d.reasons.join(' '), p).toContain('the Fedimint top-up code changed');
     }
-    for (const p of ['src/fedimint.tsx', 'src/funding.ts', 'test/unit/fedimint.test.ts', 'test/support/fakereceiver.ts', 'test/fedimintx/a.ts']) {
+    for (const p of ['src/fedimint.tsx', 'src/funding.ts', 'test/unit/fedimint.test.ts', 'test/support/fakereceiver.ts', 'test/fedimintx/a.ts', 'public/v2/core/note.js', 'public/v2/modules/fund/ecash/index.js']) {
       expect(touchesFedimintGateway(p), p).toBe(false);
       expect(decide('pull_request', [ch(p)]).receiver, p).toBe(false);
     }
@@ -202,6 +202,7 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
     expect(outputs(decide('pull_request', [ch('src/fedimint.ts')])).receiver).toBe('true');
     expect(existsSync(join(ROOT, 'src/fedimint.ts'))).toBe(true);
     expect(existsSync(join(ROOT, 'test/fedimint'))).toBe(true);
+    for (const p of ['public/v2/core/fedinote.js', 'public/v2/core/vault.js', 'public/v2/core/engine.js']) expect(existsSync(join(ROOT, p)), p).toBe(true);
   });
 
   it('runs Android only for android/ or what its bundle is made from', () => {

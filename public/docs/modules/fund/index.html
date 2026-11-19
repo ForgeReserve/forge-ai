@@ -124,7 +124,7 @@
 </tr>
 <tr>
 <td><code>msgLine()</code></td>
-<td>A status line (<code>role=&quot;status&quot;</code>) with <code>set(text, kind)</code>. A text with no kind that does not end in a full stop shows the wait icon.</td>
+<td>A status line (<code>role=&quot;status&quot;</code>) with <code>set(text, kind, ico)</code>: <code>ico</code> names its picture in place of the kind&#39;s. A text with no kind that does not end in a full stop shows the wait icon.</td>
 </tr>
 <tr>
 <td><code>addedPanel({id, amount, plus, words, wordsAttrs, balance})</code></td>
@@ -328,8 +328,8 @@
 <td>Turns Private only off and chooses a free model. Returns the model, or <code>null</code>. Only after the person said yes.</td>
 </tr>
 <tr>
-<td><code>topup(token, invite)</code></td>
-<td>Adds eCash to the balance of its unit (<code>landsIn</code>), opening that balance when the phone has none. Stores the token on the phone first (<a href="#vault">the vault</a>), sends it, and removes it only once the engine credits it. Resolves <code>{credited, unit, replay}</code>, with <code>free: true</code> for a voucher of free questions. Throws <code>EngineError</code>; when <code>retryable</code> is true the token stays on the phone and is sent again later.</td>
+<td><code>topup(token, invite, extra)</code></td>
+<td>Adds eCash to the balance of its unit (<code>landsIn</code>), opening that balance when the phone has none; Fedimint notes go to the sat balance. Stores the token on the phone first (<a href="#vault">the vault</a>), with <code>extra</code> (fields kept with it, such as <code>{kind: &#39;fedimint&#39;, notesId}</code>), sends it, and removes it only once the engine credits it. Resolves <code>{credited, unit, replay}</code>, with <code>free: true</code> for a voucher of free questions. Throws <code>EngineError</code>; when <code>retryable</code> is true the token stays on the phone and is sent again later.</td>
 </tr>
 <tr>
 <td><code>topupFree(token)</code></td>
@@ -345,7 +345,7 @@
 </tr>
 </tbody></table></div>
 <h3 id="vault"><code>vault</code><a class="anchor" href="#vault" aria-label="Link to this section">#</a></h3>
-<p>eCash on its way in or out, kept in the phone&#39;s storage so a token is never lost. From <code>createVault</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/vault.js"><code>public/v2/core/vault.js</code></a>. <code>wallet.topup</code> uses it for you; use it directly when a token goes somewhere else first, as Other mint does.</p>
+<p>eCash on its way in or out, kept in the phone&#39;s storage so a token is never lost. From <code>createVault</code> in <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/vault.js"><code>public/v2/core/vault.js</code></a>. <code>wallet.topup</code> uses it for you; use it directly when a token goes somewhere else first, as eCash from another mint does.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -370,8 +370,12 @@
 <td>Marks it refused: the engine did not take it. Funds lists it so the person can copy it back out.</td>
 </tr>
 <tr>
+<td><code>stuck(id, code, message)</code></td>
+<td>Marks Fedimint notes stuck: the federation took them and nothing was credited (<code>issuance_failed</code>). Never sent again; Funds lists them with their id for whoever helps.</td>
+</tr>
+<tr>
 <td><code>discard(id)</code></td>
-<td>Removes a refused entry the person copied.</td>
+<td>Removes a refused or stuck entry the person copied.</td>
 </tr>
 <tr>
 <td><code>incoming()</code>, <code>outgoing()</code></td>
@@ -434,8 +438,8 @@
 <td><code>true</code> when the browser can use a camera.</td>
 </tr>
 <tr>
-<td><code>open(video, onProgress)</code></td>
-<td>Starts reading single or animated QR codes into the <code>&lt;video&gt;</code> element. Resolves <code>{promise, stop()}</code>; <code>promise</code> resolves the text read. <code>onProgress(p)</code> gets 0 to 1 for an animated code.</td>
+<td><code>open(video, onProgress, opts)</code></td>
+<td>Starts reading single or animated QR codes into the <code>&lt;video&gt;</code> element. Resolves <code>{promise, stop()}</code>; <code>promise</code> resolves the text read. <code>onProgress(p)</code> gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; <code>opts.accept(text)</code> takes other codes too (eCash passes its Fedimint notes reader), and <code>opts.any</code> takes any code.</td>
 </tr>
 </tbody></table></div>
 <h3 id="qr"><code>qr</code><a class="anchor" href="#qr" aria-label="Link to this section">#</a></h3>
@@ -564,7 +568,7 @@
 </tr>
 <tr>
 <td><code>open(id, {token})</code></td>
-<td>Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint to Other mint this way.</td>
+<td>Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, or Fedimint notes, to eCash this way.</td>
 </tr>
 <tr>
 <td><code>token</code></td>
@@ -597,7 +601,7 @@
 <h3 id="usable"><code>usable()</code><a class="anchor" href="#usable" aria-label="Link to this section">#</a></h3>
 <p>Optional. Return <code>false</code> on a phone that cannot use the module. The first run&#39;s How you pay then leaves it out; Add money still lists it so its screen can explain. Tap a Cashu card returns <code>nfc.supported()</code>.</p>
 <h3 id="sub"><code>sub()</code><a class="anchor" href="#sub" aria-label="Link to this section">#</a></h3>
-<p>Optional. Returns the string key of the line behind the module&#39;s info button on Add money. Without it the app uses <code>fund.&lt;id&gt;.sub</code> when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired.</p>
+<p>Optional. Returns the string key of the line behind the module&#39;s info button on Add money. Without it the app uses <code>fund.&lt;id&gt;.sub</code> when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired; eCash, to name Fedimint only while the engine takes it.</p>
 <p>The bundled modules also set <code>group</code> (<code>&#39;unlinked&#39;</code> or <code>&#39;depends&#39;</code>). No app code reads it.</p>
 <h2 id="lifecycle">Lifecycle<a class="anchor" href="#lifecycle" aria-label="Link to this section">#</a></h2>
 <ol>

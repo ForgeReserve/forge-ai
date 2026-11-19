@@ -160,17 +160,18 @@ describe('paper notes in a phone-sized browser', () => {
     expect(errors.filter((e) => !/status of 4\d\d/.test(e))).toEqual([]);
   }, 90_000);
 
-  it('a note from a mint the engine does not take says so and offers Other mint, with the note handed over', async () => {
+  it('a note from a mint the engine does not take says so and offers its price, with the note handed to the eCash box', async () => {
     const token = await note(MINT_B, 100);
     const { page, errors } = await phoneWithCamera([token]);
     await page.goto(`${g.url}/v2/#/funds/add/note`);
     await page.waitForSelector('#noteResult', { timeout: 20_000 });
     expect(await page.textContent('#noteAmount')).toBe('$1.00');
     expect(await page.textContent('#noteMint')).toBe('From 127.0.0.1:3339');
-    expect(await page.textContent('#noteResult')).toBe('From another mint. This note is from a mint this engine does not take. It can be added through Other mint.');
+    expect(await page.textContent('#noteResult')).toBe('From another mint. This note is from a mint this engine does not take. It can be added at a price. You see the price first.');
     expect(await page.locator('#noteAdd').count()).toBe(0); // never sent to the engine as a top-up
+    expect(await page.textContent('#noteOtherMint')).toBe('See the price');
     await page.click('#noteOtherMint');
-    await page.waitForSelector('[data-fund=othermint]');
+    await page.waitForSelector('[data-fund=ecash]');
     // The note is in the box and its price is asked for at once.
     await page.waitForSelector('#foreignConfirm', { timeout: 20_000 });
     expect(await page.textContent('#foreignConfirm')).toMatch(/^Add /);

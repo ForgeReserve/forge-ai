@@ -3,10 +3,12 @@
 // before anything is sent, and adds it on one tap through wallet.topup, which stores the note's eCash on
 // the phone before sending it and removes it only once the engine confirms the credit (core/vault.js).
 //
-// A note from a mint the engine does not take says so and offers the other-mint path when the engine
-// has one. A note from the engine's own mint in the unit these funds do not hold offers the change
-// (fund module eCash shows its price first). Whether a note was already used is known only to its mint,
+// A note from a mint the engine does not take says so, and when the engine takes other mints offers See
+// the price, which opens the eCash box with it (priced there). A note from the engine's own mint in the
+// unit these funds do not hold offers the change (the eCash box shows its price first). Fedimint notes
+// read here (a still code, core/fedinote.js) go to the eCash box, which takes both kinds. Whether a note was already used is known only to its mint,
 // so the phone learns it when the engine refuses the note (token_spent), and says so.
+import { readFedimint } from '../../../core/fedinote.js';
 import { isNoteUnit, mintLabel, noteVerdict, readNote, refusalOf } from '../../../core/note.js';
 import { inviteField } from '../kit.js';
 
@@ -51,9 +53,13 @@ export function create(inputs) {
         body.replaceChildren(ui.el('div', { class: 'scanner' }, video), ui.sayEl('p', { class: 'note-hint' }, t('fund.note.point')), progress, msg);
         foot.replaceChildren(paste);
         try {
-          const started = await scan.open(video, (p) => {
-            if (p > 0 && p < 1) ui.say(progress, t('fund.note.reading', { percent: Math.round(p * 100) }));
-          });
+          const started = await scan.open(
+            video,
+            (p) => {
+              if (p > 0 && p < 1) ui.say(progress, t('fund.note.reading', { percent: Math.round(p * 100) }));
+            },
+            { accept: (text) => readFedimint(text).ok },
+          );
           // Left or chose Paste while the camera was starting: turn it off again.
           if (mine !== runs) return started.stop();
           job = started;
@@ -83,6 +89,8 @@ export function create(inputs) {
       /** What was read: the amount and the mint, and the one next step. */
       const show = (text) => {
         msg.set('');
+        // Fedimint notes: the eCash box takes them.
+        if (readFedimint(text).ok) return open('ecash', { token: String(text).replace(/\s+/g, '') });
         const note = readNote(text);
         const camera = !!scan?.available();
         const again = btn({ class: 'btn block', id: 'noteScanAgain', onclick: () => (camera ? scanning() : pasting()) }, camera ? 'qr' : 'copy', camera ? t('fund.note.again') : t('fund.note.pasteAgain'));
@@ -103,7 +111,7 @@ export function create(inputs) {
         // What the note holds as one card: its amount in large type, and its mint.
         const head = [ui.el('section', { class: 'card price-card' }, known ? ui.el('div', { class: 'amount-tag', id: 'noteAmount', text: amount }) : null, mintLine)];
         const methods = wallet.methods();
-        const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('othermint', { token: note.token }) }, 'swap', t('fund.note.useOtherMint'));
+        const otherMintBtn = () => btn({ class: 'btn primary block', id: 'noteOtherMint', onclick: () => open('ecash', { token: note.token }) }, 'swap', t('fund.note.seePrice'));
         const refused = (kind) => {
           const words = { spent: t('fund.note.spent'), other_mint: t('fund.note.otherMint'), wrong_mint: t('fund.note.wrongMint'), wrong_unit: t('fund.note.wrongUnit', { unit: t(UNIT_WORD[note.unit] ?? 'unit.other') }) }[kind];
           body.replaceChildren(...head, ui.sayEl('p', { class: 'msg err', id: 'noteResult', role: 'status' }, words, 'err'));

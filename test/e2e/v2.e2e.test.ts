@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Gateway, startGateway } from './helpers.ts';
 
 // The v2 app served beside v1: its shell, its own worker scope and manifest, and its bundled modules.
-const BUNDLED = ['look/light', 'look/dark', 'look/midnight', 'mode/default', 'fund/ecash', 'fund/lightning', 'fund/onchain', 'fund/othermint'];
+const BUNDLED = ['look/light', 'look/dark', 'look/midnight', 'mode/default', 'fund/ecash', 'fund/lightning', 'fund/onchain'];
 
 describe('v2 shell', () => {
   let g: Gateway;

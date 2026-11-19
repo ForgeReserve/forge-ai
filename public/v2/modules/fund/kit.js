@@ -141,10 +141,11 @@ const UNIT_WORD = { usd: 'unit.usd', sat: 'unit.sat' };
 
 /**
  * The price the engine quoted for eCash it changes (POST /v1/wallet/fund/foreign/quote), with Yes, then
- * the steps until the outcome. Other mint uses it, and so does eCash from the engine's own mint in the
- * unit these funds do not hold (foreign.convert), which also says what is changed into what and has a
- * No (onNo). The token goes into the vault on Yes only, with the funding id, so the outcome lands even
- * when the person leaves (settlePendingForeign); No takes nothing, the token stays the person's.
+ * the steps until the outcome. The eCash box uses it for eCash from another mint, and for eCash from the
+ * engine's own mint in the unit these funds do not hold (foreign.convert), which says what is changed
+ * into what. Both say where the amount comes from and have a No (onNo). The token goes into the vault on
+ * Yes only, with the funding id, so the outcome lands even when the person leaves
+ * (settlePendingForeign); No takes nothing, the token stays the person's.
  * Fills body and foot; once the money is in, the success panel takes the screen (added, screens/funds.js).
  * Returns {stop} for the poller.
  */
@@ -163,9 +164,9 @@ export function foreignQuote(inputs, { body, foot, f, token, done, added, onNo }
     'section',
     { class: 'card price-card' },
     ...[
-      q.convert ? ui.sayEl('p', { id: 'convertWhat' }, t('fund.convert.what', { to: words(f.unit), from: words(q.unit) }), '', 'swap') : null,
+      q.convert ? ui.sayEl('p', { id: 'convertWhat' }, t('fund.convert.what', { to: words(f.unit), from: words(q.unit) }), '', 'swap') : ui.sayEl('p', { id: 'foreignWhat' }, t('fund.ecash.otherWhat'), '', 'swap'),
       ui.el('div', { class: 'amount-tag', id: 'foreignCredit', text: format.units(q.credit, f.unit) }),
-      q.convert ? ui.sayEl('p', { class: 'note', id: 'convertFrom' }, t('fund.convert.from', { amount: format.units(q.token_amount, q.unit) }), '', 'coins') : null,
+      ui.sayEl('p', { class: 'note', id: q.convert ? 'convertFrom' : 'foreignFrom' }, t('fund.convert.from', { amount: format.units(q.token_amount, q.unit) }), '', 'coins'),
       ui.sayEl('p', { class: 'note' }, t('fund.othermint.fees', { amount: format.units(q.fee_max, q.unit) }), '', 'gauge'),
     ].filter(Boolean),
   );
@@ -271,9 +272,10 @@ export function poll(fn, ms) {
 
 /**
  * A paste box with an optional Scan button (the camera adapter). Its label leads with the paste picture;
- * info: detail behind an info button beside it (which mints are taken), or null.
+ * info: detail behind an info button beside it (which mints are taken), a line or a list of lines, or
+ * null. accept(text): a code the scanner takes besides Cashu tokens (Fedimint notes, core/fedinote.js).
  */
-export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null }) {
+export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, accept = null }) {
   const ta = ui.el('textarea', { id, rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
   const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
   const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
@@ -292,7 +294,7 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null })
           onclick: async () => {
             box.hidden = false;
             try {
-              job = await scan.open(video);
+              job = await scan.open(video, undefined, accept ? { accept } : undefined);
               const text = await job.promise;
               stop();
               ta.value = text;
@@ -306,10 +308,21 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null })
         ui.el('span', { text: t('fund.scan') }),
       )
     : null;
-  const more = info ? ui.el('p', { class: 'field-info' }, info) : null;
-  const head = ui.el('div', { class: 'field-head' }, ui.el('label', { for: id, class: 'label' }, ui.icon('paste', 20), ui.el('span', { text: label })), more ? ui.infoToggle(more, t('common.info')) : null);
+  const lines = (x) => [x].flat().filter(Boolean);
+  const more = info ? ui.el('p', { class: 'field-info' }) : null;
+  const toggle = more ? ui.infoToggle(more, t('common.info')) : null;
+  /** The info lines again (what the engine takes can arrive after the screen is drawn). */
+  const setInfo = (x) => {
+    if (!more) return;
+    const l = lines(x);
+    more.replaceChildren(...l.flatMap((v, i) => (i ? [ui.el('br'), v] : [v])));
+    toggle.hidden = !l.length;
+    if (!l.length) more.hidden = true;
+  };
+  setInfo(info);
+  const head = ui.el('div', { class: 'field-head' }, ui.el('label', { for: id, class: 'label' }, ui.icon('paste', 20), ui.el('span', { text: label })), toggle);
   const node = ui.el('div', { class: 'field' }, head, more, ta, btn, box);
-  return { node, value: () => ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, ''), clear: () => (ta.value = ''), stop, input: ta };
+  return { node, value: () => ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, ''), clear: () => (ta.value = ''), stop, input: ta, setInfo };
 }
 
 /**

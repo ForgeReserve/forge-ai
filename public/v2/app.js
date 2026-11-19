@@ -15,6 +15,7 @@ import { chatPayload, createEngine, EngineError, tinfoilFetch } from './core/eng
 import { createNative, defaultEngine, followBars, reloadForIsolation } from './core/native.js';
 import { freeInfo, freeKeyName, freeLeft, freeMaxTokens, fundsBlock, isCreditMint, nextFreeTotal, useFree } from './core/free.js';
 import { isJoinHash, joinPlan, passFrom } from './core/join.js';
+import { tokenKind } from './core/fedinote.js';
 import { readNote } from './core/note.js';
 import { createTillPays, createTillSettings } from './core/till.js';
 import { chargedFor, errorView } from './core/errors.js';
@@ -800,8 +801,12 @@ const siblingsOn = () => !!S.methods?.sibling?.enabled && !S.siblingRefused;
  * that the engine has not answered for yet. With no balance at all, {key: null}: the invite opens one.
  */
 const fundingFor = (unit) => prepareFunding(unit, { keys: keys(), siblings: siblingsOn(), made: (k) => k in newKeys(), make: makeKey });
-/** The unit a token the phone can read goes to; a token it cannot read goes to the home balance, as before. */
+/**
+ * The unit a token the phone can read goes to: Fedimint notes to sats (docs/PAYMENTS.md, Fedimint notes);
+ * a token it cannot read goes to the home balance, as before.
+ */
 const landingOf = (token) => {
+  if (tokenKind(token) === 'fedimint') return landing('sat');
   const n = readNote(token);
   return n.ok ? landing(n.unit) : homeUnit();
 };
@@ -873,13 +878,14 @@ const wallet = {
   /**
    * Adds eCash through the vault: stored on the phone first, removed only once credited. A voucher of
    * free questions (from the engine's credit mint) goes on the free balance; the result says free: true.
+   * Fedimint notes go the same way, to the sat balance. extra: fields kept with the vault entry.
    */
-  topup: async (token, invite) => {
+  topup: async (token, invite, extra = {}) => {
     const note = readNote(token);
     if (note.ok && isCreditMint(S.free, note.mint)) return topupFree(token);
     if (!(await unitsKnown())) {
       // The token waits on the phone, sent again once the balances can be read (retryAll).
-      vault.pending(vault.hold(token, 'topup', { engine: engine.base ?? '' }).id, 'offline');
+      vault.pending(vault.hold(token, 'topup', { engine: engine.base ?? '', ...extra }).id, 'offline');
       throw unitsUnknown();
     }
     // To the balance of the token's unit, no change of units and no fee (landing): a second balance is
@@ -889,7 +895,7 @@ const wallet = {
     try {
       // The engine may still find a voucher here (the credit mint was not known yet): its free balance
       // key then goes to the free slot, never the paid one.
-      const r = await topupWithVault({ engine, vault, token, key: f.key, sibling: f.sibling, invite, setKey, setFreeKey });
+      const r = await topupWithVault({ engine, vault, token, key: f.key, sibling: f.sibling, invite, setKey, setFreeKey, extra });
       if (r.free) {
         await refreshFree();
         store.set({});
@@ -898,8 +904,10 @@ const wallet = {
     } catch (e) {
       // The engine would not open the second balance: from now on this unit is changed into the balance
       // the phone has, and this token is offered that way now, price first (as a wrong_unit top-up is).
-      if (e?.code !== 'sibling_refused' || !note.ok) throw e;
+      // Fedimint notes are never changed: they need the sat balance, and the refusal says so.
+      if (e?.code !== 'sibling_refused') throw e;
       wallet.siblingRefused();
+      if (!note.ok) throw e;
       const to = landing(note.unit);
       if (to === note.unit || !S.methods?.convert?.units?.includes(to)) throw e;
       throw new EngineError('wrong_unit', e.message, { status: 400, body: { convert: { quote: '/v1/wallet/fund/foreign/quote', unit: to, token_unit: note.unit } } });

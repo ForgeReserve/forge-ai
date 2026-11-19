@@ -496,21 +496,6 @@ const disc = (p, [a, b, c]) => `${rg(`${p}disc`, { fx: '34%', fy: '28%' }, [
 const discBody = (p) => `<ellipse cx="50" cy="93" rx="34" ry="3.4" fill="#000000" opacity="0.18" ${f(p, 'b2')}/><circle cx="50" cy="50" r="44" fill="url(#${p}disc)"/><circle cx="50" cy="50" r="43.4" fill="none" stroke="url(#${p}drim)" stroke-width="1.2"/>`;
 
 const SPOT = {
-  // Another mint: two coins trading places, the arrows between them.
-  othermint: (p) => `<defs>${filters(p)}${coinDefs(p)}${disc(p, ['#FBF9FF', '#E8E0FF', '#C3B2F5'])}
-${lg(`${p}ar`, [0, 0, 1, 1], [
-  [0, '#8C74F0'],
-  [1, '#4A2FB0'],
-])}</defs>${discBody(p)}
-<ellipse cx="34" cy="70" rx="15" ry="3" fill="#000000" opacity="0.25" ${f(p, 'b1')}/>
-${coin(p, { cx: 34, cy: 60, rx: 15, ry: 5.5, h: 5, rim: false })}
-<ellipse cx="66" cy="50" rx="15" ry="3" fill="#000000" opacity="0.25" ${f(p, 'b1')}/>
-${coin(p, { cx: 66, cy: 40, rx: 15, ry: 5.5, h: 5, rim: false })}
-<g fill="none" stroke-linecap="round" stroke-linejoin="round">
-<path d="M30 42C32 30 44 24 54 25M50 20l5 5-6 4M70 62C68 74 56 79 46 77M50 82l-5-5 6-4" stroke="#2A1A70" stroke-opacity="0.3" stroke-width="5" transform="translate(0.8 1.2)" ${f(p, 'b06')}/>
-<path d="M30 42C32 30 44 24 54 25M50 20l5 5-6 4M70 62C68 74 56 79 46 77M50 82l-5-5 6-4" stroke="url(#${p}ar)" stroke-width="4"/>
-<path d="M31 40C33 31 42 26 50 26" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="1"/>
-</g>`,
   // On-chain: a bitcoin coin.
   onchain: (p) => `<defs>${filters(p)}${coinDefs(p)}${disc(p, ['#FFFBEF', '#F6E9C8', '#E2C789'])}</defs>${discBody(p)}
 <ellipse cx="50" cy="72" rx="26" ry="5" fill="#5A3C08" opacity="0.3" ${f(p, 'b2')}/>
@@ -579,7 +564,6 @@ const TAB = {
   card: '<rect x="2" y="6" width="15" height="11" rx="2.5" fill="currentColor" fill-opacity="0.16"/><path transform="translate(4.9 6.8) scale(.092) rotate(-14 50 50)" d="M58 7C76 7 90 18 90 33C90 46 78 50 66 52C58 53 55 60 59 68C62 74 70 77 70 85C70 92 63 96 54 96C30 96 10 77 10 52C10 27 31 7 58 7Z" fill="currentColor" stroke="none"/><path d="M19 8a4 4 0 0 1 0 6M21.5 6a7 7 0 0 1 0 10"/>',
   ecash: '<ellipse cx="12" cy="6" rx="7" ry="3" fill="currentColor" fill-opacity="0.22"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
   more: '<circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="18" cy="12" r="2" fill="currentColor"/>',
-  othermint: '<ellipse cx="7.5" cy="15" rx="4.5" ry="2" fill="currentColor" fill-opacity="0.2"/><ellipse cx="16.5" cy="9" rx="4.5" ry="2" fill="currentColor" fill-opacity="0.2"/><path d="M5 9c.5-3 3-4.5 6-4.3M9 3l2 1.7-2 1.8M19 15c-.5 3-3 4.5-6 4.3M15 21l-2-1.7 2-1.8"/>',
   onchain: '<circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.16"/><path d="M9.5 7.5H13a2.2 2.2 0 0 1 0 4.4H9.5h4a2.3 2.3 0 0 1 0 4.6h-4zM9.5 7.5v9M11 6v1.5M13 6v1.5M11 16.5V18M13 16.5V18"/>',
   free: '<path d="M3 8h18v3a1.6 1.6 0 0 0 0 3.2V17H3v-2.8A1.6 1.6 0 0 0 3 11z" fill="currentColor" fill-opacity="0.16"/><path d="M15 8v9" stroke-dasharray="1.6 1.8"/><path d="M9 9.8l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z"/>',
   // The two cards together: one behind the other, the waves of the tap.

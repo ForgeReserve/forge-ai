@@ -233,7 +233,8 @@ describe('Add money as wallet cards', () => {
     // The More card: its tiles open the other ways, and the big button waits.
     await page.click('#tab-more');
     expect(await page.isVisible('#wayGo')).toBe(false);
-    expect(await page.locator('#way-more .way-tile').evaluateAll((ts) => ts.map((x) => x.id))).toEqual(['more-free', 'more-othermint']);
+    // Other mints are priced in the eCash box: no tile of their own.
+    expect(await page.locator('#way-more .way-tile').evaluateAll((ts) => ts.map((x) => x.id))).toEqual(['more-free']);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);
@@ -292,19 +293,20 @@ describe('Add money as wallet cards', () => {
     await page.goto(`${g.url}/v2/#/funds/add`);
     await page.waitForSelector('#tab-more');
     await expect.poll(() => wayOrder(page)).toEqual(['ecash', 'note', 'lightning', 'cards', 'more']);
-    // Other mint, from the More card: next time it has a card of its own, first, and leaves More.
-    await openWay(page, 'othermint');
-    await page.waitForSelector('[data-fund=othermint]');
+    // Free questions, from the More card: next time it has a card of its own, first, and leaves More,
+    // which then has nothing left on it.
+    await openWay(page, 'free');
+    await page.waitForSelector('[data-fund=free]');
     await page.goBack();
-    await page.waitForSelector('#tab-more');
-    expect(await wayOrder(page)).toEqual(['othermint', 'note', 'lightning', 'cards', 'ecash', 'more']);
-    expect(await page.locator('#more-othermint').count()).toBe(0);
-    await shot(page, 'card-0-othermint-own-card.png');
+    await page.waitForSelector('#tab-free');
+    expect(await wayOrder(page)).toEqual(['free', 'note', 'lightning', 'cards', 'ecash']);
+    expect(await page.locator('#more-free').count()).toBe(0);
+    await shot(page, 'card-0-free-own-card.png');
     // Remembered on this phone: the order holds after a reload.
     await page.waitForTimeout(300);
     await page.reload();
-    await page.waitForSelector('#tab-more');
-    expect((await wayOrder(page))[0]).toBe('othermint');
+    await page.waitForSelector('#tab-free');
+    expect((await wayOrder(page))[0]).toBe('free');
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
