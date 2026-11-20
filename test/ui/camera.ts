@@ -7,12 +7,11 @@ import { qrMatrix } from '../../scripts/lib/qr.ts';
 // --use-file-for-fake-video-capture, so the app's real camera adapter and v1's scanner read the QR code
 // from it as they would from a phone camera pointed at a paper note.
 
-const W = 640;
-const H = 480;
+type Level = 'L' | 'M' | 'Q' | 'H';
 
-/** One greyscale frame (YUV 4:2:0, chroma neutral) showing the QR code of `text`. */
-function frame(text: string): Buffer {
-  const m = qrMatrix(text, 'L');
+/** One greyscale frame (YUV 4:2:0, chroma neutral), W by H, showing the QR code of `text` as large as it fits. */
+function frame(text: string, level: Level, W: number, H: number): Buffer {
+  const m = qrMatrix(text, level);
   const n = m.length + 8; // with a quiet zone
   const cell = Math.max(1, Math.floor((H - 40) / n));
   const ox = Math.floor((W - n * cell) / 2);
@@ -30,10 +29,11 @@ function frame(text: string): Buffer {
 
 /**
  * Writes a Y4M video that shows each text's QR code in turn (one text: a still code; several: an
- * animated code, each part held for `hold` frames). Returns the file path.
+ * animated code, each part held for `hold` frames), at error correction `level`, `width` by `height`
+ * pixels (640 by 480, a browser's usual camera picture, unless said). Returns the file path.
  */
-export function cameraFile(texts: string[], { fps = 10, hold = 3 } = {}): string {
-  const frames = texts.flatMap((t) => Array(hold).fill(frame(t)) as Buffer[]);
+export function cameraFile(texts: string[], { fps = 10, hold = 3, level = 'L' as Level, width: W = 640, height: H = 480 } = {}): string {
+  const frames = texts.flatMap((t) => Array(hold).fill(frame(t, level, W, H)) as Buffer[]);
   const dir = mkdtempSync(join(tmpdir(), 'forge-camera-'));
   const path = join(dir, 'camera.y4m');
   writeFileSync(path, Buffer.concat([Buffer.from(`YUV4MPEG2 W${W} H${H} F${fps}:1 Ip A1:1 C420jpeg\n`), ...frames]));

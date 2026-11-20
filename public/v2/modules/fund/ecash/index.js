@@ -20,9 +20,14 @@
 // federation took without the value being added (issuance_failed) are marked stuck, never sent again,
 // and shown with their id for whoever helps.
 //
+// A BitNotes paper note (core/bitnote.js) is read on the phone: its code that controls the funds becomes
+// a Cashu token of its one mint, which goes the way any Cashu token goes from here. Its other code, which
+// only shows the note, is refused with a word to scan the other one; so is a note of more than one mint.
+//
 // A token handed over by another fund module (a scanned note, a card tap) fills the box and is sent at once.
+import { isBitnote, readBitnote, shownAmount } from '../../../core/bitnote.js';
 import { fedimintAnswer, fedimintCheck, notesIdOf, readFedimint, shortId, tokenKind } from '../../../core/fedinote.js';
-import { isNoteUnit, noteVerdict, readNote } from '../../../core/note.js';
+import { isNoteUnit, mintLabel, noteVerdict, readNote } from '../../../core/note.js';
 import { foreignQuote, fundIn, inviteField, poll, tokenBox } from '../kit.js';
 
 /** The picture for each Fedimint answer: what the line says before it is read. */
@@ -69,7 +74,7 @@ export function create(inputs) {
         const feds = fedimint()?.enabled ? (fedimint().federations ?? []).map((f) => f.name || f.id?.slice(0, 8)).filter(Boolean) : [];
         return [mints.length ? t('fund.ecash.mints', { mints: mints.join(', ') }) : null, feds.length ? t('fund.ecash.federations', { names: feds.join(', ') }) : null];
       };
-      const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click(), info: info() ?? [], accept: (text) => readFedimint(text).ok });
+      const box = tokenBox(inputs, { id: 'ecashToken', label: t('fund.ecash.label'), onScanned: () => add.click(), info: info() ?? [], accept: (text) => readFedimint(text).ok || isBitnote(text) });
       // What the Fedimint notes are, once Add is pressed: their amount and their federation.
       const card = ui.el('div', { id: 'ecashCard' });
       const form = [invite.node, box.node, card, msg, onward].filter(Boolean);
@@ -281,6 +286,30 @@ export function create(inputs) {
         await sendNotes(read.notes, notesId);
       };
 
+      // ------------------------------------------------------------ BitNotes
+
+      /**
+       * A BitNotes note: read and checked here, then its one mint's token goes on as Cashu. Nothing is sent
+       * for the code that only shows the note, a note that does not check out, or one of several mints.
+       */
+      const addBitnote = async (text) => {
+        const read = await readBitnote(text);
+        if (!read.ok) return msg.set(t(read.reason === 'mismatch' ? 'fund.ecash.bn.mismatch' : 'fund.ecash.bn.unreadable'), 'err', read.reason === 'mismatch' ? 'xCircle' : null);
+        if (read.kind === 'public') return msg.set(t('fund.ecash.bn.public'), 'err', 'scan');
+        if (read.mints.length > 1) return msg.set(t('fund.ecash.bn.manyMints', { count: read.mints.length }), 'err', 'noMoney');
+        // The note as one card: the amount printed on it (when the person cannot get less) and its mint.
+        const shown = shownAmount(read);
+        card.replaceChildren(
+          ui.el(
+            'section',
+            { class: 'card price-card', id: 'bnCard' },
+            shown != null ? ui.el('div', { class: 'amount-tag', id: 'bnAmount', text: format.units(shown, 'sat') }) : null,
+            ui.sayEl('p', { class: 'note', id: 'bnFrom' }, t('fund.note.from', { mint: mintLabel(read.mints[0].mint) }), '', 'coins'),
+          ),
+        );
+        await addCashu(read.mints[0].token);
+      };
+
       // ------------------------------------------------------------ the box
 
       /** One press at a time. */
@@ -302,6 +331,7 @@ export function create(inputs) {
         const text = box.value();
         showOnward();
         card.replaceChildren();
+        if (isBitnote(text)) return run(() => addBitnote(text));
         const kind = tokenKind(text);
         if (kind === 'none') return msg.set(t(fedimint()?.enabled ? 'fund.ecash.badBoth' : 'fund.ecash.bad'), 'err');
         // sendNotes keeps its own busy mark: run only guards the press.

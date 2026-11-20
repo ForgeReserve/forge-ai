@@ -6,8 +6,10 @@
 // A note from a mint the engine does not take says so, and when the engine takes other mints offers See
 // the price, which opens the eCash box with it (priced there). A note from the engine's own mint in the
 // unit these funds do not hold offers the change (the eCash box shows its price first). Fedimint notes
-// read here (a still code, core/fedinote.js) go to the eCash box, which takes both kinds. Whether a note was already used is known only to its mint,
-// so the phone learns it when the engine refuses the note (token_spent), and says so.
+// read here (a still code, core/fedinote.js) go to the eCash box, which takes both kinds, and so does a
+// BitNotes note's code (core/bitnote.js), spaces and all. Whether a note was already used is known only
+// to its mint, so the phone learns it when the engine refuses the note (token_spent), and says so.
+import { bitnoteText } from '../../../core/bitnote.js';
 import { readFedimint } from '../../../core/fedinote.js';
 import { isNoteUnit, mintLabel, noteVerdict, readNote, refusalOf } from '../../../core/note.js';
 import { inviteField } from '../kit.js';
@@ -58,7 +60,7 @@ export function create(inputs) {
             (p) => {
               if (p > 0 && p < 1) ui.say(progress, t('fund.note.reading', { percent: Math.round(p * 100) }));
             },
-            { accept: (text) => readFedimint(text).ok },
+            { accept: (text) => readFedimint(text).ok || bitnoteText(text) !== null },
           );
           // Left or chose Paste while the camera was starting: turn it off again.
           if (mine !== runs) return started.stop();
@@ -91,6 +93,9 @@ export function create(inputs) {
         msg.set('');
         // Fedimint notes: the eCash box takes them.
         if (readFedimint(text).ok) return open('ecash', { token: String(text).replace(/\s+/g, '') });
+        // A BitNotes note: the eCash box reads it, with its spaces.
+        const bitnote = bitnoteText(text);
+        if (bitnote) return open('ecash', { token: bitnote });
         const note = readNote(text);
         const camera = !!scan?.available();
         const again = btn({ class: 'btn block', id: 'noteScanAgain', onclick: () => (camera ? scanning() : pasting()) }, camera ? 'qr' : 'copy', camera ? t('fund.note.again') : t('fund.note.pasteAgain'));

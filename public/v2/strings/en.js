@@ -997,6 +997,11 @@ export default {
   'fund.ecash.fm.pending': 'Still arriving. The federation is still working on it. Your eCash is kept on this phone until it is added. You can leave this screen.',
   'fund.ecash.fm.stuck': 'Needs help. The federation took this eCash and it was not added yet. It is not lost. Ask for help and give this code: {id}',
   'fund.ecash.fm.checkNow': 'Check now',
+  // BitNotes paper notes (core/bitnote.js), in the same box. Nothing is sent for any of these.
+  'fund.ecash.bn.public': 'Scan the other code. This code only shows the note. Scan the code that says do not share. Nothing was sent.',
+  'fund.ecash.bn.manyMints': 'Too many mints. This note holds eCash from {count} mints. Only a note from one mint can be added here. Nothing was sent. Keep the note.',
+  'fund.ecash.bn.mismatch': 'Does not check out. This code does not match its note. Nothing was sent. Keep the note.',
+  'fund.ecash.bn.unreadable': 'Could not read it. This code could not be read as a note. Try again.',
   'fund.scan': 'Scan a code',
   'fund.scanHint': 'Point the camera at the code.',
   'fund.lightning.name': 'Lightning',

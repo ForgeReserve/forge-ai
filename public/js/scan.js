@@ -4,7 +4,11 @@
    - a NUT-16 animated code: ur:bytes parts with fountain codes, decoded by vendor/bcur.js,
    - a Forge balance key (sk-forge-...), so a key saved as a QR code can be loaded too,
    - with opts.accept, any code accept(text) takes: the v2 app's eCash box passes its Fedimint notes
-     reader (public/v2/core/fedinote.js), so a still code of Fedimint notes is read too.
+     reader (public/v2/core/fedinote.js) and the BitNotes prefix (public/v2/core/bitnote.js), so a still
+     code of Fedimint notes, or a BitNotes note's code, is read too.
+   A BitNotes code is dense (about 120 modules a side, more for a note of many proofs). The camera is
+   asked for a large picture (1920 by 1080 at best), and where jsQR reads it every other frame is its
+   middle square at full detail (up to 1080 pixels a side) instead of the whole frame made small.
    The kit's animated Fedimint (qrloop) path is left out.
    jsQR (Apache-2.0) decodes camera frames where the browser has no BarcodeDetector.
    Loaded on demand; exposes window.ForgeScan. */
@@ -63,7 +67,7 @@
             return detector ? null : loadScript("jsqr.js");
           }).catch(function () { return loadScript("jsqr.js"); })
         : loadScript("jsqr.js");
-      Promise.all([ready, navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })])
+      Promise.all([ready, navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })])
         .then(function (r) {
           stream = r[1];
           if (stopped) { stop(); return; }
@@ -79,7 +83,7 @@
             : (e && e.message) || "The camera did not start."));
         });
 
-      var busy = false, lastAt = 0;
+      var busy = false, lastAt = 0, frames = 0;
       function tick(ts) {
         if (stopped) return;
         raf = requestAnimationFrame(tick);
@@ -108,8 +112,15 @@
           return detector.detect(video).then(function (codes) { return codes.length ? codes[0].rawValue : ""; });
         }
         var w = video.videoWidth, h = video.videoHeight, scale = Math.min(1, 720 / Math.max(w, h));
-        canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (frames++ % 2) {
+          // The middle square at full detail, for a dense code held close.
+          var side = Math.min(w, h), out = Math.min(side, 1080);
+          canvas.width = canvas.height = out;
+          ctx.drawImage(video, (w - side) / 2, (h - side) / 2, side, side, 0, 0, out, out);
+        } else {
+          canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
         var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
         var code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
         return Promise.resolve(code ? code.data : "");

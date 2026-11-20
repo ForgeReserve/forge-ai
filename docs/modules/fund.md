@@ -134,7 +134,7 @@ The camera, for QR codes (`adapters.camera` in [`public/v2/core/adapters.js`](ht
 | Function | What it does |
 | - | - |
 | `available()` | `true` when the browser can use a camera. |
-| `open(video, onProgress, opts)` | Starts reading single or animated QR codes into the `<video>` element. Resolves `{promise, stop()}`; `promise` resolves the text read. `onProgress(p)` gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; `opts.accept(text)` takes other codes too (eCash passes its Fedimint notes reader), and `opts.any` takes any code. |
+| `open(video, onProgress, opts)` | Starts reading single or animated QR codes into the `<video>` element. Resolves `{promise, stop()}`; `promise` resolves the text read. `onProgress(p)` gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; `opts.accept(text)` takes other codes too (eCash and Scan a note pass the Fedimint notes reader and the BitNotes prefix), and `opts.any` takes any code. The camera is asked for 1920 by 1080 at best; where jsQR reads it, every other frame is the middle square at full detail, for dense codes. |
 
 ### `qr`
 
@@ -203,7 +203,7 @@ Required. Draws the module's screen. The app calls it each time the screen opens
 | - | - |
 | `done(result)` | Call it when the money is in: the app goes back to Funds. With `result` (`{words, amount, plus}`: the words that say what was added, the amount as text, `plus: false` for what is not money), Funds shows the success panel at its top with Ask now under it. |
 | `added(result)` | Call it when the money is in and the person should see it on this screen first (a paid invoice): the success panel takes the module's place, with the funds now, Ask now and Done (back to Funds). `result` is `{words, amount, plus, wordsAttrs, extra}`: `wordsAttrs` gives the words line its id, `extra` is a list of the module's nodes that still matter, shown under the panel (an address that takes more). |
-| `open(id, {token})` | Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, or Fedimint notes, to eCash this way. |
+| `open(id, {token})` | Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, Fedimint notes, or a BitNotes note's code (spaces kept) to eCash this way. |
 | `token` | The token another module handed over with `open`, or `undefined`. |
 
 It returns `{node, update, destroy}`:

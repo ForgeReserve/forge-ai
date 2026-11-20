@@ -1,5 +1,6 @@
 // Shared parts for the bundled fund modules. Every function takes the inputs a fund module was handed,
 // so a module that uses the kit still sees nothing beyond its kind's inputs.
+import { bitnoteText } from '../../core/bitnote.js';
 
 /**
  * The invite code field, shown while the engine needs one to open a balance. A phone with a balance
@@ -274,6 +275,8 @@ export function poll(fn, ms) {
  * A paste box with an optional Scan button (the camera adapter). Its label leads with the paste picture;
  * info: detail behind an info button beside it (which mints are taken), a line or a list of lines, or
  * null. accept(text): a code the scanner takes besides Cashu tokens (Fedimint notes, core/fedinote.js).
+ * value(): the box's text with its whitespace taken out, except a BitNotes code (core/bitnote.js), whose
+ * spaces are part of it.
  */
 export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, accept = null }) {
   const ta = ui.el('textarea', { id, rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
@@ -322,7 +325,8 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, a
   setInfo(info);
   const head = ui.el('div', { class: 'field-head' }, ui.el('label', { for: id, class: 'label' }, ui.icon('paste', 20), ui.el('span', { text: label })), toggle);
   const node = ui.el('div', { class: 'field' }, head, more, ta, btn, box);
-  return { node, value: () => ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, ''), clear: () => (ta.value = ''), stop, input: ta, setInfo };
+  const value = () => bitnoteText(ta.value) ?? ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, '');
+  return { node, value, clear: () => (ta.value = ''), stop, input: ta, setInfo };
 }
 
 /**
