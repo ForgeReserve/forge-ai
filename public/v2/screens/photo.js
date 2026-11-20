@@ -112,11 +112,17 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     );
   }
 
+  /** Lets go of the photo, and of the picture of it the screen drew (a canvas of the photo's size). */
+  function dropPhoto() {
+    closePhoto(photo);
+    photo = null;
+    view.width = view.height = 0;
+  }
+
   async function check(file) {
     if (busy) return;
     busy = true;
-    closePhoto(photo);
-    photo = null;
+    dropPhoto();
     confirmedFailed = false;
     stepState.clear();
     body.replaceChildren(el('p', { class: 'lead', id: 'photoWorking', role: 'status', text: t('photo.working') }), stepList);
@@ -134,6 +140,10 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
         },
       });
       if (gone) return closePhoto(photo);
+      // Only the filters read these (a copy of every pixel, and the original file); the new file is drawn
+      // from the canvas. So they go now, while the person looks at the photo.
+      photo.pixels = null;
+      photo.bytes = null;
       covers = result.covers.map(withId);
       maybe = result.steps.flatMap((s) => s.maybe ?? []);
       showing = 'after';
@@ -320,6 +330,10 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     return makeFile(photo, covers, filters);
   }
 
+  // While one of Share, Ask about it and Save is under way (the new file is made, the sheet or the save
+  // screen is up) those three and Another photo show as not ready: a tap on one then is not lost without
+  // a sign, and the photo being made into a file is not let go of under it.
+  const actionBtns = () => [shareBtn, askBtn, saveBtn, another];
   const act = (fn, failed = 'photo.shareFailed') => async () => {
     if (busy || !photo) return;
     if (result?.steps.some((s) => !s.ok) && !confirmedFailed) {
@@ -328,6 +342,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       return;
     }
     busy = true;
+    for (const b of actionBtns()) b.disabled = true;
     status.set('');
     try {
       await fn();
@@ -335,6 +350,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       status.set(t(ERRORS[e?.code] ?? failed), 'err');
     } finally {
       busy = false;
+      for (const b of actionBtns()) b.disabled = false;
     }
   };
   const shareBtn = el(
@@ -369,7 +385,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     icon('download', 20),
     el('span', { text: t('photo.save') }),
   );
-  const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (closePhoto(photo), (photo = null), (maybe = []), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
+  const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (dropPhoto(), (maybe = []), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
 
   function drawReview() {
     status.set('');
@@ -431,12 +447,10 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       removeEventListener('focus', pickerClosed);
       listen.destroy();
       forget?.();
-      closePhoto(photo);
-      photo = null;
+      dropPhoto();
       result = null;
       covers = [];
       maybe = [];
-      view.width = view.height = 0;
     },
     /** For the tests: how many blocks of each kind are on the photo now. */
     counts: () => countKinds(covers),

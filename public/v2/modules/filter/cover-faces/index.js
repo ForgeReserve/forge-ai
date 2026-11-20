@@ -8,7 +8,7 @@
 // sees every block before anything is shared and can add more.
 // Handed only t (core/registry.js). It sees the photo being shared, never chats or the wallet.
 import { faceCover, keepFaces, MAYBE_SCORE, maybeFaces, passes } from './boxes.js';
-import { detectYunet, loadYunet } from './yunet.js';
+import { detectYunet, dropKeptTextures, loadYunet } from './yunet.js';
 
 const LIB = new URL('../../../../vendor/face-api/face-api.js', import.meta.url).href;
 const MODEL = new URL('../../../../vendor/yunet/', import.meta.url).href;
@@ -41,9 +41,8 @@ function load() {
   return loading;
 }
 
-/** The part p of the photo's canvas, drawn at p.scale, as its own canvas. */
-function part(canvas, p) {
-  const c = document.createElement('canvas');
+/** Draws the part p of the photo's canvas into `c`, at p.scale: one canvas serves every part in turn. */
+function part(canvas, p, c) {
   c.width = Math.max(1, Math.round(p.w * p.scale));
   c.height = Math.max(1, Math.round(p.h * p.scale));
   c.getContext('2d').drawImage(canvas, p.x, p.y, p.w, p.h, 0, 0, c.width, c.height);
@@ -59,12 +58,21 @@ export function create() {
     async analyse(photo) {
       const { tf, gpu, net } = await load();
       const dets = [];
-      // On the plain processor (no graphics chip to use) the tiles are at the photo's own size: half the work.
-      for (const p of passes(photo.width, photo.height, gpu ? undefined : 0)) {
-        const c = part(photo.canvas, p);
-        const sx = p.w / c.width;
-        const sy = p.h / c.height;
-        for (const d of await detectYunet(tf, net, c, MAYBE_SCORE)) dets.push({ x: p.x + d.x * sx, y: p.y + d.y * sy, w: d.w * sx, h: d.h * sy, score: d.score });
+      // One canvas for every part, emptied at the end: a canvas made per part is let go of only when the
+      // page next collects its garbage, and until then it holds its pixels, on the graphics chip too.
+      const c = document.createElement('canvas');
+      try {
+        // On the plain processor (no graphics chip to use) the tiles are at the photo's own size: half the work.
+        for (const p of passes(photo.width, photo.height, gpu ? undefined : 0)) {
+          part(photo.canvas, p, c);
+          const sx = p.w / c.width;
+          const sy = p.h / c.height;
+          for (const d of await detectYunet(tf, net, c, MAYBE_SCORE)) dets.push({ x: p.x + d.x * sx, y: p.y + d.y * sy, w: d.w * sx, h: d.h * sy, score: d.score });
+        }
+      } finally {
+        c.width = c.height = 0;
+        // The textures TensorFlow.js kept to use again go back now, on the graphics chip (yunet.js).
+        if (gpu) dropKeptTextures(tf);
       }
       const faces = keepFaces(dets);
       const cover = (d) => faceCover(d, photo.width, photo.height);

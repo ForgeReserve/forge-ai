@@ -1,5 +1,5 @@
 {
-  "source": "Vitest JSON reports, 2026-11-20: .tmp/bitnote-times/run10.json, and photo-camera.ui.test.ts from a local Linux run (scripts/ui-linux.sh)",
+  "source": "Vitest JSON reports, 2026-11-20: .tmp/bitnote-times/run10.json, and photo-camera.ui.test.ts and photo-memory.ui.test.ts from local Linux runs (scripts/ui-linux.sh)",
   "files": {
     "test/ui/about.ui.test.ts": 64.1,
     "test/ui/addfunds.ui.test.ts": 28.8,
@@ -33,6 +33,7 @@
     "test/ui/phonon.ui.test.ts": 111.1,
     "test/ui/photo-camera.ui.test.ts": 64.2,
     "test/ui/photo-crowd.ui.test.ts": 12,
+    "test/ui/photo-memory.ui.test.ts": 29.2,
     "test/ui/photo.ui.test.ts": 46,
     "test/ui/playful.ui.test.ts": 36.5,
     "test/ui/privacy-toggle.ui.test.ts": 20,
