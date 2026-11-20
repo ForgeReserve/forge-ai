@@ -8,6 +8,7 @@ import { FakeReceiver, RECEIVER_TOKEN } from '../support/fakereceiver.ts';
 import { fakeNotes } from '../support/fedinotes.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { boxState, DOTS, seenAt } from './held.ts';
 
 // The eCash box (public/v2/modules/fund/ecash/) takes both kinds of eCash through one field and one
 // scanner: Cashu tokens and Fedimint notes (core/fedinote.js). The engine is the real gateway with its
@@ -186,8 +187,8 @@ describe('the eCash box with Fedimint notes', () => {
     expect(await msgIcon(page)).toBe('#i-noMoney');
     expect(topups()).toBe(0);
     expect(await vaultIn(page)).toEqual([]);
-    // The notes are still in the box, and Copy gives them back.
-    expect(await page.inputValue('#ecashToken')).toBe(n.notes);
+    // The notes are still in the box, as pasted (not held), and Copy gives them back.
+    expect(await boxState(page)).toEqual({ value: n.notes, held: false });
     await page.click('#fmCopy');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(n.notes);
     await shot(page, '03-fedimint-off');
@@ -403,13 +404,84 @@ describe('the eCash box with Fedimint notes', () => {
     await ctx.close();
   }, 60_000);
 
-  it('reads Fedimint notes from the camera through the same box', async () => {
+  it('reads Fedimint notes from the camera through the same box, and never writes them into the page', async () => {
     const n = await fakeNotes(rx, FED.island, 32_768);
-    const { ctx, page, errors } = await phone(g, { codes: [n.notes.toUpperCase()] });
+    const scanned = n.notes.toUpperCase();
+    const { ctx, page, errors } = await phone(g, { codes: [scanned] });
     await openBox(page);
+    // Held until the page is read while the notes are on their way.
+    let release!: () => void;
+    const seen = new Promise<void>((r) => (release = r));
+    await page.route('**/v1/wallet/topup', async (route) => {
+      await seen;
+      await route.continue();
+    });
     await page.click('[data-fund=ecash] .field .btn');
+    await expect.poll(() => msg(page), { timeout: 30_000 }).toBe('Adding your eCash');
+    // Dots in the box, marked held; the notes nowhere a person could read them.
+    expect(await boxState(page)).toEqual({ value: DOTS, held: true });
+    expect(await seenAt(page, scanned)).toEqual([]);
+    expect(await seenAt(page, n.notes)).toEqual([]);
+    release();
     await page.waitForSelector('[data-screen=funds] #fundsAdded', { timeout: 30_000 });
     expect(await page.textContent('#fundsAddedText')).toBe('Added 31.534 sat.');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('keeps scanned notes held after a failed Add, and Add sends the same notes again', async () => {
+    const n = await fakeNotes(rx, FED.island, 16_384);
+    const { ctx, page, errors, topups } = await phone(g, { codes: [n.notes] });
+    const sent: string[] = [];
+    page.on('request', (r) => r.url().endsWith('/v1/wallet/topup') && sent.push(JSON.parse(r.postData() ?? '{}').token));
+    await openBox(page);
+    // The receiver cannot be reached: the gateway refuses with nothing taken.
+    rx.down = true;
+    try {
+      await page.click('[data-fund=ecash] .field .btn');
+      await expect.poll(() => msg(page), { timeout: 30_000 }).toMatch(/^Cannot reach it now\./);
+    } finally {
+      rx.down = false;
+    }
+    expect(topups()).toBe(1);
+    expect(await boxState(page)).toEqual({ value: DOTS, held: true });
+    expect(await seenAt(page, n.notes)).toEqual([]);
+    expect(await page.isVisible('#ecashAdd')).toBe(true);
+    await page.click('#ecashAdd');
+    await page.waitForSelector('[data-screen=funds] #fundsAdded', { timeout: 20_000 });
+    expect(await page.textContent('#fundsAddedText')).toBe('Added 15.15 sat.');
+    expect(sent).toEqual([n.notes, n.notes]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('lets go of scanned notes once the box is edited: what is typed or pasted is what is sent, as shown', async () => {
+    const n = await fakeNotes(rx, FED.island, 8192);
+    const { ctx, page, errors, topups } = await phone(g, { codes: [n.notes] });
+    await openBox(page);
+    rx.down = true;
+    try {
+      await page.click('[data-fund=ecash] .field .btn');
+      await expect.poll(() => msg(page), { timeout: 30_000 }).toMatch(/^Cannot reach it now\./);
+    } finally {
+      rx.down = false;
+    }
+    expect(await boxState(page)).toEqual({ value: DOTS, held: true });
+    // One letter typed at the end: the held notes and their dots go, the letter stays.
+    await page.focus('#ecashToken');
+    await page.keyboard.press('End');
+    await page.keyboard.type('x');
+    expect(await boxState(page)).toEqual({ value: 'x', held: false });
+    await page.click('#ecashAdd');
+    await expect.poll(() => msg(page)).toBe('Not eCash. Paste a Cashu token or Fedimint notes.');
+    expect(topups()).toBe(1);
+    // Pasted by the person: shown as pasted, and sent.
+    await page.fill('#ecashToken', n.notes);
+    expect(await boxState(page)).toEqual({ value: n.notes, held: false });
+    await page.click('#ecashAdd');
+    await page.waitForSelector('[data-screen=funds] #fundsAdded', { timeout: 20_000 });
+    expect(await page.textContent('#fundsAddedText')).toBe('Added 6.958 sat.');
+    expect(topups()).toBe(2);
     expect(errors).toEqual([]);
     await ctx.close();
   }, 60_000);

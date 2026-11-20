@@ -271,15 +271,41 @@ export function poll(fn, ms) {
   };
 }
 
+/** What the token box shows in place of a code it holds: a fixed row, so not even its length shows. */
+const DOT = '•';
+const DOTS = DOT.repeat(24);
+
 /**
  * A paste box with an optional Scan button (the camera adapter). Its label leads with the paste picture;
  * info: detail behind an info button beside it (which mints are taken), a line or a list of lines, or
  * null. accept(text): a code the scanner takes besides Cashu tokens (Fedimint notes, core/fedinote.js).
  * value(): the box's text with its whitespace taken out, except a BitNotes code (core/bitnote.js), whose
  * spaces are part of it.
+ *
+ * eCash is spent by whoever reads it, so a code the person did not type or paste (scanned, or handed over
+ * by another way with hold(text)) is never written into the page: the box keeps it in memory and shows
+ * a row of dots, marked data-held. value() gives the held code; any edit or clear() lets it go, and the
+ * box is plain text again. A failed Add leaves it held, so Add tries the same code again.
  */
 export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, accept = null }) {
   const ta = ui.el('textarea', { id, rows: '4', class: 'field-input mono', placeholder: 'cashuB...', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off' });
+  let held = null;
+  /** Keeps the code off the page: dots in the box instead. Setting the value fires no input event. */
+  const hold = (text) => {
+    held = text;
+    ta.value = DOTS;
+    ta.toggleAttribute('data-held', true);
+  };
+  const drop = () => {
+    held = null;
+    ta.removeAttribute('data-held');
+  };
+  // The person edits the box: the held code goes, and so do its dots, leaving what they typed.
+  ta.addEventListener('input', () => {
+    if (held === null) return;
+    drop();
+    ta.value = ta.value.replaceAll(DOT, '');
+  });
   const video = ui.el('video', { muted: true, playsinline: true, 'aria-label': t('fund.scanHint') });
   const box = ui.el('div', { class: 'scanner', hidden: true }, video, ui.sayEl('p', { class: 'note' }, t('fund.scanHint')));
   let job = null;
@@ -300,7 +326,7 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, a
               job = await scan.open(video, undefined, accept ? { accept } : undefined);
               const text = await job.promise;
               stop();
-              ta.value = text;
+              hold(text);
               onScanned?.(text);
             } catch {
               stop();
@@ -325,8 +351,15 @@ export function tokenBox({ t, ui, scan }, { id, label, onScanned, info = null, a
   setInfo(info);
   const head = ui.el('div', { class: 'field-head' }, ui.el('label', { for: id, class: 'label' }, ui.icon('paste', 20), ui.el('span', { text: label })), toggle);
   const node = ui.el('div', { class: 'field' }, head, more, ta, btn, box);
-  const value = () => bitnoteText(ta.value) ?? ta.value.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, '');
-  return { node, value, clear: () => (ta.value = ''), stop, input: ta, setInfo };
+  const value = () => {
+    const text = held ?? ta.value;
+    return bitnoteText(text) ?? text.replace(/\s+/g, '').replace(/^cashu:(?=cashu)/i, '');
+  };
+  const clear = () => {
+    drop();
+    ta.value = '';
+  };
+  return { node, value, clear, hold, stop, input: ta, setInfo };
 }
 
 /**

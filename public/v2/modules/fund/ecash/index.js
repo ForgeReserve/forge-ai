@@ -24,7 +24,9 @@
 // a Cashu token of its one mint, which goes the way any Cashu token goes from here. Its other code, which
 // only shows the note, is refused with a word to scan the other one; so is a note of more than one mint.
 //
-// A token handed over by another fund module (a scanned note, a card tap) fills the box and is sent at once.
+// A token handed over by another fund module (a scanned note, a card tap) is sent at once. Like a scanned
+// one, it is held by the box and shown as dots, never as text (kit.js tokenBox): whoever reads eCash can
+// spend it, and a phone's screen can be seen by others.
 import { isBitnote, readBitnote, shownAmount } from '../../../core/bitnote.js';
 import { fedimintAnswer, fedimintCheck, notesIdOf, readFedimint, shortId, tokenKind } from '../../../core/fedinote.js';
 import { isNoteUnit, mintLabel, noteVerdict, readNote } from '../../../core/note.js';
@@ -113,6 +115,11 @@ export function create(inputs) {
         await wallet.refresh();
         done({ words, amount: r.replay ? '' : r.free ? t('fund.note.free', { count: r.credited }) : format.units(r.credited, r.unit), plus: !r.free });
       };
+      /** Added at its price (kit.js foreignQuote): the box lets go of the code, as finish does. */
+      const addedAt = (x) => {
+        box.clear();
+        added(x);
+      };
 
       // ------------------------------------------------------------ Cashu
 
@@ -128,7 +135,7 @@ export function create(inputs) {
         const r = await engine.foreignQuote(wallet.keyFor ? wallet.keyFor(unit) : wallet.key(), { token, unit, pubkey: wallet.lockKey() || undefined });
         if (!r.ok) return msg.set(t('fund.failed', { message: r.body?.error?.message ?? `HTTP ${r.status}` }), 'err');
         msg.set('');
-        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added, onNo: keep });
+        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added: addedAt, onNo: keep });
       };
 
       /**
@@ -174,7 +181,7 @@ export function create(inputs) {
         }
         msg.set('');
         showOnward();
-        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added, onNo: keep });
+        quote = foreignQuote(inputs, { body, foot, f: r.body, token, done, added: addedAt, onNo: keep });
       };
 
       const addCashu = async (token, { asIs = false } = {}) => {
@@ -350,7 +357,7 @@ export function create(inputs) {
         if (!foot.contains(add) && !quote && !poller) foot.replaceChildren(add);
       });
       if (given) {
-        box.input.value = given;
+        box.hold(given);
         queueMicrotask(() => add.click());
       }
       const node = ui.el('div', { class: 'fund-view' }, body, foot);

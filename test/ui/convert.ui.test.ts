@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInvite, type Gateway, MINT_A, mintProofs, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { boxState, DOTS, seenAt } from './held.ts';
 
 // eCash from the engine's own mint in the unit the funds do not hold (sats on dollar funds), on an engine
 // that cannot open the sat balance beside the dollar one (no `sibling` among its funding methods, and
@@ -115,7 +116,8 @@ describe('eCash in the other currency', () => {
     await pasteForPrice(page, token);
     await page.click('#foreignNo');
     await page.waitForSelector('#ecashAdd');
-    expect(await page.inputValue('#ecashToken')).toBe(token);
+    // Pasted by the person: still shown as pasted.
+    expect(await boxState(page)).toEqual({ value: token, held: false });
     expect(await page.textContent('[data-fund=ecash] .msg')).toMatch(/^Nothing was changed\./);
     expect(confirms).toEqual([]);
     expect((await vault(page)).in).toEqual([]);
@@ -131,12 +133,25 @@ describe('eCash in the other currency', () => {
     const key = await dollarKey();
     const token = getEncodedToken({ mint: MINT_A, unit: 'sat', proofs: await mintProofs(MINT_A, 'sat', 500) }, { removeDleq: true });
     const { page, errors } = await phone(key, [token]);
+    const priced: string[] = [];
+    page.on('request', (r) => r.url().endsWith('/v1/wallet/fund/foreign/quote') && priced.push(JSON.parse(r.postData() ?? '{}').token));
     await page.goto(`${g.url}/v2/#/funds/add/note`);
     await page.waitForSelector('#noteConvert', { timeout: 20_000 });
     expect(await page.textContent('#noteResult')).toMatch(/^Other currency\. This note is in sats\./);
+    expect(await seenAt(page, token)).toEqual([]);
     await page.click('#noteConvert');
     await page.waitForSelector('[data-fund=ecash] #foreignConfirm');
     expect(await page.textContent('#convertFrom')).toBe('From 500 sat');
+    expect(await seenAt(page, token)).toEqual([]);
+    // Keep my eCash: back to the box, which holds the handed-over note as dots, never as its text.
+    await page.click('#foreignNo');
+    await page.waitForSelector('#ecashAdd');
+    expect(await boxState(page)).toEqual({ value: DOTS, held: true });
+    expect(await seenAt(page, token)).toEqual([]);
+    // Add prices the same note again.
+    await page.click('#ecashAdd');
+    await page.waitForSelector('[data-fund=ecash] #foreignConfirm');
+    expect(priced).toEqual([token, token]);
     const credit = (await page.textContent('#foreignCredit'))!;
     await page.click('#foreignConfirm');
     await expect.poll(() => page.textContent('#foreignStatus'), { timeout: 40_000 }).toBe(`Added ${credit}.`);
