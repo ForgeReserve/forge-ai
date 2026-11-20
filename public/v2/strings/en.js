@@ -260,6 +260,8 @@ export default {
   'photo.saveDenied': 'Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share.',
   'photo.saveFailed': 'Not saved. Try again, or tap Share.',
   'photo.again': 'Forge restarted, so the photo did not arrive. Take or pick it again. The phone closed Forge while you were choosing.',
+  'photo.saveDone': 'Saved where you picked. The phone closed Forge while you were choosing, and the photo was saved after it opened again.',
+  'photo.saveLost': 'Not saved. The phone closed Forge while you were choosing where to save the photo. Take or pick it again.',
   // Take a photo, inside the app (screens/camera.js)
   'cam.title': 'Take a photo',
   'cam.view': 'What the camera sees',

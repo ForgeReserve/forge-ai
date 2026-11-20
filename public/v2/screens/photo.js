@@ -14,7 +14,7 @@ import { listenHeader, screenListen } from './parts.js';
 const STATE_TEXT = { removed: 'photo.state.removed', covered: 'photo.state.covered', none: 'photo.state.none', failed: 'photo.state.failed', uncovered: 'photo.state.uncovered', unsure: 'photo.state.unsure' };
 const STEP_TEXT = { running: 'photo.stepState.running', done: 'photo.stepState.done', failed: 'photo.stepState.failed', waiting: 'photo.stepState.waiting' };
 const BLOCK_LABEL = { face: 'photo.block.face', writing: 'photo.block.writing', mine: 'photo.block.mine' };
-const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'photo.bad', unsafe: 'photo.unsafe', denied: 'photo.saveDenied', save_failed: 'photo.saveFailed', bad_file: 'photo.saveFailed', bad_type: 'photo.saveFailed' };
+const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'photo.bad', unsafe: 'photo.unsafe', denied: 'photo.saveDenied', save_failed: 'photo.saveFailed' };
 // What the screen says once the photo went out. Saved only for a save the phone confirmed; a web page
 // says only that the download started (core/photo.js saveOutcome).
 const DONE_TEXT = { shared: 'photo.shared', saved: 'photo.saved', savedPhotos: 'photo.savedPhotos', downloading: 'photo.downloading' };
@@ -402,8 +402,10 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     take()
       .then((f) => (taken(), gone ? null : f ? check(f) : drawStart('photo.missed')))
       .catch((e) => (taken(), !gone && drawStart(e?.code === 'none' ? 'photo.none' : 'photo.missed')));
-  } else if (from === 'again') {
-    drawStart(null, 'photo.again');
+  } else if (from === 'again' || from === 'saveDone' || from === 'saveLost') {
+    // After the phone stopped the app while a picker or the save screen was up (app.js start).
+    if (from === 'saveLost') drawStart('photo.saveLost');
+    else drawStart(null, from === 'again' ? 'photo.again' : 'photo.saveDone');
     // Said once: a reload shows Share unseen as it is.
     history.replaceState(history.state, '', '#/photo');
   } else {

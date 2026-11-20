@@ -52,6 +52,35 @@ export function base64ToBytes(b64) {
 const fileData = async (file) => bytesToBase64(new Uint8Array(await file.arrayBuffer()));
 
 /**
+ * Bytes per piece when a file is staged in the Android app (ShareStage.CHUNK_BYTES in ShareRules.kt): a
+ * multiple of 3, so each piece is whole base64 on its own (256 KiB of text). A full size photo of 5 MB
+ * goes over in about 27 calls.
+ */
+export const STAGE_CHUNK = 192 * 1024;
+
+/**
+ * Hands a file to the Android app's ForgeShare in pieces, through calls that open no screen (stageStart,
+ * stageAppend), and resolves the token Share and Save then name it by. Capacitor keeps the options of
+ * the call that opens the save screen in the app's saved state, which Android caps at about 1 MB: a
+ * full size photo in that call stopped the app, so that call carries no file. A piece that fails
+ * removes what was staged and rejects with its code (too_big, bad_file, no_file).
+ */
+export async function stageFile(call, file, chunk = STAGE_CHUNK) {
+  const token = (await call('ForgeShare', 'stageStart', { size: file.size }))?.token;
+  if (typeof token !== 'string' || !token) throw Object.assign(new Error('not staged'), { code: 'bad_file' });
+  try {
+    for (let at = 0; at < file.size; at += chunk) {
+      const data = bytesToBase64(new Uint8Array(await file.slice(at, at + chunk).arrayBuffer()));
+      await call('ForgeShare', 'stageAppend', { token, data });
+    }
+  } catch (e) {
+    call('ForgeShare', 'stageDrop', { token }).catch(() => {});
+    throw e;
+  }
+  return token;
+}
+
+/**
  * The app's native parts for the screens, or null on the website.
  *   platform: 'android' or 'ios'.
  *   share: the share adapter (core/adapters.js) through the app's share sheet and save screen.
@@ -88,13 +117,21 @@ export function createNative(win = globalThis) {
       /** Opens the share sheet. Resolves {opened: true}: the app is not told which app was picked. */
       async files(files) {
         const f = files[0];
-        await call('ForgeShare', 'share', { name: f.name, mime: f.type, data: await fileData(f) });
+        await call('ForgeShare', 'share', { token: await stageFile(call, f), name: f.name, mime: f.type });
         return { opened: true };
       },
       /** Saves where the person picks. Resolves {saved: boolean}. */
       async save(file) {
-        const r = await call('ForgeShare', 'save', { name: file.name, mime: file.type, data: await fileData(file) });
+        const r = await call('ForgeShare', 'save', { token: await stageFile(call, file), name: file.name, mime: file.type });
         return { saved: r?.saved === true };
+      },
+      /**
+       * How a save ended when Android restarted the app while its save screen was up (SharePlugin.kt
+       * saved): 'saved', 'notSaved', or null when there was none. Told once.
+       */
+      async restored() {
+        const r = await call('ForgeShare', 'restoredSave').catch(() => null);
+        return r?.saved === true ? 'saved' : r?.saved === false ? 'notSaved' : null;
       },
     },
     shareIn: {

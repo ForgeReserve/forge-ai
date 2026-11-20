@@ -1,7 +1,10 @@
 package com.forgereserve.ai
 
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
+import java.security.SecureRandom
 import java.util.Base64
 
 /**
@@ -96,7 +99,7 @@ object ShareOut {
         return "${base.ifEmpty { "forge-photo" }}.$ext"
     }
 
-    /** Decodes the file the page sends. null when it is not base64 or is over max bytes. */
+    /** Decodes base64 the page sends (a piece of a staged file). null when it is not base64 or is over max bytes. */
     fun decode(data: String?, max: Int = MAX_BYTES): ByteArray? {
         if (data.isNullOrEmpty() || data.length > (max / 3 + 1) * 4) return null
         return try {
@@ -104,6 +107,123 @@ object ShareOut {
         } catch (e: IllegalArgumentException) {
             null
         }
+    }
+}
+
+/** Why a staged file was refused; code is the one the page gets (call.reject). */
+class StageError(val code: String, message: String) : Exception(message)
+
+/**
+ * The file the page hands to Share or Save, staged in the app's cache first (SharePlugin.kt). The call
+ * that opens the save screen is kept by Capacitor in the app's saved state while that screen is up, and
+ * Android refuses saved state over about 1 MB (a full size photo as base64 in that call stopped the app).
+ * So the page sends the file in pieces through calls that open nothing, and Share or Save then carries
+ * only a token, the name and the type.
+ *
+ * Plain Kotlin with no Android types, so the JVM unit tests cover it. The staged files are inside the
+ * app's cache, outside the folder the share sheet's FileProvider may hand out (ShareOut.DIR), so no
+ * other app can read them. SharePlugin touches them from one thread only.
+ */
+class ShareStage(private val dir: File, private val random: SecureRandom = SecureRandom()) {
+    companion object {
+        const val DIR = "share-staged"
+
+        /**
+         * The most bytes one piece carries: 192 KiB, a multiple of 3, so each piece is whole base64 on its
+         * own (exactly 256 KiB of text). A full size photo of 5 MB is about 27 pieces. Small enough that no
+         * bridge message is large and the phone holds little extra memory at once; large enough that the
+         * number of calls stays small.
+         */
+        const val CHUNK_BYTES = 192 * 1024
+
+        /**
+         * The longest a Share or Save call's options may be, as JSON: Capacitor writes the options of the
+         * call that opened the save screen into the app's saved state, twice. A token, a name of at most a
+         * few hundred letters and a type fit in far less.
+         */
+        const val MAX_CALL_CHARS = 2048
+
+        private val TOKEN = Regex("^[0-9a-f]{32}$")
+
+        /** The token, when it is one this class makes (32 lowercase hex digits), else null. */
+        fun token(s: String?): String? = s?.takeIf { TOKEN.matches(it) }
+    }
+
+    /** token -> the size the page said the file has. Only files still being staged are here. */
+    private val sizes = HashMap<String, Long>()
+
+    private fun fileOf(token: String) = File(dir, token)
+
+    /**
+     * Starts a file of size bytes and returns its token. Every other staged file goes first, except keep
+     * (the file of a save whose save screen is still up), so at most two are ever on disk.
+     */
+    fun start(size: Long, keep: String? = null): String {
+        if (size <= 0) throw StageError("bad_file", "The file is empty.")
+        if (size > ShareOut.MAX_BYTES) throw StageError("too_big", "The file is too large.")
+        sweep(keep)
+        dir.mkdirs()
+        val bytes = ByteArray(16)
+        random.nextBytes(bytes)
+        val token = bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        fileOf(token).writeBytes(ByteArray(0))
+        sizes[token] = size
+        return token
+    }
+
+    /** Adds the next piece (base64, at most CHUNK_BYTES once decoded). Returns the bytes staged so far. */
+    fun append(token: String?, data: String?): Long {
+        val t = token(token)
+        val size = t?.let { sizes[it] }
+        val file = t?.let { fileOf(it) }
+        if (size == null || file == null || !file.isFile) throw StageError("no_file", "The file is not staged.")
+        val bytes = ShareOut.decode(data, CHUNK_BYTES)
+        if (bytes == null) {
+            drop(t)
+            throw StageError("bad_file", "The file could not be read.")
+        }
+        val total = file.length() + bytes.size
+        if (total > size) {
+            drop(t)
+            throw StageError("bad_file", "The file is longer than it said.")
+        }
+        FileOutputStream(file, true).use { it.write(bytes) }
+        return total
+    }
+
+    /**
+     * The staged file, once all of it came: it is then no longer open for pieces, and stays on disk until
+     * drop. A file that is missing or short is dropped and refused.
+     */
+    fun take(token: String?): File {
+        val t = token(token) ?: throw StageError("no_file", "The file is not staged.")
+        val size = sizes.remove(t)
+        val file = fileOf(t)
+        if (size == null || !file.isFile) {
+            file.delete()
+            throw StageError("no_file", "The file is not staged.")
+        }
+        if (file.length() != size) {
+            file.delete()
+            throw StageError("bad_file", "Not all of the file came.")
+        }
+        return file
+    }
+
+    /** The file a save screen was opened for, if it is still there (after Android restarted the app). */
+    fun taken(token: String?): File? = token(token)?.let { fileOf(it) }?.takeIf { it.isFile }
+
+    fun drop(token: String?) {
+        val t = token(token) ?: return
+        sizes.remove(t)
+        fileOf(t).delete()
+    }
+
+    /** Removes every staged file except keep's. */
+    fun sweep(keep: String? = null) {
+        val k = token(keep)
+        sizes.keys.retainAll { it == k }
+        dir.listFiles()?.forEach { if (it.name != k) it.deleteRecursively() }
     }
 }
 

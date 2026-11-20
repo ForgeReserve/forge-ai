@@ -36,9 +36,12 @@ export const ROUTES = {
   photoNone: 'photo/none',
   photoSent: 'photo/sent',
   // Take a photo inside the app (screens/camera.js), and Share unseen opened again after the phone stopped
-  // the app while a photo picker was up (core/camera.js wasPicking).
+  // the app while a photo picker was up (core/camera.js wasPicking), or while the Android app's save screen
+  // was up: the photo was saved after all, or was not (core/native.js share.restored).
   photoCamera: 'photo/camera',
   photoAgain: 'photo/again',
+  photoSaveDone: 'photo/save-done',
+  photoSaveLost: 'photo/save-lost',
   // Ask about it with a model that cannot see photos: Choose a model, showing only the models that can.
   modelPhoto: 'photo/model',
   // The first run (core/firstrun.js), one route per step: Welcome, How you pay, the limits, Private only.
@@ -83,5 +86,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoCamera: 'photo', photoAgain: 'home', modelPhoto: 'photo', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoCamera: 'photo', photoAgain: 'home', photoSaveDone: 'home', photoSaveLost: 'home', modelPhoto: 'photo', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }

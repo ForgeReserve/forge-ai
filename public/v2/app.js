@@ -2374,12 +2374,14 @@ function screenFor(name, params) {
     case 'photoMissed':
     case 'photoNone':
     case 'photoSent':
-    case 'photoAgain': {
+    case 'photoAgain':
+    case 'photoSaveDone':
+    case 'photoSaveLost': {
       const now = cameraNow && navigator.userActivation?.isActive === true;
       cameraNow = false;
       return photoScreen({
         ...ctx,
-        params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent', photoAgain: 'again' }[name] },
+        params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent', photoAgain: 'again', photoSaveDone: 'saveDone', photoSaveLost: 'saveLost' }[name] },
         filters: (registry.list('filter') ?? []).map((x) => x.instance),
         share: adapters.share,
         openCamera: !cameraFailed && typeof adapters.camera.still === 'function' && adapters.camera.available() ? () => nav('photoCamera') : null,
@@ -2593,6 +2595,9 @@ async function start() {
   // The phone stopped the app while Share unseen's photo picker was up (core/camera.js wasPicking): read,
   // and the mark taken away, on every open.
   const picked = wasPicking(localStore());
+  // The same while the Android app's save screen was up: the app finished that save once it opened
+  // again, or could not (core/native.js share.restored). Told once.
+  const restoredSave = native?.share?.restored ? await native.share.restored() : null;
   // An event link (core/join.js): the pass leaves the address at once, so it stays out of the history
   // and any bookmark, and is used once the models are in (joinWith). In the Android app it comes from
   // the link that opened the app (ForgeJoin).
@@ -2640,8 +2645,9 @@ async function start() {
   // still opens Share unseen, and the first run its own steps.
   const opening = parse(location.hash).name;
   if (coverOn() && !SHARED_IN.includes(opening) && stepOfRoute(opening) === null) history.replaceState({ forge2: 0 }, '', href('game'));
-  // Opened on the home after such a stop: Share unseen again, saying so, for the person to pick again.
-  // Never over the cover: opened fresh, it shows its game.
+  // Opened on the home after such a stop: Share unseen again, saying so, for the person to pick again
+  // (or saying the save was done). Never over the cover: opened fresh, it shows its game.
+  else if (restoredSave && opening === 'home') history.replaceState(history.state, '', href(restoredSave === 'saved' ? 'photoSaveDone' : 'photoSaveLost'));
   else if (picked && opening === 'home') history.replaceState(history.state, '', href('photoAgain'));
   // No cover after all (its mode could not load offline, say): the app's own title again.
   if (!coverOn() && document.documentElement.dataset.bootCover) {

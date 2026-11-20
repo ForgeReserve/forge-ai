@@ -73,7 +73,7 @@ async function appPhone(): Promise<AppPhone> {
   // Capacitor's bridge, as the app's web view has it, with the app's two plugins played here.
   await ctx.addInitScript(() => {
     const w = window as any;
-    w.__native = { calls: [] as any[], listeners: [] as any[], shared: null as any };
+    w.__native = { calls: [] as any[], listeners: [] as any[], shared: null as any, staged: {} as Record<string, string[]>, restoredSave: null as any };
     w.Capacitor = {
       isNativePlatform: () => true,
       nativePromise: async (plugin: string, method: string, opts: any) => {
@@ -91,8 +91,22 @@ async function appPhone(): Promise<AppPhone> {
           sessionStorage.removeItem('test.joinPass');
           return pass ? { pass } : {};
         }
+        // ForgeShare (SharePlugin.kt): the file is staged in pieces, then Share or Save names it by token.
+        if (plugin === 'ForgeShare' && method === 'stageStart') {
+          const token = String(Object.keys(w.__native.staged).length + 1).padStart(32, '0');
+          w.__native.staged[token] = [];
+          return { token };
+        }
+        if (plugin === 'ForgeShare' && method === 'stageAppend') return void w.__native.staged[opts.token].push(opts.data);
         if (plugin === 'ForgeShare' && method === 'share') return { opened: true };
         if (plugin === 'ForgeShare' && method === 'save') return { saved: true };
+        // How a save ended when Android restarted the app while its save screen was up, told once.
+        if (plugin === 'ForgeShare' && method === 'restoredSave') {
+          const r = w.__native.restoredSave ?? JSON.parse(sessionStorage.getItem('test.restoredSave') ?? 'null');
+          w.__native.restoredSave = null;
+          sessionStorage.removeItem('test.restoredSave');
+          return r ?? {};
+        }
         return undefined;
       },
       addListener: (plugin: string, event: string, fn: () => void) => {
@@ -251,7 +265,10 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     const sent = await page.evaluate(() => (window as any).__native.calls.find((c: any) => c.method === 'share').opts);
     expect(sent.mime).toBe('image/jpeg');
     expect(sent.name).toMatch(/\.jpg$/);
-    const out = Buffer.from(sent.data, 'base64');
+    // The call that opens the sheet carries no file: the photo went over first, in pieces.
+    expect(Object.keys(sent).sort()).toEqual(['mime', 'name', 'token']);
+    const pieces: string[] = await page.evaluate((t) => (window as any).__native.staged[t], sent.token);
+    const out = Buffer.concat(pieces.map((p) => Buffer.from(p, 'base64')));
     expect(out.equals(CREW)).toBe(false);
     expect(out.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
     // No "Shared" toast: the app is not told whether the person sent it.
@@ -274,6 +291,25 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     expect(await page.isVisible('#photoShare')).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
+  }, 120_000);
+
+  it('opens on Share unseen saying whether the photo was saved, when the phone closed Forge while its save screen was up', async () => {
+    const cases = [
+      [{ saved: false }, '#photoAlert', 'Not saved. The phone closed Forge while you were choosing where to save the photo.'],
+      [{ saved: true }, '#photoNote', 'Saved where you picked.'],
+    ] as const;
+    for (const [answer, where, text] of cases) {
+      const { ctx, page, errors } = await appPhone();
+      await ctx.addInitScript((r) => ((window as any).__native.restoredSave = r), answer);
+      await page.goto(`${app}/`);
+      await page.waitForSelector('[data-screen=photo]');
+      expect(await page.textContent(where)).toContain(text);
+      // Said once: the address is Share unseen's own again.
+      expect(new URL(page.url()).hash).toBe('#/photo');
+      expect(await page.evaluate(() => (window as any).__native.calls.filter((c: any) => c.method === 'restoredSave').length)).toBe(1);
+      expect(errors).toEqual([]);
+      await ctx.close();
+    }
   }, 120_000);
 
   it('says so when a share held no photo', async () => {
