@@ -2,10 +2,12 @@
 //!
 //! ```text
 //! <data>/
+//!   lock                       held by the one process that serves or recovers this directory
 //!   mnemonic                   only when the seed was generated here (mode 0600)
 //!   seed-check                 fingerprint of the seed (seed.rs)
 //!   federations/<id>/
 //!     federation.json          the invite it was joined with, its name, when
+//!     restore.json             only while `recover` rebuilds this federation's wallet
 //!     client.db/               the fedimint client's RocksDB
 //!   receives/<notes_id>.json   one record per set of notes received
 //! ```
@@ -13,6 +15,10 @@
 //! Each file is written whole: to a temporary file, synced, then renamed over the old one, so a
 //! crash leaves the old version or the new one, never half of either. Directories and files are
 //! private to the service's user.
+//!
+//! That is also what makes a backup of a live directory consistent (backup.rs): every small file
+//! read is one whole version of it. The client databases are not backed up (docs/FEDIMINT-RECEIVER.md,
+//! Backup and recovery): the notes come back from the seed.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -142,6 +148,22 @@ pub struct FederationFile {
     #[serde(default)]
     pub name: Option<String>,
     pub joined_at: u64,
+    /// When this federation's wallet was rebuilt from the seed after its data was lost
+    /// (`fedimint-receiver recover`, or a join that found notes the seed already held). From then
+    /// until the operator closes the restore, a rejection of notes as spent is not taken as proof
+    /// that someone else spent them: this wallet may have taken them before the loss.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restored_at: Option<u64>,
+    /// When the operator closed the restore (`fedimint-receiver restore-done`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restore_closed_at: Option<u64>,
+}
+
+impl FederationFile {
+    /// Whether the restore is still open: rejections of notes are uncertain until it is closed.
+    pub fn restore_open(&self) -> bool {
+        self.restored_at.is_some() && self.restore_closed_at.is_none()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -177,8 +199,57 @@ impl Store {
         Ok(out)
     }
 
+    /// One federation's `federation.json`, if it has one.
+    pub fn federation_file(&self, id: &str) -> Result<Option<FederationFile>> {
+        let path = self.federation_dir(id).join("federation.json");
+        match std::fs::read(&path) {
+            Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes).with_context(|| format!("reading {}", path.display()))?)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
+        }
+    }
+
     pub fn save_federation(&self, f: &FederationFile) -> Result<()> {
         write_atomic(&self.federation_dir(&f.id).join("federation.json"), &serde_json::to_vec_pretty(f)?)
+    }
+
+    /// The ids of every federation directory, joined or not.
+    pub fn federation_ids(&self) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(self.dir.join("federations"))? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir()
+                && let Some(name) = entry.file_name().to_str()
+            {
+                out.push(name.to_owned());
+            }
+        }
+        out.sort();
+        Ok(out)
+    }
+
+    /// A federation `recover` has still to rebuild: what it knew of it (from a backup, or from the
+    /// invite it was given). Removed once `federation.json` is written.
+    pub fn restore_file(&self, id: &str) -> Result<Option<FederationFile>> {
+        let path = self.federation_dir(id).join("restore.json");
+        match std::fs::read(&path) {
+            Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes).with_context(|| format!("reading {}", path.display()))?)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
+        }
+    }
+
+    pub fn save_restore_file(&self, f: &FederationFile) -> Result<()> {
+        let dir = self.federation_dir(&f.id);
+        create_private_dir(&dir)?;
+        write_atomic(&dir.join("restore.json"), &serde_json::to_vec_pretty(f)?)
+    }
+
+    pub fn remove_restore_file(&self, id: &str) -> Result<()> {
+        match std::fs::remove_file(self.federation_dir(id).join("restore.json")) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e).context("removing restore.json"),
+            _ => Ok(()),
+        }
     }
 
     fn receive_path(&self, notes_id: &str) -> PathBuf {
@@ -201,6 +272,12 @@ impl Store {
     }
 
     pub fn pending_receives(&self) -> Result<Vec<ReceiveRecord>> {
+        Ok(self.receives()?.into_iter().filter(|r| r.state == State::Pending).collect())
+    }
+
+    /// Every receive record. A `.tmp` file is a write in progress (or one a crash cut short) and
+    /// is not a record.
+    pub fn receives(&self) -> Result<Vec<ReceiveRecord>> {
         let mut out = Vec::new();
         for entry in std::fs::read_dir(self.dir.join("receives"))? {
             let path = entry?.path();
@@ -208,10 +285,24 @@ impl Store {
                 continue;
             }
             let r: ReceiveRecord = serde_json::from_slice(&std::fs::read(&path)?).with_context(|| format!("reading {}", path.display()))?;
-            if r.state == State::Pending {
-                out.push(r);
-            }
+            out.push(r);
         }
+        out.sort_by(|a, b| (a.created_at, &a.notes_id).cmp(&(b.created_at, &b.notes_id)));
         Ok(out)
+    }
+}
+
+/// The lock that keeps a second process (a second service, or `recover` while the service runs)
+/// off a data directory. Held until the returned file is dropped; the operating system releases
+/// it when the process ends, however it ends.
+pub fn lock_data_dir(dir: &Path) -> Result<std::fs::File> {
+    let path = dir.join("lock");
+    let f = private_options().create(true).truncate(false).open(&path).with_context(|| format!("opening {}", path.display()))?;
+    match f.try_lock() {
+        Ok(()) => Ok(f),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            anyhow::bail!("another fedimint-receiver process is using {}; stop it first", dir.display())
+        }
+        Err(std::fs::TryLockError::Error(e)) => Err(e).with_context(|| format!("locking {}", path.display())),
     }
 }

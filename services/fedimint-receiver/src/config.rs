@@ -44,8 +44,16 @@ impl Config {
         }
         let listen = std::env::var(LISTEN_ENV).unwrap_or_else(|_| DEFAULT_LISTEN.to_owned());
         let listen = listen.parse().with_context(|| format!("{LISTEN_ENV} is not an address: {listen}"))?;
-        let data_dir = std::env::var_os(DATA_DIR_ENV).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("data"));
-        let mnemonic = std::env::var(crate::seed::MNEMONIC_ENV).ok().filter(|m| !m.trim().is_empty());
-        Ok(Self { token, listen, data_dir, mnemonic })
+        Ok(Self { token, listen, data_dir: data_dir_from_env(), mnemonic: mnemonic_from_env() })
     }
+}
+
+/// `FEDIMINT_RECEIVER_DATA_DIR`, or `./data`.
+pub fn data_dir_from_env() -> PathBuf {
+    std::env::var_os(DATA_DIR_ENV).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("data"))
+}
+
+/// `FEDIMINT_RECEIVER_MNEMONIC`, when set and not blank.
+pub fn mnemonic_from_env() -> Option<String> {
+    std::env::var(crate::seed::MNEMONIC_ENV).ok().filter(|m| !m.trim().is_empty())
 }

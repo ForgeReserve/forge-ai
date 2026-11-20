@@ -155,6 +155,54 @@ impl Drop for Service {
     }
 }
 
+/// What a run of one of the binary's commands gave.
+pub struct CliOut {
+    pub ok: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+impl CliOut {
+    /// The stdout lines, each a JSON object.
+    pub fn lines(&self) -> Vec<Value> {
+        self.stdout.lines().map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}: {l}"))).collect()
+    }
+}
+
+/// Run `fedimint-receiver <args>` on `data`, as an operator would (`recover`, `backup`,
+/// `restore-done`), with `stdin` piped in. Runs off the async workers: the federations live in
+/// this process.
+pub async fn cli(data: &Path, env: &[(&str, &str)], args: &[&str], stdin: Option<&str>) -> CliOut {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_fedimint-receiver"));
+    cmd.env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("FEDIMINT_RECEIVER_DATA_DIR", data)
+        .env("RUST_LOG", "info,fedimint_receiver=debug")
+        .args(args)
+        .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let input = stdin.map(str::to_owned);
+    tokio::task::spawn_blocking(move || {
+        let mut child = cmd.spawn().expect("spawn fedimint-receiver");
+        if let Some(text) = input {
+            use std::io::Write as _;
+            child.stdin.take().expect("stdin").write_all(text.as_bytes()).expect("write stdin");
+        }
+        let out = child.wait_with_output().expect("wait");
+        CliOut {
+            ok: out.status.success(),
+            stdout: String::from_utf8_lossy(&out.stdout).into(),
+            stderr: String::from_utf8_lossy(&out.stderr).into(),
+        }
+    })
+    .await
+    .expect("cli task")
+}
+
 /// A fresh data directory (and its log file beside it) that lives as long as the guard.
 pub fn data_dir() -> (tempfile::TempDir, PathBuf) {
     let t = tempfile::tempdir().expect("tempdir");
