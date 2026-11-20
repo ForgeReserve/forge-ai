@@ -1,0 +1,101 @@
+{
+  "source": "scripts/fedimint-fixtures.ts: devfed and the receiver at fedimint 0.13.0",
+  "notes": [
+    {
+      "name": "v1",
+      "notes": "AgEEdc-XRAD9AP0D_QQAAZk0D67wNM5ixC4R6JoAdOZzu-JlDa-XY4sU001YJWa5G_0kg-UXvMgkK4U_8iewrjFPgGpgo3jOQVGzPshDqVNPUbj8X_1XkN-of77j2QVC_UAAAaRwmxS4CfjckSJxc7nIz1MgEBfIw2qMu2O7C6nbYpuW13lqeWpygsQ85C1vrmGz8nuOn1Ki5NifFk3qFGBSUIjDYPSV2VgAd7W35YeMl032_YAAAa_k09bjm-b_Yyc_D2Z64_2gBpW4BvOH6WvKULsHFkRASyfQsmR3BT5uOVd--8DiYvsWwbLusi2UcVeMGetZXj_o1-sF9ZorBegtbl1XhZzT",
+      "module": "mint",
+      "amount_msat": 50176,
+      "count": 3,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": false,
+      "federation_prefix": "75cf9744",
+      "notes_id": "1bae92511aad655328430324d6c033a41e12e3b6778b1e8556081a278d31578e",
+      "joined": true
+    },
+    {
+      "name": "v1-small",
+      "notes": "AgEEdc-XRABVAf0EAAGM-69S6U-6_syWbOxc34tt5EQOj7hyyRjv634LldAE5LVzznLvE0Ory_jAXIHPHdTFstgakO3ZqKvTJTr018oPCGHxHOg5befRvmeGqkCoIw==",
+      "module": "mint",
+      "amount_msat": 1024,
+      "count": 1,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": false,
+      "federation_prefix": "75cf9744",
+      "notes_id": "4f9927d9763d299e1a8d7c0c0cd1a408b8bf331aac9cc8176b2f31582f654103",
+      "joined": true
+    },
+    {
+      "name": "v1-tiers",
+      "notes": "AgEEdc-XRAD9Ak0G_QgAAYE2PQCgQlU9iwtaXxQNQE9fqU4UD39EQlZlqyIEBAlWDwV3OO-wnOyi9rSd1Rz6P-TU65Cm6pSGSc7q212EZr1y3D0GRzw1UemvCzKsijIN_RAAAaM1d8YfUBQcip8aHbgPPBd13MYJhyx2h9icckhwfytWd7t6t8C3wwKegO1H02HFnI_a6JZJ0Vf2MpXOWdtIXGh55ASEh7v1S2ab3eCzFtxC_UAAAYGK90RdkX8vnnYDhmqfBxquXn4TalSATGcJYMzb41hMQt2b_VZCdK4UKPoniXmCnYYx4b9o5s2MJsjX-PEOo3xsJ4EzjMblceMp3n3S2qNy_YAAAYJCQS6pbC1s1Gn--iJsluvYNLrRgNgdCPwSy_ft1634bN_dloTsTMrVMT3YkHnRcrxvyqxS0W41Z5W3Ycr0IlpJd4Fh0A0M569GTkWcyS19_gACAAABiT94cvKhtcaJS1HEqjsm2jsa4FKO5OxAV0qC9u9O972V60uaxiXtJeFTUTWZ5gS9brJaytRKqJq14kAQ6RXDEvRU-cNHs6uT9jI_qM3IpoX-AAgAAAKDxjSpHpiLak1jWUjCqC-EKGfGlwZzwnJJJKETMfy-kQL-x3AGnocwRv26G_djgoxOGCTZeaxWOA4Gc__KDWPg2HzifjDVqsOVkQ5dNrVl3a2QqATpv0N-_irhrZ6NeWPJwh479XzYsGSohbGVuEryQ4FYClyl6hDvTjGXHm0iD85WqFEscJBR5OTYNwGKpYk7AODbtIqnHRkcv_xVw4R3",
+      "module": "mint",
+      "amount_msat": 1234944,
+      "count": 7,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": false,
+      "federation_prefix": "75cf9744",
+      "notes_id": "2167fbe508810b16b8dcd4592d2b03b4adaac754b9175cb49e59604bc565e7e4",
+      "joined": true
+    },
+    {
+      "name": "v1-invite",
+      "notes": "AwEEdc-XRACpAv0QAAGPXMoxWYhcE9FLGl2Bm47IFnSJmubA8pxzf3QQVDaa88xSpRX3fvTtCRlWrpG7F4YroLA2mWeQFT4EYASPXwfTGlhMjAiS8kFgLM95-OJKP_1AAAGuSXU6M5xkwCIWy1xRmYWG8tQxDg-ktyiimIbVOghM4aZzNi5cpj7KzJyHvdswCDHrbZenwt3wmItInB0Q0DqarPcRkBNAlDjynbVMwcG6XAI4AQAVd3M6Ly8xMjcuMC4wLjE6MTYyODQvdc-XRBAK0OR2ffAh919-riLsvCz1OHcYyJz4NZXV9gE=",
+      "module": "mint",
+      "amount_msat": 20480,
+      "count": 2,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": true,
+      "federation_prefix": "75cf9744",
+      "notes_id": "449d63aa2d69ae7f750870b0be913303e8804b6fefc02b3c63ef27e7de5d7eaf",
+      "joined": true
+    },
+    {
+      "name": "v2",
+      "notes": "fedimint4000iqtpn4h0150q4ntq7o74nvns7na4c7fpiq37n36gce2vl95bdr7018kug93jagb69crph3tfuhsdhfc76buol0iantnufjm4enaitvac3m8l04k6jhcgfsmjse25ttapue7d41ocgp8eemepar9mid6pe2eb1m3i4a67o4637aa6c11a0aruobeho04ae8qn6e7o9dmvbtu8en7lacvvanou50emblc31qadtbhoupfun53s2l2f877900n1s9ivreqj3aoc659t55geb5jiqdel9jpk30v109ilu0qcvooq5cn82aq27urb0ph0ub0255om0mnn57qfcpfcafc2hrvghgihspo53mj3606kpa61u7jog3tjhscb4g79rmjbicqa8baj769skric6q2pos8klev02abjdsn2hl2s9vpck0asprrj7bq9e3d1bn9l7l2",
+      "module": "mintv2",
+      "amount_msat": 50176,
+      "count": 3,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": true,
+      "federation_prefix": "75cf9744",
+      "notes_id": "c0a12d9338cd7666cf0c79525c1b0fdfab364045199972031ea174ac6d2f410c",
+      "joined": true
+    },
+    {
+      "name": "v2-tiers",
+      "notes": "fedimint8000iqtpn4h0150q4ntq7o74nvns7na4c7fpiq37n36gce2vl95bdr7018k4h6p8pvcrk1hfnnqnlgrlh3v06a7gesij5qoa5jn7sf70gvtg94aljkk5k069iprp5t5fkiq1bejdhr5euodk36u3sequ482lkjge6r389bri8sdnpi1ro2getti3a334s04aiggg0j65a1f4r5kso0kkpgg32k39uv6vluhfn3se1lf5ul3bi2f8qbmnbdm5ut17on5b1ulvbp9d6a1muscsfgclmi9jq3o426km04v86bon0scj1d2t2f0la8lqe2a10802l8cvdq69t9ad6otl49ehvingahqdepqqorm9diqdjfu22d3cg46uud2f7oid7n084url88ekondickch145pv43c96r2grpcbdqprbrk30egb67bs3b80mbgihkq307ss560h24uf7edhr0n0gakpa8g5guqm2fhtlo60prv047rku648gu66v4idaflg9ms0e5msmfbohpngpb7mu0qs02ikbml99q0sfctrgu8vfth0dolm6b0aobgr55jqp869j7csc23g8t1249j4r52ptmsp0pj77546f8mdfbcqoljva48cda5rjbppf914mr0819h7tjvocdbmag41mviv3m04eg1kvjf1gtfvmghq7b3bphier6fl3jfvbpo3bj7l4c2imdvb9ie18ksgpmu1ijskpvh412so7bec3a3rqp9vaca27l9vnhmfq68eoua7hui74timfuhev3etljkgtd9ah1of4bisfk5dmv4fk0t223oidst9kv4sel2cegb23gopmfvopnd0q1ak04ad0nr0hqv1hsbmeitkefqc0uheemk3d7sp8qq2japo6ameigha5t0hnqpecdduttdv61v43smq0r55mdk0sao8n7nje78tldri17ial5etovnnqb40r5dv3bprpvvb1pbe7",
+      "module": "mintv2",
+      "amount_msat": 778240,
+      "count": 7,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": true,
+      "federation_prefix": "75cf9744",
+      "notes_id": "f8be04682acd03eb97dc50b7909feb10cb8d7beb7ddb3af364f57e07a731dc5b",
+      "joined": true
+    },
+    {
+      "name": "v2-invite",
+      "notes": "fedimint4000iqtpn4h0150q4ntq7o74nvns7na4c7fpiq37n36gce2vl95bdr7018ksgdupba0nnrhiic7rpn2u42u27m0nltscsvmtf48s3ih7sqe2ngpl0sj4og8880rjc4vn7br58sqv99m43ajtnhionk1bngaigl1b1g3soglf6tvv98pfug913qd9e0qas04acgevjhfall3al3r6k0lpf46hsjmobl3hd50s243clhlu9f0fnpvj32q2n1q4504349lrg1o4gtogob21qdctc0muqeeo32n7u6e97fmeikud3gjltkd4r9am6fqii06efj0gj000lot67ts5f9c4jro5ghb03n46q9cc3p07kpban7vi424k08jsmbv0vgsuvivsahgts5bafsseo0ip9sn6lcldv00",
+      "module": "mintv2",
+      "amount_msat": 20480,
+      "count": 2,
+      "federation_id": "75cf9744100ad0e4767df021f75f7eae22ecbc2cf5387718c89cf83595d5f601",
+      "carries_federation_id": true,
+      "federation_prefix": "75cf9744",
+      "notes_id": "85c171d1dcb927f441cefd92758808617b1e78e372460e0a28f937bb1ba45326",
+      "joined": true
+    },
+    {
+      "name": "v1-not-joined",
+      "notes": "AgEE8nUzvgCpAv0IAAGvPDd06k83cVUrlpxzvA6rj0Fio_HwAKNczV27sv3Rdny_FRL6mvE8ts7E_UfGYTJJZZ_d1_9GRw3pzafe2p92tsfOo1LPQJmd9y327U2u4_0gAAG3GKBqwoBTmMMT_woaZ4V6bVgV3JG0w6oSYjNmVhCtRc_weRgImakjy45vQL1o-qlEqFtgzL26Z3qqjCcoIKCJot3cnkgAlhFUNk_Wz05PKA==",
+      "module": "mint",
+      "amount_msat": 10240,
+      "count": 2,
+      "federation_id": "f27533be862c3602ef6fd075cfa09d27288f91fa89ffcc38ededde4e78d24099",
+      "carries_federation_id": false,
+      "federation_prefix": "f27533be",
+      "notes_id": "48eb2ffe4f92a9a8778c79d62ffab8f3f81d82f32ca5f1c0d353a9220b8ff6be",
+      "joined": false
+    }
+  ]
+}

@@ -697,7 +697,6 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .tab-note, .tab-ecash, .tab-onchain { color: var(--gold-ink); }
 .tab-card { color: var(--green); }
 .tab-fedimint, .tab-cards { color: var(--blue); }
-.tab-othermint { color: var(--violet); }
 .tab-more { color: var(--text-body); }
 .way-go { min-height: 64px; border-radius: 20px; font-size: 18px; font-weight: 700; }
 .way-go .ico { color: var(--gold); }

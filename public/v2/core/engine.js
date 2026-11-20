@@ -19,12 +19,18 @@ export class EngineError extends Error {
 
 /** Codes after which the same request may succeed later: a token sent with one of these is kept as pending. */
 const RETRYABLE = new Set(['topup_pending', 'mint_unavailable', 'token_in_flight', 'rate_limited', 'in_flight', 'wallet_insufficient', 'payout_unknown']);
+/**
+ * Codes that are final although their status is 5xx (docs/PAYMENTS.md, Fedimint notes): sending the same
+ * notes again would not change them. fedimint_unavailable: nothing was taken, the notes are still the
+ * person's. issuance_failed: the federation took them and an operator settles it by hand.
+ */
+const FINAL = new Set(['fedimint_unavailable', 'issuance_failed']);
 
 export function errorFrom(status, body) {
   const e = body?.error ?? {};
   const code = typeof e.code === 'string' && e.code ? e.code : status === 402 ? 'payment_required' : `http_${status}`;
   const message = typeof e.message === 'string' && e.message ? e.message : `The engine answered HTTP ${status}.`;
-  return new EngineError(code, message, { status, retryable: status >= 500 || status === 429 || RETRYABLE.has(code), body });
+  return new EngineError(code, message, { status, retryable: !FINAL.has(code) && (status >= 500 || status === 429 || RETRYABLE.has(code)), body });
 }
 
 const trimBase = (b) => String(b ?? '').replace(/\/+$/, '');

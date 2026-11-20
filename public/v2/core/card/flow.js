@@ -652,8 +652,8 @@ function matchRestored(outputs, body) {
 /**
  * Puts a card job's token where it goes, so the job can let it go. The engine's own mint: wallet.topup,
  * which stores it in the vault before sending it, and keeps it there when the engine refuses it or does
- * not answer. Another mint: the vault, marked not added, until the person adds it through Other mint
- * (Funds lists it, with Copy). Resolves once the vault has the token; throws only when it does not.
+ * not answer. Another mint: the vault, marked not added, until the person adds it in the eCash box, at
+ * its price (Funds lists it, with Copy). Resolves once the vault has the token; throws only when it does not.
  * Returns {route, credited, unit, replay, error} as far as known.
  */
 export async function handToken(job, { wallet, vault, engineBase = '', message = '' }) {

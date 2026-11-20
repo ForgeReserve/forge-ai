@@ -162,8 +162,9 @@ describe('Tap a Cashu card', () => {
     await page.goto(`${g.url}/v2/#/funds/add`);
     await page.waitForSelector('#tab-cards');
     // Named as plainly as the Fedimint card, and beside it (owner, 2026-11-17): the two printed cards on one
-    // wallet card, each its own button with its word.
-    expect(await wayOrder(page)).toEqual(['note', 'lightning', 'cards', 'ecash', 'more']);
+    // wallet card, each its own button with its word. Other mints are priced in eCash: this engine has no
+    // way left for the More card.
+    expect(await wayOrder(page)).toEqual(['note', 'lightning', 'cards', 'ecash']);
     expect(await page.getAttribute('#tab-cards', 'aria-label')).toBe('Tap a card: Cashu or Fedimint');
     expect(await page.getAttribute('#way-cards .way-badge', 'aria-label')).toBe('Forge app');
     expect(await page.textContent('#way-cards .way-word')).toBe('Cards');
@@ -318,7 +319,7 @@ describe('Tap a Cashu card', () => {
     await ctx.close();
   }, 120_000);
 
-  it('in the app: a card from another mint pays its input fee and goes on to Other mint with the eCash', async () => {
+  it('in the app: a card from another mint pays its input fee and goes on to the eCash box with the eCash, priced there', async () => {
     const card = new CardSim({ pin: null, mint: MINT_C });
     await provision(card, await mintSigner(MINT_C), [64, 32]);
     const { ctx, page, errors } = await appWithCard(card);
@@ -328,11 +329,11 @@ describe('Tap a Cashu card', () => {
     // No PIN on this card: no PIN field.
     expect(await page.locator('#cardPin').count()).toBe(0);
     expect(await page.textContent('#cardFee')).toBe('Fee: 1 sat. The card mint takes 1 sat to move it.');
-    // Other mint charges its own price after this: the card screen says only what comes to the phone.
-    expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 95 sat. Other mint shows its price next.');
+    // The eCash box prices it after this: the card screen says only what comes to the phone.
+    expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 95 sat. eCash shows its price next.');
     await page.click('#cardMove');
-    // Other mint opens with the eCash and asks the engine for its price at once.
-    await page.waitForSelector('[data-fund=othermint] #foreignConfirm', { timeout: 30_000 });
+    // The eCash box opens with the eCash and asks the engine for its price at once.
+    await page.waitForSelector('[data-fund=ecash] #foreignConfirm', { timeout: 30_000 });
     expect(card.balance()).toBe(0);
     // Until it is added, the eCash is kept on the phone, listed as not added.
     const held = (await vault(page)).in;
@@ -399,7 +400,7 @@ describe('Tap a Cashu card', () => {
       expect(await page.textContent('.card-art-amount')).toBe('96 sat');
       expect(await page.textContent('#cardPart')).toBe('One tap moves up to 50 sat. Tap again for the rest.');
       expect(await page.textContent('#cardMove')).toBe('Move 50 sat');
-      expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 49 sat. Other mint shows its price next.');
+      expect(await page.textContent('#cardGet')).toBe('Comes to this phone: 49 sat. eCash shows its price next.');
       await page.click('#cardSome');
       await page.fill('#cardAmount', '60');
       expect(await page.textContent('#cardPreview')).toBe('Use a whole number up to 50 sat.');
@@ -533,7 +534,8 @@ describe('Tap a Cashu card', () => {
     // Tap a Fedimint card needs a till, which the iPhone app has not: it is never offered there.
     await page.goto(`${app}/#/funds/add`);
     await page.waitForSelector('#tab-card');
-    await page.waitForSelector('#more-othermint', { state: 'attached' });
+    // The engine's ways are read (Lightning is one of them).
+    await page.waitForSelector('#tab-lightning', { state: 'attached' });
     expect(await page.locator('#tab-fedimint, #more-fedimint').count()).toBe(0);
     expect(errors).toEqual([]);
     await ctx.close();

@@ -13,8 +13,8 @@
 //
 // Where the eCash goes: a card from the engine's own mint tops up the funds through the vault (stored
 // first, removed once credited). A card from another mint the engine takes through other-mint funding:
-// the eCash is kept in the vault, marked not added, and the Other mint screen opens with it. The engine's
-// own eCash in the unit these funds do not hold goes the same way, to the eCash screen, which shows the
+// the eCash is kept in the vault, marked not added, and the eCash box opens with it and shows its price.
+// The engine's own eCash in the unit these funds do not hold goes the same way: the eCash box shows the
 // price to change it (when the engine changes units).
 import { inviteField } from '../kit.js';
 import { cardFace } from '../../../screens/brands/cards.js';
@@ -490,8 +490,8 @@ export function create(inputs) {
         } catch (e) {
           return failed({ code: 'mint_unavailable', kept: true, message: e?.message });
         }
-        // The engine's own eCash in the other unit: the eCash module shows the price to change it.
-        if (r.route === 'othermint') return open(info?.trusted ? 'ecash' : 'othermint', { token: job.token });
+        // eCash from another mint, or the engine's own in the other unit: the eCash box shows its price.
+        if (r.route === 'othermint') return open('ecash', { token: job.token });
         // The engine would not open the balance of the card's unit: its eCash is changed, price first.
         if (r.error?.code === 'wrong_unit' && r.error.body?.convert) return open('ecash', { token: job.token });
         await wallet.refresh();

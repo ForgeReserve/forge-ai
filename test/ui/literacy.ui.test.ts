@@ -335,7 +335,7 @@ describe('reading load on every screen', () => {
     await page.waitForSelector('#fundsAsk:not([hidden])');
     await check(page, 'funds-start-free');
 
-    for (const way of ['note', 'ecash', 'lightning', 'othermint', 'free', 'card', 'fedimint']) {
+    for (const way of ['note', 'ecash', 'lightning', 'free', 'card', 'fedimint']) {
       await go(page, 'funds/add', '[data-screen=addFunds]');
       await openWay(page, way);
       await page.waitForSelector(`[data-fund=${way}]`);

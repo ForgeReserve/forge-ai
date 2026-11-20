@@ -31,7 +31,7 @@ The whole of [`public/v2/core/ui.js`](https://github.com/ForgeReserve/forge-ai/b
 | `ICONS` | The list of icon names `icon` knows. |
 | `say(node, text, kind = '', ico = null)` | Writes `text` into `node` headline first: an icon, the first sentence in view, the rest behind a round info button. `kind` is `''`, `'err'`, `'ok'` or `'wait'`. Returns `node`. |
 | `sayEl(tag, attrs, text, kind, ico)` | `say` into a new element. |
-| `msgLine()` | A status line (`role="status"`) with `set(text, kind)`. A text with no kind that does not end in a full stop shows the wait icon. |
+| `msgLine()` | A status line (`role="status"`) with `set(text, kind, ico)`: `ico` names its picture in place of the kind's. A text with no kind that does not end in a full stop shows the wait icon. |
 | `addedPanel({id, amount, plus, words, wordsAttrs, balance})` | The success panel Add money shows when money is in: a lit check, the amount in large type (with a plus unless `plus` is `false`), the words as a status line (`wordsAttrs` gives it an id) and the funds now as the balance pill. Returns the panel; `setBalance(text)` updates the pill. A module rarely needs it: `added()` and `done()` draw it (below). |
 | `toast(text, ms = 2600)` | A short message at the bottom of the screen. |
 | `announce(text)` | Says `text` to screen readers only. |
@@ -93,14 +93,14 @@ The balances as a fund module sees them, from [`public/v2/app.js`](https://githu
 | `lockKey()` | The public key the person locks payouts to, or `''`. |
 | `privateOnly()` | Whether Private only is on. |
 | `useFreeModels()` | Turns Private only off and chooses a free model. Returns the model, or `null`. Only after the person said yes. |
-| `topup(token, invite)` | Adds eCash to the balance of its unit (`landsIn`), opening that balance when the phone has none. Stores the token on the phone first ([the vault](#vault)), sends it, and removes it only once the engine credits it. Resolves `{credited, unit, replay}`, with `free: true` for a voucher of free questions. Throws `EngineError`; when `retryable` is true the token stays on the phone and is sent again later. |
+| `topup(token, invite, extra)` | Adds eCash to the balance of its unit (`landsIn`), opening that balance when the phone has none; Fedimint notes go to the sat balance. Stores the token on the phone first ([the vault](#vault)), with `extra` (fields kept with it, such as `{kind: 'fedimint', notesId}`), sends it, and removes it only once the engine credits it. Resolves `{credited, unit, replay}`, with `free: true` for a voucher of free questions. Throws `EngineError`; when `retryable` is true the token stays on the phone and is sent again later. |
 | `topupFree(token)` | The same for a voucher of free questions, onto the free balance. |
 | `isCredit(mint)` | `true` for the engine's credit mint, whose eCash is free questions. |
 | `open(invite)` | Opens a balance with an invite code and nothing on it, for the free models. Resolves `{created, freeShown}`. |
 
 ### `vault`
 
-eCash on its way in or out, kept in the phone's storage so a token is never lost. From `createVault` in [`public/v2/core/vault.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/vault.js). `wallet.topup` uses it for you; use it directly when a token goes somewhere else first, as Other mint does.
+eCash on its way in or out, kept in the phone's storage so a token is never lost. From `createVault` in [`public/v2/core/vault.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/vault.js). `wallet.topup` uses it for you; use it directly when a token goes somewhere else first, as eCash from another mint does.
 
 | Function | What it does |
 | - | - |
@@ -108,7 +108,8 @@ eCash on its way in or out, kept in the phone's storage so a token is never lost
 | `credited(id)` | Removes the entry once the engine confirmed the credit. |
 | `pending(id, code)` | Marks it pending: the outcome is open, it is sent again later. |
 | `refused(id, code, message)` | Marks it refused: the engine did not take it. Funds lists it so the person can copy it back out. |
-| `discard(id)` | Removes a refused entry the person copied. |
+| `stuck(id, code, message)` | Marks Fedimint notes stuck: the federation took them and nothing was credited (`issuance_failed`). Never sent again; Funds lists them with their id for whoever helps. |
+| `discard(id)` | Removes a refused or stuck entry the person copied. |
 | `incoming()`, `outgoing()` | The entries on their way in, and the payout tokens kept until saved. |
 | `keepRefund({id, token, amount, unit})` | Keeps a payout token until the person says they saved it. |
 | `saved(id)` | Removes a kept payout token. |
@@ -133,7 +134,7 @@ The camera, for QR codes (`adapters.camera` in [`public/v2/core/adapters.js`](ht
 | Function | What it does |
 | - | - |
 | `available()` | `true` when the browser can use a camera. |
-| `open(video, onProgress)` | Starts reading single or animated QR codes into the `<video>` element. Resolves `{promise, stop()}`; `promise` resolves the text read. `onProgress(p)` gets 0 to 1 for an animated code. |
+| `open(video, onProgress, opts)` | Starts reading single or animated QR codes into the `<video>` element. Resolves `{promise, stop()}`; `promise` resolves the text read. `onProgress(p)` gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; `opts.accept(text)` takes other codes too (eCash passes its Fedimint notes reader), and `opts.any` takes any code. |
 
 ### `qr`
 
@@ -202,7 +203,7 @@ Required. Draws the module's screen. The app calls it each time the screen opens
 | - | - |
 | `done(result)` | Call it when the money is in: the app goes back to Funds. With `result` (`{words, amount, plus}`: the words that say what was added, the amount as text, `plus: false` for what is not money), Funds shows the success panel at its top with Ask now under it. |
 | `added(result)` | Call it when the money is in and the person should see it on this screen first (a paid invoice): the success panel takes the module's place, with the funds now, Ask now and Done (back to Funds). `result` is `{words, amount, plus, wordsAttrs, extra}`: `wordsAttrs` gives the words line its id, `extra` is a list of the module's nodes that still matter, shown under the panel (an address that takes more). |
-| `open(id, {token})` | Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint to Other mint this way. |
+| `open(id, {token})` | Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, or Fedimint notes, to eCash this way. |
 | `token` | The token another module handed over with `open`, or `undefined`. |
 
 It returns `{node, update, destroy}`:
@@ -223,7 +224,7 @@ Optional. Return `false` on a phone that cannot use the module. The first run's 
 
 ### `sub()`
 
-Optional. Returns the string key of the line behind the module's info button on Add money. Without it the app uses `fund.<id>.sub` when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired.
+Optional. Returns the string key of the line behind the module's info button on Add money. Without it the app uses `fund.<id>.sub` when that key exists. Tap a Fedimint card uses it to say a till is needed until one is paired; eCash, to name Fedimint only while the engine takes it.
 
 The bundled modules also set `group` (`'unlinked'` or `'depends'`). No app code reads it.
 

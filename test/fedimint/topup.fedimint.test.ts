@@ -3,6 +3,9 @@
 // Nothing here is a stand-in: notes are made by a federation's own client, the receiver reissues them at
 // the federation, and the gateway credits what the receiver's done record says.
 //
+// The last block drives the v2 app's own top-up client (public/v2/core: fedinote.js reads the notes,
+// engine.js sends them, vault.js keeps them on the phone) against the same real gateway and receiver.
+//
 // Needs the two binaries built first (docs/FEDIMINT-RECEIVER.md, Tests):
 //   cd services/fedimint-receiver && cargo build --features devfed --bins
 //   pnpm test:fedimint
@@ -127,6 +130,16 @@ function admin(dbPath: string, receiverUrl: string, args: string[], input = '') 
 }
 
 const j = (b: object) => JSON.stringify(b);
+
+// The v2 app's client code, as the eCash box uses it (public/v2/modules/fund/ecash/index.js, app.js wallet.topup).
+const FN: any = await import('../../public/v2/core/fedinote.js' as string);
+const VAULT: any = await import('../../public/v2/core/vault.js' as string);
+const ENGINE: any = await import('../../public/v2/core/engine.js' as string);
+/** The phone's storage: a Map, as localStorage keeps strings. */
+function phoneStorage() {
+  const m = new Map<string, string>();
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+}
 
 describe('Fedimint top-ups against the real receiver and a real federation', () => {
   let fed: DevFed;
@@ -322,4 +335,97 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
     const lateRec = await rx.api(`/receive/${latestRow(g).id.slice(3)}`);
     expect(await balanceOf(g, first.key)).toBe(first.net + lateRec.net_msat);
   }, LONG);
+
+  describe("the v2 app's top-up client against the real gateway", () => {
+    // Fresh state for the phone: its own vault and its own sat balance key.
+    const vault = VAULT.createVault(phoneStorage());
+    let appKey: string | null = null;
+    const setKey = (k: string, unit?: string) => {
+      expect(unit ?? 'sat').toBe('sat');
+      appKey = k;
+    };
+    const appEngine = (gateway: Gateway) => ENGINE.createEngine({ base: gateway.url });
+    /** What the eCash box does with notes once the phone has read them and decided to send them. */
+    const send = async (gateway: Gateway, notes: string, invite?: string) => {
+      const notesId = await FN.notesIdOf(notes);
+      return VAULT.topupWithVault({ engine: appEngine(gateway), vault, token: notes, key: appKey, invite, setKey, extra: { kind: 'fedimint', notesId } });
+    };
+
+    it('reads the methods and the notes as the gateway and the receiver do, and is credited once', async () => {
+      // A gateway that waits for the federation, as in production (the test before left one that does not).
+      await g.close();
+      g = await gw();
+      const methods = await appEngine(g).fundMethods();
+      const n = await fed.notes(25_000);
+      const read = FN.readFedimint(n.notes);
+      expect(read).toMatchObject({ ok: true, module: 'mint', amountMsat: n.amount_msat, prefix: fed.id.slice(0, 8) });
+      const check = FN.fedimintCheck(read, methods);
+      expect(check).toMatchObject({ verdict: 'send', federation: { id: fed.id, max: 100_000 }, maxSat: 100_000 });
+      const before = await fedBalance();
+      const r = await send(g, read.notes, createInvite(g));
+      expect(r).toMatchObject({ unit: 'sat', replay: false });
+      expect(appKey).toMatch(/^sk-forge-/);
+      // The id the phone works out is the one the gateway and the receiver use.
+      const notesId = await FN.notesIdOf(read.notes);
+      expect(g.deps.db.prepare('SELECT status FROM incoming WHERE id = ?').get(`fm:${notesId}`)).toEqual({ status: 'done' });
+      const rec = await rx.api(`/receive/${notesId}`);
+      expect(rec).toMatchObject({ state: 'done', gross_msat: n.amount_msat });
+      expect(Math.round(r.credited * 1000)).toBe(rec.net_msat);
+      expect(await balanceOf(g, appKey!)).toBe(rec.net_msat);
+      expect(await fedBalance()).toBe(before + rec.net_msat);
+      // Credited: gone from the phone.
+      expect(vault.incoming()).toEqual([]);
+      // The same notes again: a replay, nothing more, and nothing left on the phone.
+      expect(await send(g, read.notes)).toMatchObject({ replay: true, credited: 0 });
+      expect(vault.incoming()).toEqual([]);
+      expect(await balanceOf(g, appKey!)).toBe(rec.net_msat);
+    }, LONG);
+
+    it('decides notes of a federation it was not given are not taken, and reads the gateway the same way', async () => {
+      const n = await stranger.notes(8_000);
+      const read = FN.readFedimint(n.notes);
+      // On the phone: nothing would be sent.
+      expect(FN.fedimintCheck(read, await appEngine(g).fundMethods()).verdict).toBe('not_taken');
+      // Sent anyway, the gateway agrees, and the phone keeps them as still the person's.
+      const e = await send(g, read.notes).catch((x: any) => x);
+      expect(e).toMatchObject({ code: 'federation_not_joined', status: 400, retryable: false });
+      expect(FN.fedimintAnswer(e)).toEqual({ kind: 'yours', key: 'fund.ecash.fm.notTaken' });
+      expect(vault.incoming()).toMatchObject([{ token: read.notes, state: 'refused', code: 'federation_not_joined', kind: 'fedimint' }]);
+      // Still theirs: their own federation takes them back.
+      expect((await stranger.spend(n.notes)).ok).toBe(true);
+      vault.discard(vault.incoming()[0].id);
+    }, LONG);
+
+    it('keeps notes pending through topup_pending and a receiver that is down, and is credited once when it is back', async () => {
+      await g.close();
+      // A gateway that does not wait for the federation: the first answer is topup_pending.
+      g = await gw({ fedimint: { waitMs: 0 } });
+      const start = await balanceOf(g, appKey!);
+      const n = await fed.notes(9_000);
+      const e = await send(g, n.notes).catch((x: any) => x);
+      expect(e).toMatchObject({ code: 'topup_pending', status: 503, retryable: true });
+      expect(FN.fedimintAnswer(e).kind).toBe('pending');
+      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'topup_pending' }]);
+      // The receiver goes down. The app sends the same notes again (as it does on start and when the
+      // connection comes back): the gateway answers fedimint_unavailable, and the phone keeps them pending,
+      // because they were already on their way.
+      await rx.kill();
+      expect(await VAULT.retryPending({ engine: appEngine(g), vault, getKey: () => appKey, setKey })).toBe(0);
+      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'fedimint_unavailable' }]);
+      expect(await balanceOf(g, appKey!)).toBe(start);
+      // Back: the app's retries finish it, once.
+      await rx.start();
+      for (let i = 0; i < 120 && vault.incoming().length; i++) {
+        await VAULT.retryPending({ engine: appEngine(g), vault, getKey: () => appKey, setKey });
+        if (vault.incoming().length) await new Promise((res) => setTimeout(res, 250));
+      }
+      expect(vault.incoming()).toEqual([]);
+      const rec = await rx.api(`/receive/${await FN.notesIdOf(n.notes)}`);
+      expect(rec.state).toBe('done');
+      expect(await balanceOf(g, appKey!)).toBe(start + rec.net_msat);
+      // Nothing more on any later try.
+      expect(await send(g, n.notes)).toMatchObject({ replay: true, credited: 0 });
+      expect(await balanceOf(g, appKey!)).toBe(start + rec.net_msat);
+    }, LONG);
+  });
 });

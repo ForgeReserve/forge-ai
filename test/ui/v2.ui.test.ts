@@ -404,10 +404,11 @@ describe('v2 money paths in a phone-sized browser', () => {
     const { ctx, page, errors } = await phone();
     try {
       await page.goto(`${gf.url}/v2/#/funds/add`);
-      await openWay(page, 'othermint');
-      await page.waitForSelector('[data-fund=othermint]');
-      await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 1000));
-      await page.click('#foreignCheck');
+      // The eCash box prices eCash from another mint in place.
+      await openWay(page, 'ecash');
+      await page.waitForSelector('[data-fund=ecash]');
+      await page.fill('#ecashToken', await mintToken(MINT_C, 'sat', 1000));
+      await page.click('#ecashAdd');
       await page.waitForSelector('#foreignConfirm');
       // The engine takes the token, but the phone hears "in_flight" (being processed): the token must
       // stay pending, not be marked as not taken.

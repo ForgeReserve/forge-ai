@@ -99,6 +99,8 @@ export function icon(name, size = 20, stroke = 2) {
   s.setAttribute('stroke-linejoin', 'round');
   s.setAttribute('aria-hidden', 'true');
   s.classList.add('ico');
+  // Which picture it is, for tests and for whoever reads the page.
+  s.setAttribute('data-icon', name);
   s.innerHTML = PATHS[name] ?? '';
   return s;
 }
@@ -306,14 +308,14 @@ export function addedPanel({ id = null, amount = '', plus = true, words = '', wo
 
 /**
  * A status line under a form: role=status, with a kind of '', 'err', 'ok' or 'wait'. The words go in
- * headline first, with the kind's icon (say). A message without a kind that ends in no full stop is a
- * step under way ("Adding your eCash"): it shows the wait icon.
+ * headline first, with the kind's icon (say), or `ico` in its place. A message without a kind that ends
+ * in no full stop is a step under way ("Adding your eCash"): it shows the wait icon.
  */
 export function msgLine() {
   const p = el('p', { class: 'msg', role: 'status' });
-  p.set = (text, kind = '') => {
+  p.set = (text, kind = '', ico = null) => {
     p.className = 'msg ' + kind;
-    say(p, text, kind || (text && !/[.?!]$/.test(text) ? 'wait' : ''));
+    say(p, text, kind || (text && !/[.?!]$/.test(text) ? 'wait' : ''), ico);
   };
   return p;
 }

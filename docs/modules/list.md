@@ -13,10 +13,9 @@ Every module that ships with the Forge app, grouped by kind. Within a kind they 
 | `fund` | `forge.fund.note` | Scan a note | Yes | Yes | Yes | The note's value | Cannot be linked to you |
 | `fund` | `forge.fund.card` | Tap a Cashu card | Points to the app | Yes | Yes, press then tap | The amount taken, fee shown | Cannot be linked to you |
 | `fund` | `forge.fund.fedimint` | Tap a Fedimint card | Points to the app | Yes, with a till | Hidden | The amount, till fee shown | The till sees the payment |
-| `fund` | `forge.fund.ecash` | eCash | Yes | Yes | Yes | The token's value | Cannot be linked to you |
+| `fund` | `forge.fund.ecash` | eCash | Yes | Yes | Yes | The token's value; from another mint, less fees | Cannot be linked to you; another mint sees one payment |
 | `fund` | `forge.fund.lightning` | Lightning | Yes | Yes | Yes | The invoice | Your wallet sees it |
 | `fund` | `forge.fund.onchain` | On-chain | When on | When on | When on | The deposit | Public on the chain |
-| `fund` | `forge.fund.othermint` | Other mint | Yes | Yes | Yes | The token, less fees | The engine sees the other mint |
 | `voice-in` | `forge.voice-in.bundled` | On this phone | No | Forge Private Voice only | No | Free | Yes |
 | `voice-in` | `forge.voice-in.phone` | On this phone | No | Where the phone has the language | Where the iPhone hears the language on the phone | Free | Yes |
 | `voice-in` | `forge.voice-in.engine` | Engine | Yes | Yes | Yes | Paid per request | With an enclave model |
@@ -61,22 +60,22 @@ Opens a balance with an invite code and nothing on it, for the free models. Free
 
 ### Scan a note
 
-Reads a paper eCash note with the camera, single or animated QR code, or a pasted code. It shows the amount and the mint before anything is sent, then adds it on one tap. A note from a mint the engine does not take offers Other mint.
+Reads a paper eCash note with the camera, single or animated QR code, or a pasted code. It shows the amount and the mint before anything is sent, then adds it on one tap. A note from a mint the engine does not take offers See the price, which opens eCash with it. Fedimint notes read here go to eCash, which takes them.
 
 - **Id:** `forge.fund.note`, known in the app as `note`.
 - **Folder:** [`public/v2/modules/fund/note/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/note)
-- **Needs:** `scan` (the camera); `wallet.topup` for [`POST /v1/wallet/topup`](../API.md#post-v1-wallet-topup); `wallet.mints`, `mintAliases`, `units` and `isCredit`; `open('othermint', {token})`. It reads the note with [`public/v2/core/note.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/note.js).
+- **Needs:** `scan` (the camera); `wallet.topup` for [`POST /v1/wallet/topup`](../API.md#post-v1-wallet-topup); `wallet.mints`, `mintAliases`, `units` and `isCredit`; `open('ecash', {token})`. It reads the note with [`public/v2/core/note.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/note.js), and Fedimint notes with [`public/v2/core/fedinote.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/fedinote.js).
 - **Works on:** the website and both apps. Without a camera it asks for the code to be pasted.
 - **Costs:** the note's value goes into the balance.
 - **Private:** eCash, which the app marks as a way that cannot be linked to you. The note's token stays on the phone until the engine credits it.
 
 ### Tap a Cashu card
 
-Takes eCash off a Cashu card held to the phone. The card proves its key, the person enters its PIN and picks how much, the card signs one swap at its own mint, and the eCash goes into the balance. A card from another mint the engine takes goes on through Other mint.
+Takes eCash off a Cashu card held to the phone. The card proves its key, the person enters its PIN and picks how much, the card signs one swap at its own mint, and the eCash goes into the balance. A card from another mint the engine takes goes on to eCash, which shows its price.
 
 - **Id:** `forge.fund.card`, known in the app as `card`.
 - **Folder:** [`public/v2/modules/fund/card/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/card)
-- **Needs:** `nfc` (a card reader); `card.load()`, whose flow uses the [Cashu card relay](../API.md#cashu-card-relay); `wallet.topup`, `vault`, `open('othermint', {token})`.
+- **Needs:** `nfc` (a card reader); `card.load()`, whose flow uses the [Cashu card relay](../API.md#cashu-card-relay); `wallet.topup`, `vault`, `open('ecash', {token})`.
 - **Works on:** the Android and iPhone apps. On the iPhone each step with the card is a press, then a tap on iOS's NFC sheet: the read, then Move or Finish. The website lists it and says it needs the app (`usable()` is false).
 - **On Add money:** the printed Cashu card, with the word Cashu. With Tap a Fedimint card there too, the two cards share one wallet card, Cards, side by side.
 - **Costs:** the amount taken off the card. Any fee and what goes back on the card are shown before the card signs.
@@ -96,14 +95,18 @@ Pays the engine's Lightning invoice from a Fedimint card, through a till. The en
 
 ### eCash
 
-Paste, or scan, a Cashu token from a mint the engine takes, and add it.
+One box for both kinds of eCash, pasted or scanned: a Cashu token or Fedimint notes. The phone tells them apart before anything is sent ([`public/v2/core/fedinote.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/fedinote.js)).
+
+- A Cashu token from a mint the engine takes is added as it is.
+- A Cashu token from another mint is priced in the box: the amount added, where it comes from and the most the fees take, then Add or Keep my eCash. On Add the engine pays a Lightning invoice from the other mint and credits what arrives. eCash the engine sends back (unused fees, or the whole token when the payment fails) is kept on the phone until the person saves it.
+- Fedimint notes go to the sat balance, while the engine takes them (`fedimint` in the ways to pay). The box shows their amount and federation, and sends nothing while the engine takes no Fedimint notes, while none of its federations issued them, or while they are worth more than it takes at once. See [APP.md, Fedimint notes in the eCash box](https://github.com/ForgeReserve/forge-ai/blob/main/docs/APP.md#fedimint-notes-in-the-ecash-box) for every answer and what the phone keeps.
 
 - **Id:** `forge.fund.ecash`, known in the app as `ecash`.
 - **Folder:** [`public/v2/modules/fund/ecash/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/ecash)
-- **Needs:** `wallet.topup` for [`POST /v1/wallet/topup`](../API.md#post-v1-wallet-topup); `scan` when the phone has a camera.
-- **Works on:** the website and both apps.
-- **Costs:** the token's value goes into the balance.
-- **Private:** eCash, which the app marks as a way that cannot be linked to you.
+- **Needs:** `wallet.topup` for [`POST /v1/wallet/topup`](../API.md#post-v1-wallet-topup); `engine.foreignQuote` and `engine.foreignConfirm` for [`POST /v1/wallet/fund/foreign/quote`](../API.md#post-v1-wallet-fund-foreign-quote) and [`POST /v1/wallet/fund/foreign/confirm`](../API.md#post-v1-wallet-fund-foreign-confirm); `engine.funding`; `vault`, which holds eCash from another mint from Add to the outcome; `wallet.methods` (`fedimint`, `foreign`, `convert`), `mints`, `lockKey`; `scan` when the phone has a camera.
+- **Works on:** the website and both apps. Fedimint notes while the engine takes them; another mint's Cashu while it takes other mints.
+- **Costs:** the token's or the notes' value goes into the balance. From another mint, less the Lightning fees, shown before Add. Fedimint notes, less the federation's fee for taking them.
+- **Private:** eCash, which the app marks as a way that cannot be linked to you. eCash from another mint: the engine and the other mint see one Lightning payment between them.
 
 ### Lightning
 
@@ -127,17 +130,6 @@ A bitcoin deposit address. The deposit is credited to a sat balance once it has 
 - **Works on:** the website and both apps, while the engine has on-chain funding on. It is off unless the operator turns it on (`FORGE_ONCHAIN_ENABLED`). Only for a sat balance.
 - **Costs:** the deposit, at least the engine's least.
 - **Private:** no. Bitcoin payments are public and permanent.
-
-### Other mint
-
-eCash from another Cashu mint. The engine quotes what it will credit, then on confirm pays a Lightning invoice from the other mint and credits what arrives. eCash the engine sends back (unused fees, or the whole token when the payment fails) is kept on the phone until the person saves it.
-
-- **Id:** `forge.fund.othermint`, known in the app as `othermint`.
-- **Folder:** [`public/v2/modules/fund/othermint/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/fund/othermint)
-- **Needs:** `engine.foreignQuote` and `engine.foreignConfirm` for [`POST /v1/wallet/fund/foreign/quote`](../API.md#post-v1-wallet-fund-foreign-quote) and [`POST /v1/wallet/fund/foreign/confirm`](../API.md#post-v1-wallet-fund-foreign-confirm); `engine.funding`; `vault`, which holds the token from confirm to the outcome; `wallet.lockKey`; `scan` when the phone has a camera.
-- **Works on:** the website and both apps, while the engine takes other mints.
-- **Costs:** the token's value, less the Lightning fees. The most the fees can be is shown before confirm.
-- **Private:** the engine and the other mint see one Lightning payment between them.
 
 ## Voice in
 

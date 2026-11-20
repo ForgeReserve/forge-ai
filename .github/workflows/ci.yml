@@ -254,8 +254,9 @@ jobs:
 
   # The Fedimint receiver (services/fedimint-receiver, docs/FEDIMINT-RECEIVER.md): formatting, clippy and its
   # tests against in-process federations, then the gateway's Fedimint top-ups end to end against the built
-  # receiver and devfed binaries (test/fedimint/). Only when the receiver's directory or the gateway's
-  # Fedimint code changes (or everything runs), so other changes do not pay for compiling fedimint. The
+  # receiver and devfed binaries (test/fedimint/), with the v2 app's top-up client. Only when the
+  # receiver's directory or the Fedimint top-up code changes (scripts/ci-changes.ts FEDIMINT_GATEWAY_PATHS,
+  # or everything runs), so other changes do not pay for compiling fedimint. The
   # dependencies' build is cached by Cargo.lock.
   receiver:
     needs: changes

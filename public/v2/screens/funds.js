@@ -1,6 +1,7 @@
 // Funds and memory (ZBoth, with the add area of AddFunds-C4), one funding method (a fund module), and
 // Take funds out (refund as eCash, kept on the phone until the person says they saved it). Add money
 // itself is the wallet cards (screens/wallet.js).
+import { shortId } from '../core/fedinote.js';
 import { CARD_WAYS } from '../core/ways.js';
 import { addedPanel, backHeader, copy, el, icon, msgLine, say, sayEl, toast } from '../core/ui.js';
 import { cardRing, listenButton, listenHeader, screenListen } from './parts.js';
@@ -81,10 +82,14 @@ export function fundsScreen(ctx) {
     const rows = [];
     for (const e of vault.incoming()) {
       const refused = e.state === 'refused';
+      // Fedimint notes the federation took without the value being added: help is needed, with their id.
+      const stuck = e.state === 'stuck';
       // Other-mint tokens settle when the engine answers (the app looks them up on start and on Funds).
-      // Once the token was taken, copying it is no use, so those rows have no Copy button.
-      const taken = !refused && e.via === 'othermint' && (e.code === 'change_pending' || e.code === 'refund_pending');
-      const [title, sub] = refused
+      // Once the token was taken, copying it is no use, so those rows have no Copy button; nor do stuck notes.
+      const taken = stuck || (!refused && e.via === 'othermint' && (e.code === 'change_pending' || e.code === 'refund_pending'));
+      const [title, sub] = stuck
+        ? [t('funds.stuck'), t('funds.stuckSub', { id: shortId(e.notesId) })]
+        : refused
         ? [t('funds.notAdded'), t('funds.notAddedSub', { message: e.message ?? '' })]
         : e.via === 'free'
           ? [t('funds.freeWaiting'), t('funds.waitingSub')]
@@ -98,14 +103,15 @@ export function fundsScreen(ctx) {
       rows.push(
         el(
           'div',
-          { class: `vault-row ${refused ? 'refused' : 'waiting'}`, 'data-vault-in': e.id },
+          { class: `vault-row ${refused || stuck ? 'refused' : 'waiting'}`, 'data-vault-in': e.id },
           el('b', { text: title }),
           sayEl('p', {}, sub),
           el(
             'div',
             { class: 'row-btns' },
             taken ? null : el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.token)) ? t('answer.copied') : t('answer.copyFailed')) }, icon('copy', 18), el('span', { text: t('funds.copyToken') })),
-            refused
+            stuck && e.notesId ? el('button', { type: 'button', class: 'btn small', onclick: async () => toast((await copy(e.notesId)) ? t('answer.copied') : t('answer.copyFailed')) }, icon('copy', 18), el('span', { text: t('funds.copyCode') })) : null,
+            refused || stuck
               ? el('button', {
                   type: 'button',
                   class: 'btn small danger',
@@ -228,7 +234,11 @@ export function takeAdded() {
  * Hosts one fund module's view. The module builds its own body from the inputs it was given.
  * open(id, {token}) switches to another fund module and hands it the token.
  */
-export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { id }) {
+/** Ways that moved into another: an old address opens the new one. Other mint is in the eCash box now. */
+const MOVED = { othermint: 'ecash' };
+
+export function fundScreen({ t, state, nav, back, backTo, registry, reader }, { id: asked }) {
+  const id = MOVED[asked] ?? asked;
   const given = handoff?.id === id ? handoff : null;
   handoff = null;
   const entry = registry.list('fund').find((x) => x.instance.id === id);

@@ -8,7 +8,7 @@ This guide is for people who want to build a module. Start with [Write your firs
 
 | Kind | What it does | What the app hands it | What it must provide | Bundled |
 | - | - | - | - | - |
-| [`fund`](fund.md) | A way to put money into the balance, shown on Add money | `t`, `ui`, `engine`, `wallet`, `vault`, `format`, `scan`, `qr`, `nfc`, `card`, `till` | `id`, `available(methods)`, `view({done, open, token})` | 9 |
+| [`fund`](fund.md) | A way to put money into the balance, shown on Add money | `t`, `ui`, `engine`, `wallet`, `vault`, `format`, `scan`, `qr`, `nfc`, `card`, `till` | `id`, `available(methods)`, `view({done, open, token})` | 8 |
 | [`voice-in`](voice-in.md) | Turns the voice into words for Hold to talk | `t`, `mic`, `recognizer`, `audio`, `speech`, `asr` | `id`, `available()`, `private()`, `price(seconds)`, `maxSeconds()`, `start({onLevel, onText})` | 4 |
 | [`voice-out`](voice-out.md) | Reads an answer aloud | `t`, `speaker`, `synth`, `audio`, `phonon` | `id`, `available()`, `private()`, `pieceSize()`, `price(pieces, key)`, `speak(pieces, options)` | 3 |
 | [`filter`](filter.md) | Checks a photo in Share unseen: hidden details to take out, places to cover | `t` | `id`, `what`, `analyse(photo)` | 3 |
@@ -23,7 +23,7 @@ Every module is a folder under [`public/v2/modules/`](https://github.com/ForgeRe
 
 ```text
 public/v2/modules/
-  fund/        card  ecash  fedimint  free  invite  lightning  note  onchain  othermint  (and kit.js)
+  fund/        card  ecash  fedimint  free  invite  lightning  note  onchain  (and kit.js)
   voice-in/    bundled  device  engine  phone
   voice-out/   device  engine  phonon
   filter/      cover-faces  cover-numbers  strip-details

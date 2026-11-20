@@ -197,8 +197,17 @@ export function walletScreen(ctx) {
       }
     });
   });
-  // A finger on the track takes over from a tab's scroll.
-  track.addEventListener('pointerdown', () => (target = null));
+  // A finger that moves on the track takes over from a tab's scroll: a swipe (the browser pans, and says
+  // so with pointercancel), or a drag past a few pixels. A tap does not: a tap on the card a tab is still
+  // scrolling to must open that card, and if the tap took over, the card nearest the middle at that
+  // moment would become the one on show, and the tap would only scroll back to the tapped card.
+  let downX = null;
+  track.addEventListener('pointerdown', (e) => (downX = e.clientX));
+  track.addEventListener('pointermove', (e) => {
+    if (downX != null && Math.abs(e.clientX - downX) > 8) target = null;
+  });
+  track.addEventListener('pointercancel', () => (target = null));
+  for (const end of ['pointerup', 'pointercancel']) track.addEventListener(end, () => (downX = null));
   track.addEventListener('wheel', () => (target = null), { passive: true });
   tabs.addEventListener('keydown', (e) => {
     const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];

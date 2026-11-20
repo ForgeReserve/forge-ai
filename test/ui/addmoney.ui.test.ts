@@ -121,7 +121,7 @@ describe('Add money: one family', () => {
     { width: 390, height: 844 },
   ])('each way at $width by $height: its picture on top, one lit button, fields of 16px, nothing sideways, 48 px targets', async (viewport) => {
     const { ctx, page, errors } = await phone(await dollarKey(), { viewport });
-    for (const id of ['note', 'lightning', 'card', 'fedimint', 'ecash', 'othermint', 'free']) {
+    for (const id of ['note', 'lightning', 'card', 'fedimint', 'ecash', 'free']) {
       await page.goto(`${g.url}/v2/#/funds/add`);
       await openWay(page, id);
       await page.waitForSelector(`[data-fund=${id}]`);
@@ -161,14 +161,15 @@ describe('Add money: one family', () => {
     await ctx.close();
   }, 60_000);
 
-  it('Other mint: the price as one card, then the success panel; sats from the engine go on as they are', async () => {
+  it('eCash from another mint: the price as one card in the eCash box, then the success panel; sats from the engine go on as they are', async () => {
     const { ctx, page, errors } = await phone(await dollarKey());
-    await openFund(page, 'othermint');
+    await openFund(page, 'ecash');
     // Sats from another mint go to the sat balance (docs/PAYMENTS.md, Two balances), opened beside the dollars.
-    await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 1000));
-    await page.click('#foreignCheck');
+    await page.fill('#ecashToken', await mintToken(MINT_C, 'sat', 1000));
+    await page.click('#ecashAdd');
     await page.waitForSelector('.price-card #foreignCredit', { timeout: 20_000 });
     expect((await look(page)).lit).toEqual(['foreignConfirm']);
+    expect((await look(page)).sideways).toBe(false);
     const credit = (await page.textContent('#foreignCredit'))!;
     expect(credit).toMatch(/^\d+ sat$/);
     await page.click('#foreignConfirm');
@@ -240,25 +241,20 @@ describe('Add money: faults from the rehearsal', () => {
     await ctx.close();
   }, 60_000);
 
-  it('eCash from another mint goes on to Other mint with the token; Other mint sends the engine its own eCash to eCash', async () => {
+  it("eCash from another mint is priced in the eCash box; the engine's own eCash is added at once", async () => {
     const { ctx, page, errors } = await phone(await dollarKey());
     await openFund(page, 'ecash');
     await page.fill('#ecashToken', await mintToken(MINT_B, 'usd', 20));
     await page.click('#ecashAdd');
-    await expect.poll(() => page.textContent('[data-fund=ecash] .msg')).toMatch(/^From another mint\./);
-    expect(await page.textContent('#ecashOtherMint')).toBe('Other mint');
-    await page.click('#ecashOtherMint');
-    // Other mint has the token and shows its price at once.
-    await page.waitForSelector('[data-fund=othermint] #foreignConfirm', { timeout: 20_000 });
+    // The price, in the same box: no other screen.
+    await page.waitForSelector('[data-fund=ecash] #foreignConfirm', { timeout: 20_000 });
+    expect(await page.locator('#ecashOtherMint').count()).toBe(0);
+    await page.click('#foreignNo');
 
-    await openFund(page, 'othermint');
-    const own = await mintToken(MINT_A, 'usd', 30);
-    await page.fill('#foreignToken', own);
-    await page.click('#foreignCheck');
-    await expect.poll(() => page.textContent('[data-fund=othermint] .msg')).toMatch(/^Use eCash instead\./);
-    expect(await page.textContent('#foreignUseEcash')).toBe('eCash');
-    await page.click('#foreignUseEcash');
-    // eCash adds it at once: back on Funds with the 30 cents.
+    await openFund(page, 'ecash');
+    await page.fill('#ecashToken', await mintToken(MINT_A, 'usd', 30));
+    await page.click('#ecashAdd');
+    // Added at once: back on Funds with the 30 cents.
     await page.waitForSelector('[data-screen=funds]', { timeout: 20_000 });
     await expect.poll(() => page.textContent('#fundsAmount')).toBe('$2.30');
     expect(errors).toEqual([]);
@@ -267,9 +263,9 @@ describe('Add money: faults from the rehearsal', () => {
 
   it('a refused other-mint payment is said as an error', async () => {
     const { ctx, page, errors } = await phone(await dollarKey());
-    await openFund(page, 'othermint');
-    await page.fill('#foreignToken', await mintToken(MINT_C, 'sat', 500));
-    await page.click('#foreignCheck');
+    await openFund(page, 'ecash');
+    await page.fill('#ecashToken', await mintToken(MINT_C, 'sat', 500));
+    await page.click('#ecashAdd');
     await page.waitForSelector('#foreignConfirm', { timeout: 20_000 });
     await page.route('**/v1/wallet/fund/foreign/confirm', (r) => r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { code: 'quote_expired', message: 'The price ran out.' } }) }));
     await page.click('#foreignConfirm');

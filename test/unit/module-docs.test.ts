@@ -143,7 +143,7 @@ describe('module list', () => {
 
   it('describes every module folder, and only those', () => {
     expect(described.map((d) => d.path).sort()).toEqual(folders.map(([k, f]) => `public/v2/modules/${k}/${f}/`).sort());
-    expect(described).toHaveLength(24);
+    expect(described).toHaveLength(23);
   });
 
   it("gives each module its manifest's id and kind, and the id its code uses", () => {
