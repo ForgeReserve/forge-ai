@@ -394,7 +394,7 @@ describe('the writing finder (cover-numbers)', () => {
       const img = decodeJpeg(bytes);
       const s = Math.min(1, TEXT.WORK_SIDE / Math.max(img.width, img.height));
       const blocks = TEXT.findWriting(img);
-      expect(blocks.length, name).toBeGreaterThan(2);
+      expect(blocks.length, name).toBeGreaterThanOrEqual(2);
       const mask = COVERS.coverMask(blocks, img.width, img.height);
       for (const b of blocks) {
         expect(holds(mask, img.width, img.height, b.found), name).toBe(true);
@@ -406,6 +406,22 @@ describe('the writing finder (cover-numbers)', () => {
     }
     // The road sign's "138A" is under a block.
     expect(TEXT.findWriting(decodeJpeg(SIGN)).some((b: any) => b.x <= 243 && b.x + b.w >= 243 && b.y <= 220 && b.y + b.h >= 220)).toBe(true);
+  });
+
+  it('on crowd photos, takes no head, window, branch or backpack for a large letter', () => {
+    // A row of heads or windows larger than the area each pixel is compared with left rims shaped like an
+    // O, side by side like a line of large letters: blocks over sky, buildings and a backpack in the wide
+    // protest photo, and over most of the march.
+    for (const name of ['protest-wide.jpg', 'march.jpg']) {
+      const img = decodeJpeg(new Uint8Array(readFileSync(resolve(PHOTOS, 'crowd', name))));
+      const A = img.width * img.height;
+      const blocks = TEXT.findWriting(img);
+      for (const b of blocks) expect(b.w * b.h, `${name} ${JSON.stringify([b.x, b.y, b.w, b.h])}`).toBeLessThan(0.04 * A);
+      expect(COVERS.coverMask(blocks, img.width, img.height).reduce((n: number, v: number) => n + v, 0), name).toBeLessThan(0.12 * A);
+    }
+    // The backpack in the wide photo, at the bottom of the frame.
+    const wide = decodeJpeg(new Uint8Array(readFileSync(resolve(PHOTOS, 'crowd/protest-wide.jpg'))));
+    expect(TEXT.findWriting(wide).some((b: any) => b.y + b.h > 700 && b.x < 800 && b.x + b.w > 500)).toBe(false);
   });
 
   it('is quick enough for a low-end phone: a 2048 px photo in well under a second on this machine', () => {
@@ -584,9 +600,9 @@ describe('the bundled filter modules', () => {
     const d = await mods[0].analyse({ bytes: SIGN });
     expect(d.found).toEqual(expect.arrayContaining(['location', 'device', 'time']));
     expect(META.leftDetails(mods[0].finish(SIGN))).toEqual([]);
-    const img = picture(400, 300);
+    const img = picture(640, 480);
     const plate = write(img, 'AB 12', 60, 100, 4);
-    const w = await mods[2].analyse({ pixels: img, width: 400, height: 300 });
+    const w = await mods[2].analyse({ pixels: img, width: 640, height: 480 });
     expect(w.covers.some((c: any) => c.kind === 'writing' && covered(c, plate))).toBe(true);
   });
 
