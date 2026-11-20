@@ -230,7 +230,8 @@ async fn a_backup_and_the_seed_bring_the_records_back_too() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_join_with_a_seed_that_already_holds_notes_recovers_them() {
     // The operator starts over on an empty volume with the same words and joins again, instead of
-    // running recover: the join runs Fedimint's recovery all the same.
+    // running recover: the join runs Fedimint's recovery all the same, to its end even when its
+    // caller stops waiting.
     let fed = fed(Mints::V1).await;
     let (_t, data) = data_dir();
     let env = [(MNEMONIC, WORDS)];
@@ -243,8 +244,23 @@ async fn a_join_with_a_seed_that_already_holds_notes_recovers_them() {
     };
     std::fs::remove_dir_all(&data).unwrap();
     let svc = Service::start(&data, &env).await.expect("start");
+    // A caller that gives up first (the gateway's client waits 15 s; a long history takes longer):
+    // the join goes on, and is there when asked again.
+    let gave_up = reqwest::Client::new()
+        .post(format!("{}/federations", svc.url))
+        .bearer_auth(TOKEN)
+        .json(&json!({ "invite": fed.invite() }))
+        .timeout(std::time::Duration::from_millis(200))
+        .send()
+        .await;
+    assert!(gave_up.is_err(), "the recovery answered within 200 ms");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while svc.get("/federations").await.1["federations"].as_array().is_none_or(Vec::is_empty) {
+        assert!(std::time::Instant::now() < deadline, "the join did not go on without its caller");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     let j = svc.join(&fed).await;
-    assert_eq!((j["already_joined"].as_bool(), j["restore_open"].as_bool()), (Some(false), Some(true)), "{j}");
+    assert_eq!((j["already_joined"].as_bool(), j["restore_open"].as_bool()), (Some(true), Some(true)), "{j}");
     assert_eq!(svc.balance(&fed).await, before);
     assert_uncertain(&receive_end(&svc, &a, "forge:acct-a").await);
     let (d, _) = fed.notes(30_000, false, false).await.expect("notes");

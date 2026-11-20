@@ -233,18 +233,25 @@ impl Wallet {
     /// federation with no mint module this service speaks, before anything is written.
     ///
     /// The client is made by Fedimint's recovery and answers only once that has finished, so a
-    /// join of a federation with a long history takes a while. When the recovery finds notes the
-    /// seed already held, the data directory had lost them: the federation is marked restored.
-    pub async fn join(&self, invite: &str) -> Result<(Arc<Federation>, bool), ApiError> {
+    /// join of a federation with a long history takes a while. It runs in a task of its own and
+    /// finishes even when the caller stops waiting (an HTTP timeout): asked again, the join waits
+    /// for that one, or finds the federation joined. When the recovery finds notes the seed
+    /// already held, the data directory had lost them: the federation is marked restored.
+    pub async fn join(self: &Arc<Self>, invite: &str) -> Result<(Arc<Federation>, bool), ApiError> {
         let invite_code = InviteCode::from_str(invite.trim()).map_err(|_| ApiError::new(Code::BadInvite, "not a Fedimint invite code"))?;
-        let _guard = self.join_lock.lock().await;
-        if let Some(fed) = self.feds.read().await.get(&invite_code.federation_id()) {
-            return Ok((fed.clone(), true));
-        }
-        let fed = self.connect(&invite_code, None).await?;
-        self.feds.write().await.insert(fed.id, fed.clone());
-        tracing::info!(federation = %fed.id, modules = ?fed.modules, "federation joined");
-        Ok((fed, false))
+        let w = self.clone();
+        tokio::spawn(async move {
+            let _guard = w.join_lock.lock().await;
+            if let Some(fed) = w.feds.read().await.get(&invite_code.federation_id()) {
+                return Ok((fed.clone(), true));
+            }
+            let fed = w.connect(&invite_code, None).await?;
+            w.feds.write().await.insert(fed.id, fed.clone());
+            tracing::info!(federation = %fed.id, modules = ?fed.modules, "federation joined");
+            Ok((fed, false))
+        })
+        .await
+        .map_err(|e| ApiError::internal(format!("the join stopped: {e}")))?
     }
 
     /// Rebuild a federation's wallet from the seed (`fedimint-receiver recover`): one whose
