@@ -53,7 +53,7 @@ The engine takes Fedimint notes in the same top-up as Cashu once its operator tu
 | `invalid_token` | "Could not use it." (nothing was taken), with Copy my eCash | Kept, marked not added |
 | `token_spent` | "Already used." | Kept, marked not added, as a spent Cashu token is |
 | `topup_pending`, `token_in_flight`, a 5xx, no answer | "Still arriving.", calm, with the wait picture and Check now | Kept pending, and the same notes are sent again: every 6 seconds while the box is open, on every start of the app and when the connection comes back. Removed only on the credit or the replay |
-| `fedimint_unavailable` for notes already pending | "Still arriving." | Kept pending: the engine reads the notes at the receiver before it looks for their earlier top-up, so this answer says nothing about notes already on their way |
+| `fedimint_unavailable` for notes already pending | "Still arriving." | Kept pending. An engine finds notes already on their way by the id it works out from them and answers `topup_pending` even with its receiver down; for notes it cannot work out an id for (or an older engine) it asks the receiver first, so this answer says nothing about notes already on their way |
 | `502 issuance_failed` | "Needs help.", with a short code and Copy code (the whole id) | Kept, marked stuck, never sent again; Funds lists them as "eCash needs help" with Copy code and Remove, and no Copy eCash (the federation has them) |
 
 The same notes again are always the same request: one sat balance, one key, so a repeat finds the first top-up and is never counted twice (the engine credits a notes id once).

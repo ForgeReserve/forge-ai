@@ -14,11 +14,12 @@ import { releaseIfEmpty } from '../../src/accounts.ts';
 import { createApp, startupRecovery } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import { buildDeps } from '../../src/deps.ts';
-import { type FedimintFaults, looksLikeFedimintNotes, receiveKey } from '../../src/fedimint.ts';
+import { type FedimintFaults, localNotesId, looksLikeFedimintNotes, receiveKey } from '../../src/fedimint.ts';
 import { newApiKey } from '../../src/ledger.ts';
 import { setLogSilent } from '../../src/log.ts';
 import { fixedRateSource } from '../../src/rates.ts';
-import { FakeReceiver, RECEIVER_TOKEN } from '../support/fakereceiver.ts';
+import { type FakeNotes, FakeReceiver, RECEIVER_TOKEN } from '../support/fakereceiver.ts';
+import notesFixture from './fixtures/fedimint/notes.json' with { type: 'json' };
 
 setLogSilent(true);
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -28,6 +29,7 @@ const catalog = {
   models: [{ id: 'mock-echo', supplier: 'mock', upstream: 'mock-echo', input_usd_per_mtok: 100, output_usd_per_mtok: 1000, max_output_tokens: 256, price_verified: true }],
 };
 
+const FIXTURES = notesFixture.notes as Array<{ name: string; notes: string; notes_id: string; federation_id: string; module: 'mint' | 'mintv2'; amount_msat: number }>;
 const FED = createHash('sha256').update('federation A').digest('hex');
 const OTHER = createHash('sha256').update('federation B').digest('hex');
 
@@ -302,6 +304,81 @@ describe('a Fedimint top-up', () => {
     expect(b.status).toBe(409);
     expect(b.body.error.code).toBe('token_in_flight');
     expect(g.balance(key)).toBe(50_000 - 1234);
+  });
+});
+
+describe('notes sent again while the receiver is down', () => {
+  // Real notes (test/unit/fixtures/fedimint/notes.json, made by devfed and read by the receiver), so the
+  // gateway works out the receiver's own notes_id from them. The stand-in is told that id.
+  const real = (name: string, o: Partial<FakeNotes> = {}) => {
+    const fx = FIXTURES.find((x) => x.name === name)!;
+    rx.joinFederation(fx.federation_id, 'Devfed', ['mint', 'mintv2']);
+    const n: FakeNotes = { notes: fx.notes, notes_id: fx.notes_id, federation_id: fx.federation_id, module: fx.module, amount_msat: fx.amount_msat, valid: true, outcome: 'done', fee_msat: 176, ...o };
+    rx.notes.set(fx.notes, n);
+    return n;
+  };
+  const parses = () => rx.calls.filter((c) => c === 'POST /parse').length;
+
+  it('works out the receiver notes_id of every kind of notes, and none for text it does not read', async () => {
+    for (const fx of FIXTURES) expect(await localNotesId(fx.notes), fx.name).toBe(fx.notes_id);
+    expect(await localNotesId(rx.makeNotes(FED, 1000).notes)).toBeUndefined();
+    expect(await localNotesId('AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=')).toBeUndefined();
+  });
+
+  it('answers topup_pending to notes already on their way (their row is found without the receiver), and credits them once it is back', async () => {
+    const g = gateway();
+    const n = real('v1', { outcome: 'pending' });
+    g.allow(n.federation_id);
+    const first = await g.topup({ token: n.notes, invite: g.invite() });
+    expect(first.status).toBe(503);
+    expect(first.body.error.code).toBe('topup_pending');
+    expect(parses()).toBe(1);
+    rx.down = true;
+    const again = await g.topup({ token: n.notes }, { authorization: `Bearer ${first.body.key}` });
+    expect(again.status).toBe(503);
+    expect(again.body.error.code).toBe('topup_pending');
+    expect(g.row(n.notes_id)).toMatchObject({ status: 'prepared' });
+    // Notes the gateway has no row for are still refused untouched while the receiver is down.
+    const fresh = await g.topup({ token: real('v1-small').notes }, { authorization: `Bearer ${first.body.key}` });
+    expect(fresh.status).toBe(503);
+    expect(fresh.body.error.code).toBe('fedimint_unavailable');
+    rx.down = false;
+    rx.finish(n.notes_id, 'done');
+    const done = await g.topup({ token: n.notes }, { authorization: `Bearer ${first.body.key}` });
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ replay: false, credited_msub: n.amount_msat - 176, fedimint: { notes_id: n.notes_id } });
+    // Found by its own id each time: /parse was asked once, for the first send (and once for the fresh notes).
+    expect(parses()).toBe(1);
+  });
+
+  it('answers a replay to notes already credited, and token_spent to another balance, with the receiver down', async () => {
+    const g = gateway();
+    const n = real('v2');
+    g.allow(n.federation_id);
+    const first = await g.topup({ token: n.notes, invite: g.invite() });
+    expect(first.status).toBe(200);
+    rx.down = true;
+    // Re-encoded with whitespace, as a person may paste it.
+    const again = await g.topup({ token: n.notes.replace(/(.{40})/g, '$1\n') }, { authorization: `Bearer ${first.body.key}` });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ replay: true, credited_msub: 0, balance_msub: first.body.balance_msub });
+    const code = g.invite();
+    const other = await g.topup({ token: n.notes, invite: code });
+    expect(other.status).toBe(400);
+    expect(other.body.error.code).toBe('token_spent');
+    expect(g.deps.invites.lookup(code)!.status).toBe('open');
+  });
+
+  it('answers issuance_failed to stuck notes with the receiver down', async () => {
+    const g = gateway();
+    const n = real('v1-invite', { outcome: 'issuance_failed' });
+    g.allow(n.federation_id);
+    const first = await g.topup({ token: n.notes, invite: g.invite() });
+    expect(first.body.error.code).toBe('issuance_failed');
+    rx.down = true;
+    const again = await g.topup({ token: n.notes }, { authorization: `Bearer ${first.body.key}` });
+    expect(again.status).toBe(502);
+    expect(again.body.error.code).toBe('issuance_failed');
   });
 });
 

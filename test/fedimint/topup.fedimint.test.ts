@@ -12,7 +12,7 @@
 // FORGE_FEDIMINT_BIN_DIR names the directory that holds them (default: that crate's target/debug). A
 // missing binary fails this file; it is never skipped.
 import { type ChildProcess, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -26,6 +26,7 @@ const BIN_DIR = resolve(ROOT, process.env.FORGE_FEDIMINT_BIN_DIR ?? 'services/fe
 const RECEIVER_BIN = join(BIN_DIR, 'fedimint-receiver');
 const DEVFED_BIN = join(BIN_DIR, 'devfed');
 const TOKEN = randomBytes(24).toString('hex');
+const ADMIN_TOKEN = randomBytes(24).toString('hex');
 const LONG = 180_000;
 
 const procs = new Set<ChildProcess>();
@@ -114,7 +115,7 @@ class Receiver {
 }
 
 /** pnpm admin fedimint:* in a child process, on the gateway's database. */
-function admin(dbPath: string, receiverUrl: string, args: string[], input = '') {
+function adminCli(dbPath: string, receiverUrl: string, args: string[], input = '') {
   return new Promise<{ status: number | null; stdout: string; stderr: string }>((done) => {
     const p = spawn(process.execPath, ['src/admin.ts', ...args], {
       cwd: ROOT,
@@ -149,7 +150,11 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
   let g: Gateway;
 
   const gw = (o: Parameters<typeof startGateway>[0] = {}) =>
-    startGateway({ dbPath: dbPath || undefined, ...o, env: { FORGE_FEDIMINT_URL: rx.url, FORGE_FEDIMINT_TOKEN: TOKEN, FORGE_INVITE_ONLY: 'true', ...o.env } });
+    startGateway({
+      dbPath: dbPath || undefined,
+      ...o,
+      env: { FORGE_FEDIMINT_URL: rx.url, FORGE_FEDIMINT_TOKEN: TOKEN, FORGE_INVITE_ONLY: 'true', FORGE_ADMIN_TOKEN_HASH: createHash('sha256').update(ADMIN_TOKEN).digest('hex'), FORGE_ADMIN_RATE_LIMIT_RPM: '100000', ...o.env },
+    });
   const topup = async (gateway: Gateway, body: object, key?: string) => {
     const r = await fetch(`${gateway.url}/v1/wallet/topup`, { method: 'POST', headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) }, body: j(body) });
     return { status: r.status, body: (await r.json()) as any };
@@ -170,6 +175,15 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
     return credited;
   };
   const accounts = (gateway: Gateway) => (gateway.deps.db.prepare('SELECT COUNT(*) AS n FROM accounts').get() as { n: number }).n;
+  /** The operator's admin API (/admin/api, src/fedimint-admin.ts), as the admin page calls it. */
+  const admin = async (gateway: Gateway, path: string, body?: object) => {
+    const r = await fetch(`${gateway.url}/admin/api${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'x-forge-admin-token': ADMIN_TOKEN, ...(body ? { origin: gateway.url, 'content-type': 'application/json' } : {}) },
+      body: body ? j(body) : undefined,
+    });
+    return { status: r.status, body: (await r.json()) as any };
+  };
 
   beforeAll(async () => {
     for (const b of [RECEIVER_BIN, DEVFED_BIN]) {
@@ -189,7 +203,7 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
   }, LONG);
 
   it('joins the federation through pnpm admin fedimint:join, and lists it in the fund methods', async () => {
-    const r = await admin(dbPath, rx.url, ['fedimint:join', '--json'], `${fed.invite}\n`);
+    const r = await adminCli(dbPath, rx.url, ['fedimint:join', '--json'], `${fed.invite}\n`);
     expect(r.status, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)[0]).toMatchObject({ id: fed.id, state: 'active', receives: 'mint', max_sat: 100_000, cap_sat: 1_000_000 });
     expect(r.stdout + r.stderr).not.toContain(fed.invite);
@@ -240,19 +254,19 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
   }, LONG);
 
   it('refuses a paused federation, and takes its notes again once resumed', async () => {
-    expect((await admin(dbPath, rx.url, ['fedimint:pause', fed.id])).stdout.trim()).toBe('paused');
+    expect((await adminCli(dbPath, rx.url, ['fedimint:pause', fed.id])).stdout.trim()).toBe('paused');
     const n = await fed.notes(10_000);
     const paused = await topup(g, { token: n.notes }, first.key);
     expect(paused.status).toBe(400);
     expect(paused.body.error.code).toBe('federation_paused');
-    expect((await admin(dbPath, rx.url, ['fedimint:resume', fed.id])).stdout.trim()).toBe('active');
+    expect((await adminCli(dbPath, rx.url, ['fedimint:resume', fed.id])).stdout.trim()).toBe('active');
     const ok = await topup(g, { token: n.notes }, first.key);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     first.net = ok.body.balance_msub;
   }, LONG);
 
   it('refuses notes over the per-payment cap and over the federation holdings cap', async () => {
-    expect((await admin(dbPath, rx.url, ['fedimint:join', '--max-sat', '20'], fed.invite)).status).toBe(0);
+    expect((await adminCli(dbPath, rx.url, ['fedimint:join', '--max-sat', '20'], fed.invite)).status).toBe(0);
     const big = await fed.notes(30_000);
     const over = await topup(g, { token: big.notes }, first.key);
     expect(over.status).toBe(400);
@@ -260,12 +274,12 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
     expect(over.body.max).toEqual({ sat: 20 });
     // Holdings: room for 10 sat more than the federation holds now.
     const held = await fedBalance();
-    expect((await admin(dbPath, rx.url, ['fedimint:join', '--max-sat', '100000', '--cap-sat', String(Math.ceil(held / 1000) + 10)], fed.invite)).status).toBe(0);
+    expect((await adminCli(dbPath, rx.url, ['fedimint:join', '--max-sat', '100000', '--cap-sat', String(Math.ceil(held / 1000) + 10)], fed.invite)).status).toBe(0);
     const full = await topup(g, { token: big.notes }, first.key);
     expect(full.status).toBe(400);
     expect(full.body.error.code).toBe('federation_full');
     expect(await fedBalance()).toBe(held);
-    expect((await admin(dbPath, rx.url, ['fedimint:join', '--cap-sat', '1000000'], fed.invite)).status).toBe(0);
+    expect((await adminCli(dbPath, rx.url, ['fedimint:join', '--cap-sat', '1000000'], fed.invite)).status).toBe(0);
     const ok = await topup(g, { token: big.notes }, first.key);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     first.net = ok.body.balance_msub;
@@ -312,6 +326,11 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
     // The receiver is killed at once, and stays down for a sweep.
     await rx.kill();
     expect(await g.deps.fedimint!.sweep()).toEqual({ checked: 1, credited: 0 });
+    // The same notes sent again: the gateway finds its own row by the notes id it works out from them,
+    // with no receiver to ask, and says they are on their way.
+    const resent = await topup(g, { token: n.notes }, first.key);
+    expect(resent.status).toBe(503);
+    expect(resent.body.error.code).toBe('topup_pending');
     // Down: new notes are refused before anything is taken.
     const m = await fed.notes(5_000);
     const down = await topup(g, { token: m.notes }, first.key);
@@ -407,11 +426,11 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
       expect(FN.fedimintAnswer(e).kind).toBe('pending');
       expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'topup_pending' }]);
       // The receiver goes down. The app sends the same notes again (as it does on start and when the
-      // connection comes back): the gateway answers fedimint_unavailable, and the phone keeps them pending,
-      // because they were already on their way.
+      // connection comes back): the gateway finds their row without the receiver and answers
+      // topup_pending, and the phone keeps them pending.
       await rx.kill();
       expect(await VAULT.retryPending({ engine: appEngine(g), vault, getKey: () => appKey, setKey })).toBe(0);
-      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'fedimint_unavailable' }]);
+      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'topup_pending' }]);
       expect(await balanceOf(g, appKey!)).toBe(start);
       // Back: the app's retries finish it, once.
       await rx.start();
@@ -426,6 +445,77 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
       // Nothing more on any later try.
       expect(await send(g, n.notes)).toMatchObject({ replay: true, credited: 0 });
       expect(await balanceOf(g, appKey!)).toBe(start + rec.net_msat);
+    }, LONG);
+  });
+
+  describe("the operator's admin against the real receiver", () => {
+    const fedView = async (id = fed.id) => (await admin(g, '/fedimint')).body.federations.find((f: any) => f.id === id);
+
+    it('reconciles to the msat: the receiver holds exactly what the gateway credited, and the fees are face value less credited', async () => {
+      await g.close();
+      g = await gw();
+      const r = await admin(g, '/fedimint');
+      expect(r.status).toBe(200);
+      const v = r.body;
+      expect(v.receiver).toMatchObject({ ok: true, error: null, joined: 1 });
+      const f = v.federations[0];
+      const credited = (g.deps.db.prepare("SELECT SUM(amount_msub) AS s FROM ledger WHERE kind = 'topup' AND ref LIKE 'fm:%'").get() as { s: number }).s;
+      expect(f).toMatchObject({ id: fed.id, state: 'active', joined: true, receiver_balance_msat: await fedBalance(), gateway: { credited_msat: credited, sent_msat: 0 }, count: { prepared: 0, stuck: 0 } });
+      expect(f.count.done).toBeGreaterThanOrEqual(8);
+      // A real federation charges a fee to reissue: it is the face value less what was credited.
+      expect(f.gateway.fees_msat).toBeGreaterThan(0);
+      expect(f.gateway.received_msat - f.gateway.credited_msat).toBe(f.gateway.fees_msat);
+      expect(f.reconciliation).toMatchObject({ status: 'ok', flag: false, difference_msat: 0, expected_msat: credited });
+      // Every sat balance here was funded with notes, and the gateway holds no Cashu sat: take out would
+      // fail, and the rebalance asks for all of it from this federation.
+      expect(v.coverage).toMatchObject({ cashu_sat: 0, shortfall_sat: v.coverage.liabilities_sat });
+      expect(v.coverage.liabilities_sat).toBeGreaterThan(0);
+      expect(v.coverage.warnings).toEqual(['take_out_short', 'largest_balance_short']);
+      expect(v.rebalance).toMatchObject({ need_sat: v.coverage.liabilities_sat, suggested_sat: v.coverage.liabilities_sat, from: [{ federation_id: fed.id }], possible: false });
+      expect(JSON.stringify(v)).not.toContain(fed.invite);
+    }, LONG);
+
+    it('joins a federation by invite, pauses and resumes it, and changes its holdings cap, which the top-up follows', async () => {
+      const joined = await admin(g, '/fedimint/federations', { invite: stranger.invite, cap_sat: 50 });
+      expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+      expect(joined.body).toMatchObject({ id: stranger.id, state: 'active', created: true, already_joined: false, caps: { cap_sat: 50 } });
+      expect(JSON.stringify(joined.body)).not.toContain(stranger.invite);
+      expect(rx.logs()).not.toContain(stranger.invite);
+      // Over its cap of 50 sat: refused, nothing taken.
+      const big = await stranger.notes(60_000);
+      expect((await topup(g, { token: big.notes }, first.key)).body.error.code).toBe('federation_full');
+      expect((await admin(g, `/fedimint/federations/${stranger.id}/cap`, { cap_sat: null })).body).toMatchObject({ cap_default: true, caps: { cap_sat: 1_000_000 } });
+      expect((await admin(g, `/fedimint/federations/${stranger.id}/pause`, {})).body).toEqual({ id: stranger.id, state: 'paused' });
+      expect((await topup(g, { token: big.notes }, first.key)).body.error.code).toBe('federation_paused');
+      expect((await admin(g, `/fedimint/federations/${stranger.id}/resume`, {})).body).toEqual({ id: stranger.id, state: 'active' });
+      const ok = await topup(g, { token: big.notes }, first.key);
+      expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+      const s = await fedView(stranger.id);
+      expect(s).toMatchObject({ joined: true, count: { done: 1 }, gateway: { credited_msat: ok.body.credited_msub }, receiver_balance_msat: ok.body.credited_msub, reconciliation: { status: 'ok', difference_msat: 0 } });
+    }, LONG);
+
+    it('Check now finishes a top-up left on its way, once, and the federation reconciles after', async () => {
+      await g.close();
+      g = await gw({ fedimint: { waitMs: 0 } });
+      const n = await fed.notes(11_000);
+      const r = await topup(g, { token: n.notes }, first.key);
+      expect(r.body.error.code).toBe('topup_pending');
+      const id = latestRow(g).id.slice(3);
+      expect((await admin(g, '/fedimint')).body.attention).toMatchObject([{ notes_id: id, federation_id: fed.id, status: 'prepared' }]);
+      let check: any;
+      for (let i = 0; i < 120; i++) {
+        check = (await admin(g, `/fedimint/receipts/${id}/check`, {})).body;
+        if (check.status !== 'prepared') break;
+        // While it waits, the receiver may already hold it: the difference is explained by it, never flagged.
+        expect((await fedView()).reconciliation.flag).toBe(false);
+        await new Promise((res) => setTimeout(res, 250));
+      }
+      expect(check).toMatchObject({ status: 'done', credited: true, record: { state: 'done', ours: true }, receiver_error: null });
+      const rec = await rx.api(`/receive/${id}`);
+      expect((await admin(g, `/fedimint/receipts/${id}/check`, {})).body).toMatchObject({ status: 'done', credited: false });
+      expect((await admin(g, '/fedimint')).body.attention).toEqual([]);
+      expect(await fedView()).toMatchObject({ receiver_balance_msat: await fedBalance(), reconciliation: { status: 'ok', difference_msat: 0 } });
+      expect(rec.state).toBe('done');
     }, LONG);
   });
 });

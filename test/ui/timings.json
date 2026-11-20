@@ -4,6 +4,7 @@
     "test/ui/about.ui.test.ts": 64.1,
     "test/ui/addfunds.ui.test.ts": 28.8,
     "test/ui/addmoney.ui.test.ts": 75,
+    "test/ui/admin-fedimint.ui.test.ts": 2.3,
     "test/ui/android.ui.test.ts": 43.3,
     "test/ui/answer-ux.ui.test.ts": 50,
     "test/ui/card.ui.test.ts": 53.3,
