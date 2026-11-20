@@ -1,5 +1,5 @@
 {
-  "source": "Vitest JSON reports, 2026-11-19: .tmp/ui-times-landing/report.json",
+  "source": "Vitest JSON reports, 2026-11-20: .tmp/bitnote-times/run10.json",
   "files": {
     "test/ui/about.ui.test.ts": 64.1,
     "test/ui/addfunds.ui.test.ts": 28.8,
@@ -7,6 +7,7 @@
     "test/ui/admin-fedimint.ui.test.ts": 2.3,
     "test/ui/android.ui.test.ts": 43.3,
     "test/ui/answer-ux.ui.test.ts": 50,
+    "test/ui/bitnote.ui.test.ts": 11.2,
     "test/ui/card.ui.test.ts": 53.3,
     "test/ui/classic.ui.test.ts": 12.3,
     "test/ui/convert.ui.test.ts": 13.1,

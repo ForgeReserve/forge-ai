@@ -439,7 +439,7 @@
 </tr>
 <tr>
 <td><code>open(video, onProgress, opts)</code></td>
-<td>Starts reading single or animated QR codes into the <code>&lt;video&gt;</code> element. Resolves <code>{promise, stop()}</code>; <code>promise</code> resolves the text read. <code>onProgress(p)</code> gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; <code>opts.accept(text)</code> takes other codes too (eCash passes its Fedimint notes reader), and <code>opts.any</code> takes any code.</td>
+<td>Starts reading single or animated QR codes into the <code>&lt;video&gt;</code> element. Resolves <code>{promise, stop()}</code>; <code>promise</code> resolves the text read. <code>onProgress(p)</code> gets 0 to 1 for an animated code. It reads Cashu tokens and balance keys; <code>opts.accept(text)</code> takes other codes too (eCash and Scan a note pass the Fedimint notes reader and the BitNotes prefix), and <code>opts.any</code> takes any code. The camera is asked for 1920 by 1080 at best; where jsQR reads it, every other frame is the middle square at full detail, for dense codes.</td>
 </tr>
 </tbody></table></div>
 <h3 id="qr"><code>qr</code><a class="anchor" href="#qr" aria-label="Link to this section">#</a></h3>
@@ -568,7 +568,7 @@
 </tr>
 <tr>
 <td><code>open(id, {token})</code></td>
-<td>Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, or Fedimint notes, to eCash this way.</td>
+<td>Switches to another fund module and hands it a token in memory only, with nothing written to storage or the address. Scan a note hands a note from another mint, Fedimint notes, or a BitNotes note&#39;s code (spaces kept) to eCash this way.</td>
 </tr>
 <tr>
 <td><code>token</code></td>
