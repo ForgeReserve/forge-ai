@@ -187,7 +187,7 @@ describe('which jobs a change needs (scripts/ci-changes.ts)', () => {
   });
 
   it('runs the receiver job, with its end to end test, when the Fedimint top-up code changes', () => {
-    for (const p of ['src/fedimint.ts', 'src/fedimint-admin.ts', 'test/fedimint/topup.fedimint.test.ts', './test/fedimint/other.ts', 'public/v2/core/fedinote.js', 'public/vendor/noble.js', 'public/v2/core/vault.js', 'public/v2/core/engine.js']) {
+    for (const p of ['src/fedimint.ts', 'src/fedimint-admin.ts', 'src/fedimint-invites.ts', 'test/fedimint/topup.fedimint.test.ts', './test/fedimint/other.ts', 'public/v2/core/fedinote.js', 'public/vendor/noble.js', 'public/v2/core/vault.js', 'public/v2/core/engine.js']) {
       expect(touchesFedimintGateway(p), p).toBe(true);
       const d = decide('pull_request', [ch(p)]);
       // The gateway's own code: everything a gateway change runs, and the receiver job besides.

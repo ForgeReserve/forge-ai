@@ -41,7 +41,8 @@ export const RECEIVER_DIR = 'services/fedimint-receiver/';
 
 /**
  * The Fedimint top-up code and its end to end test, which the receiver job runs against the real
- * receiver and a real federation (test/fedimint/): the gateway's side and the operator's admin for it,
+ * receiver and a real federation (test/fedimint/): the gateway's side, the operator's admin for it, the invite export the
+ * recovery drill feeds to the receiver,
  * and the v2 app's client that the test drives (how the phone reads notes, sends them and keeps them).
  * The gateway reads notes with the app's own reader, which works out public keys with the vendored noble. A change to
  * one of these runs that job as well; the rest of the code does not (the unit tests run a stand-in
@@ -50,6 +51,7 @@ export const RECEIVER_DIR = 'services/fedimint-receiver/';
 export const FEDIMINT_GATEWAY_PATHS = [
   'src/fedimint.ts',
   'src/fedimint-admin.ts',
+  'src/fedimint-invites.ts',
   'test/fedimint/',
   'public/v2/core/fedinote.js',
   'public/vendor/noble.js',
