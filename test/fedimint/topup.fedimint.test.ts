@@ -312,6 +312,11 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
     // The receiver is killed at once, and stays down for a sweep.
     await rx.kill();
     expect(await g.deps.fedimint!.sweep()).toEqual({ checked: 1, credited: 0 });
+    // The same notes sent again: the gateway finds its own row by the notes id it works out from them,
+    // with no receiver to ask, and says they are on their way.
+    const resent = await topup(g, { token: n.notes }, first.key);
+    expect(resent.status).toBe(503);
+    expect(resent.body.error.code).toBe('topup_pending');
     // Down: new notes are refused before anything is taken.
     const m = await fed.notes(5_000);
     const down = await topup(g, { token: m.notes }, first.key);
@@ -407,11 +412,11 @@ describe('Fedimint top-ups against the real receiver and a real federation', () 
       expect(FN.fedimintAnswer(e).kind).toBe('pending');
       expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'topup_pending' }]);
       // The receiver goes down. The app sends the same notes again (as it does on start and when the
-      // connection comes back): the gateway answers fedimint_unavailable, and the phone keeps them pending,
-      // because they were already on their way.
+      // connection comes back): the gateway finds their row without the receiver and answers
+      // topup_pending, and the phone keeps them pending.
       await rx.kill();
       expect(await VAULT.retryPending({ engine: appEngine(g), vault, getKey: () => appKey, setKey })).toBe(0);
-      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'fedimint_unavailable' }]);
+      expect(vault.incoming()).toMatchObject([{ token: n.notes, state: 'pending', code: 'topup_pending' }]);
       expect(await balanceOf(g, appKey!)).toBe(start);
       // Back: the app's retries finish it, once.
       await rx.start();

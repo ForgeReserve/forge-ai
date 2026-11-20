@@ -3,7 +3,9 @@
  * Fedimint client: the receiver service (services/fedimint-receiver, docs/FEDIMINT-RECEIVER.md) holds
  * the notes. This file is the gateway's side of its contract:
  *
- *  1. POST /parse first: the notes' value and federation, with nothing spent. A federation is accepted
+ *  0. Notes the gateway already has a row for are found first, by the notes id worked out here from the
+ *     notes themselves (localNotesId), and go straight to that row: no receiver is needed to answer them.
+ *  1. POST /parse: the notes' value and federation, with nothing spent. A federation is accepted
  *     only when the receiver has joined it AND the federations table has it active. The caps are checked
  *     here: per payment, and the federation's holdings.
  *  2. The gateway's own incoming row, id fm:<notes_id>, status prepared, holding the notes text, is
@@ -165,10 +167,16 @@ interface FmRow {
   error: string | null;
 }
 
-/** What /parse and the policy said about notes about to be taken (FedimintService.check). */
+/**
+ * What check() decided about notes about to be taken: either the gateway's own row for them already
+ * exists (a resend: parsed and federation are absent, nothing was asked of the receiver), or /parse and
+ * the policy passed them (both present).
+ */
 export interface FedimintPlan {
   notes: string;
-  parsed: ParsedNotes;
+  notesId: string;
+  /** What /parse said; undefined when the gateway's row for these notes was found first. */
+  parsed?: ParsedNotes;
   /** The federation's row; undefined when the gateway already has a row for these notes (a retry). */
   federation?: FederationRow;
   /** The receiver's balance for the federation, and when it was asked (for the holdings cap). */
@@ -213,6 +221,37 @@ export const receiveKey = (accountId: string) => `forge:${accountId}`;
 
 /** Whitespace is ignored in notes, as the receiver ignores it. */
 const compact = (s: string) => s.replace(/\s+/g, '');
+
+/**
+ * The app's reader of notes (public/v2/core/fedinote.js): it works out the receiver's notes_id from the
+ * notes alone (the module, the federation id's first 4 bytes and each note's public key), with no
+ * network call. One implementation for the phone and the gateway, checked against real notes and the
+ * receiver's own ids (test/unit/fixtures/fedimint/notes.json, and the end to end test).
+ */
+interface NoteReader {
+  readFedimint(text: string): { ok: boolean; count?: number };
+  notesIdOf(text: string): Promise<string | null>;
+}
+let noteReader: Promise<NoteReader> | undefined;
+const reader = () => (noteReader ??= import('../public/v2/core/fedinote.js' as string) as Promise<NoteReader>);
+/**
+ * Each note costs a public key derivation (about 0.2 ms): notes with more than this are not worked out
+ * locally, and go to /parse first as before.
+ */
+export const LOCAL_ID_MAX_NOTES = 256;
+
+/** The notes' id worked out on the gateway, or undefined when the reader does not read them (or there are too many). */
+export async function localNotesId(notes: string): Promise<string | undefined> {
+  try {
+    const r = await reader();
+    const read = r.readFedimint(notes);
+    if (!read.ok || (read.count ?? Infinity) > LOCAL_ID_MAX_NOTES) return undefined;
+    return (await r.notesIdOf(notes)) ?? undefined;
+  } catch (e) {
+    log.warn('fedimint_local_id_failed', { err: errText(e) });
+    return undefined;
+  }
+}
 
 /**
  * True when a top-up's token is meant as Fedimint notes. Anything that starts with "cashu" stays on the
@@ -333,10 +372,17 @@ export class FedimintService {
    * Step 1, before any balance is opened: reads the notes at the receiver and refuses what the gateway
    * does not take. Nothing is spent or recorded. Notes the gateway already has a row for skip the policy:
    * they are resumed (or refused) by receive(), whatever has changed since.
+   *
+   * The row is looked up first, by the notes id worked out here from the notes themselves, so a resend of
+   * notes already on their way needs no receiver: with the receiver down it answers topup_pending (the
+   * row's own state), where asking /parse first could only say fedimint_unavailable. Notes the reader
+   * here cannot work out an id for still go to /parse first, and the row is looked up by its notes_id.
    */
   async check(token: string): Promise<FedimintPlan> {
     const notes = compact(token);
     if (notes.length > this.o.maxNotesBytes) throw new PaymentError('invalid_token', 'notes too large');
+    const local = await localNotesId(notes);
+    if (local && this.row(`fm:${local}`)) return { notes, notesId: local, balanceMsat: 0, balanceAt: 0 };
     let parsed: ParsedNotes;
     try {
       parsed = await this.client.parse(notes);
@@ -345,7 +391,8 @@ export class FedimintService {
       log.warn('fedimint_receiver_unavailable', { err: errText(e) });
       throw new PaymentError('fedimint_unavailable', 'Fedimint notes cannot be taken right now; nothing was spent, try again later', 503);
     }
-    if (this.row(`fm:${parsed.notes_id}`)) return { notes, parsed, balanceMsat: 0, balanceAt: 0 };
+    if (local && local !== parsed.notes_id) log.warn('fedimint_local_id_differs', { notes_id: parsed.notes_id });
+    if (this.row(`fm:${parsed.notes_id}`)) return { notes, notesId: parsed.notes_id, parsed, balanceMsat: 0, balanceAt: 0 };
     const fed = parsed.resolution === 'joined' && parsed.federation_id ? this.federation(parsed.federation_id) : undefined;
     const ids = { federation_id: parsed.federation_id, federation_prefix: parsed.federation_prefix };
     if (!fed) {
@@ -371,7 +418,7 @@ export class FedimintService {
     }
     // Checked again, with the notes on their way, when the row is written (receive()).
     this.holdingsCheck(fed, parsed.amount_msat, balanceMsat, balanceAt);
-    return { notes, parsed, federation: fed, balanceMsat, balanceAt };
+    return { notes, notesId: parsed.notes_id, parsed, federation: fed, balanceMsat, balanceAt };
   }
 
   /**
@@ -398,7 +445,7 @@ export class FedimintService {
    * outcome is not known yet.
    */
   async receive(plan: FedimintPlan, accountId: string): Promise<FedimintResult> {
-    const id = `fm:${plan.parsed.notes_id}`;
+    const id = `fm:${plan.notesId}`;
     if (this.inflight.has(id)) throw new PaymentError('token_in_flight', 'these notes are already being processed', 409);
     this.inflight.add(id);
     try {
@@ -406,12 +453,12 @@ export class FedimintService {
       if (row) {
         // The notes went to the receiver for one balance only.
         if (row.account_id !== accountId) throw new PaymentError('token_spent', 'these notes were already given');
-        if (row.status === 'done') return { replay: true, creditedMsat: 0, notesId: plan.parsed.notes_id, federationId: row.mint.slice('fedimint:'.length) };
+        if (row.status === 'done') return { replay: true, creditedMsat: 0, notesId: plan.notesId, federationId: row.mint.slice('fedimint:'.length) };
         if (row.status === 'rejected') throw new PaymentError('token_spent', `these notes were refused: ${row.error ?? 'spent'}`);
         if (row.status === 'stuck') throw this.stuckError();
       } else {
         // check() found a row that has gone since (refused meanwhile): the caller asks again.
-        if (!plan.federation) throw new PaymentError('token_in_flight', 'these notes are being processed; try again', 409);
+        if (!plan.federation || !plan.parsed) throw new PaymentError('token_in_flight', 'these notes are being processed; try again', 409);
         const fed = plan.federation;
         this.holdingsCheck(fed, plan.parsed.amount_msat, plan.balanceMsat, plan.balanceAt);
         const t = now();
@@ -432,7 +479,7 @@ export class FedimintService {
       }
       switch (outcome.kind) {
         case 'done':
-          return { replay: false, creditedMsat: outcome.netMsat, notesId: plan.parsed.notes_id, federationId: row.mint.slice('fedimint:'.length) };
+          return { replay: false, creditedMsat: outcome.netMsat, notesId: plan.notesId, federationId: row.mint.slice('fedimint:'.length) };
         case 'pending':
           throw new FedimintPending('the Fedimint receive is not finished yet');
         default:

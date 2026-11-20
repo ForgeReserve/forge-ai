@@ -223,11 +223,12 @@ The gateway takes Fedimint eCash in the same top-up as Cashu once the operator t
 
 **The steps.**
 
-1. `POST /parse` at the receiver: the notes' value, federation and `notes_id`, with nothing spent. The refusals below come here, before any balance is opened.
-2. The balance is opened (or found), as for a Cashu top-up.
-3. The gateway writes its own `incoming` row, id `fm:<notes_id>`, `purpose = 'fedimint'`, `status = 'prepared'`, holding the notes text, BEFORE it calls the receiver. The holdings cap is checked again in the same step.
-4. `POST /receive` with the notes and this top-up's key, `forge:<balance id>`. The receiver answers the first caller's record to everyone: a record whose `key` is not this balance's means someone else gave those notes first, and the top-up is refused (`token_spent`), nothing credited.
-5. Only a `done` record is credited: `net_msat` from it, in one transaction with marking the row `done` (a row that is no longer `prepared` is never credited again). The answer waits up to 8 seconds for a `pending` receive to finish.
+1. The gateway works out the notes' `notes_id` itself, with no network call, by the app's own reader (`public/v2/core/fedinote.js` `notesIdOf`: the module, the federation id's first 4 bytes and each note's public key, as the receiver computes it). If it already has a row `fm:<notes_id>`, these are notes sent before: the receiver is not asked to read them, and the top-up goes straight to that row (a replay, `token_spent`, `issuance_failed`, or, for a row still `prepared`, the receive asked about again, so `503 topup_pending` while the receiver is down). Notes with more than 256 notes in them, or that the reader does not read, skip this and are looked up by the receiver's `notes_id` after step 2.
+2. `POST /parse` at the receiver: the notes' value, federation and `notes_id`, with nothing spent. The refusals below come here, before any balance is opened.
+3. The balance is opened (or found), as for a Cashu top-up.
+4. The gateway writes its own `incoming` row, id `fm:<notes_id>`, `purpose = 'fedimint'`, `status = 'prepared'`, holding the notes text, BEFORE it calls the receiver. The holdings cap is checked again in the same step.
+5. `POST /receive` with the notes and this top-up's key, `forge:<balance id>`. The receiver answers the first caller's record to everyone: a record whose `key` is not this balance's means someone else gave those notes first, and the top-up is refused (`token_spent`), nothing credited.
+6. Only a `done` record is credited: `net_msat` from it, in one transaction with marking the row `done` (a row that is no longer `prepared` is never credited again). The answer waits up to 8 seconds for a `pending` receive to finish.
 
 Once the receiver has a record of the notes (any answer carrying one), the gateway drops the notes text from its row: `GET /receive/{notes_id}` is all it needs from then on, so the bearer notes are not kept on the gateway longer than the first call needs. A row ends `done`, `rejected` (refused, spent elsewhere, or given first by someone else) or `stuck` (below).
 
@@ -242,7 +243,7 @@ Once the receiver has a record of the notes (any answer carrying one), the gatew
 | `400 amount_too_large` | The notes' face value is over the per-payment cap: `FORGE_FEDIMINT_MAX_SAT` (default 100,000 sat), or the federation's own lower `max_sat`. Carries `max: {sat}` |
 | `400 federation_full` | Taking them would put the federation's holdings over its cap: `FORGE_FEDIMINT_FEDERATION_CAP_SAT` (default 1,000,000 sat), or the federation's own `cap_sat` |
 | `400 insufficient_amount` | The federation's fee to take the notes is at least what they are worth |
-| `503 fedimint_unavailable` | The receiver did not answer before anything was taken. Try again later. Only for notes not sent before: the gateway asks the receiver to read the notes before it looks for an earlier top-up of them, so for notes whose earlier top-up is still `prepared` this answer says nothing about them (the v2 app keeps such notes pending) |
+| `503 fedimint_unavailable` | The receiver did not answer before anything was taken. Try again later. Only for notes the gateway has no top-up of: notes it has a row for are found by the id it works out itself (step 1), and answer what that row says. Notes it could not work out an id for (more than 256 notes, or text its reader does not read) still go to the receiver first, so for those this answer says nothing about an earlier top-up still `prepared` (the v2 app keeps such notes pending) |
 | `409 token_in_flight` | The same notes are being taken by another request right now |
 
 **Refusals after the receiver took a look.** `400 token_spent`: the notes were spent elsewhere first (the federation refused them), were given to the receiver first by someone else, or are already the top-up of another balance. Sending the same notes again to the same key is a replay (`replay: true`, nothing credited).
@@ -266,7 +267,7 @@ Once the receiver has a record of the notes (any answer carrying one), the gatew
 
 **The v2 app** takes Fedimint notes in the eCash box, with Cashu, through the same `wallet.topup`: it reads them on the phone, sends nothing while `fedimint` is absent from the ways to pay or the notes are not from a federation it lists or are over its `max`, keeps them in the vault from before the request to the credit, sends pending notes again, and marks `issuance_failed` notes stuck. Every answer and what the phone keeps: [APP.md, Fedimint notes in the eCash box](APP.md#fedimint-notes-in-the-ecash-box).
 
-Tested in `test/unit/fedimint.test.ts` against a stand-in receiver over HTTP (every branch above, a crash at each point, the timer), and end to end in `test/fedimint/topup.fedimint.test.ts` against the real receiver binary and real federations from its `devfed` binary ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md), Tests). Not covered by a test: `ambiguous_federation` and `issuance_failed` from a real receiver (the receiver cannot make either happen on demand; the stand-in covers the gateway's side), a federation of any real network, and a rebalance.
+Tested in `test/unit/fedimint.test.ts` against a stand-in receiver over HTTP (every branch above, a crash at each point, the timer, and notes sent again while the receiver is down, with real notes so the gateway's own `notes_id` is the receiver's), and end to end in `test/fedimint/topup.fedimint.test.ts` against the real receiver binary and real federations from its `devfed` binary ([FEDIMINT-RECEIVER.md](FEDIMINT-RECEIVER.md), Tests). Not covered by a test: `ambiguous_federation` and `issuance_failed` from a real receiver (the receiver cannot make either happen on demand; the stand-in covers the gateway's side), a federation of any real network, and a rebalance.
 
 ### A Fedimint card, through a till (the v2 Android app)
 
