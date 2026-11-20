@@ -66,6 +66,27 @@ function iosNfc() {
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
+/**
+ * ForgeShare's staging calls as SharePlugin.kt answers them: a token per file, its pieces kept in order.
+ * files: token -> the pieces' base64.
+ */
+function staging(more: Record<string, (opts: any) => any> = {}) {
+  const files = new Map<string, string[]>();
+  let next = 0;
+  const answers: Record<string, (opts: any) => any> = {
+    'ForgeShare.stageStart': () => {
+      const token = String(++next).padStart(32, '0');
+      files.set(token, []);
+      return { token };
+    },
+    'ForgeShare.stageAppend': (o) => void files.get(o.token)!.push(o.data),
+    'ForgeShare.stageDrop': (o) => void files.delete(o.token),
+    ...more,
+  };
+  const bytes = (token: string) => Buffer.concat((files.get(token) ?? []).map((d) => Buffer.from(d, 'base64')));
+  return { answers, files, bytes };
+}
+
 describe('the native bridge', () => {
   it('is there only inside the app', () => {
     expect(N.nativeBridge({})).toBeNull();
@@ -91,19 +112,26 @@ describe('the native bridge', () => {
   });
 
   it('shares the protected photo through the app\'s sheet', async () => {
-    const { win, calls } = fakeCapacitor();
+    const st = staging();
+    const { win, calls } = fakeCapacitor(st.answers);
     const nat = N.createNative(win);
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 1])], 'forge-photo.jpg', { type: 'image/jpeg' });
     expect(nat.share.canShareFiles([file])).toBe(true);
     expect(await nat.share.files([file])).toEqual({ opened: true });
-    expect(calls).toEqual([['ForgeShare', 'share', { name: 'forge-photo.jpg', mime: 'image/jpeg', data: '/9j/AQ==' }]]);
+    // The file is staged first; the call that opens the sheet names it by its token only.
+    const token = '1'.padStart(32, '0');
+    expect(calls).toEqual([
+      ['ForgeShare', 'stageStart', { size: 4 }],
+      ['ForgeShare', 'stageAppend', { token, data: '/9j/AQ==' }],
+      ['ForgeShare', 'share', { token, name: 'forge-photo.jpg', mime: 'image/jpeg' }],
+    ]);
     // The photo screen does not say "Shared": the app is not told whether the person sent it.
     expect(await PH.shareOrSave(file, nat.share)).toBe('opened');
   });
 
   it('says whether the photo was saved or the save screen was closed', async () => {
     let saved = true;
-    const { win } = fakeCapacitor({ 'ForgeShare.save': () => ({ saved }) });
+    const { win } = fakeCapacitor(staging({ 'ForgeShare.save': () => ({ saved }) }).answers);
     const nat = N.createNative(win);
     const file = new File([new Uint8Array([1])], 'p.jpg', { type: 'image/jpeg' });
     expect(await nat.share.save(file)).toEqual({ saved: true });
@@ -133,13 +161,97 @@ describe('the native bridge', () => {
   });
 
   it('a sheet that fails to open is an error, not a share', async () => {
-    const { win } = fakeCapacitor({
-      'ForgeShare.share': () => {
-        throw Object.assign(new Error('no'), { code: 'share_failed' });
-      },
-    });
+    const { win } = fakeCapacitor(
+      staging({
+        'ForgeShare.share': () => {
+          throw Object.assign(new Error('no'), { code: 'share_failed' });
+        },
+      }).answers,
+    );
     const nat = N.createNative(win);
     await expect(PH.shareOrSave(new File([new Uint8Array([1])], 'p.jpg', { type: 'image/jpeg' }), nat.share)).rejects.toThrow('no');
+  });
+
+  it('saves a full size photo with no file in the call that opens the save screen', async () => {
+    const st = staging({ 'ForgeShare.save': () => ({ saved: true }) });
+    const { win, calls } = fakeCapacitor(st.answers);
+    const nat = N.createNative(win);
+    // About a 12 megapixel JPEG: several pieces, the last one short.
+    const photo = new Uint8Array(5_000_000).map((_, i) => (i * 31) % 256);
+    expect(await nat.share.save(new File([photo], 'forge-photo.jpg', { type: 'image/jpeg' }))).toEqual({ saved: true });
+    const pieces = calls.filter(([, m]) => m === 'stageAppend').map(([, , o]) => o.data as string);
+    expect(pieces).toHaveLength(Math.ceil(photo.length / N.STAGE_CHUNK));
+    // Each piece is whole base64 of at most 256 KiB, so no bridge message is large.
+    for (const p of pieces.slice(0, -1)) expect(p.length).toBe(256 * 1024);
+    expect(pieces.every((p) => p.length <= 256 * 1024)).toBe(true);
+    const [, , save] = calls.find(([, m]) => m === 'save')!;
+    expect(Object.keys(save).sort()).toEqual(['mime', 'name', 'token']);
+    // Capacitor keeps these options in the app's saved state while the save screen is up (ShareStage.MAX_CALL_CHARS).
+    expect(JSON.stringify(save).length).toBeLessThan(2048);
+    expect(new Uint8Array(st.bytes(save.token))).toEqual(photo);
+  });
+
+  it('stages in pieces of any size, each one decoding on its own', async () => {
+    const st = staging();
+    const { call } = N.nativeBridge(fakeCapacitor(st.answers).win)!;
+    const bytes = new Uint8Array(1000).map((_, i) => i % 256);
+    for (const chunk of [3, 6, 999, 1000, 3000]) {
+      const token = await N.stageFile(call, new File([bytes], 'p.jpg'), chunk);
+      expect(new Uint8Array(st.bytes(token))).toEqual(bytes);
+      expect(st.files.get(token)!).toHaveLength(Math.ceil(1000 / chunk));
+    }
+    expect(N.STAGE_CHUNK % 3).toBe(0);
+  });
+
+  it('removes a staged file when a piece fails, and opens no screen', async () => {
+    let pieces = 0;
+    const st = staging({
+      'ForgeShare.stageAppend': () => {
+        if (++pieces === 2) throw Object.assign(new Error('gone'), { code: 'no_file' });
+      },
+    });
+    const { win, calls } = fakeCapacitor(st.answers);
+    const nat = N.createNative(win);
+    const file = new File([new Uint8Array(N.STAGE_CHUNK * 2)], 'p.jpg', { type: 'image/jpeg' });
+    await expect(nat.share.save(file)).rejects.toMatchObject({ code: 'no_file' });
+    await settle();
+    expect(calls.map(([p, m]) => `${p}.${m}`)).toEqual(['ForgeShare.stageStart', 'ForgeShare.stageAppend', 'ForgeShare.stageAppend', 'ForgeShare.stageDrop']);
+    expect(st.files.size).toBe(0);
+    // A file the app would not stage (too large, or empty) is refused before any piece is sent.
+    const big = fakeCapacitor({
+      'ForgeShare.stageStart': () => {
+        throw Object.assign(new Error('too large'), { code: 'too_big' });
+      },
+    });
+    await expect(N.createNative(big.win).share.files([file])).rejects.toMatchObject({ code: 'too_big' });
+    expect(big.calls.map(([, m]) => m)).toEqual(['stageStart']);
+    // An app that gave no token: nothing is sent.
+    const none = fakeCapacitor({});
+    await expect(N.createNative(none.win).share.save(file)).rejects.toMatchObject({ code: 'bad_file' });
+    expect(none.calls.map(([, m]) => m)).toEqual(['stageStart']);
+  });
+
+  it('tells once how a save ended when the phone restarted the app meanwhile', async () => {
+    let kept: any = { saved: true };
+    const take = () => {
+      const k = kept;
+      kept = {};
+      return k;
+    };
+    const nat = N.createNative(fakeCapacitor({ 'ForgeShare.restoredSave': take }).win);
+    expect(await nat.share.restored()).toBe('saved');
+    expect(await nat.share.restored()).toBeNull();
+    kept = { saved: false };
+    expect(await nat.share.restored()).toBe('notSaved');
+    // An app built before restoredSave rejects the call: nothing to say.
+    const old = fakeCapacitor({
+      'ForgeShare.restoredSave': () => {
+        throw new Error('not implemented');
+      },
+    });
+    expect(await N.createNative(old.win).share.restored()).toBeNull();
+    // The iPhone app has no save screen to come back from.
+    expect(N.createNative(iosCapacitor({}, ['ForgeShare']).win).share.restored).toBeUndefined();
   });
 
   it('takes a photo shared in once, as a file', async () => {
