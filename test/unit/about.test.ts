@@ -207,9 +207,9 @@ describe('the page source', () => {
     const words = html.replace(/<[^>]+>/g, ' ');
     expect(words).not.toMatch(/[\u2014\u2013]/);
     expect(words).not.toMatch(/crypto/i);
-    // Bellows is never said to run in sealed hardware; cards are for the Android app.
+    // Bellows is never said to run in sealed hardware; cards work in the app (Android and iPhone), never on the web.
     expect(words).not.toMatch(/enclave/i);
-    expect(words).toMatch(/Card\s*<small>Android app<\/small>|Card\s+Android app/);
+    expect(words).toMatch(/Card\s+In the app/);
     for (const m of words.matchAll(/\becash\b/gi)) expect(m[0]).toBe('eCash');
   });
 
