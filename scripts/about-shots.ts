@@ -182,14 +182,19 @@ try {
     await ctx.close();
   }
 
-  // 4. Share unseen: a public domain photo (test/unit/fixtures/photos/README.md) with its faces covered.
+  // 4. Share unseen: a public domain street photo (test/unit/fixtures/photos/README.md) with its faces covered.
   {
     const { ctx, page } = await phone(key);
     await page.click('#btn-add');
     await page.click('#addPhoto');
     await page.waitForSelector('[data-screen=photo]');
-    await page.setInputFiles('#photoFile', { name: 'crew.jpg', mimeType: 'image/jpeg', buffer: readFileSync(join(ROOT, 'test/unit/fixtures/photos/crew.jpg')) });
+    await page.setInputFiles('#photoFile', { name: 'street.jpg', mimeType: 'image/jpeg', buffer: readFileSync(join(ROOT, 'test/unit/fixtures/photos/crowd/protest-wide.jpg')) });
     await page.waitForSelector('#photoChanges', { timeout: 60_000 });
+    // The page shows real people: the spots the finder was less sure of are covered as well.
+    if (await page.isVisible('#photoCoverMaybe')) {
+      await page.click('#photoCoverMaybe');
+      await page.waitForSelector('#photoMaybeBox', { state: 'hidden' });
+    }
     await shot(page, 'share-unseen');
     await ctx.close();
   }
