@@ -34,6 +34,8 @@ filter: ['t'],
 
 Covers are in the working picture's pixels. The new file is made at that size too, so a cover lands on the same pixels on the screen and in the file.
 
+`pixels` and `bytes` are there only while the filters run: once every filter has answered, the screen lets go of both (a copy of every pixel, and the original file, which can be tens of megabytes). Read what you need in `analyse`; do not keep the photo object for later.
+
 ## What a filter provides
 
 ### `id`
@@ -70,7 +72,7 @@ Optional. Starts slow work early, such as loading a model. The app calls it once
 1. The registry calls `create(inputs)` once when the app starts.
 2. Share unseen opens: after 300 ms the app calls `prepare()` on every filter that has one.
 3. The person picks or takes a photo, or shares one in from another app. The app runs `analyse(photo)` on each filter in turn, through `runFilters` in [`public/v2/core/filters.js`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/core/filters.js), and shows each step as it runs.
-4. The person sees the photo before and after, with every cover. They can take a cover away with the cross on its corner, or a tap on it, and add their own by tapping or dragging on the photo.
+4. The screen lets go of `photo.pixels` and `photo.bytes`. The person sees the photo before and after, with every cover. They can take a cover away with the cross on its corner, or a tap on it, and add their own by tapping or dragging on the photo.
 5. Share, Save or Ask about it: the app paints the covers into a new JPEG, calls each `finish(bytes)` in turn, and checks that the file holds no hidden details before it goes anywhere.
 
 ## How covers are painted
@@ -84,6 +86,16 @@ Optional. Starts slow work early, such as loading a model. The app calls it once
 On the screen each cover also has a gold outline and a cross on its corner to take it away. The file has neither.
 
 The face filter fits an ellipse round each face: it reaches half the detector's box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus a tenth of the box's size (at most 4 pixels) and two of the detector's pixels at its look at the whole photo, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter's height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.
+
+## Memory
+
+Share unseen runs on phones with little memory to spare; on a Galaxy A16 with 3.5 GB, Android stops apps in the background to make room. What a filter holds after `analyse` stays held while the person looks at the photo, taps, and shares it, so give it back when `analyse` ends, on the graphics chip too:
+
+- A canvas you make is let go of only when the page next collects its garbage, and until then it holds its pixels. Use one canvas for every part of the photo you look at, and set its `width` and `height` to 0 at the end, in a `finally`.
+- Dispose every TensorFlow.js tensor you make, also when a step throws part way.
+- TensorFlow.js on the graphics chip (its WebGL backend) keeps every texture it is done with, to use again, and never deletes one. The face filter gives them back at the end of each `analyse` (`dropKeptTextures` in `cover-faces/yunet.js`). In desktop Chrome that is about 220 MB after one 2,048 pixel photo and about 350 MB after four of different sizes; on a Galaxy A16 the app held 346 MB of graphics memory after Share unseen. Setting `WEBGL_DELETE_TEXTURE_THRESHOLD` to 0 keeps none at all, but made each photo 40 to 60% slower; giving them back once the photo is checked costs nothing measurable on a Mac and about 5 to 9% with the processor slowed 4 times.
+
+The screen holds two canvases of the photo's size while it shows the photo: the photo itself and the picture on the screen. Both are emptied when the person picks another photo or leaves the screen.
 
 ## Errors
 
@@ -184,4 +196,4 @@ Most false covers are the backs of heads, hands and a face drawn on a sign. Cove
 
 ## Tests
 
-[`test/unit/v2/photo.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts) tests the filter chain with fake filters, the writing finder and the details reader on real camera files in `test/unit/fixtures/photos/`. [`test/ui/photo.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts) picks a photo in Chrome and checks the blocks and the list of changes. [`test/unit/v2/face-model.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/face-model.test.ts) loads the face model with the real TensorFlow.js from the website's, the Android app's and the iPhone app's addresses and finds the three faces in the crew photo, the UI test checks that every face in the wide protest photo is covered on the Share unseen screen, and [`test/unit/ios.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/ios.test.ts) checks that the iPhone app carries every file the filters load.
+[`test/unit/v2/photo.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts) tests the filter chain with fake filters, the writing finder and the details reader on real camera files in `test/unit/fixtures/photos/`. [`test/ui/photo.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts) picks a photo in Chrome and checks the blocks and the list of changes. [`test/unit/v2/face-model.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/face-model.test.ts) loads the face model with the real TensorFlow.js from the website's, the Android app's and the iPhone app's addresses and finds the three faces in the crew photo, the UI test checks that every face in the wide protest photo is covered on the Share unseen screen, and [`test/unit/ios.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/ios.test.ts) checks that the iPhone app carries every file the filters load. [`test/ui/photo-memory.ui.test.ts`](https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo-memory.ui.test.ts) checks what the screen and the face filter hold once a photo is checked (see [Memory](#memory)).
