@@ -93,6 +93,10 @@ export async function detectYunet(tf, net, canvas, minScore) {
  * setting at 0 keeps none at all but made each photo 40 to 60% slower. The backend's texture manager is
  * not part of what TensorFlow.js publishes: when it is not as expected (a newer TensorFlow.js), the
  * setting goes to 0 instead. True when the textures were given back this way.
+ *
+ * A deleted texture leaves the graphics chip only when the browser next sends its WebGL commands, and
+ * nothing sends them once the check is over: on that 3.5 GB phone 318 MB stayed held with every texture
+ * deleted, and fell to 44 MB when the commands were sent. So they are sent here.
  */
 export function dropKeptTextures(tf) {
   const m = tf.backend()?.textureManager;
@@ -104,5 +108,7 @@ export function dropKeptTextures(tf) {
   m._numBytesAllocated -= m._numBytesFree;
   m._numBytesFree = 0;
   m.numFreeTextures = 0;
+  m.gpgpu.gl?.flush();
+  m.gpgpu.gl?.finish();
   return true;
 }
