@@ -6,6 +6,7 @@
 // The photo lives in this screen's memory only. Leaving the screen lets go of it; nothing stores it.
 import { countKinds, dragBox, hitCover, tapBox } from '../core/covers.js';
 import { changeRows, runFilters, withId } from '../core/filters.js';
+import { clearPicking, markPicking } from '../core/camera.js';
 import { closePhoto, drawCovered, makeFile, openPhoto, saveOutcome, shareOrSave, takeShared } from '../core/photo.js';
 import { el, icon, msgLine, say, sayEl } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
@@ -23,9 +24,15 @@ const TAP_SLOP = 10;
 /**
  * take: where a photo shared in comes from (the service worker's cache on the website, the app's
  * ForgeShareIn plugin in the Android app). forget: in the app, removes the photo files the app wrote
- * (a photo the camera took for this screen) once the screen closes.
+ * (a photo the phone's camera app took for this screen) once the screen closes.
+ *
+ * Take a photo opens the camera inside the app (openCamera, screens/camera.js), and took() hands back the
+ * photo it took. With no openCamera (no camera the page can use, or it could not be opened) it opens the
+ * phone's own camera through the file input, as Pick a photo opens its picker; with pickNow that happens
+ * at once, inside the tap that asked for the camera. While either is up a mark is kept in `storage`
+ * (core/camera.js markPicking), so a phone that stops the app meanwhile opens Share unseen again.
  */
-export function photoScreen({ t, ui, back, actions, reader, params = {}, filters, share, take = takeShared, forget = null }) {
+export function photoScreen({ t, ui, back, actions, reader, params = {}, filters, share, take = takeShared, forget = null, openCamera = null, took = () => null, pickNow = false, storage = null }) {
   let photo = null;
   let result = null; // {steps, covers}
   let covers = [];
@@ -50,26 +57,40 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
 
   const camera = el('input', { type: 'file', accept: 'image/*', capture: 'environment', id: 'photoCamera', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
   const picker = el('input', { type: 'file', accept: 'image/*', id: 'photoFile', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
-  for (const input of [camera, picker])
+  for (const input of [camera, picker]) {
     input.addEventListener('change', () => {
+      clearPicking(storage);
       const f = input.files?.[0];
       input.value = '';
       if (f) check(f);
     });
+    input.addEventListener('cancel', () => clearPicking(storage));
+  }
+  const choose = (input) => {
+    markPicking(storage);
+    input.click();
+  };
+  // The picker closed with the app still running (a photo picked or not): the mark goes.
+  const pickerClosed = () => document.visibilityState === 'visible' && clearPicking(storage);
+  document.addEventListener('visibilitychange', pickerClosed);
+  addEventListener('focus', pickerClosed);
 
-  function drawStart(alertKey = null) {
+  /** alertKey: a problem, in the red box. noteKey: a plain line under the lead. */
+  function drawStart(alertKey = null, noteKey = null) {
     const alert = alertKey ? [el('div', { class: 'error-box', role: 'alert', id: 'photoAlert' }, sayEl('p', { id: 'photoAlertText' }, t(alertKey), 'err'))] : [];
+    const note = noteKey ? [sayEl('p', { class: 'note', id: 'photoNote', role: 'status' }, t(noteKey), '', 'info')] : [];
     // The phone already sent the shared photo to the server (photo.sent), so "it does not leave this
     // phone" is not said there.
     const free = alertKey === 'photo.sent' ? [] : [sayEl('p', { class: 'note', id: 'photoFree' }, t('photo.free'), '', 'gift')];
     body.replaceChildren(
       sayEl('p', { class: 'lead', id: 'photoLead' }, t('photo.lead'), '', 'shield'),
       ...alert,
+      ...note,
       el(
         'div',
         { class: 'photo-pick' },
-        el('button', { type: 'button', class: 'pick-btn', id: 'photoTake', onclick: () => camera.click() }, el('span', { class: 'tile-ico tint-gold' }, icon('camera', 26)), el('b', { text: t('photo.take') })),
-        el('button', { type: 'button', class: 'pick-btn', id: 'photoPick', onclick: () => picker.click() }, el('span', { class: 'tile-ico tint-blue' }, icon('image', 26)), el('b', { text: t('photo.pick') })),
+        el('button', { type: 'button', class: 'pick-btn', id: 'photoTake', onclick: () => (openCamera ? openCamera() : choose(camera)) }, el('span', { class: 'tile-ico tint-gold' }, icon('camera', 26)), el('b', { text: t('photo.take') })),
+        el('button', { type: 'button', class: 'pick-btn', id: 'photoPick', onclick: () => choose(picker) }, el('span', { class: 'tile-ico tint-blue' }, icon('image', 26)), el('b', { text: t('photo.pick') })),
       ),
       ...free,
       camera,
@@ -381,7 +402,20 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     take()
       .then((f) => (taken(), gone ? null : f ? check(f) : drawStart('photo.missed')))
       .catch((e) => (taken(), !gone && drawStart(e?.code === 'none' ? 'photo.none' : 'photo.missed')));
-  } else drawStart({ missed: 'photo.missed', none: 'photo.none', sent: 'photo.sent' }[from] ?? null);
+  } else if (from === 'again') {
+    drawStart(null, 'photo.again');
+    // Said once: a reload shows Share unseen as it is.
+    history.replaceState(history.state, '', '#/photo');
+  } else {
+    // A photo the in-app camera took: checked at once.
+    const taken = took();
+    if (taken) check(taken);
+    else {
+      drawStart({ missed: 'photo.missed', none: 'photo.none', sent: 'photo.sent' }[from] ?? null);
+      // The in-app camera could not open (not refused): the phone's own camera, in the same tap.
+      if (pickNow) choose(camera);
+    }
+  }
   // Start loading the face model now, so the check is quicker once a photo is picked.
   setTimeout(() => !gone && filters.forEach((f) => f.prepare?.().catch(() => {})), 300);
 
@@ -391,6 +425,8 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     focus: main.querySelector('h1'),
     destroy() {
       gone = true;
+      document.removeEventListener('visibilitychange', pickerClosed);
+      removeEventListener('focus', pickerClosed);
       listen.destroy();
       forget?.();
       closePhoto(photo);

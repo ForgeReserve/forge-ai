@@ -35,6 +35,10 @@ export const ROUTES = {
   photoMissed: 'photo/missed',
   photoNone: 'photo/none',
   photoSent: 'photo/sent',
+  // Take a photo inside the app (screens/camera.js), and Share unseen opened again after the phone stopped
+  // the app while a photo picker was up (core/camera.js wasPicking).
+  photoCamera: 'photo/camera',
+  photoAgain: 'photo/again',
   // Ask about it with a model that cannot see photos: Choose a model, showing only the models that can.
   modelPhoto: 'photo/model',
   // The first run (core/firstrun.js), one route per step: Welcome, How you pay, the limits, Private only.
@@ -79,5 +83,5 @@ export function href(name, params = {}) {
 
 /** The route Back goes to when there is no history (a page opened straight on a sub screen). */
 export function parentOf(name) {
-  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', modelPhoto: 'photo', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
+  return { fund: 'addFunds', startFree: 'addFunds', addFunds: 'funds', takeOut: 'funds', takeOutUnit: 'funds', freeOut: 'funds', look: 'more', model: 'more', voice: 'more', history: 'more', erase: 'more', engine: 'more', photo: 'home', photoCamera: 'photo', photoAgain: 'home', modelPhoto: 'photo', photoShared: 'home', photoMissed: 'home', photoNone: 'home', photoSent: 'home' }[name] ?? 'home';
 }
