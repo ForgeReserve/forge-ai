@@ -103,7 +103,24 @@ describe('Share unseen lets go of what the checks used', () => {
       await ctx.close();
       skip(`no WebGL in this Chrome: the face finder runs on ${before.backend}`);
     }
+    // Notes whether a texture was deleted with no WebGL commands sent after it: such a texture stays on the chip.
+    await page.evaluate(async (src) => {
+      const gl: any = (await eval(src)).backend().gpgpu.gl;
+      const w = window as any;
+      w.__unsent = false;
+      const wrap = (name: string, unsent: boolean) => {
+        const f = gl[name].bind(gl);
+        gl[name] = (...a: unknown[]) => {
+          w.__unsent = unsent;
+          return f(...a);
+        };
+      };
+      wrap('deleteTexture', true);
+      wrap('flush', false);
+      wrap('finish', false);
+    }, tfOf);
     await check(page);
+    expect(await page.evaluate(() => (window as any).__unsent)).toBe(false);
     // Faces were found, so the finder did run on the graphics chip.
     expect(await page.locator('#coverLayer .cover-box[data-kind=face]').count()).toBeGreaterThanOrEqual(3);
     const after = await tfState(page);
