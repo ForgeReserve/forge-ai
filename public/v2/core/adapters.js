@@ -2,6 +2,7 @@
 // an eCash code), the microphone, the browser's own speech recogniser and voices, the speaker, the share
 // sheet, vibration, and card taps (NFC, which only the Android app has: core/native.js).
 import { loadScript } from '../../js/ui.js';
+import { largestFrame, stillShape, stillSize, turnedAway } from './camera.js';
 
 const Recognition = () => (typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined);
 
@@ -37,6 +38,25 @@ function playbackSession() {
   };
 }
 
+/**
+ * The frame a playing video shows, as a JPEG, at the stream's own size. The canvas is let go before
+ * this resolves, so only the encoded photo is held.
+ */
+async function frameOf(video) {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  try {
+    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+    return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+  } finally {
+    canvas.width = canvas.height = 0;
+  }
+}
+
 /** How long an utterance may take to start before the phone is taken to have dropped it. */
 const SYNTH_START_MS = 2500;
 let synthUnlocked = false;
@@ -59,6 +79,82 @@ const defaults = {
     async open(video, onProgress = () => {}, opts = {}) {
       await loadScript('/js/scan.js');
       return window.ForgeScan.scan(video, onProgress, opts);
+    },
+    /**
+     * The camera for taking a photo inside the page (Share unseen, screens/camera.js): the `facing`
+     * camera ('environment', the back one, or 'user'), or the camera `device` (an id from `cameras`),
+     * plays in `video`. Resolves {id, facing, faces, mirror, cameras, take(), stop()}: `faces` says
+     * whether the camera told which way it faces (a phone's do, most computers' do not), `cameras` the ids
+     * of every camera here. Rejects as getUserMedia does (refused, no camera). take() resolves the
+     * photo as a Blob and turns the camera off: the largest still the camera takes (ImageCapture), or
+     * where the browser has none (Safari, Firefox) a frame of the stream at its largest picture. Nothing
+     * is stored or sent; the camera is off once take() or stop() is called.
+     */
+    async still(video, { facing = 'environment', device = null } = {}) {
+      const md = navigator.mediaDevices;
+      const which = device ? { deviceId: { exact: device } } : { facingMode: { ideal: facing } };
+      const stream = await md.getUserMedia({ video: { ...which, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+      const track = stream.getVideoTracks()[0];
+      let stopped = false;
+      const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        for (const t of stream.getTracks()) t.stop();
+        try {
+          video.pause();
+          video.srcObject = null;
+        } catch {
+          /* already let go */
+        }
+      };
+      try {
+        let capture = null;
+        try {
+          if (typeof globalThis.ImageCapture === 'function') capture = new globalThis.ImageCapture(track);
+        } catch {
+          capture = null;
+        }
+        // No stills here: the photo is a frame of the stream, so the stream runs at its largest picture.
+        const big = capture ? null : largestFrame(track.getCapabilities?.());
+        if (big) await track.applyConstraints({ width: { ideal: big.width }, height: { ideal: big.height } }).catch(() => {});
+        video.muted = true;
+        video.setAttribute('playsinline', '');
+        video.srcObject = stream;
+        await video.play();
+        const settings = track.getSettings?.() ?? {};
+        const cameras = (await md.enumerateDevices().catch(() => [])).filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
+        const shown = settings.facingMode || facing;
+        return {
+          id: settings.deviceId ?? null,
+          facing: shown,
+          faces: !!settings.facingMode,
+          // The camera on the screen's side is shown as in a mirror; the photo itself is not turned.
+          mirror: shown === 'user',
+          cameras,
+          async take() {
+            if (stopped) throw new Error('the camera is off');
+            const view = { width: video.videoWidth, height: video.videoHeight };
+            let blob = null;
+            if (capture) {
+              try {
+                blob = await capture.takePhoto(stillSize(await capture.getPhotoCapabilities()));
+                // A still turned the other way from the screen: the frame the person saw instead.
+                if (turnedAway(stillShape(new Uint8Array(await blob.slice(0, 512 * 1024).arrayBuffer())), view)) blob = null;
+              } catch {
+                blob = null;
+              }
+            }
+            if (!blob && !stopped) blob = await frameOf(video);
+            stop();
+            if (!blob) throw new Error('the camera is off');
+            return blob;
+          },
+          stop,
+        };
+      } catch (e) {
+        stop();
+        throw e;
+      }
     },
   },
 

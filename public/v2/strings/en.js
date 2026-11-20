@@ -259,6 +259,13 @@ export default {
   'photo.downloading': 'Download started. Look in your downloads.',
   'photo.saveDenied': 'Not saved. Forge may not add to Photos. Allow it in Settings, or tap Share.',
   'photo.saveFailed': 'Not saved. Try again, or tap Share.',
+  'photo.again': 'Forge restarted, so the photo did not arrive. Take or pick it again. The phone closed Forge while you were choosing.',
+  // Take a photo, inside the app (screens/camera.js)
+  'cam.title': 'Take a photo',
+  'cam.view': 'What the camera sees',
+  'cam.opening': 'Opening the camera',
+  'cam.take': 'Take the photo',
+  'cam.flip': 'Other camera',
 
   // More sheet
   'more.title': 'More',

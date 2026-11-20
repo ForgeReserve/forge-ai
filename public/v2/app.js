@@ -21,6 +21,7 @@ import { createTillPays, createTillSettings } from './core/till.js';
 import { chargedFor, errorView } from './core/errors.js';
 import { t } from './core/i18n.js';
 import { MAX_IMAGES, shrinkImage } from './core/image.js';
+import { clearPicking, wasPicking } from './core/camera.js';
 import { SHARE_CACHE } from './core/photo.js';
 import { ehbpBytes, estimate, freeModelChoice, holdMsub, isFreeModel, perQuestion, voicePriceLine } from './core/price.js';
 import { SPEAK_MAX_CHARS } from './core/speech.js';
@@ -49,6 +50,7 @@ import { askSheet } from './screens/parts.js';
 import { askStandard, inviteError, startFreeScreen } from './screens/startfree.js';
 import { walletScreen } from './screens/wallet.js';
 import { historyScreen } from './screens/history.js';
+import { cameraScreen } from './screens/camera.js';
 import { photoScreen } from './screens/photo.js';
 import { lookScreen, modelScreen, voiceScreen } from './screens/settings.js';
 import { addSheet, moreSheet } from './screens/sheets.js';
@@ -1409,6 +1411,21 @@ async function attachPhoto(file, { replace = false } = {}) {
 let photoWaiting = null;
 
 /**
+ * Take a photo inside the app (screens/camera.js): the photo just taken, on its way back to Share unseen,
+ * which takes it at once (memory only, let go on any other screen). cameraFailed: the camera would not
+ * open on this page, so Take a photo uses the phone's own camera; cameraNow: open that at once, when the
+ * failure was not a refusal and the tap that asked is still fresh.
+ */
+let photoTaken = null;
+let cameraFailed = false;
+let cameraNow = false;
+const takePhotoTaken = () => {
+  const f = photoTaken;
+  photoTaken = null;
+  return f;
+};
+
+/**
  * Choose a model for a photo (modelPhoto): the photo view's two steps. chosen(): the model is chosen, so
  * the photo goes on to Type in place of the list. standard(): no private model can see photos, so the
  * Private chip's question is asked (askStandard) before Private only is turned off, unless the person
@@ -2357,12 +2374,35 @@ function screenFor(name, params) {
     case 'photoMissed':
     case 'photoNone':
     case 'photoSent':
+    case 'photoAgain': {
+      const now = cameraNow && navigator.userActivation?.isActive === true;
+      cameraNow = false;
       return photoScreen({
         ...ctx,
-        params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent' }[name] },
+        params: { from: { photoShared: 'shared', photoMissed: 'missed', photoNone: 'none', photoSent: 'sent', photoAgain: 'again' }[name] },
         filters: (registry.list('filter') ?? []).map((x) => x.instance),
         share: adapters.share,
+        openCamera: !cameraFailed && typeof adapters.camera.still === 'function' && adapters.camera.available() ? () => nav('photoCamera') : null,
+        took: takePhotoTaken,
+        pickNow: now,
+        storage: localStore(),
         ...(native?.shareIn ? { take: native.shareIn.take, forget: native.forget } : {}),
+      });
+    }
+    case 'photoCamera':
+      return cameraScreen({
+        ...ctx,
+        camera: adapters.camera,
+        taken: (file) => {
+          photoTaken = file;
+          back();
+        },
+        // Refused, or no camera here: Share unseen goes on with the phone's own camera.
+        failed: (e) => {
+          cameraFailed = true;
+          cameraNow = e?.name !== 'NotAllowedError' && e?.name !== 'SecurityError';
+          back();
+        },
       });
     default:
       return mode.home();
@@ -2404,6 +2444,8 @@ function render() {
   trail[depth()] = name;
   trail.length = depth() + 1;
   shownDepth = depth();
+  // A photo the in-app camera took is for Share unseen only.
+  if (name !== 'photo') photoTaken = null;
   current = screenFor(name, params);
   root.replaceChildren(current.node);
   root.dataset.route = name;
@@ -2445,6 +2487,15 @@ async function eraseAll() {
   const r = await eraseEverything(browserStorage(), { closeOwn: shutdown });
   if (!r.ok) console.warn('erase left', r.left, r.blocked);
   showErased(r.ok);
+}
+
+/** localStorage, or null where the browser blocks it. */
+function localStore() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** The browser's storage for this site, as core/erase.js takes it. */
@@ -2539,6 +2590,9 @@ async function start() {
   // A photo shared in from another app waits only for the page it opened (Share unseen). Opened any
   // other way, an old one that was never read is removed.
   if (parse(location.hash).name !== 'photoShared') await globalThis.caches?.delete(SHARE_CACHE).catch(() => {});
+  // The phone stopped the app while Share unseen's photo picker was up (core/camera.js wasPicking): read,
+  // and the mark taken away, on every open.
+  const picked = wasPicking(localStore());
   // An event link (core/join.js): the pass leaves the address at once, so it stays out of the history
   // and any bookmark, and is used once the models are in (joinWith). In the Android app it comes from
   // the link that opened the app (ForgeJoin).
@@ -2586,6 +2640,9 @@ async function start() {
   // still opens Share unseen, and the first run its own steps.
   const opening = parse(location.hash).name;
   if (coverOn() && !SHARED_IN.includes(opening) && stepOfRoute(opening) === null) history.replaceState({ forge2: 0 }, '', href('game'));
+  // Opened on the home after such a stop: Share unseen again, saying so, for the person to pick again.
+  // Never over the cover: opened fresh, it shows its game.
+  else if (picked && opening === 'home') history.replaceState(history.state, '', href('photoAgain'));
   // No cover after all (its mode could not load offline, say): the app's own title again.
   if (!coverOn() && document.documentElement.dataset.bootCover) {
     delete document.documentElement.dataset.bootCover;
@@ -2620,6 +2677,8 @@ async function start() {
     else if (!picking && !erased && currentName !== 'game' && coverOn()) leave('game');
   });
   addEventListener('pagehide', () => S.settings.autoDelete === 'close' && !erased && burnEverything());
+  // The page closed by the person while a picker was up: no Share unseen next time it opens.
+  addEventListener('pagehide', () => clearPicking(localStore()));
   addEventListener('pageshow', (e) => e.persisted && S.settings.autoDelete === 'close' && !erased && burnEverything().then(() => nav('home', {}, { replace: true })));
   render();
   live = true;

@@ -26,7 +26,7 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 | Card taps | Tap a card reads a Cashu eCash card over NFC (`NfcPlugin.kt`, ForgeNfc): IsoDep connect, transceive and close, 5 seconds per command, reading on only while that screen is open. The page builds every command (`public/v2/core/card/`); the plugin checks each is one well formed short APDU and hands back the card's whole answer. The iPhone app has the same plugin in Swift ([IOS.md](IOS.md)). |
 | Fedimint cards | Tap a Fedimint card pays the engine's Lightning invoice through a till (`TillPlugin.kt`, ForgeTill; [PAYMENTS.md](PAYMENTS.md)). Pairing scans the till's pairing code; the till's address and pay token are sealed with a key in the Android Keystore and the token never goes back to the page. The plugin sends only the till's pay routes, over https, and holds the card link (a WebSocket, `TillLink.kt`) while the page relays the till's card commands to the card through ForgeNfc. Erase everything forgets the till and deletes the key. |
 
-Camera and microphone are asked for the first time they are used (scanning a note, taking a photo, holding Hold to talk), through Capacitor's web view, or by ForgeSpeech the first time the phone's recogniser listens (the same `RECORD_AUDIO` permission). Camera, microphone and NFC are optional features, so the app installs on phones without them. NFC is used by Tap a card (slice A13) and Tap a Fedimint card (slice A14). A phone with NFC turned off is asked to turn it on; one without NFC is told it cannot read cards.
+Camera and microphone are asked for the first time they are used (scanning a note, taking a photo inside the app, holding Hold to talk), through Capacitor's web view, or by ForgeSpeech the first time the phone's recogniser listens (the same `RECORD_AUDIO` permission). Camera, microphone and NFC are optional features, so the app installs on phones without them. NFC is used by Tap a card (slice A13) and Tap a Fedimint card (slice A14). A phone with NFC turned off is asked to turn it on; one without NFC is told it cannot read cards.
 
 The app has no Classic mode (it carries only the v2 app) and no service worker (its files are already on the phone).
 
@@ -35,7 +35,7 @@ The app has no Classic mode (it carries only the v2 app) and no service worker (
 The same as the web app (docs/PRIVACY.md), inside the app's own web view storage. On top of that:
 
 - Backups are off (`allowBackup="false"` and data extraction rules that exclude everything), so no copy of the balance key, chats or photos goes to a cloud backup or a phone to phone transfer.
-- Two kinds of photo file: the protected photo handed to the share sheet (in the app's cache, `shared-out/`), and a photo taken with the camera for Share unseen (Capacitor writes it to the app's own pictures folder). Both are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
+- Two kinds of photo file: the protected photo handed to the share sheet (in the app's cache, `shared-out/`), and a photo taken with the phone's own camera app for Share unseen (Capacitor writes it to the app's own pictures folder). Take a photo uses the camera inside the app (getUserMedia in the web view, [APP.md](APP.md)), which writes no file; the phone's camera app is used only where that camera cannot open. Both files are removed when the app starts, when Share unseen closes, and by Erase everything, which also clears the web view's cache.
 - Uninstalling the app removes everything it kept.
 
 ## Two APKs
@@ -139,6 +139,7 @@ The app's pages come from `https://localhost` (Capacitor), so every engine call 
 
 - The app on a real phone beyond the natural voice: the debug APK was installed on the Galaxy A16 5G (2026-11-15) and its voice lab run there; nothing else was tried on it, and the Pixel on GrapheneOS has not had it.
 - Camera and microphone permission prompts, the camera capture and Hold to talk inside the web view.
+- Take a photo inside the app on a phone: whether the Android web view offers ImageCapture and what size of still it gives, the still's turn when the phone is held sideways (a still turned against the screen is dropped for the frame the screen showed), the front camera, turning between cameras, memory on the Galaxy A16 with a full size still, and Share unseen opened again after Android stops the app during the gallery picker. Only Chrome's fake camera has run it.
 - The status and navigation bars on a phone: only the page's calls to ForgeBars and the JVM rules are tested. The app's theme stays a light AppCompat theme (so the web view's colour scheme is unchanged), so Follow the phone setting may not see a dark phone inside the app.
 - Hold to talk heard by the phone's recogniser: only its availability was checked on the two phones (2026-11-15, debug `forge.speechCheck`: the A16 offers it for `en-US`, the GrapheneOS Pixel has none); nothing was recorded or heard on a phone.
 - A photo shared in from Signal or another app, and the share sheet and save screen on a phone.
