@@ -17,6 +17,11 @@
 //! submitted again; one the client has is only followed, and the client resumes its own state
 //! machines. A set of notes is never submitted under two operation ids, so it is never counted
 //! twice.
+//!
+//! Every join runs Fedimint's own recovery for the seed (`ClientPreview::recover`), never a plain
+//! join: the seed may have been used with the federation before (a data directory that was lost),
+//! and a plain join would start the mint v1 note counters from zero. For a seed never used there,
+//! the recovery finds nothing (docs/FEDIMINT-RECEIVER.md, Backup and recovery).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -24,7 +29,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
-use fedimint_client::{Client, ClientHandleArc, RootSecret};
+use fedimint_client::{Client, ClientHandle, ClientHandleArc, RootSecret};
 use fedimint_connectors::ConnectorRegistry;
 use fedimint_core::config::{ClientConfig, FederationId};
 use fedimint_core::core::OperationId;
@@ -38,6 +43,59 @@ use tokio::sync::{Mutex, RwLock};
 use crate::error::{ApiError, Code};
 use crate::notes::{Inner, Kind, Notes};
 use crate::store::{FederationFile, ReceiveRecord, State, Store, now};
+
+/// Wait for the client's module recoveries, if any run, and reopen it when a module that cannot
+/// be used while it recovers (mint v1) is still held back. Fedimint keeps each recovery's progress
+/// in the client database, so one cut short resumes where it stopped.
+///
+/// The reopen goes through `ClientBuilder::open` with the wallet's own root secret, on the same
+/// database handle. `ClientHandle::restart` is not used: in fedimint-client 0.13.0 it hands the
+/// client's federation-level secret back to the builder as if it were the root secret, which
+/// derives the federation key a second time, so every note issued after it would come from keys
+/// the seed's recovery never looks at.
+async fn settle_recovery(
+    client: ClientHandle,
+    db: Database,
+    connectors: &ConnectorRegistry,
+    root_secret: &RootSecret,
+) -> Result<ClientHandle> {
+    let id = client.federation_id();
+    let recovering = client.has_pending_recoveries();
+    if recovering {
+        tracing::info!(federation = %id, "recovering the seed's notes from the federation's history");
+        let mut progress = client.subscribe_to_recovery_progress();
+        let log = tokio::spawn(async move {
+            let mut last = std::time::Instant::now();
+            while let Some((module, p)) = progress.next().await {
+                if last.elapsed() >= std::time::Duration::from_secs(5) {
+                    tracing::info!(federation = %id, module, complete = p.complete, total = p.total, "recovery progress");
+                    last = std::time::Instant::now();
+                }
+            }
+        });
+        let done = client.wait_for_all_recoveries().await;
+        log.abort();
+        done.map_err(|e| anyhow!("the federation's recovery failed: {e:#}; run the same command again to resume it"))?;
+        tracing::info!(federation = %id, "recovery complete");
+    }
+    let client = if client.all_modules_usable() {
+        client
+    } else {
+        client.shutdown().await;
+        let mut builder = Client::builder().await;
+        module_inits(&mut builder);
+        builder.open(connectors.clone(), db, root_secret.clone()).await.map_err(|e| anyhow!("reopening after the recovery: {e:#}"))?
+    };
+    if recovering {
+        // Both mints' recoveries hand the notes they found to state machines that fetch the
+        // notes' signatures from the guardians while the client runs: the balance is whole only
+        // when those have finished. (A process stopped before then finishes them on its next
+        // start.)
+        tracing::info!(federation = %id, "waiting for the recovered notes' signatures");
+        client.wait_for_all_active_state_machines().await;
+    }
+    Ok(client)
+}
 
 /// One joined federation.
 pub struct Federation {
@@ -118,16 +176,7 @@ impl Wallet {
     /// Open the data directory: every federation joined before, and the receives still pending,
     /// which are picked up again in the background.
     pub async fn open(data_dir: &Path, root_secret: RootSecret) -> Result<Arc<Self>> {
-        let store = Store::open(data_dir)?;
-        let connectors = ConnectorRegistry::build_from_client_defaults().with_env_var_overrides().bind().await;
-        let w = Arc::new(Self {
-            store,
-            root_secret,
-            connectors,
-            feds: RwLock::new(BTreeMap::new()),
-            join_lock: Mutex::new(()),
-            receive_lock: Mutex::new(()),
-        });
+        let w = Self::bare(data_dir, root_secret).await?;
         for f in w.store.federations()? {
             let fed = w.open_federation(&f).await.with_context(|| format!("opening federation {}", f.id))?;
             tracing::info!(federation = %fed.id, modules = ?fed.modules, "federation opened");
@@ -137,11 +186,34 @@ impl Wallet {
         Ok(w)
     }
 
+    /// The wallet with no federation opened and nothing resumed: what `recover` works with.
+    pub async fn bare(data_dir: &Path, root_secret: RootSecret) -> Result<Arc<Self>> {
+        let store = Store::open(data_dir)?;
+        let connectors = ConnectorRegistry::build_from_client_defaults().with_env_var_overrides().bind().await;
+        Ok(Arc::new(Self {
+            store,
+            root_secret,
+            connectors,
+            feds: RwLock::new(BTreeMap::new()),
+            join_lock: Mutex::new(()),
+            receive_lock: Mutex::new(()),
+        }))
+    }
+
     async fn open_federation(&self, f: &FederationFile) -> Result<Federation> {
-        let db = open_db(&self.store.federation_dir(&f.id).join("client.db")).await?;
+        let path = self.store.federation_dir(&f.id).join("client.db");
+        anyhow::ensure!(
+            path.exists(),
+            "federation {} has no client database: run `fedimint-receiver recover` to rebuild its wallet from the seed",
+            f.id
+        );
+        let db = open_db(&path).await?;
         let mut builder = Client::builder().await;
         module_inits(&mut builder);
-        let client = builder.open(self.connectors.clone(), db, self.root_secret.clone()).await?;
+        let client = builder.open(self.connectors.clone(), db.clone(), self.root_secret.clone()).await?;
+        // A recovery cut short (the process stopped while it ran) resumes here from its last
+        // saved progress, before the federation is used.
+        let client = settle_recovery(client, db, &self.connectors, &self.root_secret).await?;
         let cfg = client.config().await;
         let id = client.federation_id();
         anyhow::ensure!(id.to_string() == f.id, "the client database holds federation {id}, not {}", f.id);
@@ -159,15 +231,63 @@ impl Wallet {
 
     /// Join the federation behind `invite`, or return it when it is joined already. Refuses a
     /// federation with no mint module this service speaks, before anything is written.
-    pub async fn join(&self, invite: &str) -> Result<(Arc<Federation>, bool), ApiError> {
+    ///
+    /// The client is made by Fedimint's recovery and answers only once that has finished, so a
+    /// join of a federation with a long history takes a while. It runs in a task of its own and
+    /// finishes even when the caller stops waiting (an HTTP timeout): asked again, the join waits
+    /// for that one, or finds the federation joined. When the recovery finds notes the seed
+    /// already held, the data directory had lost them: the federation is marked restored.
+    pub async fn join(self: &Arc<Self>, invite: &str) -> Result<(Arc<Federation>, bool), ApiError> {
         let invite_code = InviteCode::from_str(invite.trim()).map_err(|_| ApiError::new(Code::BadInvite, "not a Fedimint invite code"))?;
+        let w = self.clone();
+        tokio::spawn(async move {
+            let _guard = w.join_lock.lock().await;
+            if let Some(fed) = w.feds.read().await.get(&invite_code.federation_id()) {
+                return Ok((fed.clone(), true));
+            }
+            let fed = w.connect(&invite_code, None).await?;
+            w.feds.write().await.insert(fed.id, fed.clone());
+            tracing::info!(federation = %fed.id, modules = ?fed.modules, "federation joined");
+            Ok((fed, false))
+        })
+        .await
+        .map_err(|e| ApiError::internal(format!("the join stopped: {e}")))?
+    }
+
+    /// Rebuild a federation's wallet from the seed (`fedimint-receiver recover`): one whose
+    /// client database was lost. `earlier` is what a backup, an earlier join or the invite given
+    /// said about it. A federation whose wallet is here already is only opened (`false`).
+    pub async fn restore(&self, earlier: &FederationFile) -> Result<(Arc<Federation>, bool), ApiError> {
+        let invite_code =
+            InviteCode::from_str(earlier.invite.trim()).map_err(|_| ApiError::new(Code::BadInvite, "not a Fedimint invite code"))?;
         let _guard = self.join_lock.lock().await;
-        if let Some(fed) = self.feds.read().await.get(&invite_code.federation_id()) {
-            return Ok((fed.clone(), true));
+        let id = invite_code.federation_id().to_string();
+        // federation.json is written only once the federation's client has finished joining or
+        // recovering, so with its client database next to it the wallet is here already.
+        if let Some(f) = self.store.federation_file(&id)?
+            && self.store.federation_dir(&id).join("client.db").exists()
+        {
+            let fed = Arc::new(self.open_federation(&f).await?);
+            // A restore that stopped between its federation.json and this cleanup.
+            self.store.remove_restore_file(&id)?;
+            self.feds.write().await.insert(fed.id, fed.clone());
+            return Ok((fed, false));
         }
+        let fed = self.connect(&invite_code, Some(earlier)).await?;
+        self.store.remove_restore_file(&id)?;
+        self.feds.write().await.insert(fed.id, fed.clone());
+        tracing::info!(federation = %fed.id, modules = ?fed.modules, "federation restored from the seed");
+        Ok((fed, true))
+    }
+
+    /// Make the client for `invite_code` by Fedimint's recovery (or open the one a cut short join
+    /// left), wait for the recovery, and write `federation.json`. `restore` is `Some` for
+    /// `restore()`, with what was known of the federation before: it is marked restored. A join
+    /// whose recovery finds notes the seed already held is marked restored too.
+    async fn connect(&self, invite_code: &InviteCode, restore: Option<&FederationFile>) -> Result<Arc<Federation>, ApiError> {
         let mut builder = Client::builder().await;
         module_inits(&mut builder);
-        let preview = builder.preview(self.connectors.clone(), &invite_code).await.map_err(|e| {
+        let preview = builder.preview(self.connectors.clone(), invite_code).await.map_err(|e| {
             tracing::warn!(federation = %invite_code.federation_id(), "join: the federation did not answer: {e:#}");
             ApiError::new(Code::Unreachable, format!("could not read the federation's config: {e}"))
         })?;
@@ -186,26 +306,37 @@ impl Wallet {
         let dir = self.store.federation_dir(&id.to_string());
         crate::store::create_private_dir(&dir)?;
         let db = open_db(&dir.join("client.db")).await?;
-        // A join that crashed after the client was made but before federation.json was written
-        // left an initialised database: open it rather than join a second time.
+        // A join that stopped after the client was made but before federation.json was written
+        // left an initialised database: open it (its recovery resumes) rather than start again.
         let client = if Client::is_initialized(&db).await {
             let mut builder = Client::builder().await;
             module_inits(&mut builder);
-            builder.open(self.connectors.clone(), db, self.root_secret.clone()).await.map_err(|e| anyhow!("{e:#}"))?
+            builder.open(self.connectors.clone(), db.clone(), self.root_secret.clone()).await.map_err(|e| anyhow!("{e:#}"))?
         } else {
-            preview.join(db, self.root_secret.clone()).await.map_err(|e| anyhow!("joining: {e:#}"))?
+            preview.recover(db.clone(), self.root_secret.clone(), None).await.map_err(|e| anyhow!("joining: {e:#}"))?
         };
+        let recovered = client.has_pending_recoveries();
+        let client = settle_recovery(client, db, &self.connectors, &self.root_secret).await?;
         let name = cfg.global.federation_name().map(str::to_owned);
+        let fed = Arc::new(Federation { id, name: name.clone(), modules, client: Arc::new(client) });
+        let t = now();
+        let restored_at = match restore {
+            Some(_) => Some(t),
+            None if recovered && fed.balance_msat().await > 0 => {
+                tracing::warn!(federation = %id, "the seed already held notes in this federation: its data was restored, rejections stay uncertain until `fedimint-receiver restore-done`");
+                Some(t)
+            }
+            None => None,
+        };
         self.store.save_federation(&FederationFile {
             id: id.to_string(),
             invite: invite_code.to_string(),
-            name: name.clone(),
-            joined_at: now(),
+            name,
+            joined_at: restore.filter(|f| f.id == id.to_string()).map_or(t, |f| f.joined_at),
+            restored_at,
+            restore_closed_at: None,
         })?;
-        let fed = Arc::new(Federation { id, name, modules, client: Arc::new(client) });
-        self.feds.write().await.insert(id, fed.clone());
-        tracing::info!(federation = %id, modules = ?fed.modules, "federation joined");
-        Ok((fed, false))
+        Ok(fed)
     }
 
     /// Which joined federation issued `notes`, if exactly one did.
@@ -476,6 +607,16 @@ impl Wallet {
                 }
             }
         };
+        let outcome = match outcome {
+            Err(("rejected", reason)) if self.restore_uncertain(&record) => Err((
+                "issuance_failed",
+                format!(
+                    "the federation refused these notes as spent ({reason}), and this wallet was restored from its seed since they were first given: \
+                     it may have taken them itself before its data was lost. Reconcile before crediting or refusing them."
+                ),
+            )),
+            o => o,
+        };
         match outcome {
             Ok(()) => {
                 let fee = fed.client.get_operation_fees(op).await.ok().flatten().map(|a| a.get_bitcoin().msats);
@@ -486,6 +627,18 @@ impl Wallet {
             }
         }
         Ok(())
+    }
+
+    /// Whether a rejection of `record`'s notes cannot be trusted: its federation was restored from
+    /// the seed and the restore is still open, or the record is older than the restore (it came
+    /// back from a backup). Either way this wallet may have taken the notes itself before its
+    /// data was lost, and its records of that are gone.
+    fn restore_uncertain(&self, record: &ReceiveRecord) -> bool {
+        match self.store.federation_file(&record.federation_id) {
+            Ok(Some(f)) => f.restored_at.is_some_and(|at| f.restore_closed_at.is_none() || record.created_at <= at),
+            // Unreadable: the safe answer.
+            Ok(None) | Err(_) => true,
+        }
     }
 
     /// Pick up every receive still pending after a restart.

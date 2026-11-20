@@ -85,8 +85,13 @@ async fn health(State(s): State<AppState>) -> Json<Value> {
     Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "federations": s.wallet.federations().await.len() }))
 }
 
-async fn federation_json(fed: &Federation, with_balance: bool) -> Value {
+async fn federation_json(s: &AppState, fed: &Federation, with_balance: bool) -> Value {
     let mut v = json!({ "id": fed.id.to_string(), "name": fed.name, "modules": fed.modules, "receives": fed.receives() });
+    // Whether its wallet was rebuilt from the seed, and whether that restore is still open
+    // (wallet.rs, the restore rule).
+    let file = s.wallet.store.federation_file(&fed.id.to_string()).ok().flatten();
+    v["restored_at"] = json!(file.as_ref().and_then(|f| f.restored_at));
+    v["restore_open"] = json!(file.as_ref().is_some_and(crate::store::FederationFile::restore_open));
     if with_balance {
         v["balance_msat"] = json!(fed.balance_msat().await);
     }
@@ -100,7 +105,7 @@ struct JoinBody {
 
 async fn join(State(s): State<AppState>, Body(b): Body<JoinBody>) -> Result<Json<Value>, ApiError> {
     let (fed, already) = s.wallet.join(&b.invite).await?;
-    let mut v = federation_json(&fed, false).await;
+    let mut v = federation_json(&s, &fed, false).await;
     v["already_joined"] = json!(already);
     Ok(Json(v))
 }
@@ -108,7 +113,7 @@ async fn join(State(s): State<AppState>, Body(b): Body<JoinBody>) -> Result<Json
 async fn list_federations(State(s): State<AppState>) -> Json<Value> {
     let mut out = Vec::new();
     for fed in s.wallet.federations().await {
-        out.push(federation_json(&fed, true).await);
+        out.push(federation_json(&s, &fed, true).await);
     }
     Json(json!({ "federations": out }))
 }

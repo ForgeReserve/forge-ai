@@ -8,12 +8,13 @@ It is built on `fedimint-client` 0.13.0 with the mint v1 and mintv2 client modul
 
 ## What it does
 
-- **Join** a federation by invite code. The service reads the federation's config from its guardians and refuses a federation with no mint module it speaks.
+- **Join** a federation by invite code. The service reads the federation's config from its guardians and refuses a federation with no mint module it speaks. Every join runs Fedimint's recovery for the wallet's seed, so a seed that held notes in that federation before gets them back.
 - **Parse** notes without contacting any federation: their kind, value, federation, and a stable `notes_id`.
 - **Receive** notes: reissue them into the wallet, once. The record of a receive is written to disk before the notes are submitted, so a crash at any point resumes after a restart without counting the notes twice.
 - **Report balances**, per federation.
+- **Back up and recover**: `fedimint-receiver backup`, `recover` and `restore-done` ([Backup and recovery](#backup-and-recovery)).
 
-It does not send, pay invoices, leave a federation or recover a wallet from its seed. Those come later.
+It does not send, pay invoices or leave a federation. Those come later. Its wallet can be rebuilt from its seed and the federations' invites ([Backup and recovery](#backup-and-recovery)).
 
 ### The notes it reads
 
@@ -71,14 +72,16 @@ Branch on `code`; the message is for people and may change.
 `{"invite": "fed11..."}` joins the federation, or returns it when it is joined already (`already_joined: true`):
 
 ```json
-{ "id": "5eb868aa...", "name": "Example", "modules": ["dummy", "ln", "mint", "wallet"], "receives": ["mint"], "already_joined": false }
+{ "id": "5eb868aa...", "name": "Example", "modules": ["dummy", "ln", "mint", "wallet"], "receives": ["mint"], "restored_at": null, "restore_open": false, "already_joined": false }
 ```
 
-`modules` is every module in the federation's config; `receives` is the kinds of notes this service takes from it.
+`modules` is every module in the federation's config; `receives` is the kinds of notes this service takes from it. `restored_at` and `restore_open` say whether the federation's wallet was rebuilt from the seed, and whether that restore is still open ([The restore rule](#the-restore-rule)).
+
+The join makes the federation's client with Fedimint's recovery and answers once the recovery has finished: a few seconds on a young federation, longer on one with a long history. It runs to its end even when the caller stops waiting (the gateway's client gives up after 15 seconds); asked again, it waits for that join or answers `already_joined`. When the recovery finds notes the seed already held, the data directory had lost them, and the federation is marked restored.
 
 ### `GET /federations`
 
-`{"federations": [{"id", "name", "modules", "receives", "balance_msat"}, ...]}`, oldest join first.
+`{"federations": [{"id", "name", "modules", "receives", "restored_at", "restore_open", "balance_msat"}, ...]}`, oldest join first.
 
 ### `GET /federations/{id}/balance`
 
@@ -141,7 +144,7 @@ The same record, without `repeat`. States:
 | --- | --- |
 | `pending` | Submitted, or waiting to be. While a federation is down a receive stays pending; the client keeps trying. |
 | `done` | The federation took the notes and issued the wallet's new notes. The balance rose by `net_msat`. `fee_msat` and `net_msat` are final only now: while pending they are the client's quote. |
-| `failed` | `failure` says which: `rejected` (the federation refused the notes: spent elsewhere first, or invalid), `refused` (this client refused to submit them), or `issuance_failed` (the federation took the notes but the new ones could not be issued: value may be stuck, an operator must look). `reason` is the client's text. |
+| `failed` | `failure` says which: `rejected` (the federation refused the notes: spent elsewhere first, or invalid), `refused` (this client refused to submit them), or `issuance_failed` (the federation took the notes and this wallet cannot show that their value arrived: the new notes could not be issued, or, after a restore, the notes were found spent and this wallet may have spent them itself before its data was lost; an operator must look). `reason` is the client's text. |
 
 ## What the gateway must do to call it safely
 
@@ -160,12 +163,13 @@ The service is safe to call twice; the gateway's job is to credit once and only 
 
 What the operator does, on the gateway's host, with the Docker setup in `docker-compose.yml`. No step prints the receiver's token, its words or an invite code; keep them out of shell history and chat.
 
-1. **The receiver's secrets**, in `.env`: `FEDIMINT_RECEIVER_TOKEN` (for example `openssl rand -hex 24`), and `FEDIMINT_RECEIVER_MNEMONIC`, 12 BIP39 words with an offline copy ([Storage, the seed and recovery](#storage-the-seed-and-recovery)). Without the words the service makes its own in its volume, and the volume becomes the only backup.
+1. **The receiver's secrets**, in `.env`: `FEDIMINT_RECEIVER_TOKEN` (for example `openssl rand -hex 24`), and `FEDIMINT_RECEIVER_MNEMONIC`, 12 BIP39 words with an offline copy ([The words](#the-words)). Without the variable the service makes its own words in its volume, and only the volume and its backups hold them.
 2. **Start the receiver:** `docker build -t forge-fedimint-receiver services/fedimint-receiver`, then `docker compose --profile fedimint up -d fedimint-receiver`. It has no published port; the gateway reaches it on the compose network.
 3. **Point the gateway at it**, in `.env`: `FORGE_FEDIMINT_URL=http://fedimint-receiver:8790`. The compose file gives the gateway the receiver's own token as `FORGE_FEDIMINT_TOKEN` unless that is set too. Optional: `FORGE_FEDIMINT_MAX_SAT` (largest top-up, default 100,000 sat) and `FORGE_FEDIMINT_FEDERATION_CAP_SAT` (most Forge holds of one federation, default 1,000,000 sat). Then recreate the gateway so it reads them: `docker compose --profile fedimint up -d`. The gateway refuses to start with a URL and no token, or with no `sat` in `FORGE_UNITS`.
-4. **Join a federation.** With its invite code on stdin, so it stays out of the command line: `docker compose exec -T gateway node src/admin.ts fedimint:join < invite.txt` (or `--max-sat N` and `--cap-sat N` for this federation's own lower caps). The gateway asks the receiver to join (the receiver reads the federation's config from its guardians and refuses one with no mint module it takes), then writes the federation's row, active. It prints the federation's id, name, the notes it takes and its caps, never the invite. Joining again refreshes the name and modules and keeps the state and caps unless new ones are given.
-5. **Check:** `docker compose exec gateway node src/admin.ts fedimint:list` shows each federation with `joined: true` and its balance at the receiver, and `GET /v1/wallet/fund/methods` lists it under `fedimint.federations`. Try one small top-up and watch for the `fedimint_topup_credited` log line before telling anyone.
-6. **Stop taking one federation's notes:** `fedimint:pause <federation id>`; `fedimint:resume <federation id>` takes them again. Notes already on their way are finished.
+4. **Join a federation.** With its invite code on stdin, so it stays out of the command line: `docker compose exec -T gateway node src/admin.ts fedimint:join < invite.txt` (or `--max-sat N` and `--cap-sat N` for this federation's own lower caps). On a federation with a long history the receiver's join can outlast the gateway's wait: the command then fails with `unreachable_receiver` while the receiver finishes, and run again a little later it completes. The gateway asks the receiver to join (the receiver reads the federation's config from its guardians and refuses one with no mint module it takes), then writes the federation's row, active. It prints the federation's id, name, the notes it takes and its caps, never the invite. Joining again refreshes the name and modules and keeps the state and caps unless new ones are given.
+5. **Back up** the receiver and the invites ([Runbook](#runbook)), now and after every join.
+6. **Check:** `docker compose exec gateway node src/admin.ts fedimint:list` shows each federation with `joined: true` and its balance at the receiver, and `GET /v1/wallet/fund/methods` lists it under `fedimint.federations`. Try one small top-up and watch for the `fedimint_topup_credited` log line before telling anyone.
+7. **Stop taking one federation's notes:** `fedimint:pause <federation id>`; `fedimint:resume <federation id>` takes them again. Notes already on their way are finished.
 
 **Turning it off.** Unset `FORGE_FEDIMINT_URL` and recreate the gateway: notes are no longer taken and the methods no longer list `fedimint`. Keep the receiver running while any Fedimint top-up is still `prepared` (`fedimint:list`, `pending`): with the URL unset the gateway does not ask about them, and they are finished only once it is set again.
 
@@ -181,26 +185,123 @@ What is established for the federation Fedimint card tills use: a till's wallet 
 
 **The fedimint-sdk crate was not used.** `fedimint-sdk` 0.1.0 is published and pins fedimint 0.13.0, but its `Ecash::receive` picks the mintv2 module whenever a federation has one, so on a federation with both mints it refuses mint v1 notes (`NotSupported`); it submits and returns the operation in one call, so recording the operation id first would mean deriving fedimint's id outside the SDK anyway; it does not expose the notes' federation id prefix; and it reports a second receive of the same notes with the same code as malformed notes (`InvalidInput`). Each of these is something this service must get right. It uses the same seed derivation as fedimint-sdk and fedimint's own clients (12-word BIP39, `StandardDoubleDerive`), so the words work there too.
 
-## Storage, the seed and recovery
+**Recovery** uses the mint modules' recovery endpoints (`recovery_count`, `recovery_slice`, `recovery_slice_hash`, `recovery_blind_nonce_outpoints`), which 0.13.0 guardians serve. A federation without them gets the older scan of signed sessions instead ([How recovery works](#how-recovery-works)); that path was not run.
+
+## Storage and the seed
 
 ```text
 <data>/
+  lock                       held by the one process that serves or recovers the directory
   mnemonic                   only when the seed was generated here (mode 0600)
   seed-check                 fingerprint of the seed: a hash, not the words
   federations/<id>/
-    federation.json          the invite it was joined with, its name, when
+    federation.json          the invite it was joined with, its name, when, and any restore
+    restore.json             only while `recover` rebuilds this federation
     client.db/               the fedimint client's RocksDB
   receives/<notes_id>.json   one record per receive; holds the notes only while pending
 ```
 
-Directories are mode 0700 and files 0600. Each small file is written whole (temporary file, sync, rename), so a crash leaves the old version or the new one.
+Directories are mode 0700 and files 0600. Each small file is written whole (temporary file, sync, rename), so a crash leaves the old version or the new one. A second service, or `recover`, on a directory in use is refused (the `lock` file).
 
 **The seed.** In production set `FEDIMINT_RECEIVER_MNEMONIC` and keep an offline copy; the words are then never on the volume. Without it the service generates words into `<data>/mnemonic` on first start. `seed-check` makes the service refuse to start with a different seed than the directory was made with, or with none after it was made with one from the environment.
 
-**What the seed and the invite codes can restore, and what was not verified.** The notes are derived from the seed, so in fedimint's design the seed plus each federation's invite code is enough to recover the balance through fedimint's recovery (the client scans the federation's history for notes the seed owns, or restores a backup the client stored with the guardians). **This service does not run that recovery yet, and it was not tested.** Two consequences:
+## Backup and recovery
 
-- Do not point a fresh data directory at a seed that already holds notes and join the same federation again: a plain join starts the note counters from zero and is not a recovery. Restoring is a later step (the plan's step 5), with a drill.
-- Until then the data volume is the backup. Copying RocksDB while the service runs is likely to give an inconsistent copy (inferred, not tested); stop the service, or snapshot the volume, before copying.
+Every note the receiver holds is derived from the wallet's seed. The value comes back from the seed and the federations' invite codes through Fedimint's own recovery. A backup carries what the seed cannot give back: the receive records the gateway's idempotency rests on, and the list of federations.
+
+### How recovery works
+
+Read from the fedimint 0.13.0 sources:
+
+- `ClientPreview::recover` (`fedimint-client`, `src/client/builder.rs`) makes the federation's client and runs each module's recovery. Mint v1 (`fedimint-mint-client`, `recover_from_slices` in `src/lib.rs`) downloads the federation's recovery items (every note issued and every note spent, in order, from the `recovery_count` and `recovery_slice` endpoints) and keeps the issued notes whose blinded nonces it derives from the seed, looking 100 note indices past the last one found in each denomination. It then fetches their signatures and sets the note counters past them. Mintv2 (`fedimint-mintv2-client`, `src/lib.rs`) does the same over its own items and recognises its notes by a filter derived from the seed. A federation without the recovery endpoints gets the older scan of signed sessions, which is slower and sees only completed sessions.
+- Fedimint's backups kept by the guardians (`backup_to_federation`, `download_backup_from_federation`) are not used: 0.13.0 marks them deprecated, as recovery made them unnecessary. The receiver passes no such backup to `recover`.
+- Mint v1 cannot be used while it recovers (`RecoveryMode::Unusable`). When the recovery is done the receiver reopens the client with `ClientBuilder::open` and waits for the recovered notes' signatures before it reports a balance. Mintv2 recovers while usable, and the receiver waits for it the same way. Progress is saved in the client database, so a recovery that stops resumes on the next `recover`, join or start.
+- `ClientHandle::restart` is not used for that reopen. In 0.13.0 it hands the client's federation-level secret to the builder as if it were the root secret: the federation key is derived a second time, and every note issued after it comes from keys the seed's recovery never looks at. The drill below found this.
+- Every join runs the recovery. A plain join (`ClientPreview::join`) starts the note counters from zero, and fedimint's documentation warns against it for a seed that may have been used before. For a seed never used with the federation, the recovery finds nothing.
+
+### What comes back
+
+| | From the words and the invites | From a backup and the words |
+| --- | --- | --- |
+| Every note received, to the msat | yes | yes (the value always comes from the seed) |
+| The federations | those whose invites are given | those in the backup |
+| The receive records | none | as they were when the backup was made |
+| A receive pending when the data was lost | its value, if the federation had finished it | its record too, which is submitted again |
+| A generated mnemonic | (the words are the seed) | yes |
+
+A backup does not hold the client databases, and they are never restored from a copy. The mint v1 client derives each new note from a counter kept in its database: a copy older than the last receive would offer the federation notes it has already seen (the federation refuses such a transaction, `BlindNonceAlreadyUsed`), and it would lack the notes received after it was made. Mintv2 picks its notes at random, but an old copy still lacks the newer ones. Recovery rebuilds both from the federation.
+
+### A backup of a live directory
+
+The receiver keeps two kinds of state: one RocksDB client database per federation, and its own small JSON files. A plain copy of a running RocksDB can catch its files between writes, and a consistent copy of a live one needs RocksDB's checkpoint. The backup leaves the databases out, so that question does not arise. Each small file is written whole (temporary file, sync, rename), so reading them while the service runs gets one whole version of each, and the files do not depend on one another. `fedimint-receiver backup` reads them into one JSON document:
+
+```json
+{ "format": "forge-fedimint-receiver-backup/1", "created_at": 1795000000, "version": "0.1.0", "seed_check": "...", "mnemonic": "(only for a generated seed)", "federations": [], "receives": [] }
+```
+
+It holds the invites, the notes of receives still pending and, for a generated seed, the words: keep it as carefully as the words. It goes to a new file with mode 0600 (`--out FILE`) or to standard output, which must not be a terminal; a summary with counts goes to standard error. A record the backup caught while pending is settled again after a restore, under the restore rule.
+
+### After a restore: the gateway
+
+What the gateway's sweep sees for each of its Fedimint top-ups once the receiver is rebuilt from the words alone. With a backup, the records it holds answer as they did before.
+
+| The gateway's row | The gateway asks | The receiver answers | The row ends |
+| --- | --- | --- | --- |
+| `done` | nothing: the same notes again are a replay for the same balance and `token_spent` for another | | `done`, credited once |
+| `prepared`, holding its notes (no answer had reached the gateway) | `POST /receive` with the notes | no record, so it receives them: `done` when the federation had not taken them; when it had, the federation calls them spent and the restore rule ends the receive `failed` with `issuance_failed` | credited once, or `stuck` |
+| `prepared`, its notes dropped (the gateway had been told `pending`) | `GET /receive/{notes_id}` | `404` | stays `prepared`; the gateway logs `fedimint_receive_missing` at each sweep |
+| `rejected` or `stuck` | nothing | | as it was |
+
+Nothing is credited twice: the gateway credits only on a `done` record, in the step that moves its row from `prepared` to `done`. No credit is lost: no row whose notes this wallet may hold ends `rejected`, and their value is in the recovered balance. The receiver never sends, so its balance in a federation is the sum of `net_msat` over every receive that went through. `fedimint:list` shows that balance next to what the gateway credited (`credited_msat`); the difference is the value of the stuck and pending top-ups that reached the wallet. The gateway has no command yet to settle such a row by hand. Until it has one, those rows stay `stuck` or `prepared`, counted in `fedimint:list`.
+
+### The restore rule
+
+After a restore the receiver cannot tell its own spend of a set of notes from someone else's: the records that would say so are gone. So while a federation's restore is open, a receive the federation rejects as spent ends `failed` with `issuance_failed`, a reason that names the restore, and no credit. A record older than the restore (one a backup brought back) ends that way even after the restore is closed. `recover` opens the restore, and so does a join whose recovery finds notes the seed already held. `fedimint-receiver restore-done FEDERATION_ID` (or `--all`) closes it; from then on, notes someone else spent are `rejected` again. While it is open, notes a person spent elsewhere also end `stuck` at the gateway: safe, and more work for the operator, so close it once the reconciliation is done.
+
+### The words
+
+`FEDIMINT_RECEIVER_MNEMONIC` holds 12 BIP39 words, the seed of every federation's wallet, derived the way fedimint's own clients derive it (`StandardDoubleDerive`). Make them with a BIP39 tool you trust on a machine kept offline, write them down, and keep that copy offline and apart from the backups. The receiver can also make them: started without the variable on an empty volume, it writes them to `/data/mnemonic` (mode 0600); `docker compose cp fedimint-receiver:/data/mnemonic ./words` copies them out to be written down, and the copy is then deleted. Such words stay in the volume and every backup holds them.
+
+The words never reach a log or an API answer, and a backup holds them only when they were generated in the volume. `seed-check` keeps a hash of them, and a receiver started with other words than its directory was made with refuses to start. `recover` never makes new words: without the variable or a backup holding generated words, it stops.
+
+### Runbook
+
+The commands below run on the gateway's host, from the repository root. None of them prints the words, an invite or a note.
+
+**Back up.** After every join, and on a schedule (hourly is plenty: a backup's age bounds how many receive records a restore lacks, never the balance).
+
+1. `(umask 077; docker compose --profile fedimint exec -T fedimint-receiver fedimint-receiver backup > fedimint-backup-$(date -u +%Y%m%dT%H%M%SZ).json)`. The receiver keeps running. Standard error shows the counts.
+2. `(umask 077; docker compose exec -T gateway node src/fedimint-invites.ts > fedimint-invites.txt)`. The gateway's federations, paused ones too, one invite a line after a comment with its id.
+3. Move both files off the host, to a place apart from the written words. Keep several generations.
+
+**Restore from a backup and the words.** The receiver's volume is lost or damaged.
+
+1. Stop the receiver: `docker compose --profile fedimint stop fedimint-receiver`. Leave the gateway running: it answers `fedimint_unavailable` to new notes, which spends nothing, and its sweep waits.
+2. Start from an empty volume: `docker compose --profile fedimint rm -f fedimint-receiver`, then `docker volume rm <project>_fedimint-data` (`docker volume ls` shows the name).
+3. Check that `.env` has the same `FEDIMINT_RECEIVER_MNEMONIC` as before. For words the receiver generated, the backup holds them and the variable stays unset.
+4. `docker compose --profile fedimint run --rm -T fedimint-receiver recover --backup - < fedimint-backup-<time>.json`. The federations must be reachable. It prints one JSON line per federation (`rebuilt`, `balance_msat`, `restore_open`), then the number of records. For a line with `error`, run `docker compose --profile fedimint run --rm -T fedimint-receiver recover` again once that federation answers: it resumes.
+5. For a federation joined after the backup was made, run `recover --invites - < fedimint-invites.txt` the same way.
+6. Start the receiver: `docker compose --profile fedimint up -d fedimint-receiver`. Then the checks below.
+
+**Restore from the words alone.** No backup is at hand.
+
+1. Steps 1 to 3 above.
+2. Export the invites from the gateway (step 2 of the backup) unless a recent copy is at hand.
+3. `docker compose --profile fedimint run --rm -T fedimint-receiver recover --invites - < fedimint-invites.txt`
+4. Start the receiver, then the checks below. The receive records are gone: [After a restore: the gateway](#after-a-restore-the-gateway) says what follows.
+
+**Check afterwards.**
+
+1. `docker compose exec gateway node src/admin.ts fedimint:list`: every federation `joined: true`, with the `balance_msat` that `recover` printed.
+2. In each federation, `balance_msat` is at least `credited_msat`. The difference is the value of the top-ups that reached the wallet without a credit: after the next sweep (every 30 seconds) they are the `stuck` and `pending` counts.
+3. In the gateway's log, `fedimint_issuance_failed` names each top-up the restore rule held, and `fedimint_receive_missing` each pending one whose record was lost. Note them with their amounts; they are what the difference in step 2 is made of.
+4. One small top-up, and watch for `fedimint_topup_credited`.
+5. Once a few sweeps have run and every top-up from before the restore is `done`, `stuck` or in your notes, close the restore: `docker compose --profile fedimint exec fedimint-receiver fedimint-receiver restore-done --all`.
+6. Make a new backup.
+
+**Moving the receiver to another host** with its state: stop it, copy the whole volume (the databases are final once it has stopped), start it on the new host, and never start the old copy again, as its note counters would fall behind. In every other case, restore as above.
+
+**What was not verified.** Recovery against a real federation, or one older than 0.13.0; how long it takes on a federation with a long history; the older scan of signed sessions; a federation going down while `recover` runs (the command waits for it); Fedimint's guardian backups, which are not used.
 
 ## Running it
 
@@ -268,10 +369,14 @@ The tests run the real binary in a child process and speak to it over HTTP, agai
 | `the_seed_from_the_environment_is_never_written_and_never_swapped` | An environment seed is never written; another seed, or none, does not open the directory; the right one does, with the balance intact; the words never reach the log. |
 | `a_generated_seed_is_kept_private_in_the_data_directory` | A generated seed is 12 words in a 0600 file in a 0700 directory, kept across restarts, never logged. |
 | `devfed_hands_out_notes_the_receiver_takes` | The `devfed` binary as a process: the receiver joins by its invite, receives its notes, and notes passed to `/spend` fail as spent. |
+| `the_seed_and_the_invites_bring_every_note_back_and_old_notes_credit_nothing` | The drill from the words alone: mint v1 and mintv2 notes received in two federations, the data directory deleted, `recover --invites -` with both invites (comments and blank lines in the file) prints each balance back to the msat and no invite or word; a second `recover` only reports. On the rebuilt directory the old notes end `failed`, `issuance_failed`, with no credit, and a repeat gives the same record; new notes of both kinds go in (the recovered counters reuse no note); notes spent elsewhere are uncertain while the restore is open and `rejected` once `restore-done --all` closes it. |
+| `a_backup_and_the_seed_bring_the_records_back_too` | A generated seed. A receive cut off between its record and its submission; `backup --out` with the service stopped (0600, counts on standard error, the words never printed, an existing file never overwritten); the directory deleted; `recover --backup` brings the words, the records and the balance back; the cut off receive is submitted and ends `done`; a done record answers a repeat with its first key and nothing more. Then a backup of the running service, edited as if it had caught a receive while pending: after the restore that receive's notes are spent (by this wallet, before the loss), and the record ends `issuance_failed` even with the restore closed; the balance is whole. |
+| `a_join_with_a_seed_that_already_holds_notes_recovers_them` | The same words on an empty directory, joined again over HTTP: the join runs on after its caller gives up at 200 ms and is there when asked again; the balance is back, the federation is marked restored, the old notes end uncertain and new notes go in. |
+| `the_recovery_commands_refuse_what_could_lose_track_of_value` | `recover` with no words makes none and stops; an invite that is not one; a second service and `recover` on a directory in use are refused; `backup` of a running service to a pipe holds no words from the environment; a backup goes only into an empty directory, and not under other words; `restore-done` of a federation not joined; `backup` of what is no data directory. |
 
 Unit tests cover reading notes (encodings, ids, a repeated note, junk) and the seed rules.
 
-**Not covered by a test:** `ambiguous_federation` (it needs two federations whose ids share 4 bytes); `fee_exceeds_value` (the test federations' wallets round notes up to economical sizes); `unreachable` on join; `issuance_failed`; a federation that is down while a receive is pending; any federation older than 0.13.0; a real federation of any kind.
+**Not covered by a test:** `ambiguous_federation` (it needs two federations whose ids share 4 bytes); `fee_exceeds_value` (the test federations' wallets round notes up to economical sizes); `unreachable` on join; `issuance_failed` from a failed issuance (the restore rule's is covered); a federation that is down while a receive is pending, or while `recover` runs; recovery from the older scan of signed sessions; any federation older than 0.13.0; a real federation of any kind.
 
 ### The gateway against it
 
@@ -295,6 +400,15 @@ pnpm test:fedimint        # FORGE_FEDIMINT_BIN_DIR: where the two binaries are (
 | the v2 app's top-up client | The app's own code (`public/v2/core/fedinote.js`, `engine.js`, `vault.js`, as the eCash box uses it) against the same gateway: it reads the methods and real notes as the gateway and the receiver do (the same amount and the same notes id), is credited once and then gets a replay with nothing left on the phone; notes of a federation it was not given are decided not taken on the phone and refused by the gateway the same way, then spent by their own federation; notes answered `topup_pending` stay on the phone through a receiver that goes down (the gateway answers `topup_pending` for notes already on their way, receiver down or not) and are credited once when it is back. |
 | the operator's admin | `GET /admin/api/fedimint` against the real receiver: after real top-ups with real fees the receiver holds exactly what the gateway credited (reading Agrees, difference 0 msat), the fees are face value less credited, and take out coverage warns with the gateway holding no Cashu sat; joining a second federation by invite, its holdings cap, pause and resume through the admin API, each followed by the top-up; Check now finishing a top-up left on its way, once. |
 
-A missing binary fails the file: nothing in it is skipped. Every branch of the gateway's side, including what the real receiver cannot be made to do on demand (`issuance_failed`, a lost answer, a 5xx, a pending record that waits), is in `test/unit/fedimint.test.ts` against a stand-in receiver.
+`test/fedimint/recovery.fedimint.test.ts` is the recovery drill with the gateway, the receiver (with its words from the environment) and one `devfed` federation:
 
-In CI the `receiver` job runs the three cargo commands above, then builds the two binaries and runs `pnpm test:fedimint` on them, when anything under `services/fedimint-receiver/`, `src/fedimint.ts`, `src/fedimint-admin.ts` or `test/fedimint/` changes, and on every push to `main` ([CI.md](CI.md)).
+| Test | What it shows |
+| --- | --- |
+| takes top-ups, and leaves two of them on their way | One top-up credited; one whose answer the gateway never handled (a crash point after the receive: its row keeps the notes); one answered `topup_pending` (its row drops the notes). No sweep runs until the loss, and both receives end `done` at the receiver. |
+| exports the invites | `node src/fedimint-invites.ts --out FILE`: a new 0600 file, the invite after a comment with the federation's id and state, nothing printed, an existing file refused. |
+| rebuilds the wallet from the words and the invites | The receiver's data directory deleted; `fedimint-receiver recover --invites FILE` prints the balance from before the loss, to the msat, with the restore open; the receiver starts on it at the same address. |
+| credits nothing twice and refuses nothing the wallet holds | The sweep: the row that held its notes ends `stuck` (the restore rule), the other stays `prepared`; no balance moves; the credited notes again are a replay from their balance and `token_spent` from another; `fedimint:list` shows one pending and one stuck, and the receiver's balance less what was credited is exactly the two undecided top-ups; new notes are credited as before. |
+
+A missing binary fails either file: nothing in them is skipped. Every branch of the gateway's side, including what the real receiver cannot be made to do on demand (`issuance_failed`, a lost answer, a 5xx, a pending record that waits), is in `test/unit/fedimint.test.ts` against a stand-in receiver.
+
+In CI the `receiver` job runs the three cargo commands above, then builds the two binaries and runs `pnpm test:fedimint` on them, when anything under `services/fedimint-receiver/`, `src/fedimint.ts`, `src/fedimint-admin.ts`, `src/fedimint-invites.ts` or `test/fedimint/` changes, and on every push to `main` ([CI.md](CI.md)). The recovery drill rides in that job, with no build step of its own: `tests/recovery.rs` is one more test binary of the crate, and the gateway's drill one more file in `test/fedimint/`.
