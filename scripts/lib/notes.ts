@@ -69,7 +69,9 @@ export function parseArgs(argv: string[], today = new Date()): Args {
   }
   const local = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(u.hostname);
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) throw new UsageError('--mint must be https (http only for a mint on this computer)');
-  const poll = Number(raw.get('poll') ?? 2000);
+  // Ten seconds: a mint's own limit on status checks can be as low as 20 a minute for one address, and a
+  // check it refuses tells this script nothing, so a faster poll only makes a paid invoice look unpaid.
+  const poll = Number(raw.get('poll') ?? 10_000);
   if (!Number.isInteger(poll) || poll < 100 || poll > 60_000) throw new UsageError('--poll must be 100 to 60000 ms');
   const resume = raw.get('resume') ?? null;
   const date = today.toISOString().slice(0, 10);

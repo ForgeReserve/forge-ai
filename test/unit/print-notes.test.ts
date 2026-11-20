@@ -15,7 +15,7 @@ describe('print-notes arguments', () => {
 
   it('reads a batch in dollars and defaults to the mint the engine trusts', () => {
     const a = parseArgs(['--count', '20', '--amount', '2.50'], day);
-    expect(a).toMatchObject({ count: 20, amount: 250, unit: 'usd', mint: DEFAULT_MINT, out: 'notes-2026-12-02.html', resume: null, poll: 2000 });
+    expect(a).toMatchObject({ count: 20, amount: 250, unit: 'usd', mint: DEFAULT_MINT, out: 'notes-2026-12-02.html', resume: null, poll: 10_000 });
     // The default is the one the engine trusts out of the box.
     expect(readFileSync(resolve(import.meta.dirname, '../../src/config.ts'), 'utf8')).toContain(`FORGE_TRUSTED_MINTS: csv.default(['${DEFAULT_MINT}'])`);
   });
