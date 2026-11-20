@@ -5,7 +5,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
 const KEY = 'forge-admin-token';
-const SECTIONS = ['overview', 'export', 'invites', 'waitlist', 'balances', 'fundings', 'requests', 'costs', 'settings'];
+const SECTIONS = ['overview', 'export', 'invites', 'waitlist', 'balances', 'fundings', 'fedimint', 'requests', 'costs', 'settings'];
 
 // ------------------------------------------------------------------ helpers
 
@@ -1130,8 +1130,239 @@ async function renderSettings() {
   });
 }
 
+// ------------------------------------------------------------------ fedimint
+
+/** msat as sat, with msat shown when there are any. */
+const msat = (n) => (n == null ? '–' : msub(n, 'sat'));
+const RECON = {
+  ok: ['Agrees', 'ok', 'The receiver holds exactly what was credited, less what was sent out.'],
+  explained: ['Agrees once top-ups finish', 'warn', 'The receiver holds more than was credited, by no more than the top-ups not finished on the gateway side.'],
+  short: ['Receiver holds less', 'err', 'The receiver holds less than the gateway credited from its notes. Balances funded with these notes are not fully backed: look at the receiver before anything else.'],
+  over: ['Receiver holds more', 'err', 'The receiver holds more than the gateway credited, and more than the top-ups on their way explain. Look for notes given to the receiver outside the gateway, or a credit the gateway missed.'],
+  unknown: ['Unknown', '', 'The receiver did not answer, so its balance is not known.'],
+};
+const EXPLAINED = { in_flight: 'top-ups on their way', stuck: 'stuck top-ups', given_elsewhere: 'notes someone else gave first' };
+const COVER = {
+  take_out_short: (c) => `If every sat balance were taken out now, the Cashu sat at the trusted mints would run out ${units(c.shortfall_sat, 'sat')} short: the last take outs would answer wallet_insufficient.`,
+  largest_balance_short: (c) => `The largest sat balance (${units(c.largest_balance_sat, 'sat')}) is more than any one mint can pay (${units(c.largest_mint?.available ?? 0, 'sat')}): taking it all out at once answers wallet_insufficient.`,
+  under_backed: (c) => `Cashu and the notes at the receiver together (${units(c.cashu_sat + (c.fedimint_sat ?? 0), 'sat')}) are less than the sat balances (${units(c.liabilities_sat, 'sat')}).`,
+  receiver_unknown: () => 'The receiver did not answer, so the notes it holds are not counted here.',
+};
+
+let fmEdit = null;
+async function renderFedimint() {
+  const f = await api('/fedimint');
+  if (!f.enabled) {
+    view.innerHTML = `${head('Fedimint')}<section class="card"><p class="empty">Fedimint is off on this gateway. Set FORGE_FEDIMINT_URL and FORGE_FEDIMINT_TOKEN, then restart (docs/FEDIMINT-RECEIVER.md, Turning it on).</p></section>`;
+    return;
+  }
+  const t = f.totals;
+  const c = f.coverage;
+  const rb = f.rebalance;
+  const fedName = new Map(f.federations.map((x) => [x.id, x.name || x.id.slice(0, 8)]));
+  const alarms = [
+    !f.receiver.ok ? `<p class="note alarm" id="fm-receiver-down">The receiver did not answer (${esc(f.receiver.error || 'no answer')}). Balances and reconciliation are unknown until it does; new notes are refused meanwhile.</p>` : '',
+    t.flagged ? `<p class="note alarm" id="fm-flag">${nf(t.flagged)} ${t.flagged === 1 ? 'federation does' : 'federations do'} not reconcile: see Reconciliation below.</p>` : '',
+    c.warnings.filter((w) => w !== 'receiver_unknown').length ? `<p class="note alarm" id="fm-cover">Take out may fail: ${c.warnings.filter((w) => w !== 'receiver_unknown').map((w) => esc(COVER[w](c))).join(' ')}</p>` : '',
+  ].join('');
+
+  const kpis = [
+    tile('Notes at the receiver', msat(t.receiver_balance_msat), `${nf(f.federations.length)} ${f.federations.length === 1 ? 'federation' : 'federations'} · ${f.receiver.ok ? 'receiver up' : '<span class="err-ink">receiver down</span>'}`),
+    tile('Credited from notes', msat(t.credited_msat), `${msat(t.fees_msat)} kept by the federations as fees`),
+    tile('Sat balances', units(c.liabilities_sat, 'sat'), `largest ${units(c.largest_balance_sat, 'sat')}`),
+    tile('Cashu sat for take out', units(c.cashu_sat, 'sat'), c.shortfall_sat ? `<span class="err-ink">${units(c.shortfall_sat, 'sat')} short of every balance</span>` : 'covers every sat balance'),
+  ].join('');
+
+  const fedTable = table(
+    [
+      { h: 'Federation', wrap: true, v: (x) => `<span class="cell">${esc(x.name || 'unnamed')} ${badge(x.state, x.state === 'active' ? 'ok' : 'warn')}${x.joined === false ? ' ' + badge('not joined at the receiver', 'err') : ''}<span class="cell-note">${short(x.id, 12)} · takes ${esc(x.receives.join(', ') || 'nothing')}</span></span>` },
+      { h: 'Receiver holds', num: true, v: (x) => msat(x.receiver_balance_msat) },
+      { h: 'Credited', num: true, v: (x) => note(msat(x.gateway.credited_msat), `${msat(x.gateway.received_msat)} face · ${msat(x.gateway.fees_msat)} fees`) },
+      {
+        h: 'Caps',
+        num: true,
+        v: (x) =>
+          note(
+            `${units(x.caps.max_sat, 'sat')} · ${units(x.caps.cap_sat, 'sat')}`,
+            `per payment${x.caps.max_default ? '' : ' (own)'} · held${x.caps.cap_default ? '' : ' (own)'}${x.holdings.room_sat != null ? `, ${units(x.holdings.room_sat, 'sat')} room` : ''}`,
+          ),
+      },
+      {
+        h: 'Top-ups',
+        v: (x) =>
+          note(
+            `${nf(x.count.done)} done${x.count.prepared ? ` · ${nf(x.count.prepared)} on their way` : ''}${x.count.stuck ? ` · <span class="err-ink">${nf(x.count.stuck)} stuck</span>` : ''}`,
+            `${nf(x.count.rejected)} refused · last ${x.last_receipt_at ? esc(ago(x.last_receipt_at)) : 'never'}`,
+          ),
+      },
+      {
+        h: '',
+        v: (x) =>
+          `<div class="actions">${x.state === 'active' ? `<button class="btn small" type="button" data-fpause="${esc(x.id)}">Pause</button>` : `<button class="btn small" type="button" data-fresume="${esc(x.id)}">Resume</button>`}<button class="btn small" type="button" data-fcap="${esc(x.id)}">Holdings cap</button></div>`,
+      },
+    ],
+    f.federations,
+    'No federation joined yet. Join one below with its invite code.',
+  );
+
+  const editing = fmEdit && f.federations.find((x) => x.id === fmEdit);
+  const capForm = editing
+    ? `<form id="fcapf" class="confirm row" autocomplete="off">
+        <label class="field"><span>Holdings cap for ${esc(editing.name || editing.id.slice(0, 8))}, in sat (the gateway default is ${units(f.defaults.cap_sat, 'sat')})</span><input name="cap" type="number" min="1" step="1" inputmode="numeric" value="${esc(editing.caps.cap_sat)}" required></label>
+        <div class="field"><div class="actions"><button class="btn primary small" type="submit">Save</button><button class="btn small" type="button" id="fcapdef">Use the default</button><button class="btn ghost small" type="button" id="fcapx">Cancel</button></div></div>
+      </form>`
+    : '';
+
+  const reconTable = table(
+    [
+      { h: 'Federation', v: (x) => esc(x.name || x.id.slice(0, 8)) },
+      { h: 'Receiver holds', num: true, v: (x) => msat(x.receiver_balance_msat) },
+      { h: 'Credited less sent', num: true, v: (x) => note(msat(x.reconciliation.expected_msat), `${msat(x.gateway.credited_msat)} credited · ${msat(x.gateway.sent_msat)} sent`) },
+      { h: 'Difference', num: true, v: (x) => (x.reconciliation.difference_msat == null ? '–' : (x.reconciliation.difference_msat > 0 ? '+' : '') + msat(x.reconciliation.difference_msat)) },
+      {
+        h: 'Reading',
+        wrap: true,
+        v: (x) => {
+          const [label, kind, text] = RECON[x.reconciliation.status];
+          const parts = x.reconciliation.difference_msat > 0 ? x.reconciliation.explained.map((e) => `${msat(e.msat)} ${EXPLAINED[e.what]}`).join(', ') : '';
+          return `<span class="cell">${badge(label, kind)}<span class="cell-note">${esc(text)}${parts ? ` Up to ${esc(parts)} can explain a difference.` : ''}</span></span>`;
+        },
+      },
+    ],
+    f.federations,
+    'Nothing to reconcile yet.',
+  );
+
+  const coverFacts = facts([
+    ['Sat balances', units(c.liabilities_sat, 'sat'), '', `largest ${units(c.largest_balance_sat, 'sat')}`],
+    ['Cashu sat, trusted mints', units(c.cashu_sat, 'sat'), 'less payouts owed', c.largest_mint ? `most at one mint: ${units(c.largest_mint.available, 'sat')}` : 'none held'],
+    ['Notes at the receiver', c.fedimint_sat == null ? '–' : units(c.fedimint_sat, 'sat'), '', 'never pay a take out'],
+    ['Short for take out', c.need_sat ? `<span class="err-ink">${units(c.need_sat, 'sat')}</span>` : units(0, 'sat'), '', c.need_sat ? 'what a rebalance must bring into Cashu' : 'Cashu covers every sat balance'],
+  ]);
+  const rebalance = rb.need_sat
+    ? `<p class="note" id="fm-rebalance">Suggested rebalance: move ${units(rb.suggested_sat, 'sat')} from ${rb.from.map((x) => `${esc(x.name || x.federation_id.slice(0, 8))} (${units(x.sat, 'sat')})`).join(' and ') || 'the receiver'} to ${esc(rb.to_mint)}, Lightning fees on top.${rb.short_after_sat ? ` The receiver holds too little: ${units(rb.short_after_sat, 'sat')} would still be missing.` : ''} Nothing on this page can move it yet: the receiver cannot pay a Lightning invoice so far.</p>`
+    : '<p class="fine" id="fm-rebalance">No rebalance needed: Cashu covers every sat balance.</p>';
+
+  const recTable = table(
+    [
+      { h: 'Age', v: (x) => when(x.created_at) },
+      { h: 'Notes id', v: (x) => short(x.notes_id, 12) },
+      { h: 'Federation', v: (x) => esc(fedName.get(x.federation_id) || x.federation_id.slice(0, 8)) },
+      { h: 'Face value', num: true, v: (x) => msat(x.face_msat) },
+      { h: 'State', wrap: true, v: (x) => badge(x.status === 'prepared' ? 'on its way' : x.status, x.status === 'stuck' ? 'err' : 'warn') + (x.error ? `<div class="muted small">${esc(x.error)}</div>` : '') },
+      { h: 'Balance', v: (x) => short(x.account_id, 12) },
+      {
+        h: '',
+        v: (x) =>
+          `<div class="actions"><button class="btn small" type="button" data-rcheck="${esc(x.notes_id)}">Check now</button>${x.status === 'stuck' ? `<button class="btn small danger" type="button" data-rresolve="${esc(x.notes_id)}">Resolve</button>` : ''}</div>`,
+      },
+    ],
+    f.attention,
+    'Nothing needs you: no top-up is stuck or on its way.',
+  );
+
+  view.innerHTML = `
+    ${head('Fedimint', `Receiver ${f.receiver.ok ? badge('up', 'ok') : badge('down', 'err')} · defaults ${units(f.defaults.max_sat, 'sat')} per payment, ${units(f.defaults.cap_sat, 'sat')} held per federation · checked ${esc(new Date(f.at).toLocaleTimeString())}`)}
+    <div class="dash">
+      ${alarms}
+      <div class="tiles">${kpis}</div>
+      <section class="card" id="fm-feds"><h3>Federations</h3>${fedTable}${capForm}</section>
+      <section class="card" id="fm-recon"><h3>Reconciliation</h3>
+        <p class="fine">The receiver's record credits each top-up its net value (the face value less the federation's fee), and its balance rises by exactly that. So the receiver should hold what the gateway credited, less what was sent out (nothing yet), to the msat. A difference is only ever explained by top-ups the gateway has not finished.</p>
+        ${reconTable}
+      </section>
+      <section class="card" id="fm-coverage"><h3>Take out coverage</h3>
+        <p class="fine">Take out pays Cashu from the trusted mint holding the most. Sat balances funded with Fedimint notes are backed by notes at the receiver, which cannot pay a take out.</p>
+        ${coverFacts}
+        ${rebalance}
+      </section>
+      <section class="card" id="fm-receipts"><h3>Top-ups that need you</h3>
+        <p class="fine">Check now asks the receiver about one top-up, as the sweep does every 30 seconds, and credits it if the receiver says it is done. Resolve closes a stuck top-up once you have settled it with the person by hand; it works only when the receiver reports the receive failed for good, and nothing is ever credited for it after.</p>
+        ${recTable}
+        <div id="fresolve"></div>
+      </section>
+      <section class="card" id="fm-join"><h3>Join a federation</h3>
+        <form id="fjoin" autocomplete="off">
+          <label class="field"><span>Invite code (sent to the receiver and kept by the gateway; never shown again)</span><textarea name="invite" rows="3" spellcheck="false" autocapitalize="off" placeholder="fed11..." required></textarea></label>
+          <div class="row">
+            <label class="field"><span>Per payment cap, sat (optional)</span><input name="max_sat" type="number" min="1" step="1" inputmode="numeric" placeholder="${esc(f.defaults.max_sat)}"></label>
+            <label class="field"><span>Holdings cap, sat (optional)</span><input name="cap_sat" type="number" min="1" step="1" inputmode="numeric" placeholder="${esc(f.defaults.cap_sat)}"></label>
+            <div class="field"><button class="btn primary" type="submit">Join</button></div>
+          </div>
+        </form>
+      </section>
+    </div>`;
+
+  const act = async (btn, path, body, done) => {
+    btn.disabled = true;
+    try {
+      const r = await api(path, { method: 'POST', body });
+      toast(done(r));
+      route(true);
+    } catch (x) {
+      toast(x.message);
+      btn.disabled = false;
+    }
+  };
+  $('#fm-feds').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.fpause) {
+      if (!confirm('Pause this federation? Its notes are refused from now on; top-ups already on their way are finished.')) return;
+      act(b, `/fedimint/federations/${b.dataset.fpause}/pause`, {}, () => 'Paused');
+    } else if (b.dataset.fresume) act(b, `/fedimint/federations/${b.dataset.fresume}/resume`, {}, () => 'Taking its notes again');
+    else if (b.dataset.fcap) {
+      fmEdit = b.dataset.fcap;
+      route(true);
+    }
+  });
+  if (editing) {
+    const setCap = (btn, cap) => act(btn, `/fedimint/federations/${editing.id}/cap`, { cap_sat: cap }, (r) => ((fmEdit = null), `Holdings cap ${units(r.caps.cap_sat, 'sat')}${r.cap_default ? ' (default)' : ''}`));
+    $('#fcapf').addEventListener('submit', (e) => {
+      e.preventDefault();
+      setCap(e.target.querySelector('button[type=submit]'), Number(new FormData(e.target).get('cap')));
+    });
+    $('#fcapdef').addEventListener('click', (e) => setCap(e.currentTarget, null));
+    $('#fcapx').addEventListener('click', () => {
+      fmEdit = null;
+      route(true);
+    });
+  }
+  $('#fm-receipts').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.rcheck) {
+      act(b, `/fedimint/receipts/${b.dataset.rcheck}/check`, {}, (r) =>
+        r.credited ? 'Credited' : r.receiver_error ? `The receiver did not answer (${r.receiver_error})` : `Still ${r.status === 'prepared' ? 'on its way' : r.status}${r.record ? `; the receiver says ${r.record.state}${r.record.failure ? ' (' + r.record.failure + ')' : ''}` : ''}`,
+      );
+    } else if (b.dataset.rresolve) {
+      const id = b.dataset.rresolve;
+      $('#fresolve').innerHTML = `<form id="fresolvef" class="confirm" autocomplete="off">
+          <p class="small">Resolve ${short(id, 12)} for good. Write how it was settled with the person; it stays on the top-up and is not logged.</p>
+          <label class="field"><span>How it was settled</span><input name="note" maxlength="200" required></label>
+          <div class="actions"><button class="btn danger" type="submit">Resolve</button><button class="btn ghost" type="button" id="fresolvex">Cancel</button></div>
+        </form>`;
+      $('#fresolvex').addEventListener('click', () => ($('#fresolve').innerHTML = ''));
+      $('#fresolvef').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        act(ev.target.querySelector('button[type=submit]'), `/fedimint/receipts/${id}/resolve`, { note: String(new FormData(ev.target).get('note') || '').trim() }, () => 'Resolved');
+      });
+      $('#fresolvef input').focus();
+    }
+  });
+  $('#fjoin').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const num = (k) => (String(fd.get(k) || '').trim() ? Number(fd.get(k)) : undefined);
+    act(e.target.querySelector('button[type=submit]'), '/fedimint/federations', { invite: String(fd.get('invite') || '').trim(), max_sat: num('max_sat'), cap_sat: num('cap_sat') }, (r) =>
+      r.created ? `Joined ${r.name || r.id.slice(0, 8)}: its notes are taken from now on` : `${r.name || r.id.slice(0, 8)} was joined already; name and modules refreshed`,
+    );
+  });
+}
+
 const RENDER = {
   overview: renderOverview,
+  fedimint: renderFedimint,
   export: renderExport,
   invites: renderInvites,
   waitlist: renderWaitlist,
