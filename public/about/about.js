@@ -10,7 +10,8 @@
 // The moments (Talk, Private, Pay, Share unseen): the selected tab's ring is a CSS animation, and it is the
 // clock. Its first half ending shows the moment's second screen (if it has one); its second half ending
 // moves on to the next moment. So anything that pauses the CSS animations (data-play, .held in
-// about.css) pauses the moments too, and nothing here keeps time of its own.
+// about.css) pauses the moments too, and nothing here keeps time of its own. Share unseen opens on its
+// photo at Before and turns to After, the faces covered; under reduced motion it shows After only (STILL).
 // - data-play: intro (the way in), playing, or stopped (Pause, a moment picked, or reduced motion).
 // - .held: a short pause while the mouse is over the moments, keyboard focus is on a tab or a link in
 //   the words, or the page is out of sight.
@@ -67,7 +68,9 @@ const stage = document.getElementById('stage');
 const caps = document.querySelector('.caps');
 const sheenEl = document.querySelector('.sheen');
 /** The screens each moment shows, in order (data-frame on the pictures). */
-const FRAMES = { talk: ['talk-a', 'talk-b'], private: ['private'], pay: ['pay-a', 'pay-b'], share: ['share'] };
+const FRAMES = { talk: ['talk-a', 'talk-b'], private: ['private'], pay: ['pay-a', 'pay-b'], share: ['share-a', 'share-b'] };
+/** The one screen a moment shows under reduced motion, where it is not its first: Share unseen at After. */
+const STILL = { share: 'share-b' };
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 
 let now = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
@@ -104,8 +107,13 @@ whos[0]?.parentElement.addEventListener('animationend', (e) => {
   whos[(who + 1) % whos.length].classList.add('on');
 });
 
-/** Shows moment i (its first screen) and starts its ring again. */
-function select(i) {
+/**
+ * Shows moment i and starts its ring again: its first screen, or its still screen (STILL) when a person
+ * picked the moment, so a page they stopped never rests on the photo before its faces are covered.
+ */
+// True while a picked moment rests on its still screen: Play then starts that moment from its first screen.
+let rested = false;
+function select(i, picked = false) {
   now = (i + tabs.length) % tabs.length;
   const target = 90 * (now + 1);
   // The shortest way round, so the last moment turns on into the first.
@@ -120,10 +128,12 @@ function select(i) {
   hero.dataset.moment = moment;
   hero.dataset.step = String(now);
   hero.style.setProperty('--tip', `${tip}deg`);
-  frame(FRAMES[moment][0]);
+  rested = picked && !!STILL[moment];
+  frame(((still.matches || picked) && STILL[moment]) || FRAMES[moment][0]);
 }
 
 function setPlay(state) {
+  if (state === 'playing' && rested) select(now);
   hero.dataset.play = state;
   playBtn.setAttribute('aria-label', state === 'stopped' ? 'Play' : 'Pause');
   // While the moments move on by themselves, a screen reader is not told each change.
@@ -141,12 +151,12 @@ hero.addEventListener('animationend', (e) => {
 });
 
 // Picking a moment shows it and stops the rest; arrows, Home and End move along the tabs.
-for (const [i, t] of tabs.entries()) t.addEventListener('click', () => (select(i), stop()));
+for (const [i, t] of tabs.entries()) t.addEventListener('click', () => (select(i, true), stop()));
 tabs[0].parentElement.addEventListener('keydown', (e) => {
   const to = { ArrowRight: now + 1, ArrowDown: now + 1, ArrowLeft: now - 1, ArrowUp: now - 1, Home: 0, End: tabs.length - 1 }[e.key];
   if (to === undefined) return;
   e.preventDefault();
-  select(to);
+  select(to, true);
   stop();
   tabs[now].focus();
 });
@@ -174,4 +184,9 @@ document.addEventListener('visibilitychange', () => (document.hidden ? holds.add
 // The way in, then the moments start; under reduced motion they never move by themselves.
 if (still.matches) stop();
 else setTimeout(() => hero.dataset.play === 'intro' && setPlay('playing'), 1500);
-still.addEventListener('change', () => still.matches && stop());
+still.addEventListener('change', () => {
+  if (!still.matches) return;
+  stop();
+  const one = STILL[hero.dataset.moment];
+  if (one) frame(one);
+});

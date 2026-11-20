@@ -203,6 +203,32 @@ describe('the page source', () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
   });
 
+  it('shows Share unseen at Before, then After with its labels, and only After under reduced motion', () => {
+    const css = readFileSync(join(ABOUT, 'about.css'), 'utf8');
+    const js = readFileSync(join(ABOUT, 'about.js'), 'utf8');
+    // Two shots of one screen: Before (the photo as it was taken) first, then After (the faces covered).
+    const img = (frame: string) => new RegExp(`<img class="frame" data-frame="${frame}"[^>]*>`).exec(html)?.[0] ?? '';
+    expect(img('share-a')).toContain('src="/about/shots/share-unseen-before.webp"');
+    expect(img('share-b')).toContain('src="/about/shots/share-unseen.webp"');
+    expect(img('share-a')).toMatch(/alt="[^"]*the same street protest photo before the faces are covered/);
+    expect(img('share-b')).toMatch(/alt="[^"]*every face in the crowd covered/);
+    expect(webpSize(readFileSync(join(ABOUT, 'shots', 'share-unseen-before.webp')))).toEqual(webpSize(readFileSync(join(ABOUT, 'shots', 'share-unseen.webp'))));
+    // The uncovered photo is on the page once, as that small shot, and nowhere else.
+    for (const [name, text] of [['index.html', html], ['about.css', css], ['about.js', js]] as const) expect(text.split('share-unseen-before').length - 1, name).toBe(name === 'index.html' ? 1 : 0);
+    expect(js).toContain("share: ['share-a', 'share-b']");
+    // Two screens, as long as Talk and Pay; the tap and the line over the photo play in the first half
+    // (Before) and are gone by its end; the labels come with After.
+    expect(css).toContain('.hero[data-moment="share"] { --dur: 8s; }');
+    for (const [sel, name] of [['.finger', 'finger-tap'], ['.ripple:not(.r2)', 'ripple-tap'], ['.beam-box', 'beam-box'], ['.beam', 'beam']] as const) expect(css, sel).toMatch(new RegExp(`\\.hero\\[data-frame="share-a"\\] ${sel.replace(/[.():]/g, '\\$&')} \\{[^}]*animation: ${name} calc\\(var\\(--dur\\) / 2\\)`));
+    const frames = Object.fromEntries([...css.matchAll(/@keyframes ([a-z0-9-]+) \{([^]*?\})\s*\}\n/g)].map((m) => [m[1]!, m[2]!]));
+    for (const name of ['finger-tap', 'ripple-tap', 'beam-box']) expect(/(\d+%) \{ ([^{}]*) \}\s*$/.exec(frames[name]!)?.slice(1), name).toEqual(['100%', expect.stringMatching(/^opacity: 0;/)]);
+    expect(css).toContain('.hero:not([data-play="intro"])[data-frame="share-b"] .chip[data-for="share"]');
+    expect(css).not.toMatch(/\[data-moment="share"\] \.chip/);
+    // Under reduced motion the moment shows After only.
+    expect(js).toContain("const STILL = { share: 'share-b' };");
+    expect(js).toContain('frame(((still.matches || picked) && STILL[moment]) || FRAMES[moment][0]);');
+  });
+
   it('follows the house style: eCash, no long dashes, no "crypto"', () => {
     const words = html.replace(/<[^>]+>/g, ' ');
     expect(words).not.toMatch(/[\u2014\u2013]/);

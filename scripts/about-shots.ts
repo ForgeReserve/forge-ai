@@ -1,7 +1,8 @@
 /**
  * Makes the phone screenshots on the landing page (public/about/, served at /): the v2 app at a
  * phone's size, with made-up words and a test balance, saved as WebP in public/about/shots/: the home, an
- * answer, Private only, Add money (the paper note's card and the cards' card) and Share unseen.
+ * answer, Private only, Add money (the paper note's card and the cards' card) and Share unseen (After, then
+ * Before, from the same photo on the same screen, so the two line up).
  *
  *   pnpm mint:up                       # once: the local test mints
  *   pnpm about:shots                   # writes public/about/shots/*.webp
@@ -196,6 +197,10 @@ try {
       await page.waitForSelector('#photoMaybeBox', { state: 'hidden' });
     }
     await shot(page, 'share-unseen');
+    // The same screen at Before: the photo as it was taken. The landing page shows it first, then After.
+    await page.click('#photo-before');
+    await page.waitForSelector('#photoStage[data-view=before]');
+    await shot(page, 'share-unseen-before');
     await ctx.close();
   }
 } finally {
