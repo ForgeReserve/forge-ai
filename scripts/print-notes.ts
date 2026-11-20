@@ -35,7 +35,7 @@ const USAGE = `Makes printable paper notes of eCash.
   --mint     the mint to make them at (default: the Forge mint the engine trusts)
   --out      the sheet to write (default notes-<date>.html); it must not exist yet
   --resume   carry on with a batch that was stopped
-  --poll     how often to check the invoice, in ms (default 2000)
+  --poll     how often to check the invoice, in ms (default 10000)
 `;
 
 interface Pending {
