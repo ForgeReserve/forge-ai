@@ -2,9 +2,10 @@
 // standard (screens/firstrun-art.js, C-Welcome to C-Private): one light for every picture, a key light from
 // the top left and a soft teal rim light from the bottom right, layered gradients for volume, specular
 // highlights and soft contact shadows, and real materials: a gift box for Start free, a printed paper note
-// with a code at each end, a lit Lightning bolt, the Cashu card and the Fedimint card each at a phone (their
-// printed faces, from screens/brands/cards.js), the C-Pay coin for eCash, and for the More ways a coin swap,
-// a bitcoin coin and a free-question voucher.
+// seen close (the code that holds the money in the camera's frame, the banknote running off to the left), a
+// lit Lightning bolt, the Cashu card and the Fedimint card each at a phone (their printed faces, from
+// screens/brands/cards.js), the C-Pay coin for eCash, and for the More ways a coin swap, a bitcoin coin and
+// a free-question voucher.
 //
 // The markup is static and from this file only (built from numbers here, never from data). Every drawing
 // gets its own id prefix, so two pictures on one screen never share a gradient or a filter.
@@ -324,19 +325,23 @@ function dummyCode(x, y, s, seed) {
   return `<path d="${ink}" fill="#14161A"/><path d="${hole}" fill="#FFFFFF"/><path d="${eye}" fill="#14161A"/>`;
 }
 
-// The note's size, scale and tilt, and where its centre sits on the 250 by 200 card.
+// The note, drawn flat at 220 by 64: the banknote panel, the torn line at T and the right-hand code (the
+// left-hand code is out of the picture, so it is not drawn).
 const NW = 220;
 const NH = 64;
-const NK = 1.05;
-const NA = -14;
-const NC = [124, 104];
+const T = 163;
+// The right-hand code's centre on the note, and where the picture puts it: in the middle of the camera's
+// frame (FX, FY), drawn NK times larger and tilted NA degrees, so the note runs off the left edge.
+const CODE = [193, 28];
+const [FX, FY, NK, NA] = [152, 100, 2.22, -7];
 
 /**
- * Scan a note: a printed paper note (Forge's eCash on paper), as the notes are printed: a wide strip with
- * a code at each end and the value between them, the right-hand code (the one that holds the money)
- * past a torn line, in the camera's frame.
+ * Scan a note: a printed paper note (Forge's eCash on paper), as the notes are printed (a code at each
+ * end, the value between them, a torn line before the right-hand code, the one that holds the money),
+ * seen close: that code large in the camera's frame, the torn line beside it, and the banknote panel
+ * fading out at the picture's left edge, x0 (further left on the wider hero).
  */
-const NOTE = (p) => {
+const NOTE = (p, x0 = 0) => {
   const guil = [];
   // The engraved rosette: one ellipse turned eight times, in two rings.
   for (let i = 0; i < 8; i++) guil.push(`<ellipse cx="132" cy="40" rx="14" ry="5" transform="rotate(${i * 22.5} 132 40)"/>`);
@@ -344,27 +349,18 @@ const NOTE = (p) => {
   const wave = [];
   for (let i = 0; i < 3; i++) wave.push(`M62 ${50 + i * 3}q4 -2.6 8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0`);
   // The paper, with a half-round bite at each end of the torn line.
-  const T = 163;
   const paper = `M3 0H${T - 2.4}a2.4 2.4 0 0 0 4.8 0H${NW - 3}a3 3 0 0 1 3 3V${NH - 3}a3 3 0 0 1-3 3H${T + 2.4}a2.4 2.4 0 0 0-4.8 0H3a3 3 0 0 1-3-3V3a3 3 0 0 1 3-3Z`;
-  // The camera's frame, upright, around the right-hand code where the tilt puts it.
-  const a = (NA * Math.PI) / 180;
-  const [lx, ly] = [(193 - NW / 2) * NK, (28 - NH / 2) * NK];
-  const fx = NC[0] + lx * Math.cos(a) - ly * Math.sin(a);
-  const fy = NC[1] + lx * Math.sin(a) + ly * Math.cos(a);
-  // Its sides (left, right, top, bottom), 35 from the code's centre, and the corners' arms, 14 long.
-  const [L, R, U, D] = [fx - 35, fx + 35, fy - 35, fy + 35].map(r1);
-  const k = 14;
-  const frame = `M${L} ${r1(U + k)}V${U + 6}a6 6 0 0 1 6-6H${r1(L + k)}M${r1(R - k)} ${U}H${R - 6}a6 6 0 0 1 6 6V${r1(U + k)}M${R} ${r1(D - k)}V${D - 6}a6 6 0 0 1-6 6H${r1(R - k)}M${r1(L + k)} ${D}H${L + 6}a6 6 0 0 1-6-6V${r1(D - k)}`;
+  // The camera's frame, upright, as the other pictures draw it: its sides (left, right, top, bottom) and
+  // the corners' arms, 30 long.
+  const [L, R, U, D] = [FX - 86, FX + 84, FY - 84, FY + 84];
+  const k = 30;
+  const frame = `M${L} ${U + k}V${U + 10}a10 10 0 0 1 10-10H${L + k}M${R - k} ${U}H${R - 10}a10 10 0 0 1 10 10V${U + k}M${R} ${D - k}V${D - 10}a10 10 0 0 1-10 10H${R - k}M${L + k} ${D}H${L + 10}a10 10 0 0 1-10-10V${D - k}`;
   // A stub: the code on white in its thin frame, a short line of print under it (red under the money's).
   const stub = (x, seed, line) => `<rect x="${x - 3}" y="2.5" width="52" height="59" rx="2.5" fill="none" stroke="#4E7A5E" stroke-opacity="0.7" stroke-width="0.9"/>
 <rect x="${x}" y="5" width="46" height="46" rx="1.5" fill="#FFFFFF"/>
 ${dummyCode(x + 3, 8, 40, seed)}
 <rect x="${x + 11}" y="54.6" width="24" height="2.2" rx="1.1" fill="${line}"/>`;
   return `<defs>${filters(p)}
-${rg(`${p}aura`, { cy: '52%' }, [
-  [0, '#FFFFFF', 0.7],
-  [1, '#FFFFFF', 0],
-])}
 ${lg(`${p}pp`, [0, 0, 1, 1], [
   [0, '#FFFEF8'],
   [0.5, '#F8F1DC'],
@@ -380,41 +376,42 @@ ${lg(`${p}sheen`, [0, 0, 1, 1], [
   [0.45, '#FFFFFF', 0.55],
   [0.6, '#FFFFFF', 0],
 ])}
+${lg(`${p}fade`, [x0, 0, x0 + 64, 0], [
+  [0, '#000000'],
+  [1, '#FFFFFF'],
+], true)}
+<mask id="${p}edge" maskUnits="userSpaceOnUse" x="${x0 - 20}" y="-20" width="${290 - x0}" height="240"><rect x="${x0 - 20}" y="-20" width="${290 - x0}" height="240" fill="url(#${p}fade)"/></mask>
 <clipPath id="${p}paper"><path d="${paper}"/></clipPath>
 </defs>
-<ellipse cx="125" cy="104" rx="112" ry="70" fill="url(#${p}aura)"/>
-${contact(p, 126, 168, 96, 5, 0.26, '#5A3C08')}
-<g transform="translate(${NC[0]} ${NC[1]}) rotate(${NA}) scale(${NK}) translate(${-NW / 2} ${-NH / 2})">
-<path d="${paper}" fill="#5A3C08" opacity="0.32" transform="translate(2 5)" ${f(p, 'b4')}/>
-<path d="${paper}" fill="url(#${p}pp)" stroke="#BFAE80" stroke-opacity="0.8" stroke-width="0.6"/>
+<g mask="url(#${p}edge)">
+<g transform="translate(${FX} ${FY}) rotate(${NA}) scale(${NK}) translate(${-CODE[0]} ${-CODE[1]})">
+<path d="${paper}" fill="#5A3C08" opacity="0.3" transform="translate(1.5 3.5)" ${f(p, 'b2')}/>
+<path d="${paper}" fill="url(#${p}pp)" stroke="#BFAE80" stroke-opacity="0.8" stroke-width="0.4"/>
 <g clip-path="url(#${p}paper)">
-<g opacity="0.1" ${f(p, 'grain')}><rect width="${NW}" height="${NH}" fill="#FFFFFF"/></g>
 <rect x="59" y="3" width="100" height="58" rx="2" fill="url(#${p}panel)"/>
 <g fill="none" stroke="#4E7A5E" stroke-opacity="0.4" stroke-width="0.5">${guil.join('')}</g>
 <path d="${wave.join('')}" fill="none" stroke="#4E7A5E" stroke-opacity="0.35" stroke-width="0.5"/>
-<path d="M0 0H70L30 ${NH}H0Z" fill="url(#${p}sheen)" opacity="0.6"/>
+<path d="M150 0H200L170 ${NH}H120Z" fill="url(#${p}sheen)" opacity="0.5"/>
 </g>
-<rect x="59" y="3" width="100" height="58" rx="2" fill="none" stroke="#4E7A5E" stroke-width="1.4"/>
+<rect x="59" y="3" width="100" height="58" rx="2" fill="none" stroke="#4E7A5E" stroke-width="1.1"/>
 <rect x="61.5" y="5.5" width="95" height="53" rx="1.2" fill="none" stroke="#4E7A5E" stroke-opacity="0.55" stroke-width="0.5" stroke-dasharray="1 1.4"/>
 <path d="M68 11.5H80M68 11.5L67 21Q71 19 74.5 19.6Q80.5 21 80.5 27Q80.5 33.5 74 33.5Q69.5 33.5 67.5 30.5" fill="none" stroke="#2F5A40" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 <rect x="85" y="13" width="28" height="2.6" rx="1.3" fill="#2F5A40" opacity="0.7"/>
-<rect x="85" y="18.5" width="18" height="2" rx="1" fill="#2F5A40" opacity="0.45"/>
 <rect x="66" y="39" width="44" height="17" rx="1.6" fill="#FFFFFF" fill-opacity="0.45" stroke="#4E7A5E" stroke-opacity="0.6" stroke-width="0.6"/>
-<g fill="#4E5A52" opacity="0.6"><rect x="69" y="42" width="12" height="1.4" rx="0.7"/><rect x="69" y="48.6" width="10" height="1.4" rx="0.7"/><rect x="85" y="48.6" width="14" height="1.4" rx="0.7"/><rect x="69" y="52.6" width="24" height="1.4" rx="0.7"/></g>
 <rect x="69" y="44.6" width="20" height="2.2" rx="1.1" fill="#B23A2A" opacity="0.75"/>
-<g transform="translate(144 18) scale(0.5)">${dollarCoin(p, 0, 0)}</g>
-<path d="M${T} 4V60" stroke="#6B6A60" stroke-opacity="0.7" stroke-width="0.8" stroke-dasharray="2 1.6"/>
-${stub(6, 7, '#8C8A80')}
+<g transform="translate(145 18) scale(0.5)">${dollarCoin(p, 0, 0)}</g>
+<path d="M${T} 4V60" stroke="#6B6A60" stroke-opacity="0.75" stroke-width="0.7" stroke-dasharray="2 1.6"/>
 ${stub(170, 29, '#C0392B')}
-<path d="M${NW - 0.6} 4V${NH - 3}a2.4 2.4 0 0 1-2.4 2.4H${T + 4}" fill="none" stroke="${TEAL}" stroke-opacity="0.55" stroke-width="1.2" ${f(p, 'b06')}/>
-<path d="M0.6 ${NH - 4}V3a2.4 2.4 0 0 1 2.4-2.4H${T - 4}" fill="none" stroke="#FFFFFF" stroke-width="1.1"/>
+<path d="M${NW - 0.4} 4V${NH - 3}a2.6 2.6 0 0 1-2.6 2.6H${T + 4}" fill="none" stroke="${TEAL}" stroke-opacity="0.6" stroke-width="0.7" ${f(p, 'b06')}/>
+<path d="M${T + 4} 0.4H${NW - 3}a2.6 2.6 0 0 1 2.6 2.6" fill="none" stroke="#FFFFFF" stroke-width="0.6"/>
+<path d="M0.4 ${NH - 4}V3a2.6 2.6 0 0 1 2.6-2.6H${T - 4}" fill="none" stroke="#FFFFFF" stroke-width="0.6"/>
+</g>
 </g>
 <g fill="none" stroke-linecap="round">
-<path d="${frame}" stroke="#E2B552" stroke-opacity="0.5" stroke-width="8" ${f(p, 'b2')}/>
-<path d="${frame}" stroke="#8A6410" stroke-width="4.6"/>
-<path d="M${r1(L - 0.6)} ${r1(U + k - 1)}V${r1(U + 5.4)}a6 6 0 0 1 6-6H${r1(L + k - 1)}" stroke="#F6D98E" stroke-width="1.1"/>
-</g>
-${sparkle(p, 40, 50, 6, '#E2B552')}${sparkle(p, 222, 150, 4, '#E2B552')}`;
+<path d="${frame}" stroke="#E2B552" stroke-opacity="0.45" stroke-width="10" ${f(p, 'b2')}/>
+<path d="${frame}" stroke="#8A6410" stroke-width="5"/>
+<path d="M${L - 0.8} ${U + k - 2}V${U + 9.2}a10 10 0 0 1 10-10H${L + k - 2}" stroke="#F6D98E" stroke-width="1.4"/>
+</g>`;
 };
 
 /** Lightning: the bolt as a lit gold object, thick, glowing, over the dark card. */
@@ -607,7 +604,10 @@ export function cardArt(id, mod, label) {
  * card's own ground, as on Add money, so a person knows where they are without reading. Only a picture.
  */
 export function wayHero(id, mod) {
-  return el('div', { class: 'way-hero', 'data-way': id, 'aria-hidden': 'true' }, cardArt(id, mod, null));
+  // The hero is wider than a card: the note's picture opens 60 further left, so the note runs on and
+  // fades near the hero's own left edge instead of in its middle.
+  const art = id === 'note' ? svg(NOTE(prefix(), -60), { w: 370, h: 200, box: '-60 0 370 200', cls: 'way-art-svg' }) : cardArt(id, mod, null);
+  return el('div', { class: 'way-hero', 'data-way': id, 'aria-hidden': 'true' }, art);
 }
 
 /** The small picture on a More tile. */
