@@ -7,6 +7,7 @@ import { type Gateway, MINT_A, MINT_B, MINT_C, mintsUp, redeem, startGateway } f
 import { type BnNote, codes, fakeProofs, mintNote, secretAt, validationHash } from '../support/bitnotes.ts';
 import { cameraArgs, cameraFile } from './camera.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
+import { boxState, DOTS, seenAt } from './held.ts';
 
 // BitNotes paper notes in the eCash box (public/v2/core/bitnote.js, modules/fund/ecash/). Each note is
 // made as BitNotes makes one (test/support/bitnotes.ts): its proofs minted at the local test mints with
@@ -195,14 +196,33 @@ describe('BitNotes paper notes in the eCash box', () => {
     await ctx.close();
   }, 90_000);
 
-  it("reads the note's code from the camera, in the box and through Scan a note", async () => {
+  it("reads the note's code from the camera, in the box and through Scan a note, and never writes it into the page", async () => {
     for (const via of ['box', 'note']) {
       const n = await mintNote(64, [MINT_A]);
-      const { ctx, page, errors } = await phone({ camera: codes(n).private });
+      const code = codes(n).private;
+      const { ctx, page, errors } = await phone({ camera: code });
+      // Held until the page is read while the note's eCash is on its way.
+      let release!: () => void;
+      const seen = new Promise<void>((r) => (release = r));
+      let held: any[] = [];
+      await page.route('**/v1/wallet/topup', async (route) => {
+        held = await vaultIn(page);
+        await seen;
+        await route.continue();
+      });
       if (via === 'box') {
         await openBox(page);
         await page.click('[data-fund=ecash] .field .btn');
       } else await page.goto(`${g.url}/v2/#/funds/add/note`);
+      await page.waitForSelector('#bnCard #bnAmount', { timeout: 30_000 });
+      await expect.poll(() => msg(page), { message: via }).toBe('Adding your eCash');
+      // Dots in the box, marked held: neither the private code nor the token read from it is on the page.
+      expect(await boxState(page), via).toEqual({ value: DOTS, held: true });
+      expect(await seenAt(page, 'ECASHZ:'), via).toEqual([]);
+      expect(await seenAt(page, code), via).toEqual([]);
+      expect(held, via).toHaveLength(1);
+      expect(await seenAt(page, held[0].token), via).toEqual([]);
+      release();
       await page.waitForSelector('[data-screen=funds] #fundsAdded', { timeout: 30_000 });
       expect(await page.textContent('#fundsAddedText')).toBe('Added 74 sat.');
       expect(errors).toEqual([]);
