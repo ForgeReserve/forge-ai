@@ -157,6 +157,38 @@ export interface FederationRow {
   joined_at: number;
 }
 
+/** One federation's top-ups as the gateway recorded them (FedimintService.stats). Amounts in msat. */
+export interface FederationStats {
+  count: { done: number; prepared: number; stuck: number; rejected: number };
+  /** Face value of the notes, by the row's state. */
+  face_msat: { done: number; prepared: number; stuck: number; rejected: number };
+  /** Face value of rejected rows whose notes someone else gave the receiver first. */
+  given_elsewhere_msat: number;
+  /** What the gateway credited for them: net of the federation's fee. */
+  credited_msat: number;
+  last_receipt_at: number | null;
+}
+
+/** A top-up row for the operator: no notes text. */
+export interface Receipt {
+  notes_id: string;
+  federation_id: string;
+  account_id: string;
+  face_msat: number;
+  status: 'prepared' | 'done' | 'rejected' | 'stuck';
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ReceiptCheck {
+  /** gone: the receiver refused the notes before recording anything, and the row was removed. */
+  status: 'prepared' | 'done' | 'rejected' | 'stuck' | 'gone';
+  credited: boolean;
+  record: { state: ReceiveRecord['state']; failure: string | null; ours: boolean } | null;
+  receiver_error: string | null;
+}
+
 interface FmRow {
   id: string;
   account_id: string;
@@ -334,6 +366,150 @@ export class FedimintService {
       s: number;
     };
     return { pending: r.pending ?? 0, stuck: r.stuck ?? 0, credited_msat: c.s };
+  }
+
+  /** A federation's own holdings cap in sat, or null for FORGE_FEDIMINT_FEDERATION_CAP_SAT. */
+  setCap(id: string, capSat: number | null): boolean {
+    const changed = this.db.prepare('UPDATE federations SET cap_sat = ? WHERE id = ?').run(capSat, id).changes > 0;
+    if (changed) log.info('fedimint_federation_cap', { federation: id, cap_sat: capSat });
+    return changed;
+  }
+
+  /** The caps in force for a federation, in sat: its own, else the gateway's (a payment never above FORGE_FEDIMINT_MAX_SAT). */
+  caps(f: FederationRow): { maxSat: number; capSat: number } {
+    return { maxSat: Math.min(f.max_sat ?? this.o.maxSat, this.o.maxSat), capSat: f.cap_sat ?? this.o.capSat };
+  }
+
+  /**
+   * The gateway's own record of every federation's top-ups, for the operator: rows by state with their
+   * face value (incoming.amount, msat), what was credited for them (the ledger's topup lines, msat), and
+   * when the last one came in. Keyed by federation id; a federation with no top-up has no entry.
+   */
+  stats(): Map<string, FederationStats> {
+    const out = new Map<string, FederationStats>();
+    const of = (mint: string) => {
+      const id = mint.slice('fedimint:'.length);
+      let s = out.get(id);
+      if (!s) out.set(id, (s = { count: { done: 0, prepared: 0, stuck: 0, rejected: 0 }, face_msat: { done: 0, prepared: 0, stuck: 0, rejected: 0 }, given_elsewhere_msat: 0, credited_msat: 0, last_receipt_at: null }));
+      return s;
+    };
+    const rows = this.db
+      .prepare(
+        `SELECT mint, status, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS face, MAX(created_at) AS last,
+           COALESCE(SUM(CASE WHEN error = 'given first by someone else' THEN amount ELSE 0 END), 0) AS elsewhere
+         FROM incoming WHERE purpose = 'fedimint' GROUP BY mint, status`,
+      )
+      .all() as Array<{ mint: string; status: keyof FederationStats['count']; n: number; face: number; last: number; elsewhere: number }>;
+    for (const r of rows) {
+      const s = of(r.mint);
+      if (r.status in s.count) {
+        s.count[r.status] += r.n;
+        s.face_msat[r.status] += r.face;
+      }
+      s.given_elsewhere_msat += r.elsewhere;
+      s.last_receipt_at = Math.max(s.last_receipt_at ?? 0, r.last);
+    }
+    const credited = this.db
+      .prepare("SELECT i.mint AS mint, COALESCE(SUM(l.amount_msub), 0) AS s FROM ledger l JOIN incoming i ON i.id = l.ref WHERE l.kind = 'topup' AND i.purpose = 'fedimint' GROUP BY i.mint")
+      .all() as Array<{ mint: string; s: number }>;
+    for (const c of credited) of(c.mint).credited_msat += c.s;
+    return out;
+  }
+
+  /** Top-ups in the given states, newest first, for the operator: never the notes text. */
+  receipts(states: Array<FmRow['status']>, limit = 200): Receipt[] {
+    if (!states.length) return [];
+    return this.db
+      .prepare(
+        `SELECT id, mint, account_id, amount, status, error, created_at, updated_at FROM incoming
+         WHERE purpose = 'fedimint' AND status IN (${states.map(() => '?').join(',')}) ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+      )
+      .all(...states, limit)
+      .map(receiptOf);
+  }
+
+  /** One top-up by its notes id, for the operator. */
+  receipt(notesId: string): Receipt | undefined {
+    const r = this.db.prepare("SELECT id, mint, account_id, amount, status, error, created_at, updated_at FROM incoming WHERE id = ? AND purpose = 'fedimint'").get(`fm:${notesId}`);
+    return r ? receiptOf(r) : undefined;
+  }
+
+  /**
+   * The operator's Check now for one top-up (by notes id). A prepared one goes through the same step as
+   * the sweep (and is credited if the receiver's record is done). A stuck one is credited only if the
+   * receiver's record for it is now done under this balance's key, in the same transaction that moves it
+   * to done; otherwise it stays stuck. Answers the row's state after, and the receiver's record (state
+   * and failure only), or the receiver's error when it could not be asked.
+   */
+  async checkReceipt(notesId: string): Promise<ReceiptCheck | undefined> {
+    const id = `fm:${notesId}`;
+    if (!this.row(id)) return undefined;
+    if (this.inflight.has(id)) throw new PaymentError('token_in_flight', 'this top-up is being processed right now; try again in a moment', 409);
+    this.inflight.add(id);
+    try {
+      const row = this.row(id)!;
+      let credited = false;
+      if (row.status === 'prepared') credited = (await this.settle(row)).kind === 'done';
+      let record: ReceiveRecord | undefined;
+      let receiverError: string | undefined;
+      try {
+        record = await this.client.status(notesId);
+      } catch (e) {
+        receiverError = e instanceof ReceiverError ? e.code : 'unreachable_receiver';
+      }
+      const now_ = this.row(id);
+      // The receiver refused the notes before recording anything: the row is gone and the notes are still their holder's.
+      if (!now_) return { status: 'gone', credited: false, record: null, receiver_error: receiverError ?? null };
+      if (now_.status === 'stuck' && record?.state === 'done' && record.key === receiveKey(now_.account_id)) {
+        const net = Math.trunc(Number(record.net_msat));
+        if (Number.isSafeInteger(net) && net >= 0) {
+          credited = tx(this.db, () => {
+            const cur = this.db.prepare('SELECT status FROM incoming WHERE id = ?').get(id) as { status: string } | undefined;
+            if (cur?.status !== 'stuck') return false;
+            this.ledger.creditRaw(now_.account_id, net, 'topup', id);
+            this.db.prepare("UPDATE incoming SET status = 'done', error = NULL, updated_at = ? WHERE id = ?").run(now(), id);
+            return true;
+          });
+          if (credited) log.info('fedimint_topup_credited', { id, account: now_.account_id, federation: record.federation_id, net_msat: net, fee_msat: record.fee_msat, was: 'stuck' });
+        }
+      }
+      return {
+        status: this.row(id)!.status,
+        credited,
+        record: record ? { state: record.state, failure: record.failure ?? null, ours: record.key === receiveKey(now_.account_id) } : null,
+        receiver_error: receiverError ?? null,
+      };
+    } finally {
+      this.inflight.delete(id);
+    }
+  }
+
+  /**
+   * Closes a stuck top-up for good, once the operator has settled it with the person by hand. Only when
+   * the receiver reports a terminal state for it: failed (a record that is done is credited by
+   * checkReceipt instead; pending, none, or no answer is not settled yet). The row becomes rejected with
+   * the operator's note, so the same notes sent again answer token_spent and nothing is ever credited.
+   */
+  async resolveReceipt(notesId: string, note: string): Promise<{ status: 'rejected' }> {
+    const id = `fm:${notesId}`;
+    const row = this.row(id);
+    if (!row) throw new PaymentError('not_found', 'no Fedimint top-up has this notes id', 404);
+    if (row.status !== 'stuck') throw new PaymentError('not_stuck', `this top-up is ${row.status}; only a stuck one is resolved by hand`, 409);
+    let record: ReceiveRecord | undefined;
+    try {
+      record = await this.client.status(notesId);
+    } catch (e) {
+      log.warn('fedimint_receiver_unavailable', { err: errText(e) });
+      throw new PaymentError('fedimint_unavailable', 'the receiver did not answer: a top-up is resolved only on its word', 503);
+    }
+    if (!record) throw new PaymentError('receiver_no_record', 'the receiver has no record of these notes: nothing to resolve on its word', 409);
+    if (record.state === 'done') throw new PaymentError('receiver_done', 'the receiver reports this receive done: use Check now, which credits it', 409);
+    if (record.state !== 'failed') throw new PaymentError('receiver_pending', 'the receiver reports this receive still pending: it is not over yet', 409);
+    const text = `resolved by the operator (${record.failure ?? 'failed'}): ${note}`.slice(0, 300);
+    const changed = this.db.prepare("UPDATE incoming SET status = 'rejected', error = ?, notes = NULL, updated_at = ? WHERE id = ? AND status = 'stuck'").run(text, now(), id).changes;
+    if (!changed) throw new PaymentError('not_stuck', 'this top-up changed meanwhile; look again', 409);
+    log.info('fedimint_topup_resolved', { id, failure: record.failure ?? null });
+    return { status: 'rejected' };
   }
 
   /** Ids of the federations the receiver reports joined, kept JOINED_TTL_MS; undefined when it cannot be asked. */
@@ -615,6 +791,17 @@ export class FedimintService {
     this.timer = undefined;
   }
 }
+
+const receiptOf = (r: any): Receipt => ({
+  notes_id: String(r.id).slice('fm:'.length),
+  federation_id: String(r.mint).slice('fedimint:'.length),
+  account_id: r.account_id,
+  face_msat: r.amount,
+  status: r.status,
+  error: r.error,
+  created_at: r.created_at,
+  updated_at: r.updated_at,
+});
 
 /** The gateway's answer for a receiver refusal that spent and recorded nothing. */
 function refusal(e: ReceiverError): PaymentError {

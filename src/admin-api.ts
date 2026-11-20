@@ -24,6 +24,7 @@ import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { PaymentError } from './cashu/wallet.ts';
 import type { Config, Unit } from './config.ts';
 import type { DB } from './db.ts';
+import { fedimintAdminRoutes } from './fedimint-admin.ts';
 import { LedgerError } from './ledger.ts';
 import { errText, log } from './log.ts';
 import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
@@ -761,6 +762,9 @@ export function createAdminRouter(d: Deps): Hono {
       })),
     });
   });
+
+  // -------------------------------------------------------------- Fedimint (src/fedimint-admin.ts)
+  fedimintAdminRoutes(r, d, { fail, body, audit });
 
   r.all('/admin/api/*', (c) => fail(c, 404, 'not_found', 'no such admin endpoint'));
 
