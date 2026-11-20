@@ -226,7 +226,7 @@ describe('the page source', () => {
     expect(css).not.toMatch(/\[data-moment="share"\] \.chip/);
     // Under reduced motion the moment shows After only.
     expect(js).toContain("const STILL = { share: 'share-b' };");
-    expect(js).toContain('frame((still.matches && STILL[moment]) || FRAMES[moment][0]);');
+    expect(js).toContain('frame(((still.matches || picked) && STILL[moment]) || FRAMES[moment][0]);');
   });
 
   it('follows the house style: eCash, no long dashes, no "crypto"', () => {

@@ -472,7 +472,8 @@ describe('the landing page in a browser', () => {
     // The keyboard: arrows move along the tabs, Home and End to the ends.
     await page.focus('#tab-pay');
     await page.keyboard.press('ArrowRight');
-    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share-a' });
+    // A moment a person picks rests on its still screen: for Share unseen, the photo with its faces covered.
+    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share-b' });
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('tab-share');
     await page.keyboard.press('ArrowRight');
     expect((await state(page)).moment).toBe('talk');

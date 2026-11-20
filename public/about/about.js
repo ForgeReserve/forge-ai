@@ -107,8 +107,13 @@ whos[0]?.parentElement.addEventListener('animationend', (e) => {
   whos[(who + 1) % whos.length].classList.add('on');
 });
 
-/** Shows moment i (its first screen) and starts its ring again. */
-function select(i) {
+/**
+ * Shows moment i and starts its ring again: its first screen, or its still screen (STILL) when a person
+ * picked the moment, so a page they stopped never rests on the photo before its faces are covered.
+ */
+// True while a picked moment rests on its still screen: Play then starts that moment from its first screen.
+let rested = false;
+function select(i, picked = false) {
   now = (i + tabs.length) % tabs.length;
   const target = 90 * (now + 1);
   // The shortest way round, so the last moment turns on into the first.
@@ -123,10 +128,12 @@ function select(i) {
   hero.dataset.moment = moment;
   hero.dataset.step = String(now);
   hero.style.setProperty('--tip', `${tip}deg`);
-  frame((still.matches && STILL[moment]) || FRAMES[moment][0]);
+  rested = picked && !!STILL[moment];
+  frame(((still.matches || picked) && STILL[moment]) || FRAMES[moment][0]);
 }
 
 function setPlay(state) {
+  if (state === 'playing' && rested) select(now);
   hero.dataset.play = state;
   playBtn.setAttribute('aria-label', state === 'stopped' ? 'Play' : 'Pause');
   // While the moments move on by themselves, a screen reader is not told each change.
@@ -144,12 +151,12 @@ hero.addEventListener('animationend', (e) => {
 });
 
 // Picking a moment shows it and stops the rest; arrows, Home and End move along the tabs.
-for (const [i, t] of tabs.entries()) t.addEventListener('click', () => (select(i), stop()));
+for (const [i, t] of tabs.entries()) t.addEventListener('click', () => (select(i, true), stop()));
 tabs[0].parentElement.addEventListener('keydown', (e) => {
   const to = { ArrowRight: now + 1, ArrowDown: now + 1, ArrowLeft: now - 1, ArrowUp: now - 1, Home: 0, End: tabs.length - 1 }[e.key];
   if (to === undefined) return;
   e.preventDefault();
-  select(to);
+  select(to, true);
   stop();
   tabs[now].focus();
 });
