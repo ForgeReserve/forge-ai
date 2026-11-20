@@ -415,9 +415,10 @@ describe('the landing page in a browser', () => {
         log.push({ t, frame: hero.dataset.frame, finger: op('.finger')[0], beam: op('.beam-box')[0], chips: op('.chip[data-for=share]'), at: [(f.x + f.width / 2 - i.x) / i.width, (f.y + f.height / 2 - i.y) / i.height] });
         requestAnimationFrame(sample);
       };
+      // Picked, the moment rests on After; Play starts it from Before, and the samples start with it.
+      document.getElementById('play')!.click();
       requestAnimationFrame(sample);
     });
-    await page.evaluate(() => document.getElementById('play')!.click());
     await expect.poll(() => state(page).then((s) => s.moment), { timeout: 15_000 }).toBe('talk');
     const log: { t: number; frame: string; finger: number; beam: number; chips: number[]; at: [number, number] }[] = await page.evaluate(() => (window as any).log);
     expect(log.length).toBeGreaterThan(40);
