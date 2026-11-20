@@ -515,11 +515,11 @@
 <li><strong>Private:</strong> yes. It runs on the phone.</li>
 </ul>
 <h3 id="cover-faces">Cover faces<a class="anchor" href="#cover-faces" aria-label="Link to this section">#</a></h3>
-<p>Finds faces and covers each with a flat ellipse. The person sees every cover before anything is shared and can add more; it can miss a face turned away, very small or in shadow.</p>
+<p>Finds faces, small ones in a crowd too, and covers each with a flat ellipse. The person sees every cover before anything is shared and can add more; it can miss a face turned away, hidden or in deep shadow. Spots it was not sure of are offered as blocks to add with one tap.</p>
 <ul>
 <li><strong>Id:</strong> <code>forge.filter.cover-faces</code>, known in the app as <code>cover-faces</code>.</li>
 <li><strong>Folder:</strong> <a href="https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-faces"><code>public/v2/modules/filter/cover-faces/</code></a></li>
-<li><strong>Needs:</strong> the photo&#39;s <code>canvas</code>. It loads face-api&#39;s tiny face detector on TensorFlow.js and its model (about 190 KB) from the app&#39;s own address, <code>public/vendor/face-api/</code>, on the graphics chip when it can.</li>
+<li><strong>Needs:</strong> the photo&#39;s <code>canvas</code>. It loads YuNet (MIT, from the OpenCV Zoo; about 100 KB, <code>public/vendor/yunet/</code>) and runs it on the TensorFlow.js that the vendored face-api bundles (<code>public/vendor/face-api/</code>), from the app&#39;s own address, on the graphics chip when it can.</li>
 <li><strong>Works on:</strong> the website and both apps.</li>
 <li><strong>Costs:</strong> nothing.</li>
 <li><strong>Private:</strong> yes. The photo never leaves the page.</li>

@@ -27,16 +27,16 @@ describe('v2 Share unseen', () => {
       expect(man.kind, f).toBe('filter');
       expect((await fetch(`${g.url}/v2/modules/filter/${f}/${man.entry}`)).status, f).toBe(200);
     }
-    for (const p of ['/v2/modules/filter/cover-faces/boxes.js', '/v2/modules/filter/cover-numbers/textfind.js', '/v2/core/photo.js', '/v2/core/photometa.js', '/v2/core/covers.js', '/v2/core/filters.js', '/v2/screens/photo.js']) expect((await fetch(g.url + p)).status, p).toBe(200);
+    for (const p of ['/v2/modules/filter/cover-faces/boxes.js', '/v2/modules/filter/cover-faces/yunet.js', '/v2/modules/filter/cover-numbers/textfind.js', '/v2/core/photo.js', '/v2/core/photometa.js', '/v2/core/covers.js', '/v2/core/filters.js', '/v2/screens/photo.js']) expect((await fetch(g.url + p)).status, p).toBe(200);
     const lib = await fetch(`${g.url}/vendor/face-api/face-api.js`);
     expect(lib.status).toBe(200);
     expect(lib.headers.get('content-type')).toMatch(/javascript/);
-    const weights = await (await fetch(`${g.url}/vendor/face-api/model/tiny_face_detector_model-weights_manifest.json`)).json();
-    expect(weights[0].paths).toEqual(['tiny_face_detector_model.bin']);
-    const bin = await fetch(`${g.url}/vendor/face-api/model/tiny_face_detector_model.bin`);
+    const model = await (await fetch(`${g.url}/vendor/yunet/yunet.json`)).json();
+    expect(model.weights[0].paths).toEqual(['yunet.bin']);
+    const bin = await fetch(`${g.url}/vendor/yunet/yunet.bin`);
     expect(bin.status).toBe(200);
-    expect((await bin.arrayBuffer()).byteLength).toBe(193321);
-    expect((await fetch(`${g.url}/vendor/licenses/face-api.txt`)).status).toBe(200);
+    expect((await bin.arrayBuffer()).byteLength).toBe(readFileSync(resolve(import.meta.dirname, '../../public/vendor/yunet/yunet.bin')).length);
+    for (const l of ['face-api.txt', 'yunet.txt']) expect((await fetch(`${g.url}/vendor/licenses/${l}`)).status, l).toBe(200);
   });
 
   it('a photo posted to the share target without the worker is dropped unread and the page opens on "sent to the server"', async () => {

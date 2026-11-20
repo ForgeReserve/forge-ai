@@ -434,24 +434,96 @@ describe('the writing finder (cover-numbers)', () => {
 });
 
 describe('the face filter’s boxes (cover-faces)', () => {
-  it('looks at the whole photo and, for a large one, four overlapping quarters', () => {
-    expect(FACES.passes(800, 600)).toEqual([{ x: 0, y: 0, w: 800, h: 600 }]);
-    const p = FACES.passes(2000, 1500);
-    expect(p).toHaveLength(5);
-    for (const q of p.slice(1)) expect(q.x + q.w <= 2000 && q.y + q.h <= 1500).toBe(true);
-    // Together the quarters cover the photo.
-    expect(p.slice(1).some((q: any) => q.x === 0 && q.y === 0) && p.slice(1).some((q: any) => q.x + q.w === 2000 && q.y + q.h === 1500)).toBe(true);
+  /** Every pixel of the W x H photo is in at least one tile, and each tile is inside the photo. */
+  const tiled = (W: number, H: number, tiles: any[]) => {
+    const seen = new Uint8Array(W * H);
+    for (const t of tiles) {
+      expect(t.x >= 0 && t.y >= 0 && t.x + t.w <= W && t.y + t.h <= H, JSON.stringify(t)).toBe(true);
+      for (let y = t.y; y < t.y + t.h; y++) seen.fill(1, y * W + t.x, y * W + t.x + t.w);
+    }
+    return seen.every((v) => v === 1);
+  };
+
+  it('looks at the whole photo, then in overlapping tiles that bring a small face to a size the detector sees', () => {
+    // A 12 MP camera photo, opened at 2048 x 1536: the whole photo made to fit one tile, then 4 by 3 tiles
+    // at its own size, 640 pixels each.
+    const p = FACES.passes(2048, 1536);
+    expect(p[0]).toEqual({ x: 0, y: 0, w: 2048, h: 1536, scale: FACES.TILE / 2048 });
+    const tiles = p.slice(1);
+    expect(tiles).toHaveLength(12);
+    for (const t of tiles) expect([t.w, t.h, t.scale]).toEqual([640, 640, 1]);
+    expect(tiled(2048, 1536, tiles)).toBe(true);
+    // The wide protest photo (1280 x 853) is enlarged 1.6 times: a face 12 pixels across reaches the
+    // detector at about 19, where YuNet finds faces from about 10.
+    const wide = FACES.passes(1280, 853);
+    const z = wide[1].scale;
+    expect(z).toBeCloseTo(2048 / 1280);
+    expect(12 * z).toBeGreaterThan(18);
+    expect(wide.slice(1).every((t: any) => Math.round(t.w * t.scale) === FACES.TILE)).toBe(true);
+    expect(tiled(1280, 853, wide.slice(1))).toBe(true);
+  });
+
+  it('neighbouring tiles share a fifth of a tile, so a face up to that size is whole in one of them', () => {
+    const tiles = FACES.passes(1440, 960).slice(1);
+    const xs = [...new Set(tiles.map((t: any) => t.x))].sort((a: any, b: any) => a - b) as number[];
+    const w = tiles[0].w;
+    for (let i = 1; i < xs.length; i++) expect(xs[i - 1]! + w - xs[i]!).toBeGreaterThanOrEqual(Math.floor(FACES.OVERLAP * w));
+  });
+
+  it('enlarges a small photo at most twice, and one that fits a tile is one look', () => {
+    const p = FACES.passes(800, 600);
+    expect(p.slice(1).every((t: any) => t.scale === FACES.MAX_ZOOM)).toBe(true);
+    expect(tiled(800, 600, p.slice(1))).toBe(true);
+    expect(FACES.passes(300, 200)).toEqual([{ x: 0, y: 0, w: 300, h: 200, scale: 2 }]);
+  });
+
+  it('keeps to MAX_TILES on any shape of photo, lowering the zoom, and still looks at all of it', () => {
+    for (const [W, H] of [
+      [2048, 2048],
+      [2048, 1536],
+      [1536, 2048],
+      [2048, 300],
+      [1440, 1440],
+      [4000, 3000],
+      [1, 1],
+    ] as const) {
+      const p = FACES.passes(W, H);
+      expect(p.length, `${W}x${H}`).toBeLessThanOrEqual(FACES.MAX_TILES + 1);
+      expect(tiled(W, H, p.length > 1 ? p.slice(1) : p), `${W}x${H}`).toBe(true);
+    }
+    // The square photo is looked at a little smaller than its own size, in 3 by 3 tiles.
+    const sq = FACES.passes(2048, 2048);
+    expect(sq.length).toBe(10);
+    expect(sq[1].scale).toBeLessThan(1);
   });
 
   it('keeps one box per face, the best scored, and drops weak ones', () => {
+    // The same face seen by two tiles, a box inside another, a weak find and a second face.
     const kept = FACES.keepFaces([
-      { x: 10, y: 10, w: 50, h: 50, score: 0.6 },
+      { x: 10, y: 10, w: 50, h: 50, score: 0.7 },
       { x: 12, y: 12, w: 50, h: 50, score: 0.9 },
-      { x: 20, y: 20, w: 10, h: 10, score: 0.5 },
-      { x: 300, y: 10, w: 40, h: 40, score: 0.2 },
-      { x: 500, y: 10, w: 40, h: 40, score: 0.4 },
+      { x: 20, y: 20, w: 10, h: 10, score: 0.8 },
+      { x: 300, y: 10, w: 40, h: 40, score: 0.4 },
+      { x: 500, y: 10, w: 40, h: 40, score: 0.65 },
+      { x: 700, y: 10, w: 8, h: 9, score: 0.95 }, // too small for anyone to tell who it is
     ]);
-    expect(kept.map((k: any) => k.score)).toEqual([0.9, 0.4]);
+    expect(kept.map((k: any) => k.score)).toEqual([0.9, 0.65]);
+    expect(FACES.MIN_SCORE).toBe(0.6);
+  });
+
+  it('offers the weak finds the kept faces do not already cover, one per place', () => {
+    const faces = [{ x: 100, y: 100, w: 40, h: 40, score: 0.9 }];
+    const maybe = FACES.maybeFaces(
+      [
+        ...faces,
+        { x: 104, y: 98, w: 30, h: 44, score: 0.5 }, // the same face, found weakly by a neighbour
+        { x: 400, y: 300, w: 14, h: 16, score: 0.5 },
+        { x: 401, y: 301, w: 13, h: 15, score: 0.45 }, // the same small spot twice
+        { x: 600, y: 300, w: 14, h: 16, score: 0.2 }, // too weak to offer
+      ],
+      faces,
+    );
+    expect(maybe.map((m: any) => [m.x, m.y])).toEqual([[400, 300]]);
   });
 
   it('covers the face with an ellipse round the detector’s box, reaching to the hair, ears and chin', () => {
@@ -475,10 +547,10 @@ describe('the face filter’s boxes (cover-faces)', () => {
       expect(mask[y! * W + x!], `${x},${y}`).toBe(1);
     // Its bounds are the ellipse's, inside the photo.
     expect([f.x, f.y, f.x + f.w, f.y + f.h]).toEqual([Math.floor(f.cx - f.rx), Math.floor(f.cy - f.ry), Math.ceil(f.cx + f.rx), Math.ceil(f.cy + f.ry)]);
-    // Tighter than a rectangle reaching as far (1.6 by 1.8 boxes), even with the detector's pixels added.
+    // Tighter than the rectangle round it, and at least the ellipse without the detector's pixels.
     const n = mask.reduce((a: number, v: number) => a + v, 0);
-    expect(n).toBeLessThan(0.9 * 160 * 216);
-    expect(n).toBeGreaterThan((Math.PI / 4) * 160 * 216);
+    expect(n).toBeLessThan(0.9 * 4 * f.rx * f.ry);
+    expect(n).toBeGreaterThan(Math.PI * (0.8 * 100 + 4) * (0.9 * 120 + 4));
   });
 
   it('a face the detector was less sure of gets a larger cover', () => {
@@ -504,9 +576,10 @@ describe('the face filter’s boxes (cover-faces)', () => {
       // Every row and column of the box inside the photo reaches to the edge it is cut at.
       for (const [y, x0, x1] of COVERS.coverSpans(f, W, H)) expect(x0 >= 0 && x1 <= W && y >= 0 && y < H).toBe(true);
     }
-    // The small face still gets two of the detector's pixels round it: about 10 pixels in a 2048 px photo.
+    // The small face still gets two of the whole look's pixels round it (about 6 in a 2048 px photo) and a
+    // tenth of its size.
     const small = FACES.faceCover({ x: 1000, y: 700, w: 9, h: 10, score: 0.9 }, 2048, 1536);
-    expect(small.rx - 0.8 * 9).toBeCloseTo((2 * 2048) / FACES.INPUT_SIZE);
+    expect(small.rx - 0.8 * 9).toBeCloseTo((2 * 2048) / FACES.TILE + 1);
   });
 });
 
@@ -533,6 +606,22 @@ describe('the filter chain and the list of changes', () => {
       { key: 'photo.change.face', n: 1, state: 'covered' },
       { key: 'photo.change.writing', n: 2, state: 'covered' },
     ]);
+  });
+
+  it('keeps the places a filter was not sure of apart from its blocks, and says Not sure when it covered none', async () => {
+    const unsure = { id: 'f', what: 'faces', analyse: async () => ({ covers: [], maybe: [{ x: 90, y: 70, w: 30, h: 30 }, { x: 5, y: 5, w: 0, h: 9 }] }) };
+    const r = await FILTERS.runFilters([unsure, writing], photo);
+    // The spot is cut to the photo, the empty one dropped, and nothing is painted for it.
+    expect(r.steps[0].maybe).toEqual([{ x: 90, y: 70, w: 10, h: 10, kind: 'face', by: 'f' }]);
+    expect(r.covers.every((c: any) => c.kind === 'writing')).toBe(true);
+    expect(FILTERS.changeRows(r.steps, r.covers)[0]).toEqual({ key: 'photo.change.face', state: 'unsure' });
+    // With faces covered as well, the row counts them; with neither, it says None found.
+    const both = await FILTERS.runFilters([{ ...unsure, analyse: async () => ({ covers: [{ x: 1, y: 1, w: 9, h: 9 }], maybe: [{ x: 40, y: 40, w: 9, h: 9 }] }) }], photo);
+    expect(FILTERS.changeRows(both.steps, both.covers)).toEqual([{ key: 'photo.change.face', n: 1, state: 'covered' }]);
+    const none = await FILTERS.runFilters([{ ...unsure, analyse: async () => ({ covers: [] }) }], photo);
+    expect(none.steps[0].maybe).toEqual([]);
+    expect(FILTERS.changeRows(none.steps, none.covers)).toEqual([{ key: 'photo.change.face', state: 'none' }]);
+    expect(en['photo.state.unsure']).toBeTruthy();
   });
 
   it('a filter that fails or hangs is reported as not checked, and the others still run', async () => {
@@ -606,13 +695,15 @@ describe('the bundled filter modules', () => {
     expect(w.covers.some((c: any) => c.kind === 'writing' && covered(c, plate))).toBe(true);
   });
 
-  it('the face filter loads its detector and model only from this app’s own vendor folder', () => {
+  it('the face filter loads TensorFlow.js and its model only from this app’s own vendor folders', () => {
     const src = readFileSync(resolve(V2, 'modules/filter/cover-faces/index.js'), 'utf8');
     expect(src).toMatch(/new URL\('\.\.\/\.\.\/\.\.\/\.\.\/vendor\/face-api\/face-api\.js', import\.meta\.url\)/);
-    expect(src).toMatch(/new URL\('\.\.\/\.\.\/\.\.\/\.\.\/vendor\/face-api\/model\/', import\.meta\.url\)/);
+    expect(src).toMatch(/new URL\('\.\.\/\.\.\/\.\.\/\.\.\/vendor\/yunet\/', import\.meta\.url\)/);
+    expect(readFileSync(resolve(V2, 'modules/filter/cover-faces/yunet.js'), 'utf8')).not.toMatch(/https?:\/\//);
     expect(src).not.toMatch(/https?:\/\//);
     const vendor = resolve(V2, '../vendor');
-    expect(readFileSync(resolve(vendor, 'face-api/model/tiny_face_detector_model-weights_manifest.json'), 'utf8')).toContain('tiny_face_detector_model.bin');
+    expect(JSON.parse(readFileSync(resolve(vendor, 'yunet/yunet.json'), 'utf8')).weights[0].paths).toEqual(['yunet.bin']);
+    expect(readFileSync(resolve(vendor, 'licenses/yunet.txt'), 'utf8')).toContain('MIT License');
     const lic = readFileSync(resolve(vendor, 'licenses/face-api.txt'), 'utf8');
     for (const s of ['Vladimir Mandic', 'Vincent Mühler', 'TensorFlow.js', 'Apache License']) expect(lic).toContain(s);
     // The bundled library fetches nothing from another address on its own.

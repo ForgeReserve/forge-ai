@@ -233,11 +233,11 @@ Reads which hidden details the original file holds (where, when, which phone, a 
 
 ### Cover faces
 
-Finds faces and covers each with a flat ellipse. The person sees every cover before anything is shared and can add more; it can miss a face turned away, very small or in shadow.
+Finds faces, small ones in a crowd too, and covers each with a flat ellipse. The person sees every cover before anything is shared and can add more; it can miss a face turned away, hidden or in deep shadow. Spots it was not sure of are offered as blocks to add with one tap.
 
 - **Id:** `forge.filter.cover-faces`, known in the app as `cover-faces`.
 - **Folder:** [`public/v2/modules/filter/cover-faces/`](https://github.com/ForgeReserve/forge-ai/blob/main/public/v2/modules/filter/cover-faces)
-- **Needs:** the photo's `canvas`. It loads face-api's tiny face detector on TensorFlow.js and its model (about 190 KB) from the app's own address, `public/vendor/face-api/`, on the graphics chip when it can.
+- **Needs:** the photo's `canvas`. It loads YuNet (MIT, from the OpenCV Zoo; about 100 KB, `public/vendor/yunet/`) and runs it on the TensorFlow.js that the vendored face-api bundles (`public/vendor/face-api/`), from the app's own address, on the graphics chip when it can.
 - **Works on:** the website and both apps.
 - **Costs:** nothing.
 - **Private:** yes. The photo never leaves the page.

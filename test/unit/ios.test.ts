@@ -252,13 +252,13 @@ describe('the Share unseen filters in the iPhone app', () => {
     return out;
   }
 
-  it('carries every file the three filters load: their modules, face-api and its model', () => {
+  it('carries every file the three filters load: their modules, face-api and the face model', () => {
     const dir = mkdtempSync(join(tmpdir(), 'forge-ios-filters-'));
     writeBundle(join(ROOT, 'public'), dir, readConfig(join(ROOT, 'capacitor.config.json')), 'ios');
     const all = new Set<string>();
     for (const f of ['strip-details', 'cover-faces', 'cover-numbers']) for (const p of loads(`v2/modules/filter/${f}`)) all.add(p);
     // The walk found the detector and its model, so it would see them go missing.
-    for (const p of ['vendor/face-api/face-api.js', 'vendor/face-api/model/tiny_face_detector_model-weights_manifest.json', 'vendor/face-api/model/tiny_face_detector_model.bin', 'v2/core/covers.js', 'v2/core/photometa.js', 'v2/modules/filter/cover-numbers/textfind.js']) expect(all, p).toContain(p);
+    for (const p of ['vendor/face-api/face-api.js', 'vendor/yunet/yunet.json', 'vendor/yunet/yunet.bin', 'v2/modules/filter/cover-faces/yunet.js', 'v2/core/covers.js', 'v2/core/photometa.js', 'v2/modules/filter/cover-numbers/textfind.js']) expect(all, p).toContain(p);
     const missing = [...all].filter((p) => !existsSync(join(dir, 'public', p)));
     expect(missing).toEqual([]);
   });
