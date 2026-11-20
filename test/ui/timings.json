@@ -30,6 +30,7 @@
     "test/ui/note.ui.test.ts": 20.4,
     "test/ui/phonon-lab.ui.test.ts": 179.9,
     "test/ui/phonon.ui.test.ts": 111.1,
+    "test/ui/photo-crowd.ui.test.ts": 12,
     "test/ui/photo.ui.test.ts": 46,
     "test/ui/playful.ui.test.ts": 36.5,
     "test/ui/privacy-toggle.ui.test.ts": 20,

@@ -6,13 +6,21 @@
 // with the average around it, which picks out marks darker or lighter than their background (letters on
 // a sign, digits on a plate). Each connected mark that is shaped like a letter becomes a candidate.
 // Candidates of a similar height and shade that sit side by side on one line are joined. A line of three
-// or more is taken as writing. It then reaches out along itself to marks beside it that are not shaped
-// like one letter (letters run together, a bare I or 1), and is covered with a small margin. Lines are
-// joined into one block only where that block covers little more than the lines do.
+// or more, each within about a third of the line's middle height, is taken as writing. It then reaches
+// out along itself to marks beside it that are not shaped like one letter (letters run together, a bare
+// I or 1), and is covered with a small margin. Lines are joined into one block only where that block
+// covers little more than the lines do.
 //
 // What it misses: very small or blurred writing, handwriting that joins up, and writing on a slant
 // steeper than about 20 degrees. What it can cover that is not writing: rows of similar marks, such as
 // a fence or a row of windows. The person sees every block and can take one away or add their own.
+//
+// Letters are looked for only up to about a sixteenth of the photo's long side (MAX_LETTER). A dark or
+// light thing larger than the area each pixel is compared with is not marked whole: only its rim stands
+// out from an average that is mostly itself, and that rim is shaped like an O. In a crowd such rims
+// (heads, backpacks, windows, branches) sit side by side like a line of large letters, and their blocks
+// would cover sky, buildings and people. Writing larger than that is plain to see, and the person can
+// cover it by hand.
 
 /** Pixels on the long side the search works at. */
 export const WORK_SIDE = 1024;
@@ -22,6 +30,10 @@ export const PAD = 0.35;
 const MIN_PAD = 2;
 /** Two lines' blocks are joined when one block over both is at most this much larger than the two. */
 export const JOIN_SLACK = 1.25;
+/** The tallest letter, in radii of the area each pixel is compared with (at most about 1/16 of the long side). */
+export const MAX_LETTER = 2.5;
+/** Every letter of a line is within this factor of the line's middle letter height. */
+export const LINE_SPREAD = 1.3;
 
 /**
  * Lines of writing in an RGBA image ({width, height, data}). Returns blocks in the image's own pixels,
@@ -92,7 +104,7 @@ function candidates(g, W, H, opts) {
       else if (v > m + C) mark[y * W + x] = 2;
     }
   }
-  const maxH = Math.max(W, H) / 8;
+  const maxH = MAX_LETTER * r;
   const seen = new Uint8Array(W * H);
   const stack = new Int32Array(W * H);
   const out = [];
@@ -174,7 +186,11 @@ function joinLines(chars, W) {
     groups.get(k).push(c);
   });
   const lines = [];
-  for (const m of groups.values()) {
+  for (const all of groups.values()) {
+    // Joined two at a time, a line's heights can drift (each 1.5 times the last): only the letters near
+    // its middle height stay in it.
+    const mid = all.map((c) => c.h).sort((a, b) => a - b)[all.length >> 1];
+    const m = all.filter((c) => c.h * LINE_SPREAD >= mid && c.h <= LINE_SPREAD * mid);
     if (m.length < 3) continue;
     // At least two marks as wide as a letter: a row of thin posts is not writing.
     if (m.filter((c) => c.w >= 0.35 * c.h).length < 2) continue;

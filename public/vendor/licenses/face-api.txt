@@ -1,4 +1,4 @@
-==== @vladmandic/face-api 1.7.15 (MIT): public/vendor/face-api/face-api.js and the tiny face detector model in public/vendor/face-api/model
+==== @vladmandic/face-api 1.7.15 (MIT): public/vendor/face-api/face-api.js
 
 MIT License
 
@@ -22,7 +22,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-==== face-api.js 0.22.2 (MIT), the project @vladmandic/face-api continues. The tiny face detector model weights come from it.
+==== face-api.js 0.22.2 (MIT), the project @vladmandic/face-api continues.
 
 MIT License
 

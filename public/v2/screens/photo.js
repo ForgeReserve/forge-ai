@@ -10,7 +10,7 @@ import { closePhoto, drawCovered, makeFile, openPhoto, saveOutcome, shareOrSave,
 import { el, icon, msgLine, say, sayEl } from '../core/ui.js';
 import { listenHeader, screenListen } from './parts.js';
 
-const STATE_TEXT = { removed: 'photo.state.removed', covered: 'photo.state.covered', none: 'photo.state.none', failed: 'photo.state.failed', uncovered: 'photo.state.uncovered' };
+const STATE_TEXT = { removed: 'photo.state.removed', covered: 'photo.state.covered', none: 'photo.state.none', failed: 'photo.state.failed', uncovered: 'photo.state.uncovered', unsure: 'photo.state.unsure' };
 const STEP_TEXT = { running: 'photo.stepState.running', done: 'photo.stepState.done', failed: 'photo.stepState.failed', waiting: 'photo.stepState.waiting' };
 const BLOCK_LABEL = { face: 'photo.block.face', writing: 'photo.block.writing', mine: 'photo.block.mine' };
 const ERRORS = { too_big: 'photo.tooBig', not_image: 'photo.bad', bad_image: 'photo.bad', unsafe: 'photo.unsafe', denied: 'photo.saveDenied', save_failed: 'photo.saveFailed', bad_file: 'photo.saveFailed', bad_type: 'photo.saveFailed' };
@@ -32,6 +32,9 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
   let showing = 'after';
   let busy = false;
   let gone = false;
+  // Places a filter was not sure of (small faces in a crowd): offered as blocks the person adds with one
+  // tap, until they do or pick another photo.
+  let maybe = [];
   // A check did not run (say the face detector could not load): the first tap on Share, Ask about it or
   // Save only warns, so the photo never goes out with that part unchecked on a single tap.
   let confirmedFailed = false;
@@ -111,6 +114,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       });
       if (gone) return closePhoto(photo);
       covers = result.covers.map(withId);
+      maybe = result.steps.flatMap((s) => s.maybe ?? []);
       showing = 'after';
       drawReview();
     } catch (e) {
@@ -132,6 +136,9 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
   const hint = el('p', { class: 'hint', id: 'photoHint' });
   const changes = el('ul', { class: 'changes', id: 'photoChanges' });
   const failedNote = sayEl('p', { class: 'note warn-text', id: 'photoFailed', hidden: true }, t('photo.failedNote'), '', 'alert');
+  const maybeNote = sayEl('p', { class: 'note warn-text', id: 'photoMaybe' }, t('photo.maybe'), '', 'eye');
+  const maybeBtn = el('button', { type: 'button', class: 'btn small', id: 'photoCoverMaybe', onclick: () => coverMaybe() }, icon('shield', 18), el('span'));
+  const maybeBox = el('div', { class: 'photo-maybe', id: 'photoMaybeBox', hidden: true }, maybeNote, maybeBtn);
 
   function drawSeg() {
     seg.replaceChildren(
@@ -195,6 +202,8 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       }),
     );
     failedNote.hidden = !result.steps.some((s) => !s.ok);
+    maybeBox.hidden = !maybe.length;
+    maybeBtn.lastChild.textContent = t(`photo.coverMaybe.${maybe.length === 1 ? 'one' : 'many'}`, { n: maybe.length });
   }
 
   function setCovers(next) {
@@ -204,6 +213,12 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
   }
   const removeCover = (id) => setCovers(covers.filter((c) => c.id !== id));
   const addCover = (box) => box && setCovers([...covers, withId(box)]);
+  // The spots the finder was not sure of become the person's own blocks: they chose to cover them.
+  function coverMaybe() {
+    const add = maybe.map((c) => withId({ ...c, kind: 'mine', id: undefined }));
+    maybe = [];
+    setCovers([...covers, ...add]);
+  }
 
   // Taps and drags on the photo, in the photo's own pixels.
   let press = null;
@@ -333,7 +348,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
     icon('download', 20),
     el('span', { text: t('photo.save') }),
   );
-  const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (closePhoto(photo), (photo = null), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
+  const another = el('button', { type: 'button', class: 'btn small', id: 'photoAnother', onclick: () => (closePhoto(photo), (photo = null), (maybe = []), drawStart()) }, icon('camera', 18), el('span', { text: t('photo.another') }));
 
   function drawReview() {
     status.set('');
@@ -342,6 +357,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       seg,
       stage,
       hint,
+      maybeBox,
       el('div', { class: 'row-btns' }, addBlock, another),
       el('h2', { class: 'caps', text: t('photo.changes') }),
       changes,
@@ -381,6 +397,7 @@ export function photoScreen({ t, ui, back, actions, reader, params = {}, filters
       photo = null;
       result = null;
       covers = [];
+      maybe = [];
       view.width = view.height = 0;
     },
     /** For the tests: how many blocks of each kind are on the photo now. */

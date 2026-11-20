@@ -3,7 +3,8 @@
 // the chain is tested in Node with fake modules.
 //
 // A filter module has `id`, `what` ('details', 'faces' or 'writing') and analyse(photo), which resolves
-// to {found} (hidden details in the file) and, or, {covers} (blocks to paint). It may have finish(bytes),
+// to {found} (hidden details in the file) and, or, {covers} (blocks to paint), and {maybe}: places it was
+// not sure enough of to cover, which the person can cover with one tap. It may have finish(bytes),
 // which gets the new JPEG and returns it cleaned, and prepare(), which starts loading a model early.
 // A filter that fails or takes too long is reported as not checked; the chain goes on without it.
 import { clampBox, countKinds } from './covers.js';
@@ -26,7 +27,8 @@ const coverId = () => `cv${++nextId}`;
 /**
  * Runs each filter on the photo, in order. onStep({id, what, state}) is told when each starts
  * ('running') and ends ('done' or 'failed'). Resolves to {steps, covers}: one step per filter
- * ({id, what, ok, found, known, count}) and every block the filters asked for, inside the photo.
+ * ({id, what, ok, found, known, count, maybe}) and every block the filters asked for, inside the photo.
+ * `maybe` holds the places a filter was not sure of, inside the photo, as blocks not painted.
  */
 export async function runFilters(filters, photo, { onStep = () => {}, timeoutMs = STEP_TIMEOUT_MS } = {}) {
   const steps = [];
@@ -35,14 +37,13 @@ export async function runFilters(filters, photo, { onStep = () => {}, timeoutMs 
     onStep({ id: f.id, what: f.what, state: 'running' });
     try {
       const r = (await withTimeout(f.analyse(photo), timeoutMs)) ?? {};
-      const mine = (r.covers ?? [])
-        .map((c) => ({ ...clampBox(c, photo.width, photo.height), kind: c.kind ?? (f.what === 'faces' ? 'face' : 'writing'), id: coverId(), by: f.id }))
-        .filter((c) => c.w > 0 && c.h > 0);
+      const inside = (list) => (list ?? []).map((c) => ({ ...clampBox(c, photo.width, photo.height), kind: c.kind ?? (f.what === 'faces' ? 'face' : 'writing'), by: f.id })).filter((c) => c.w > 0 && c.h > 0);
+      const mine = inside(r.covers).map((c) => ({ ...c, id: coverId() }));
       covers.push(...mine);
-      steps.push({ id: f.id, what: f.what, ok: true, found: r.found ?? [], known: r.known !== false, count: mine.length });
+      steps.push({ id: f.id, what: f.what, ok: true, found: r.found ?? [], known: r.known !== false, count: mine.length, maybe: inside(r.maybe) });
       onStep({ id: f.id, what: f.what, state: 'done' });
     } catch (e) {
-      steps.push({ id: f.id, what: f.what, ok: false, found: [], known: false, count: 0, error: String(e?.message ?? e) });
+      steps.push({ id: f.id, what: f.what, ok: false, found: [], known: false, count: 0, maybe: [], error: String(e?.message ?? e) });
       onStep({ id: f.id, what: f.what, state: 'failed' });
     }
   }
@@ -61,8 +62,9 @@ export const withId = (c) => ({ ...c, id: c.id ?? coverId() });
 
 /**
  * The list of what changed, for the screen: rows of {key, n, state}. `key` is a string table key (the
- * screen picks the one or many form from `n`), `state` is 'removed', 'covered', 'none', 'failed' or
- * 'uncovered' (blocks a filter made that the person took away).
+ * screen picks the one or many form from `n`), `state` is 'removed', 'covered', 'none', 'failed',
+ * 'uncovered' (blocks a filter made that the person took away) or 'unsure' (none covered, but places it
+ * was not sure of).
  */
 export function changeRows(steps, covers) {
   const rows = [];
@@ -84,7 +86,7 @@ export function changeRows(steps, covers) {
     }
     const left = Math.min(now[kind], made(kind));
     const taken = made(kind) - left;
-    if (made(kind) === 0) rows.push({ key: `photo.change.${kind}`, state: 'none' });
+    if (made(kind) === 0) rows.push({ key: `photo.change.${kind}`, state: s.maybe?.length ? 'unsure' : 'none' });
     if (left > 0) rows.push({ key: `photo.change.${kind}`, n: left, state: 'covered' });
     if (taken > 0) rows.push({ key: `photo.change.${kind}Taken`, n: taken, state: 'uncovered' });
   }

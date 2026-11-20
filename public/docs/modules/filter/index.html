@@ -69,6 +69,9 @@
 </ul></li>
 <li><a href="#a-minimal-filter">A minimal filter</a><ul>
 </ul></li>
+<li><a href="#how-the-face-filter-finds-small-faces">How the face filter finds small faces</a><ul>
+<li><a href="#scoring-it">Scoring it</a></li>
+</ul></li>
 <li><a href="#tests">Tests</a><ul>
 </ul></li>
 </ul></nav>
@@ -134,6 +137,10 @@
 <td>Covers to paint, in the photo&#39;s pixels: a box <code>{x, y, w, h, kind}</code>, or an ellipse <code>{shape: &#39;ellipse&#39;, cx, cy, rx, ry, x, y, w, h, kind}</code> whose <code>x</code>, <code>y</code>, <code>w</code> and <code>h</code> are its bounds. <code>kind</code> is <code>&#39;face&#39;</code> or <code>&#39;writing&#39;</code>; without it a <code>faces</code> filter&#39;s covers are faces and any other&#39;s are writing. <code>found</code>, optional, is the box of what the filter found (the face, the line of writing), which the cover holds; tests check it. Covers are cut to the photo and empty ones dropped.</td>
 </tr>
 <tr>
+<td><code>maybe</code></td>
+<td>Optional. Places the filter was not sure enough of to cover, as covers like those in <code>covers</code>: small or blurred faces in a crowd. They are not painted. The screen says what may have been missed and offers to cover them with one tap; they then count as the person&#39;s own blocks. A filter that covered nothing but has places in <code>maybe</code> is listed as Not sure.</td>
+</tr>
+<tr>
 <td><code>found</code></td>
 <td>For a <code>details</code> filter: the hidden details the original file holds, from <code>&#39;location&#39;</code>, <code>&#39;device&#39;</code>, <code>&#39;time&#39;</code>, <code>&#39;thumbnail&#39;</code> and <code>&#39;other&#39;</code>.</td>
 </tr>
@@ -163,7 +170,7 @@
 <li>A cover is never blurred or pixelated: a blurred face or line of writing can be sharpened or matched. Nothing under a cover reaches the new file in any form; a test changes every pixel under the covers and gets the same file, byte for byte.</li>
 </ul>
 <p>On the screen each cover also has a gold outline and a cross on its corner to take it away. The file has neither.</p>
-<p>The face filter fits an ellipse round each face: it reaches half the detector&#39;s box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus two of the detector&#39;s pixels, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter&#39;s height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.</p>
+<p>The face filter fits an ellipse round each face: it reaches half the detector&#39;s box height above the box for the hair, three tenths of its width to each side for the ears and three tenths of its height below it for the chin, plus a tenth of the box&#39;s size (at most 4 pixels) and two of the detector&#39;s pixels at its look at the whole photo, and up to 15% more for a face the detector was not sure of. The writing filter fits a box to each line it finds, with a margin of about a third of a letter&#39;s height, and reaches along the line to letters it did not take for letters alone (letters run together, a bare I or 1). It joins two lines into one box only where that box covers little more than the two do.</p>
 <h2 id="errors">Errors<a class="anchor" href="#errors" aria-label="Link to this section">#</a></h2>
 <ul>
 <li>A filter that throws, rejects or takes longer than 45 seconds is listed as not checked, and the chain goes on with the next one. Before the photo is shared the person is told a check did not run and taps again to share anyway.</li>
@@ -179,7 +186,7 @@
 <p>There is no setting to turn a filter off. A filter added after these runs last.</p>
 <h2 id="platforms">Platforms<a class="anchor" href="#platforms" aria-label="Link to this section">#</a></h2>
 <p>Share unseen works the same on the website, in the Android app and in the iPhone app. A filter sees only the photo object. The photo comes from the camera or the gallery, or from another app&#39;s share sheet: through the web app&#39;s share target on the website, and through the app itself on Android.</p>
-<p>The iPhone app serves its files from <code>capacitor://localhost</code>, not from an <code>https://</code> address. A filter that loads a file of its own, such as a model, makes its address with <code>new URL(name, import.meta.url)</code> and hands it to <code>fetch</code> whole. Do not let a library rebuild the address: face-api&#39;s <code>loadFromUri</code> keeps only <code>http://</code> and <code>https://</code> addresses whole, so in the iPhone app it asked for <code>capacitor:/localhost/...</code> and the face check never ran. The face filter fetches its model&#39;s manifest itself and hands the weights to face-api (<code>loadModel</code> in <code>cover-faces/index.js</code>).</p>
+<p>The iPhone app serves its files from <code>capacitor://localhost</code>, not from an <code>https://</code> address. A filter that loads a file of its own, such as a model, makes its address with <code>new URL(name, import.meta.url)</code> and hands it to <code>fetch</code> whole. Do not let a library rebuild the address: face-api&#39;s <code>loadFromUri</code> keeps only <code>http://</code> and <code>https://</code> addresses whole, so in the iPhone app it asked for <code>capacitor:/localhost/...</code> and the face check never ran. The face filter fetches its model&#39;s files itself and hands the weights to TensorFlow.js (<code>loadYunet</code> in <code>cover-faces/yunet.js</code>).</p>
 <h2 id="a-minimal-filter">A minimal filter<a class="anchor" href="#a-minimal-filter" aria-label="Link to this section">#</a></h2>
 <p>This filter covers the orange date some cameras print on a photo. It is <a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/modules/examples/filter/date-stamp"><code>docs/modules/examples/filter/date-stamp/</code></a>, and <a href="/docs/modules/first-module#a-filter-cover-a-date-stamp">Write your first module</a> builds it step by step. Its <code>manifest.json</code>:</p>
 <div class="code"><span class="lang">json</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
@@ -205,8 +212,66 @@
     },
   };
 }</code></pre></div>
+<h2 id="how-the-face-filter-finds-small-faces">How the face filter finds small faces<a class="anchor" href="#how-the-face-filter-finds-small-faces" aria-label="Link to this section">#</a></h2>
+<p>The face filter runs YuNet, a face detector made for small faces (MIT, from the <a href="https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet">OpenCV Zoo</a>), on the TensorFlow.js that the vendored face-api bundles. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/scripts/yunet-model.ts"><code>scripts/yunet-model.ts</code></a> turns its ONNX file, pinned by commit and SHA-256, into <code>public/vendor/yunet/</code>: the list of layers and about 100 KB of 16-bit weights. No ONNX runtime is shipped. <code>node scripts/yunet-model.ts --check</code> checks that the committed files are what the pinned file gives.</p>
+<p>YuNet finds faces from about 10 of its own pixels across. <code>passes</code> in <code>cover-faces/boxes.js</code> decides where it looks:</p>
+<ol>
+<li>The whole photo, made to fit one 640 pixel tile: faces too large for a tile.</li>
+<li>Overlapping 640 pixel tiles over all of the photo, at a zoom that brings its long side to 2,048 pixels, at most twice its size. A 1,280 pixel photo is looked at 1.6 times its size, so a face 12 pixels across reaches the detector at 19. Neighbouring tiles share a fifth of a tile.</li>
+<li>At most 12 tiles. A photo that would take more (a square one) is looked at a little smaller, so every part of it is still looked at.</li>
+</ol>
+<p>On a phone with no graphics chip to use, TensorFlow.js runs on the processor, and the tiles are at the photo&#39;s own size: about half the work.</p>
+<p>Finds scored 0.6 and up, at least 10 pixels across in the photo, are covered. Finds from 0.5 up to 0.6 that meet no covered face are the filter&#39;s <code>maybe</code>.</p>
+<h3 id="scoring-it">Scoring it<a class="anchor" href="#scoring-it" aria-label="Link to this section">#</a></h3>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/scripts/face-score.ts"><code>scripts/face-score.ts</code></a> runs a face filter in Chrome on the crowd photos in <code>test/unit/fixtures/photos/crowd/</code>, whose faces are marked by hand in <code>faces.json</code>, and prints per photo how many marked faces its covers hold (recall), how many face covers land on no face (false), how many spots it was not sure of, and the time <code>analyse</code> took:</p>
+<div class="code"><span class="lang">sh</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-sh">node scripts/face-score.ts                  <span class="hljs-comment"># the bundled filter</span>
+node scripts/face-score.ts --throttle 4     <span class="hljs-comment"># processor 4 times slower, a stand-in for a low-end phone</span>
+node scripts/face-score.ts --cpu            <span class="hljs-comment"># no WebGL: TensorFlow.js on the processor</span>
+node scripts/face-score.ts --filter &lt;folder&gt; --runs 3 --json</code></pre></div>
+<p>A face is covered when 90% of its marked box is under covers. A face is marked when it is at least 12 pixels tall and a person could tell who it is: looking at the camera, turned or in profile. The back of a head does not count. Places a cover is neither right nor wrong (faces too blurred, hidden or turned to call, visors) are marked as <code>ignore</code>. <code>--throttle</code> slows the page&#39;s processor only; a graphics chip runs at its own speed.</p>
+<p>On the ten crowd photos (304 faces), on a Mac:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Finder</th>
+<th>Covered</th>
+<th>False covers</th>
+<th>Time per photo, graphics chip</th>
+<th>Processor only, 4 times slower</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>face-api&#39;s tiny face detector, whole photo and four quarters (before)</td>
+<td>39 (13%)</td>
+<td>5</td>
+<td>about 0.1 s</td>
+<td>about 10 s</td>
+</tr>
+<tr>
+<td>The same detector in 256 pixel tiles, about 35 of them</td>
+<td>163 (54%)</td>
+<td>21</td>
+<td>about 0.7 s</td>
+<td>about 80 s</td>
+</tr>
+<tr>
+<td>The same in at most 12 tiles</td>
+<td>78 (26%)</td>
+<td>10</td>
+<td>about 0.2 s</td>
+<td>about 26 s</td>
+</tr>
+<tr>
+<td>YuNet in tiles (now)</td>
+<td>291 (96%)</td>
+<td>30</td>
+<td>about 0.2 s</td>
+<td>about 15 s (tiles at the photo&#39;s own size: 284, 93%)</td>
+</tr>
+</tbody></table></div>
+<p>Most false covers are the backs of heads, hands and a face drawn on a sign. Covering the spots the filter was not sure of covers 4 more faces.</p>
 <h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
-<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts"><code>test/unit/v2/photo.test.ts</code></a> tests the filter chain with fake filters, the writing finder and the details reader on real camera files in <code>test/unit/fixtures/photos/</code>. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts"><code>test/ui/photo.ui.test.ts</code></a> picks a photo in Chrome and checks the blocks and the list of changes. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/face-model.test.ts"><code>test/unit/v2/face-model.test.ts</code></a> loads the face model with the real face-api from the website&#39;s, the Android app&#39;s and the iPhone app&#39;s addresses, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/ios.test.ts"><code>test/unit/ios.test.ts</code></a> checks that the iPhone app carries every file the filters load.</p>
+<p><a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/photo.test.ts"><code>test/unit/v2/photo.test.ts</code></a> tests the filter chain with fake filters, the writing finder and the details reader on real camera files in <code>test/unit/fixtures/photos/</code>. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/ui/photo.ui.test.ts"><code>test/ui/photo.ui.test.ts</code></a> picks a photo in Chrome and checks the blocks and the list of changes. <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/v2/face-model.test.ts"><code>test/unit/v2/face-model.test.ts</code></a> loads the face model with the real TensorFlow.js from the website&#39;s, the Android app&#39;s and the iPhone app&#39;s addresses and finds the three faces in the crew photo, the UI test checks that every face in the wide protest photo is covered on the Share unseen screen, and <a href="https://github.com/ForgeReserve/forge-ai/blob/main/test/unit/ios.test.ts"><code>test/unit/ios.test.ts</code></a> checks that the iPhone app carries every file the filters load.</p>
 
 <footer class="foot"><p>Forge AI. Generated from <code>docs/modules/filter.md</code>. <a href="#top">Back to the top</a></p></footer>
 </main>
