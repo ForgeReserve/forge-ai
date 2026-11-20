@@ -6,7 +6,8 @@ import { type Gateway, startGateway } from '../e2e/helpers.ts';
 // sizes (three computer screens, three phones) the page is exactly as tall and wide as the window and
 // every part of it is inside the window, whichever words the title shows. The three actions sit at the
 // top right. The moments (Talk, Private, Pay, Share unseen) move on by themselves, can be picked by tap or
-// keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; the title's
+// keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; Share unseen
+// shows its photo as it was taken, taps After and shows it covered, with its labels; the title's
 // last words turn on a quicker clock of their own and stop whenever the moments stop, and a screen
 // reader hears one sentence. The download
 // buttons show Soon while their links are empty and become links once set. What was meant for the
@@ -191,7 +192,7 @@ describe('the landing page in a browser', () => {
 
     // Every phone picture loaded, each with words for a screen reader; one shows.
     const imgs = await page.locator('.frame').evaluateAll((xs) => xs.map((x) => ({ w: (x as HTMLImageElement).naturalWidth, alt: x.getAttribute('alt') ?? '', shown: getComputedStyle(x).visibility === 'visible' })));
-    expect(imgs.length).toBe(6);
+    expect(imgs.length).toBe(7);
     for (const i of imgs) {
       expect(i.w).toBe(600);
       expect(i.alt.length).toBeGreaterThan(20);
@@ -375,7 +376,7 @@ describe('the landing page in a browser', () => {
     await page.context().close();
   });
 
-  it('moves through the moments by itself, two screens for Talk and Pay', async () => {
+  it('moves through the moments by itself, two screens for Talk, Pay and Share unseen', async () => {
     const { page, errors } = await open([1440, 900]);
     await page.evaluate(() => {
       const hero = document.querySelector('.hero') as HTMLElement;
@@ -385,8 +386,69 @@ describe('the landing page in a browser', () => {
     });
     await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
     await faster(page, 25);
-    await expect.poll(() => page.evaluate(() => (window as any).seen.length), { timeout: 15_000 }).toBeGreaterThanOrEqual(7);
-    expect((await page.evaluate(() => (window as any).seen)).slice(0, 7)).toEqual(['talk-a', 'talk-b', 'private', 'pay-a', 'pay-b', 'share', 'talk-a']);
+    await expect.poll(() => page.evaluate(() => (window as any).seen.length), { timeout: 15_000 }).toBeGreaterThanOrEqual(8);
+    expect((await page.evaluate(() => (window as any).seen)).slice(0, 8)).toEqual(['talk-a', 'talk-b', 'private', 'pay-a', 'pay-b', 'share-a', 'share-b', 'talk-a']);
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('shows Share unseen as taken, taps After, runs the checks and shows it covered, with its labels', async () => {
+    const { page, errors } = await open([1440, 900]);
+    await expect.poll(() => state(page).then((s) => s.play), { timeout: 5000 }).toBe('playing');
+    // From the start of the moment (picked and played without the mouse, which would hold it), at the
+    // page's own speed (so a busy machine still draws enough frames), a sample at every frame: the
+    // moment's time from its ring, the screen, and how much of the fingertip, the line over the photo and
+    // the labels shows.
+    await page.evaluate(() => document.getElementById('tab-share')!.click());
+    await page.evaluate(() => {
+      const hero = document.querySelector('.hero') as HTMLElement;
+      const ring = [...document.querySelectorAll('#tab-share .arc')];
+      const op = (s: string) => [...document.querySelectorAll(s)].map((e) => (getComputedStyle(e).visibility === 'hidden' ? 0 : Number(getComputedStyle(e).opacity)));
+      const log: any[] = [];
+      (window as any).log = log;
+      const img = document.querySelector('.frame[data-frame=share-a]')!;
+      const sample = () => {
+        const t = Math.max(...ring.map((a) => Number(a.getAnimations()[0]?.currentTime ?? 0))) / 1000;
+        if (hero.dataset.moment !== 'share') return;
+        const f = document.querySelector('.finger')!.getBoundingClientRect();
+        const i = img.getBoundingClientRect();
+        log.push({ t, frame: hero.dataset.frame, finger: op('.finger')[0], beam: op('.beam-box')[0], chips: op('.chip[data-for=share]'), at: [(f.x + f.width / 2 - i.x) / i.width, (f.y + f.height / 2 - i.y) / i.height] });
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await page.evaluate(() => document.getElementById('play')!.click());
+    await expect.poll(() => state(page).then((s) => s.moment), { timeout: 15_000 }).toBe('talk');
+    const log: { t: number; frame: string; finger: number; beam: number; chips: number[]; at: [number, number] }[] = await page.evaluate(() => (window as any).log);
+    expect(log.length).toBeGreaterThan(40);
+    // Before for the first half, then After to the end: one change, never back.
+    const frames = log.map((x) => x.frame).filter((f, i, a) => f !== a[i - 1]);
+    expect(frames).toEqual(['share-a', 'share-b']);
+    const turn = log.find((x) => x.frame === 'share-b')!.t;
+    expect(turn).toBeGreaterThan(3.9);
+    expect(turn).toBeLessThan(4.2);
+    expect(log.at(-1)!.t).toBeGreaterThan(7.5);
+    // The fingertip shows only in Before, from about 1 s to 2 s, and presses the After tab (its place in
+    // the shot: x 25 to 296 and y 178 to 252 of 600 by 1298).
+    const touched = log.filter((x) => x.finger > 0.5);
+    expect(touched.length).toBeGreaterThanOrEqual(3);
+    for (const x of touched) {
+      expect(x.frame).toBe('share-a');
+      expect(x.t).toBeGreaterThan(0.9);
+      expect(x.t).toBeLessThan(2.1);
+      expect(x.at[0]).toBeGreaterThan(25 / 600);
+      expect(x.at[0]).toBeLessThan(296 / 600);
+      expect(x.at[1]).toBeGreaterThan(178 / 1298);
+      expect(x.at[1]).toBeLessThan(252 / 1298);
+    }
+    // The line over the photo comes after the tap and is gone as After comes in.
+    const scanned = log.filter((x) => x.beam > 0.5);
+    expect(scanned.length).toBeGreaterThanOrEqual(3);
+    expect(Math.min(...scanned.map((x) => x.t))).toBeGreaterThan(Math.max(...touched.map((x) => x.t)) - 0.5);
+    for (const x of log.filter((x) => x.beam > 0)) expect(x.frame).toBe('share-a');
+    // The labels stay hidden through Before, come in with After and stay.
+    for (const x of log.filter((x) => x.frame === 'share-a')) expect(x.chips).toEqual([0, 0]);
+    for (const x of log.filter((x) => x.t > turn + 1.5)) expect(x.chips).toEqual([1, 1]);
     expect(errors).toEqual([]);
     await page.context().close();
   });
@@ -410,7 +472,7 @@ describe('the landing page in a browser', () => {
     // The keyboard: arrows move along the tabs, Home and End to the ends.
     await page.focus('#tab-pay');
     await page.keyboard.press('ArrowRight');
-    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share' });
+    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share-a' });
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('tab-share');
     await page.keyboard.press('ArrowRight');
     expect((await state(page)).moment).toBe('talk');
@@ -482,10 +544,13 @@ describe('the landing page in a browser', () => {
     const f = await fit(page);
     expect(f.scroll).toEqual([width, height]);
     expect(f.outside).toEqual([]);
-    // A tab still changes the moment, at once.
+    // A tab still changes the moment, at once. Share unseen shows its photo covered (After) only, with its labels.
     await page.click('#tab-share');
-    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share' });
-    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.frame[data-frame=share]')!).opacity)).toBe('1');
+    expect(await state(page)).toMatchObject({ moment: 'share', frame: 'share-b' });
+    const looks = (sel: string) => page.evaluate((s) => [...document.querySelectorAll(s)].map((e) => [getComputedStyle(e).opacity, getComputedStyle(e).visibility].join(' ')), sel);
+    expect(await looks('.frame[data-frame=share-b]')).toEqual(['1 visible']);
+    expect(await looks('.frame[data-frame=share-a]')).toEqual(['0 hidden']);
+    if (width > 600) expect(await looks('.chip[data-for=share]')).toEqual(['1 visible', '1 visible']);
     expect(errors).toEqual([]);
     await page.context().close();
   });

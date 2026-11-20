@@ -10,7 +10,8 @@
 // The moments (Talk, Private, Pay, Share unseen): the selected tab's ring is a CSS animation, and it is the
 // clock. Its first half ending shows the moment's second screen (if it has one); its second half ending
 // moves on to the next moment. So anything that pauses the CSS animations (data-play, .held in
-// about.css) pauses the moments too, and nothing here keeps time of its own.
+// about.css) pauses the moments too, and nothing here keeps time of its own. Share unseen opens on its
+// photo at Before and turns to After, the faces covered; under reduced motion it shows After only (STILL).
 // - data-play: intro (the way in), playing, or stopped (Pause, a moment picked, or reduced motion).
 // - .held: a short pause while the mouse is over the moments, keyboard focus is on a tab or a link in
 //   the words, or the page is out of sight.
@@ -67,7 +68,9 @@ const stage = document.getElementById('stage');
 const caps = document.querySelector('.caps');
 const sheenEl = document.querySelector('.sheen');
 /** The screens each moment shows, in order (data-frame on the pictures). */
-const FRAMES = { talk: ['talk-a', 'talk-b'], private: ['private'], pay: ['pay-a', 'pay-b'], share: ['share'] };
+const FRAMES = { talk: ['talk-a', 'talk-b'], private: ['private'], pay: ['pay-a', 'pay-b'], share: ['share-a', 'share-b'] };
+/** The one screen a moment shows under reduced motion, where it is not its first: Share unseen at After. */
+const STILL = { share: 'share-b' };
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 
 let now = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
@@ -120,7 +123,7 @@ function select(i) {
   hero.dataset.moment = moment;
   hero.dataset.step = String(now);
   hero.style.setProperty('--tip', `${tip}deg`);
-  frame(FRAMES[moment][0]);
+  frame((still.matches && STILL[moment]) || FRAMES[moment][0]);
 }
 
 function setPlay(state) {
@@ -174,4 +177,9 @@ document.addEventListener('visibilitychange', () => (document.hidden ? holds.add
 // The way in, then the moments start; under reduced motion they never move by themselves.
 if (still.matches) stop();
 else setTimeout(() => hero.dataset.play === 'intro' && setPlay('playing'), 1500);
-still.addEventListener('change', () => still.matches && stop());
+still.addEventListener('change', () => {
+  if (!still.matches) return;
+  stop();
+  const one = STILL[hero.dataset.moment];
+  if (one) frame(one);
+});
