@@ -1,10 +1,10 @@
 // The pictures on the wallet cards (AddFunds-C1 to C4 in docs/design/canvas), drawn to the first run's
 // standard (screens/firstrun-art.js, C-Welcome to C-Private): one light for every picture, a key light from
 // the top left and a soft teal rim light from the bottom right, layered gradients for volume, specular
-// highlights and soft contact shadows, and real materials: a gift box for Start free, a printed paper note,
-// a lit Lightning bolt, the Cashu card and the Fedimint card each at a phone (their printed faces, from
-// screens/brands/cards.js), the C-Pay coin for eCash, and for the More ways a coin swap, a bitcoin coin and
-// a free-question voucher.
+// highlights and soft contact shadows, and real materials: a gift box for Start free, a printed paper note
+// with a code at each end, a lit Lightning bolt, the Cashu card and the Fedimint card each at a phone (their
+// printed faces, from screens/brands/cards.js), the C-Pay coin for eCash, and for the More ways a coin swap,
+// a bitcoin coin and a free-question voucher.
 //
 // The markup is static and from this file only (built from numbers here, never from data). Every drawing
 // gets its own id prefix, so two pictures on one screen never share a gradient or a filter.
@@ -293,63 +293,128 @@ ${contact(p, 128, 176, 74, 6, 0.4, '#00302A')}
 <ellipse cx="126.5" cy="79.8" rx="3.6" ry="2" fill="#FFFFFF" opacity="0.8" ${f(p, 'b06')}/>
 ${sparkle(p, 210, 38, 9)}${sparkle(p, 40, 58, 6)}${sparkle(p, 214, 150, 5, '#D9FFF6')}${sparkle(p, 52, 150, 3.5, '#D9FFF6')}`;
 
-/** Scan a note: a printed paper note (Forge's eCash on paper), in the camera's frame. */
+/**
+ * A drawn code: three finder squares and a scatter of modules on an 11 by 11 grid, from a fixed seed.
+ * No QR code has 11 modules a side (the smallest has 21), so nothing can read it as one. (x, y) the top
+ * left, s the side.
+ */
+function dummyCode(x, y, s, seed) {
+  const c = s / 11;
+  const sq = (cx, cy, w) => `M${r1(x + cx)} ${r1(y + cy)}h${r1(w)}v${r1(w)}h${r1(-w)}z`;
+  let ink = '';
+  let hole = '';
+  let eye = '';
+  for (const [i, j] of [
+    [0, 0],
+    [8, 0],
+    [0, 8],
+  ]) {
+    // The finder's 7:5:3 squares, over three cells.
+    ink += sq(i * c, j * c, 3 * c);
+    hole += sq(i * c + (3 / 7) * c, j * c + (3 / 7) * c, (15 / 7) * c);
+    eye += sq(i * c + (6 / 7) * c, j * c + (6 / 7) * c, (9 / 7) * c);
+  }
+  let r = seed;
+  for (let j = 0; j < 11; j++)
+    for (let i = 0; i < 11; i++) {
+      if ((i < 4 && j < 4) || (i > 6 && j < 4) || (i < 4 && j > 6)) continue;
+      r = (r * 1103515245 + 12345) & 0x7fffffff;
+      if ((r >> 16) % 5 < 2) ink += sq(i * c + 0.25, j * c + 0.25, c - 0.5);
+    }
+  return `<path d="${ink}" fill="#14161A"/><path d="${hole}" fill="#FFFFFF"/><path d="${eye}" fill="#14161A"/>`;
+}
+
+// The note's size, scale and tilt, and where its centre sits on the 250 by 200 card.
+const NW = 220;
+const NH = 64;
+const NK = 1.05;
+const NA = -14;
+const NC = [124, 104];
+
+/**
+ * Scan a note: a printed paper note (Forge's eCash on paper), as the notes are printed: a wide strip with
+ * a code at each end and the value between them, the right-hand code (the one that holds the money)
+ * past a torn line, in the camera's frame.
+ */
 const NOTE = (p) => {
   const guil = [];
-  for (let i = 0; i < 6; i++) guil.push(`<ellipse cx="80" cy="108" rx="${30 + i * 2.6}" ry="${20 + i * 1.9}" transform="rotate(${-20 + i * 9} 80 108)"/>`);
+  // The engraved rosette: one ellipse turned eight times, in two rings.
+  for (let i = 0; i < 8; i++) guil.push(`<ellipse cx="132" cy="40" rx="14" ry="5" transform="rotate(${i * 22.5} 132 40)"/>`);
+  guil.push('<circle cx="132" cy="40" r="15.5"/><circle cx="132" cy="40" r="4"/>');
   const wave = [];
-  for (let i = 0; i < 3; i++) wave.push(`M44 ${142 + i * 4}q6 -4 12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0`);
-  const qr = 'M156 84h6v6h-6zM190 84h6v6h-6zM156 118h6v6h-6zM170 80h5v5h-5zM176 88h5v5h-5zM170 98h5v5h-5zM180 104h5v5h-5zM190 98h5v5h-5zM196 110h5v5h-5zM172 116h5v5h-5zM182 122h5v5h-5zM190 116h5v5h-5zM154 100h5v5h-5zM164 106h5v5h-5zM184 92h5v5h-5z';
+  for (let i = 0; i < 3; i++) wave.push(`M62 ${50 + i * 3}q4 -2.6 8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0`);
+  // The paper, with a half-round bite at each end of the torn line.
+  const T = 163;
+  const paper = `M3 0H${T - 2.4}a2.4 2.4 0 0 0 4.8 0H${NW - 3}a3 3 0 0 1 3 3V${NH - 3}a3 3 0 0 1-3 3H${T + 2.4}a2.4 2.4 0 0 0-4.8 0H3a3 3 0 0 1-3-3V3a3 3 0 0 1 3-3Z`;
+  // The camera's frame, upright, around the right-hand code where the tilt puts it.
+  const a = (NA * Math.PI) / 180;
+  const [lx, ly] = [(193 - NW / 2) * NK, (28 - NH / 2) * NK];
+  const fx = NC[0] + lx * Math.cos(a) - ly * Math.sin(a);
+  const fy = NC[1] + lx * Math.sin(a) + ly * Math.cos(a);
+  // Its sides (left, right, top, bottom), 35 from the code's centre, and the corners' arms, 14 long.
+  const [L, R, U, D] = [fx - 35, fx + 35, fy - 35, fy + 35].map(r1);
+  const k = 14;
+  const frame = `M${L} ${r1(U + k)}V${U + 6}a6 6 0 0 1 6-6H${r1(L + k)}M${r1(R - k)} ${U}H${R - 6}a6 6 0 0 1 6 6V${r1(U + k)}M${R} ${r1(D - k)}V${D - 6}a6 6 0 0 1-6 6H${r1(R - k)}M${r1(L + k)} ${D}H${L + 6}a6 6 0 0 1-6-6V${r1(D - k)}`;
+  // A stub: the code on white in its thin frame, a short line of print under it (red under the money's).
+  const stub = (x, seed, line) => `<rect x="${x - 3}" y="2.5" width="52" height="59" rx="2.5" fill="none" stroke="#4E7A5E" stroke-opacity="0.7" stroke-width="0.9"/>
+<rect x="${x}" y="5" width="46" height="46" rx="1.5" fill="#FFFFFF"/>
+${dummyCode(x + 3, 8, 40, seed)}
+<rect x="${x + 11}" y="54.6" width="24" height="2.2" rx="1.1" fill="${line}"/>`;
   return `<defs>${filters(p)}
-${lg(`${p}pp`, [0, 0, 1, 1], [
-  [0, '#FFFFFF'],
-  [0.5, '#FBF5E4'],
-  [1, '#E6D9B6'],
+${rg(`${p}aura`, { cy: '52%' }, [
+  [0, '#FFFFFF', 0.7],
+  [1, '#FFFFFF', 0],
 ])}
-${lg(`${p}fold`, [0, 0, 1, 0], [
-  [0, '#8A6410', 0],
-  [0.42, '#8A6410', 0.1],
-  [0.5, '#FFFFFF', 0.55],
-  [0.58, '#8A6410', 0.06],
-  [1, '#8A6410', 0],
+${lg(`${p}pp`, [0, 0, 1, 1], [
+  [0, '#FFFEF8'],
+  [0.5, '#F8F1DC'],
+  [1, '#E9DCB6'],
+])}
+${lg(`${p}panel`, [0, 0, 1, 1], [
+  [0, '#F3F2DE'],
+  [1, '#DCE3C6'],
 ])}
 ${dollarDefs(p)}
 ${lg(`${p}sheen`, [0, 0, 1, 1], [
   [0, '#FFFFFF', 0],
-  [0.45, '#FFFFFF', 0.5],
+  [0.45, '#FFFFFF', 0.55],
   [0.6, '#FFFFFF', 0],
 ])}
-<clipPath id="${p}paper"><rect x="30" y="52" width="190" height="112" rx="6"/></clipPath>
+<clipPath id="${p}paper"><path d="${paper}"/></clipPath>
 </defs>
-<g transform="rotate(-6 125 108)">
-${contact(p, 128, 168, 92, 5, 0.3, '#5A3C08')}
-<rect x="32" y="58" width="190" height="112" rx="6" fill="#5A3C08" opacity="0.22" ${f(p, 'b4')}/>
-<rect x="30" y="52" width="190" height="112" rx="6" fill="url(#${p}pp)"/>
+<ellipse cx="125" cy="104" rx="112" ry="70" fill="url(#${p}aura)"/>
+${contact(p, 126, 168, 96, 5, 0.26, '#5A3C08')}
+<g transform="translate(${NC[0]} ${NC[1]}) rotate(${NA}) scale(${NK}) translate(${-NW / 2} ${-NH / 2})">
+<path d="${paper}" fill="#5A3C08" opacity="0.32" transform="translate(2 5)" ${f(p, 'b4')}/>
+<path d="${paper}" fill="url(#${p}pp)" stroke="#BFAE80" stroke-opacity="0.8" stroke-width="0.6"/>
 <g clip-path="url(#${p}paper)">
-<g opacity="0.1" ${f(p, 'grain')}><rect x="30" y="52" width="190" height="112" fill="#FFFFFF"/></g>
-<g fill="none" stroke="#C9A24A" stroke-opacity="0.32" stroke-width="0.6">${guil.join('')}</g>
-<path d="${wave.join('')}" fill="none" stroke="#C9A24A" stroke-opacity="0.35" stroke-width="0.7"/>
-<rect x="121" y="52" width="10" height="112" fill="url(#${p}fold)"/>
-<path d="M30 52L120 52L60 164H30Z" fill="url(#${p}sheen)" opacity="0.6"/>
+<g opacity="0.1" ${f(p, 'grain')}><rect width="${NW}" height="${NH}" fill="#FFFFFF"/></g>
+<rect x="59" y="3" width="100" height="58" rx="2" fill="url(#${p}panel)"/>
+<g fill="none" stroke="#4E7A5E" stroke-opacity="0.4" stroke-width="0.5">${guil.join('')}</g>
+<path d="${wave.join('')}" fill="none" stroke="#4E7A5E" stroke-opacity="0.35" stroke-width="0.5"/>
+<path d="M0 0H70L30 ${NH}H0Z" fill="url(#${p}sheen)" opacity="0.6"/>
 </g>
-<rect x="38" y="60" width="174" height="96" rx="4" fill="none" stroke="#C9A24A" stroke-width="1.3"/>
-<rect x="41.5" y="63.5" width="167" height="89" rx="3" fill="none" stroke="#C9A24A" stroke-opacity="0.55" stroke-width="0.6" stroke-dasharray="1 2"/>
-<g fill="#C9A24A"><circle cx="45" cy="67" r="2"/><circle cx="205" cy="67" r="2"/><circle cx="45" cy="149" r="2"/><circle cx="205" cy="149" r="2"/></g>
-${dollarCoin(p, 80, 108)}
-<g fill="#8A6410" opacity="0.55"><rect x="112" y="70" width="26" height="3" rx="1.5"/><rect x="112" y="76" width="18" height="2.4" rx="1.2"/><rect x="112" y="140" width="22" height="2.4" rx="1.2"/><rect x="112" y="145" width="14" height="2.4" rx="1.2"/></g>
-<g fill="#14161A" opacity="0.7"><rect x="150" y="140" width="3" height="5" rx="0.6"/><rect x="155" y="140" width="3" height="5" rx="0.6"/><rect x="160" y="140" width="3" height="5" rx="0.6"/><rect x="167" y="140" width="3" height="5" rx="0.6"/><rect x="172" y="140" width="3" height="5" rx="0.6"/><rect x="177" y="140" width="3" height="5" rx="0.6"/></g>
-<rect x="149" y="77" width="58" height="58" rx="4" fill="#5A3C08" opacity="0.2" ${f(p, 'b1')}/>
-<rect x="148" y="76" width="58" height="58" rx="4" fill="#FFFFFF"/>
-<path d="M152 80h14v14h-14zM186 80h14v14h-14zM152 114h14v14h-14z" fill="none" stroke="#14161A" stroke-width="3"/>
-<path d="${qr}" fill="#14161A"/>
-<path d="M220 66V158Q220 164 214 164H130" fill="none" stroke="${TEAL}" stroke-opacity="0.55" stroke-width="1.3" ${f(p, 'b06')}/>
-<path d="M31 160V58Q31 53 36 53H200" fill="none" stroke="#FFFFFF" stroke-width="1.2"/>
+<rect x="59" y="3" width="100" height="58" rx="2" fill="none" stroke="#4E7A5E" stroke-width="1.4"/>
+<rect x="61.5" y="5.5" width="95" height="53" rx="1.2" fill="none" stroke="#4E7A5E" stroke-opacity="0.55" stroke-width="0.5" stroke-dasharray="1 1.4"/>
+<path d="M68 11.5H80M68 11.5L67 21Q71 19 74.5 19.6Q80.5 21 80.5 27Q80.5 33.5 74 33.5Q69.5 33.5 67.5 30.5" fill="none" stroke="#2F5A40" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="85" y="13" width="28" height="2.6" rx="1.3" fill="#2F5A40" opacity="0.7"/>
+<rect x="85" y="18.5" width="18" height="2" rx="1" fill="#2F5A40" opacity="0.45"/>
+<rect x="66" y="39" width="44" height="17" rx="1.6" fill="#FFFFFF" fill-opacity="0.45" stroke="#4E7A5E" stroke-opacity="0.6" stroke-width="0.6"/>
+<g fill="#4E5A52" opacity="0.6"><rect x="69" y="42" width="12" height="1.4" rx="0.7"/><rect x="69" y="48.6" width="10" height="1.4" rx="0.7"/><rect x="85" y="48.6" width="14" height="1.4" rx="0.7"/><rect x="69" y="52.6" width="24" height="1.4" rx="0.7"/></g>
+<rect x="69" y="44.6" width="20" height="2.2" rx="1.1" fill="#B23A2A" opacity="0.75"/>
+<g transform="translate(144 18) scale(0.5)">${dollarCoin(p, 0, 0)}</g>
+<path d="M${T} 4V60" stroke="#6B6A60" stroke-opacity="0.7" stroke-width="0.8" stroke-dasharray="2 1.6"/>
+${stub(6, 7, '#8C8A80')}
+${stub(170, 29, '#C0392B')}
+<path d="M${NW - 0.6} 4V${NH - 3}a2.4 2.4 0 0 1-2.4 2.4H${T + 4}" fill="none" stroke="${TEAL}" stroke-opacity="0.55" stroke-width="1.2" ${f(p, 'b06')}/>
+<path d="M0.6 ${NH - 4}V3a2.4 2.4 0 0 1 2.4-2.4H${T - 4}" fill="none" stroke="#FFFFFF" stroke-width="1.1"/>
 </g>
 <g fill="none" stroke-linecap="round">
-<path d="M14 46V26a10 10 0 0 1 10-10h20M206 16h20a10 10 0 0 1 10 10v20M236 154v20a10 10 0 0 1-10 10h-20M44 184H24a10 10 0 0 1-10-10v-20" stroke="#E2B552" stroke-opacity="0.45" stroke-width="10" ${f(p, 'b2')}/>
-<path d="M14 46V26a10 10 0 0 1 10-10h20M206 16h20a10 10 0 0 1 10 10v20M236 154v20a10 10 0 0 1-10 10h-20M44 184H24a10 10 0 0 1-10-10v-20" stroke="#8A6410" stroke-width="5"/>
-<path d="M14 44V26a10 10 0 0 1 10-10h18" stroke="#F6D98E" stroke-width="1.4" transform="translate(-0.8 -0.8)"/>
-</g>`;
+<path d="${frame}" stroke="#E2B552" stroke-opacity="0.5" stroke-width="8" ${f(p, 'b2')}/>
+<path d="${frame}" stroke="#8A6410" stroke-width="4.6"/>
+<path d="M${r1(L - 0.6)} ${r1(U + k - 1)}V${r1(U + 5.4)}a6 6 0 0 1 6-6H${r1(L + k - 1)}" stroke="#F6D98E" stroke-width="1.1"/>
+</g>
+${sparkle(p, 40, 50, 6, '#E2B552')}${sparkle(p, 222, 150, 4, '#E2B552')}`;
 };
 
 /** Lightning: the bolt as a lit gold object, thick, glowing, over the dark card. */
