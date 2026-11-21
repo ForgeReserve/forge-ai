@@ -202,6 +202,43 @@ describe('admin settings and accounts', () => {
   });
 });
 
+describe('admin overview and costs at markup 1', () => {
+  // The hosted gateway runs at FORGE_MARKUP=1 (docs/PAYMENTS.md, What a request costs): revenue is the
+  // catalog cost, so every margin figure is exactly 0, never NaN, Infinity or -0.
+  it('reads a margin of exactly 0 for real requests, by model, tier and supplier', async () => {
+    const { call, deps, app } = gateway({ FORGE_MARKUP: '1' });
+    const key = newApiKey();
+    tx(deps.db, () => deps.ledger.creditRaw(deps.ledger.createAccountRaw(key, 'usd', null).id, 100_000, 'topup', null));
+    for (let i = 0; i < 3; i++) {
+      const r = await app.request(`${ORIGIN}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: 'mock-echo', messages: [{ role: 'user', content: 'Say hello ' + i }], max_tokens: 64 }),
+      });
+      expect(r.status).toBe(200);
+    }
+    const o = (await (await call('/admin/api/overview')).json()) as any;
+    expect(o.markup).toBe(1);
+    for (const w of Object.values(o.windows) as any[]) {
+      for (const row of [w.total, ...w.by_model, ...w.by_tier, ...w.by_supplier]) {
+        expect(row.revenue_msub.usd).toBeGreaterThan(0);
+        expect(row.cost_msub.usd).toBe(row.revenue_msub.usd);
+        expect(Object.is(row.margin_msub.usd, 0)).toBe(true);
+        expect(Object.is(row.margin_usd_equiv, 0)).toBe(true);
+        expect(row.cost_usd_equiv).toBe(row.revenue_usd_equiv);
+      }
+    }
+    const c = (await (await call('/admin/api/costs')).json()) as any;
+    expect(c.markup).toBe(1);
+    expect(c.total.requests).toBe(3);
+    expect(c.total.price_nusd).toBeGreaterThan(0);
+    expect(c.total.cost_nusd).toBe(c.total.price_nusd);
+    for (const s of c.suppliers) expect(s.cost_nusd).toBe(s.price_nusd);
+    for (const m of c.models) expect(m.cost_nusd).toBe(m.price_nusd);
+    expect(JSON.stringify(o) + JSON.stringify(c)).not.toMatch(/NaN|Infinity/);
+  });
+});
+
 describe('ledger freeze', () => {
   it('blocks spending but not refunds or credits', () => {
     const db = openDb(':memory:');

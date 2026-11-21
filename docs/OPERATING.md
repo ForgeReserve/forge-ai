@@ -49,7 +49,7 @@ Environment variables, validated with zod at startup. `src/config.ts` is the com
 | `FORGE_UNITS` | `usd,sat` | Accepted units |
 | `FORGE_DEFAULT_UNIT` | `usd` | Unit of a 402 request unless the client sends `X-Forge-Unit` |
 | `FORGE_INVITE_ONLY` | `true` | Require invites for topups and NUT-24 requests |
-| `FORGE_MARKUP` | `1.25` | Multiplier on supplier cost |
+| `FORGE_MARKUP` | `1.25` | Multiplier on supplier cost. `1` charges the suppliers' prices at cost, with no margin; the hosted gateway runs at `1` ([PAYMENTS.md](PAYMENTS.md#what-a-request-costs)) |
 | `FORGE_MODELS_FILE` | `config/models.json` | Supplier and model catalog |
 | `FORGE_DB_PATH` | `data/forge.db` | SQLite ledger and wallet |
 | `FORGE_WALLET_SEED` | generated, stored in DB | 64-byte hex seed for deterministic eCash outputs (NUT-13) |

@@ -5,6 +5,7 @@
     "test/ui/addfunds.ui.test.ts": 28.8,
     "test/ui/addmoney.ui.test.ts": 75,
     "test/ui/admin-fedimint.ui.test.ts": 2.3,
+    "test/ui/admin-overview.ui.test.ts": 1.3,
     "test/ui/android.ui.test.ts": 43.3,
     "test/ui/answer-ux.ui.test.ts": 50,
     "test/ui/bitnote.ui.test.ts": 11.2,

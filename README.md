@@ -14,6 +14,8 @@ Forge AI lets people ask AI models questions and pay for each answer with eCash,
 
 The hosted gateway is invite only. Ask for an invite at https://ai.forge-reserve.com/beta/.
 
+The hosted gateway charges the suppliers' cost with no margin: it runs with `FORGE_MARKUP=1`, and its hosting is paid by its operator. `FORGE_MARKUP` defaults to 1.25, so a gateway you run yourself adds 25 percent unless you change it. To check the hosted prices, compare each model's `pricing.usd_per_mtok` in https://ai.forge-reserve.com/v1/models with its `input_usd_per_mtok` and `output_usd_per_mtok` (and `cached_input` with `cached_input_usd_per_mtok`, where a model has one) in [config/models.json](config/models.json). [docs/PAYMENTS.md](docs/PAYMENTS.md#what-a-request-costs) lists the other figures to compare and where a charge can differ from the supplier's bill.
+
 ## Run it
 
 ```sh
