@@ -204,7 +204,20 @@ describe('hold to talk', () => {
     expect(f.rate).toMatch(/^\d+ Hz$/);
     expect(f.length).toMatch(/^1\.\d s of 1\.\d s$/);
     expect(await page.textContent('#micFactsHead')).toBe('Last recording');
+    // Which copy of the app made the recording: the build the worker serves, loaded from the network.
+    await expect.poll(async () => (await micFacts(page)).build).toMatch(/^[0-9a-f]{8}$/);
+    expect((await micFacts(page)).build).toBe((await page.getAttribute('html', 'data-build'))!.slice(0, 8));
+    expect(await page.getAttribute('html', 'data-saved')).toBeNull();
     expect(errors).toEqual([]);
+    // Once more online with the worker in charge, so it keeps the app's files; then with no network the
+    // phone's kept copy opens, and the page knows it (the readout says "saved copy" beside the build).
+    await page.reload();
+    await page.waitForSelector('[data-screen=voice]');
+    await ctx.setOffline(true);
+    await page.reload();
+    await page.waitForSelector('[data-screen=voice]');
+    await expect.poll(() => page.getAttribute('html', 'data-saved')).toBe('yes');
+    await ctx.setOffline(false);
     await ctx.close();
   }, 60_000);
 
