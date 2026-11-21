@@ -2818,9 +2818,9 @@ function registerWorker() {
   const ours = (w) => !!w && new URL(w.scriptURL).pathname === '/v2/sw.js';
   updater = createUpdater({ storage, hadController: ours(sw.controller), busy: busyForUpdate, reload: () => location.reload() });
   // A new worker (a new build: its script carries the build id) took over: reload once into its files.
-  sw.addEventListener('controllerchange', () => {
-    if (!erased) updater.controllerChanged();
-    showBuild();
+  sw.addEventListener('controllerchange', async () => {
+    const version = await showBuild();
+    if (!erased) updater.controllerChanged(version);
   });
   workerReg = sw.register('/v2/sw.js', { scope: '/v2/', updateViaCache: 'none' }).catch(() => null);
   // A tab brought back (from the background, or restored from the back-forward cache) asks for a newer
@@ -2845,15 +2845,21 @@ const build = { loaded: null, now: null, saved: false };
 /** Puts the build id of the worker that serves this page on <html data-build> (and data-saved on a page opened from the kept copy), so a stale page can be told apart. */
 function showBuild() {
   const c = navigator.serviceWorker?.controller;
-  if (!c || typeof MessageChannel !== 'function') return;
-  const ch = new MessageChannel();
-  ch.port1.onmessage = (e) => {
-    if (!e.data?.version) return;
-    document.documentElement.dataset.build = build.now = e.data.version;
-    build.loaded ??= e.data.version;
-    if (e.data.saved) document.documentElement.dataset.saved = (build.saved = true) && 'yes';
-  };
-  c.postMessage({ type: 'version' }, [ch.port2]);
+  if (!c || typeof MessageChannel !== 'function') return Promise.resolve(null);
+  // Answers with the build id, or null when the worker says nothing within two seconds.
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 2000);
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => {
+      clearTimeout(timer);
+      if (!e.data?.version) return resolve(null);
+      document.documentElement.dataset.build = build.now = e.data.version;
+      build.loaded ??= e.data.version;
+      if (e.data.saved) document.documentElement.dataset.saved = (build.saved = true) && 'yes';
+      resolve(e.data.version);
+    };
+    c.postMessage({ type: 'version' }, [ch.port2]);
+  });
 }
 
 /** Waits (a few seconds at most) for a worker that is still installing, so it cannot fill a cache after Erase. */

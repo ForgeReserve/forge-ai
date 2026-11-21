@@ -182,6 +182,8 @@ export async function startGateway(
     faucetNow?: () => number;
     /** The clock free voice questions count days by. */
     freeVoiceNow?: () => number;
+    /** Serves the pages from this folder (a copy a test changes, as a deploy would). */
+    publicDir?: string;
   } = {},
 ): Promise<Gateway> {
   const dbPath = opts.dbPath ?? join(mkdtempSync(join(tmpdir(), 'forge-e2e-')), 'forge.db');
@@ -211,7 +213,7 @@ export async function startGateway(
     freeVoice: opts.freeVoiceNow ? { now: opts.freeVoiceNow } : undefined,
   });
   if (opts.recover !== false) await startupRecovery(deps);
-  const app = createApp(deps);
+  const app = createApp(opts.publicDir ? { ...deps, publicDir: opts.publicDir } : deps);
   const server: ServerType = await new Promise((resolve) => {
     const s = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' }, () => resolve(s));
   });

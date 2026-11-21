@@ -1,5 +1,5 @@
 {
-  "source": "Vitest JSON reports, 2026-11-20: .tmp/bitnote-times/run10.json, and photo-camera.ui.test.ts and photo-memory.ui.test.ts from local Linux runs (scripts/ui-linux.sh); voice.ui.test.ts from a local Linux run, 2026-11-21",
+  "source": "Vitest JSON reports, 2026-11-20: .tmp/bitnote-times/run10.json, and photo-camera.ui.test.ts and photo-memory.ui.test.ts from local Linux runs (scripts/ui-linux.sh); voice.ui.test.ts and update.ui.test.ts from local Linux runs, 2026-11-21",
   "files": {
     "test/ui/about.ui.test.ts": 64.1,
     "test/ui/addfunds.ui.test.ts": 28.8,
@@ -42,6 +42,7 @@
     "test/ui/talk-still.ui.test.ts": 20,
     "test/ui/two-balances.ui.test.ts": 6,
     "test/ui/v2.ui.test.ts": 41.9,
+    "test/ui/update.ui.test.ts": 9.8,
     "test/ui/voice.ui.test.ts": 93.4
   }
 }

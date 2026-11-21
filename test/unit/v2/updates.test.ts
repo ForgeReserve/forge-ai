@@ -63,4 +63,59 @@ describe('reloading into a new build', () => {
     expect(up.screenChanged()).toBe(false);
     expect(state.reloads).toBe(0);
   });
+  it('reloads once for each new build, however soon one deploy follows another, and never twice for the same build', () => {
+    const storage = new Map<string, string>();
+    // The first deploy: the tab reloads for build A.
+    const one = setup({ storage });
+    expect(one.up.controllerChanged('build-a')).toBe(true);
+    // The reloaded page: the same worker claiming it again does nothing.
+    const two = setup({ storage });
+    expect(two.up.controllerChanged('build-a')).toBe(false);
+    // A second deploy five minutes later: one reload for build B (the owner's iPhone, 2026-11-21, stayed on A).
+    two.tick(5 * 60 * 1000);
+    expect(two.up.controllerChanged('build-b')).toBe(true);
+    expect(two.state.reloads).toBe(1);
+    // Two engines answering in turn with A and B cannot make a loop: both were reloaded for.
+    const three = setup({ storage });
+    expect(three.up.controllerChanged('build-a')).toBe(false);
+    expect(three.up.controllerChanged('build-b')).toBe(false);
+    expect(three.state.reloads).toBe(0);
+    // After the hour, the same build may reload the tab once more.
+    three.tick(U.RELOAD_GAP_MS + 1);
+    expect(three.up.controllerChanged('build-a')).toBe(true);
+  });
+
+  it('a busy person gets the newest build at the next screen change, once', () => {
+    const storage = new Map<string, string>();
+    const { up, state } = setup({ storage, busy: true });
+    expect(up.controllerChanged('build-a')).toBe(false);
+    expect(up.controllerChanged('build-b')).toBe(false);
+    state.busy = false;
+    expect(up.screenChanged()).toBe(true);
+    expect(state.reloads).toBe(1);
+    expect(Object.keys(JSON.parse(storage.get(U.RELOAD_KEY)!))).toEqual(['build-b']);
+  });
+
+  it('a worker whose build changes every time cannot reload a tab more than a few times an hour', () => {
+    const storage = new Map<string, string>();
+    let reloads = 0;
+    for (let i = 0; i < 20; i++) {
+      const page = setup({ storage });
+      page.up.controllerChanged(`build-${i}`);
+      reloads += page.state.reloads;
+    }
+    expect(reloads).toBe(U.RELOAD_MAX);
+  });
+
+  it('without a build id the old rule holds, and a value an older build stored still guards', () => {
+    const storage = new Map<string, string>([[U.RELOAD_KEY, String(1_000_000 - 1000)]]);
+    const page = setup({ storage });
+    expect(page.up.controllerChanged()).toBe(false);
+    // A named build the tab has not reloaded for still reloads it.
+    expect(page.up.controllerChanged('build-a')).toBe(true);
+    // Storage holding something unreadable: no automatic reload.
+    const broken = setup({ storage: new Map([[U.RELOAD_KEY, '{not json']]) });
+    expect(broken.up.controllerChanged('build-a')).toBe(false);
+    expect(broken.state.reloads).toBe(0);
+  });
 });
