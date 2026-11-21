@@ -44,6 +44,14 @@ Payment links: with a balance key, every request on that key is linkable to the 
 - The gateway sees only that search was asked for (`X-Forge-Web-Search: 1`, kept in the request's hold, not logged with any content) and, from Tinfoil's usage metrics, how many searches ran. It never sees the searches or the results: they are inside the encrypted request and answer.
 - The app's line while it is on: the sealed machine sends the search to a search service, which sees the search but not who asked.
 
+## Prompt caching
+
+Tinfoil caches the start of a prompt in the GPU memory of the enclave that served it. The cache is never written to disk, and an entry usually lasts minutes, at most hours (docs.tinfoil.sh/sdk/prompt-caching). A later request reuses it only when the API identity, a `user_cache_secret`, the model and the start of the prompt all match. Without a secret per user, requests under one API identity share one cache. The gateway sends every request with its one Tinfoil key, so all of them have the same API identity.
+
+- A plaintext request carries a `user_cache_secret` only when the client puts one in its body, which the gateway sends on as it came. Plaintext requests without one share one cache: one person's request can make another person's request that opens with the same text (a few thousand characters or more) faster and, on a model with a cached price, cheaper. The cached count in the answer, the charge and the speed can then tell the second person that someone sent that opening recently. Tinfoil's docs note that requests sharing an identity and a secret also share cache-hit timing.
+- An encrypted request from the chat page or the v2 app goes through Tinfoil's browser SDK (1.4.0), which adds its own `user_cache_secret` to the body before encrypting it. In a browser that value lasts for the page's lifetime, so these requests share a cache only with other requests from the same page. This is from Tinfoil's docs and the SDK's code; it has not been checked against the live service.
+- Tinfoil's docs describe no way to turn caching off. A fresh secret on every request means no request ever reuses the cache; one stable secret per user keeps each cache to that user. The gateway sets neither today.
+
 ## Audio (speech to text, text to speech)
 
 - `POST /v1/audio/transcriptions` and `POST /v1/audio/speech` are not encrypted end to end. The gateway receives the recording or the text in plain form, holds it in memory while it relays it to the supplier, and drops it when the request ends. It is never logged or stored: the log line and the `requests` row carry the model, seconds or characters, price and status.

@@ -341,6 +341,7 @@ hold_nano_usd = input_tokens * input_nano_usd_per_token
 <p>What is charged:</p>
 <ul>
 <li>The tokens the supplier reports, at the model&#39;s prices, plus the search fee when the model searched. Capped at the hold.</li>
+<li>Input tokens the supplier served from its prompt cache (<code>usage.prompt_tokens_details.cached_tokens</code> in its answer) at the <code>cached_input</code> price, on a model that lists one. The hold always uses the full input price.</li>
 <li>No usage reported on a plaintext stream: the gateway counts the answer as it passes and charges that estimate, capped at the hold.</li>
 <li>No usage reported on a complete non-streaming or encrypted answer: the hold.</li>
 <li>A flat-priced supplier: its schedule.</li>
@@ -612,7 +613,7 @@ X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
 </tr>
 <tr>
 <td><code>data[].pricing.usd_per_mtok</code>, <code>sat_per_mtok</code></td>
-<td>Price per million tokens, input and output, markup included. <code>sat_per_mtok</code> is <code>null</code> without a rate</td>
+<td>Price per million tokens, input and output, markup included. A model whose supplier bills input from its prompt cache at a lower price also lists it as <code>cached_input</code>. <code>sat_per_mtok</code> is <code>null</code> without a rate</td>
 </tr>
 <tr>
 <td><code>data[].pricing.hold</code></td>

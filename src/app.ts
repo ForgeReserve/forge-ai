@@ -27,7 +27,7 @@ import { type Account, type Invites, type Ledger, LedgerError, type Passes } fro
 import { errText, log } from './log.ts';
 import { parseUsageMetrics, USAGE_HEADER as TINFOIL_USAGE_HEADER } from './suppliers/tinfoil.ts';
 import { costFromHeaders, FrameCounter, SseMeter, usageFromJson } from './meter.ts';
-import { audioCostNanoUsd, costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
+import { audioCostNanoUsd, cachedInputTokens, costNanoUsd, displayPrice, estimateTokensFromBytes, flatCostNanoUsd, holdInfo, holdNanoUsd, MSUB_PER_UNIT, msubToUnitsCeil, nanoUsdToMsub, type Usage, usageNanoUsd, worstUsage } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import type { RateOracle } from './rates.ts';
 import { type Supplier, UpstreamError } from './suppliers/types.ts';
@@ -244,9 +244,19 @@ export function createApp(d: Deps) {
           free: isFreeModel(m),
           free_reason: isFreeModel(m) ? (m.free_reason ?? null) : undefined,
           mode: isFreeModel(m) ? 'metered' : s.pricing,
-          usd_per_mtok: { input: round(m.input_usd_per_mtok * env.FORGE_MARKUP), output: round(m.output_usd_per_mtok * env.FORGE_MARKUP) },
+          // cached_input: the price of input the supplier serves from its prompt cache, on a model whose
+          // supplier lists one (docs/PAYMENTS.md, Cached input). Left out otherwise: cached input costs input.
+          usd_per_mtok: {
+            input: round(m.input_usd_per_mtok * env.FORGE_MARKUP),
+            output: round(m.output_usd_per_mtok * env.FORGE_MARKUP),
+            ...(m.cached_input_usd_per_mtok !== undefined ? { cached_input: round(m.cached_input_usd_per_mtok * env.FORGE_MARKUP) } : {}),
+          },
           sat_per_mtok: rate
-            ? { input: round(displayPrice(m.input_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!), output: round(displayPrice(m.output_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!) }
+            ? {
+                input: round(displayPrice(m.input_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!),
+                output: round(displayPrice(m.output_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!),
+                ...(m.cached_input_usd_per_mtok !== undefined ? { cached_input: round(displayPrice(m.cached_input_usd_per_mtok, env.FORGE_MARKUP, 'sat', rate)!) } : {}),
+              }
             : null,
           verified: m.price_verified,
           // What the gateway holds for a request, so a client can show and check the same figure exactly
@@ -943,6 +953,17 @@ export function createApp(d: Deps) {
             costSource = 'catalog';
           }
         }
+        // The input tokens charged at the cached price (0 when the supplier reported none), bounded to the
+        // input tokens: stored and logged as it was charged.
+        const cachedTokens = usage ? cachedInputTokens(usage) : undefined;
+        // Cross-check: the supplier's own cost against the same usage at catalog cost (no markup). They
+        // differ when the catalog is out of date with the supplier's rate card, or a figure is wrong.
+        if (costSource === 'supplier' && !alwaysFlat && source !== 'flat') {
+          const catalogNusd = Math.round(usageNanoUsd(model, usage!, 1, searchTerms));
+          if (Math.abs(catalogNusd - costNusd!) > Math.max(1000, costNusd! * 0.01)) {
+            log.warn('supplier_cost_differs', { request_id: requestId, model: model.id, supplier_cost_nusd: costNusd, catalog_cost_nusd: catalogNusd, input_tokens: usage!.inputTokens, cached_input_tokens: cachedTokens, output_tokens: usage!.outputTokens });
+          }
+        }
         const res: SettleResult = { chargedMsub: 0 };
         if (pay.kind === 'free') {
           res.balanceMsub = ledger.get(pay.account.id)!.balance_msub;
@@ -961,10 +982,11 @@ export function createApp(d: Deps) {
           }
         }
         db.prepare(
-          'UPDATE requests SET status = ?, input_tokens = ?, output_tokens = ?, usage_source = ?, charged_msub = ?, change_units = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?',
+          'UPDATE requests SET status = ?, input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, usage_source = ?, charged_msub = ?, change_units = ?, latency_ms = ?, price_nusd = ?, supplier_cost_nusd = ?, cost_source = ? WHERE id = ?',
         ).run(
           status === 'ok' || status === 'partial' ? 'settled' : 'failed',
           usage?.inputTokens ?? null,
+          cachedTokens ?? null,
           usage?.outputTokens ?? null,
           source,
           res.chargedMsub,
@@ -996,6 +1018,7 @@ export function createApp(d: Deps) {
           encrypted,
           stream,
           input_tokens: usage?.inputTokens,
+          cached_input_tokens: cachedTokens,
           output_tokens: usage?.outputTokens,
           usage_source: source,
           web_search: search || undefined,
@@ -1142,6 +1165,8 @@ export function createApp(d: Deps) {
       // fee is charged (it is in the hold); with metrics, only when they show a search.
       if (usage && metrics) Object.assign(usage, { webSearchCalls: metrics.webSearchCalls, otherCostUsd: metrics.otherCostUsd });
       else if (usage && search) usage.webSearchCalls = 1;
+      // Cached input: from the body's usage, else from Tinfoil's metrics (the same count, from its router).
+      if (usage && usage.cachedInputTokens === undefined && metrics?.cachedInputTokens !== undefined) usage.cachedInputTokens = metrics.cachedInputTokens;
       if (!usage) {
         source = noUsage;
         usage = worst;

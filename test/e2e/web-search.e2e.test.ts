@@ -149,6 +149,16 @@ describe.skipIf(!up)('web search (mock enclave)', () => {
     expect(sent.prompt_injection_check_options).toEqual({});
   });
 
+  it('plaintext, declared, but the metrics show no search (and cached input): no fee', async () => {
+    metrics = 'prompt=50,completion=7,total=57,cached_prompt_tokens=0,uncached_prompt_tokens=50,model=enc-model,cost_usd=0.0000117';
+    const res = await plain(searchBody());
+    expect(res.status).toBe(200);
+    expect(row(res.headers.get('x-forge-request-id')!).charged_msub).toBe(usd(50, 7, false));
+    metrics = 'prompt=50,completion=7,total=57,model=enc-model,cost_usd=0.0000117';
+    const again = await plain(searchBody());
+    expect(row(again.headers.get('x-forge-request-id')!).charged_msub).toBe(usd(50, 7, false));
+  });
+
   it('plaintext stream: the metrics never arrive (an HTTP trailer), so with search on the fee is charged, within the hold', async () => {
     const res = await plain(searchBody({ stream: true }));
     const s = await readSse(res);

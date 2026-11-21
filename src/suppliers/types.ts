@@ -15,6 +15,8 @@ export interface ReportedUsage {
   inputTokens: number;
   outputTokens: number;
   costUsd?: number;
+  /** The part of inputTokens served from the supplier's prompt cache (Tinfoil's cached_prompt_tokens). */
+  cachedInputTokens?: number;
   /** Web searches and page fetches the model made (Tinfoil's web_search_calls); absent when none. */
   webSearchCalls?: number;
   /** Fees for auxiliary services such as the privacy filter (Tinfoil's other_cost_usd). */

@@ -9,7 +9,10 @@ export const USAGE_HEADER = 'x-tinfoil-usage-metrics';
 
 /**
  * Parses `prompt=67,completion=42,total=109,model=gpt-oss-120b,cost_usd=0.000042`, with the optional
- * `web_search_calls` and `other_cost_usd` (docs.tinfoil.sh/guides/proxy-server, usage metrics).
+ * `cached_prompt_tokens` (the part of `prompt` served from Tinfoil's prompt cache; `uncached_prompt_tokens`
+ * is the rest), `web_search_calls` and `other_cost_usd` (docs.tinfoil.sh/guides/proxy-server, usage
+ * metrics). `cost_usd` is Tinfoil's price for the request at its published rates, cached input at the
+ * cached rate, search and auxiliary fees included.
  */
 export function parseUsageMetrics(v: string | string[] | undefined): ReportedUsage | undefined {
   const s = Array.isArray(v) ? v[0] : v;
@@ -27,6 +30,9 @@ export function parseUsageMetrics(v: string | string[] | undefined): ReportedUsa
     return Number.isFinite(n) && n >= 0 ? n : undefined;
   };
   const out: ReportedUsage = { inputTokens: prompt, outputTokens: completion, costUsd: num('cost_usd') };
+  // Bounded by pricing.ts cachedInputTokens when it is charged.
+  const cached = num('cached_prompt_tokens');
+  if (cached !== undefined) out.cachedInputTokens = cached;
   const calls = num('web_search_calls');
   if (calls !== undefined && calls > 0) out.webSearchCalls = calls;
   const other = num('other_cost_usd');
