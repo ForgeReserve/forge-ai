@@ -4,7 +4,7 @@ Status: built in slice C1, card taps in A13, the native natural voice on branch 
 
 Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 6.2.3). The app's files are inside the APK: it loads no code from the network. It talks only to its engine, and to a till the person paired for Fedimint cards.
 
-- Name **Forge**, application id `com.forgereserve.ai`, Android 9 (API 28) and up. A second APK of the same app, **Forge Private Voice** (`com.forgereserve.ai.privatevoice`), adds its own speech to text for GrapheneOS (Two APKs, below).
+- Name **Forge**, application id `com.forgereserve.ai`, Android 9 (API 28) and up, built for Android 16 (compileSdk and targetSdk 36; Android 15 and 16, below). A second APK of the same app, **Forge Private Voice** (`com.forgereserve.ai.privatevoice`), adds its own speech to text for GrapheneOS (Two APKs, below).
 - No Google services, no Firebase, no analytics. It should run on GrapheneOS without Google Play; that is not tested on a phone yet.
 - The engine is `https://ai.forge-reserve.com` until the person sets another in **More, Engine**. HTTPS only.
 - eCash on its way in is tied to the engine it was sent to. After a switch, it is never sent to the new engine. It waits on the phone until the person goes back to the first one (`public/v2/core/vault.js`).
@@ -17,8 +17,8 @@ Forge for Android is the v2 web app in a Capacitor shell (`android/`, Capacitor 
 | Event links | `https://ai.forge-reserve.com/j#<pass>`, the one QR code on an event's slide, opens the app on that pass (App Links; `JoinPlugin.kt`, `JoinRules.kt`, ForgeJoin), cold or while it runs. The web app then opens a free balance with it (Event links, below). |
 | Photos shared in | Another app's share sheet sends a photo to Forge. It opens Share unseen with it (`ShareInPlugin.kt`, `public/v2/core/native.js`). The photo is read into memory, never written to storage. |
 | Share out | Share unseen's Share opens Android's share sheet with the protected photo only. Save opens the system save screen, so no storage permission is needed (`SharePlugin.kt`). The page says Saved only once the file is written; a closed save screen says nothing, and a failed write says Not saved. The photo goes to the app first, in pieces (Share out and Save, below). |
-| Back button | Walks back through the app's screens, then leaves. |
-| Status and navigation bars | The colour of the page, as a browser keeps them its theme-color (`BarsPlugin.kt`, `BarRules.kt`, `core/native.js` followBars): dark with light icons on Midnight (the default look, and the colour the app starts in) and the first run, light with dark icons on the Light look. |
+| Back button | Walks back through the app's screens, then leaves (`MainActivity`, `BackRule`). Through the `OnBackPressedDispatcher`, so the back gesture and predictive back reach it on Android 13 to 16 alike (`enableOnBackInvokedCallback`). |
+| Status and navigation bars | The colour of the page, as a browser keeps them its theme-color (`BarsPlugin.kt`, `BarRules.kt`, `core/native.js` followBars): dark with light icons on Midnight (the default look, and the colour the app starts in) and the first run, light with dark icons on the Light look. The app is drawn edge to edge on every Android version: the bars are see-through, and the web view's frame is padded by the bars, the camera cutout and the keyboard and painted in the page's colour (`Edge` in `BarsPlugin.kt`, `BarRules.room`). The page never sits under a bar, and its `env(safe-area-inset-*)` stay 0. |
 | Natural voice, native | Where the phone runs it (64-bit ARM with ARMv8.2), the natural voice is made by Gradium's native runtime (`libptts_ffi.so`, built by `scripts/android-ptts.sh` from a pinned xn-ptts commit and committed with its SHA-256) in a process of its own (`VoiceService`, `:voice`), through ForgeVoice (`VoicePlugin.kt`), and played through an `AudioTrack`. On the Galaxy A16 5G it makes the voice at RTF 0.30 against 0.94 in the browser (docs/VOICE.md, Native voice in the Android app). |
 | Natural voice | The APK carries the natural voice (Phonon 31m and seven en-GB voices, docs/VOICE.md), stored uncompressed, so answers are read aloud offline from the first open with no download. The web view reads the files straight from the APK; nothing is copied into its cache. `MainActivity` serves the app's own files with the cross-origin isolation headers (`IsolationRules.kt`) so the voice can run on several threads; on the Galaxy A16 5G (Android System WebView, 2026-11-15) the voice lab shows the page is not isolated (`crossOriginIsolated` false) even so, so there the browser's build runs on one thread; the cause is not found. Where the phone runs it, the native voice below is used instead. |
 | Hold to talk, Forge Private Voice | Forge Private Voice hears Hold to talk with its own model first (Moonshine tiny through sherpa-onnx, in a process of its own, `:asr`; `AsrPlugin.kt`, ForgeAsr): free, and the sound never leaves the phone, also where the phone has no recogniser of its own, as on GrapheneOS (docs/VOICE.md, Bundled speech to text). In the universal APK ForgeAsr says it is unavailable. |
@@ -82,7 +82,7 @@ Every build first runs `node scripts/android-web.ts`. It puts the natural voice'
 
 The Android project is kept by hand. Do not run `npx cap add`, `cap sync` or `cap update`: they would put back the Cordova module, the Google services hook and the template icons.
 
-Capacitor 6 is used because it builds with JDK 17; Capacitor 7 and 8 need JDK 21.
+Capacitor 6 is used because it builds with JDK 17; Capacitor 7 and 8 need JDK 21. The project compiles against API 36 with the Android Gradle plugin 8.10.1 (the first tested with compileSdk 36; 8.7 warns), Gradle 8.13 and Kotlin 2.0.21. Capacitor 6.2.3's own module takes the same SDK levels from `android/variables.gradle` and compiles with them unchanged.
 
 ## Sign
 
@@ -120,6 +120,60 @@ From a computer, for testing: `adb install -r app-debug.apk`.
 
 Installing the new APK over the old one keeps the balance, chats and settings. An APK signed with another key does not install over it.
 
+## Google Play
+
+Google Play takes an app bundle (`.aab`), and only for Forge (the `universal` flavour). Forge Private Voice stays an APK from `/download`. The bundle is built by `./gradlew bundleUniversalRelease` and signed with the upload key, which the environment names at build time:
+
+| Variable | What |
+|---|---|
+| `FORGE_UPLOAD_KEYSTORE` | The keystore file, outside this repository |
+| `FORGE_UPLOAD_KEY_ALIAS` | The key's alias in it |
+| `FORGE_UPLOAD_STORE_PASSWORD` | The keystore's password |
+| `FORGE_UPLOAD_KEY_PASSWORD` | The key's password, only when it differs from the keystore's |
+
+Without the first three, or with a keystore inside the repository, the build stops before it starts and says which is missing; it never falls back to a debug key. Gradle signs the bundle with the JDK's `jarsigner`, which reads both passwords from the environment by name (`-storepass:env`), so no password is on a command line or in a log. A Play bundle of Forge Private Voice (`bundlePrivatevoiceRelease`, or `bundleRelease` for both) is refused. The APKs keep no signing config, so the debug builds and `scripts/android-release.sh` work as before with none of these set.
+
+Make the upload key once, outside this repository, and keep it and its password safe:
+
+```sh
+keytool -genkeypair -v -keystore <outside the repository>/forge-upload.jks -alias upload -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then, for each upload:
+
+```sh
+scripts/android-bundle.sh                                  # asks for the keystore, the alias and the password
+scripts/android-bundle.sh --keystore <file> --alias upload # asks for the password only
+```
+
+The script reads the same four variables, asks on the terminal for what is not set (the password without showing it), refuses a keystore inside the repository, and hands the password to Gradle only through its environment. It builds with `clean bundleUniversalRelease`, checks the bundle is signed, writes `dist/forge-<version>.aab` and prints its path, size, versionCode and SHA-256, and the upload certificate's SHA-256. It never prints a password and never makes a key.
+
+- Play re-signs what phones download with its own app signing key (Play App Signing). A phone with Forge from `/download` (the owner's release key) cannot update to the Play version or back: Android refuses an update signed with another key, so moving between them means uninstalling, which loses the balance key. Play Console can take the owner's existing release key as the app signing key instead, which keeps both on one key.
+- Event links open the Play version without asking only once `FORGE_ANDROID_CERT_SHA256` also lists Play's app signing certificate (Play Console, App integrity), next to the release key's.
+- versionCode is shared with the APKs and Play needs it to go up with every upload (Update, above).
+- The bundle stores native libraries uncompressed on 16 KB boundaries (`uncompressNativeLibraries` with `PAGE_ALIGNMENT_16K` in its BundleConfig), and every library's segments are 16 KB aligned, so the APKs Play makes from it load on 16 KB page phones.
+
+## Android 15 and 16
+
+What changes for an app that targets API 35 and 36, and what the app does about it:
+
+| Change | Applies | What the app does |
+|---|---|---|
+| Edge to edge is forced (API 35); the opt-out attribute is ignored (API 36); `statusBarColor` and `navigationBarColor` no longer colour the bars | Yes | Drawn edge to edge on every version on purpose. The web view's frame is padded by the status bar, the navigation bar, the camera cutout and the keyboard (`BarRules.room`: the larger of the navigation bar and the keyboard at the bottom) and painted in the page's colour, so the bars look as before. No contrast scrim over three-button navigation. The insets stop at the frame, so the page's `env(safe-area-inset-*)` stay 0 and its own safe-area padding adds nothing. Without this, at API 36 on Android 15 the Send button sat under the navigation bar and the keyboard covered the page. |
+| The keyboard no longer resizes an edge to edge window | Yes | `adjustResize` (what Android picked for the app before, checked with the target 34 build) and the keyboard's inset in the frame's padding: the page shrinks above the keyboard, as `interactive-widget=resizes-content` expects. |
+| Display cutout: the window reaches into it (API 35) | Yes | The cutout is in the padding, so nothing sits under it, in landscape too (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on older versions, so all are the same). |
+| Predictive back: `onBackPressed` is not called and the back key is not sent (API 36) | Yes | Back already went through `onBackPressedDispatcher`. `enableOnBackInvokedCallback="true"` makes Android 13 to 15 use the same path. The callback is always on, so Back walks the web history and then moves the app to the background, as before; there is no back to home animation. |
+| Orientation, resizability and aspect ratio limits are ignored on large screens (API 36) | No | The app sets none: it already follows the phone's rotation and any window size. |
+| Foreground service limits (API 35) | No | A release build runs no foreground service. The voice and speech to text services are bound, in processes of their own. The one foreground service is the debug-only adb check (`specialUse`). |
+| Audio focus only for the top app (API 35) | No | The app's own code asks for no audio focus. The native voice plays through an `AudioTrack`, and the web view's sound plays while the app is open. |
+| Stricter intent rules (safer intents, intent redirection) | No | The app's own intents are explicit binds to its unexported services, which have no intent filters. Share and Save open the system's share sheet and save screen. An event link or a shared photo is read from its intent and never started again. |
+| NFC (API 35, 36) | No | Tap a card uses reader mode while its screen is open (`enableReaderMode`), which did not change. |
+| Media, MediaStore and photo picker changes (API 35, 36) | No | Save uses the system save screen (`ACTION_CREATE_DOCUMENT`); the app reads no MediaStore. |
+| `List.removeFirst()` and friends bind to Java 21 at compileSdk 35 | No | The Kotlin code calls none (checked by `test/unit/android.test.ts`); on Android 14 and below they would be missing. |
+| `elegantTextHeight` and other `TextView` changes | No | The app draws no Android text; everything is the web view. |
+| 16 KB pages | Yes, for Play | Already aligned in both APKs and in the bundle (Two APKs, Google Play). |
+| Local network access needs a permission | Not yet | Android 16 has it only behind a test flag; it is planned for a later API level. A till on the person's own network may need it then. |
+
 ## Event links
 
 One QR code gets a room full of people into Forge with a free balance, on the web app or in the Android app, with no code to copy. The operator makes an event pass (`pnpm admin passes:create`, [ADMIN.md](ADMIN.md), Event passes), which prints its link: `https://ai.forge-reserve.com/j#<pass>`. That link goes in the QR code. The pass is in the fragment, so it never reaches the server or its logs.
@@ -135,13 +189,15 @@ The app's pages come from `https://localhost` (Capacitor), so every engine call 
 
 ## Tests
 
-- `cd android && ./gradlew testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest` (the same tests, once per flavour): Forge Private Voice's speech to text rules (`AsrRulesTest`, docs/VOICE.md), the bars' colour and icons (`BarRulesTest`), the share rules (what counts as a shared photo, size limits, the type read from the file's bytes, safe file names, base64 limits; `ShareStageTest`: staging in pieces, tokens, short and long files, the clean up at start that keeps a save still open, and the staged folder outside the FileProvider's paths), the back button, the phone's speech recogniser rules (`SpeechRulesTest`: languages, availability, error codes, one press with pauses), and the native voice's rules (`VoiceRulesTest`: which processors, threads and cores, the model folder, the adb lab run; `VoicePaceTest`: the slow-phone start, with the web test's numbers).
+- `cd android && ./gradlew testUniversalDebugUnitTest testPrivatevoiceDebugUnitTest` (the same tests, once per flavour): Forge Private Voice's speech to text rules (`AsrRulesTest`, docs/VOICE.md), the bars' colour and icons and the room left for the bars, the cutout and the keyboard (`BarRulesTest`), the share rules (what counts as a shared photo, size limits, the type read from the file's bytes, safe file names, base64 limits; `ShareStageTest`: staging in pieces, tokens, short and long files, the clean up at start that keeps a save still open, and the staged folder outside the FileProvider's paths), the back button, the phone's speech recogniser rules (`SpeechRulesTest`: languages, availability, error codes, one press with pauses), and the native voice's rules (`VoiceRulesTest`: which processors, threads and cores, the model folder, the adb lab run; `VoicePaceTest`: the slow-phone start, with the web test's numbers).
 - `JoinRulesTest` (in both flavours' unit tests): which intents carry an event pass, including the data Android makes from the `/j` page's intent link.
 - `test/unit/passes.test.ts`, `test/ui/join.ui.test.ts`: event passes, `/j`, `assetlinks.json` and the web app's join; `test/ui/android.ui.test.ts` also opens the app on a pass through the ForgeJoin stand-in, cold and while it runs.
 - `test/unit/android.test.ts`: the manifest and Gradle files (app id, Android 9, no Google services, the permissions, optional features, no backups, no cleartext, the share filter and file paths), the bundle, and Forge Private Voice (the flavours, the `:asr` process, `scripts/asr/lock.json` and its refusals, the Kotlin API files, the licences the universal APK leaves out).
 - `test/unit/v2/native.test.ts`: the web side of the bridge (a full size photo staged in pieces, with no file in the call that opens the save screen; a failed piece; the save told after a restart) and the engine address rules.
 - `test/ui/android.ui.test.ts`: the bundle served from its own origin with a stand-in for Capacitor's bridge, against a gateway on another origin: the default engine, switching engine, funding, a streamed answer, a photo shared in and shared out (staged in pieces), Share unseen saying whether a save went through after the app was restarted, the bars following the look, Back from the home an event link opened with the game first (Playful), and the `/download` page.
 - `test/unit/download.test.ts` (both APKs, the choice shown only with both, the iPhone app's link), `test/unit/android-release.test.ts` (both flavours, 16 KB alignment).
+- `test/unit/android.test.ts`, Android 16 and Google Play: compileSdk and targetSdk 36 with an Android Gradle plugin tested with them, Capacitor still 6, edge to edge with the frame padded and painted, `adjustResize`, Back through the dispatcher with `enableOnBackInvokedCallback`, no orientation limits, no Java 21 collection calls in Kotlin, no foreground service in a release build, and the bundle signing rules in `app/build.gradle` (no signing config, the four variables, passwords by name, privatevoice refused).
+- `test/unit/android-bundle.test.ts`: `scripts/android-bundle.sh` refuses a missing keystore, one inside the repository, no alias and no password; with Gradle stood in for, it hands the key over through the environment, never prints the password (typed or from the environment), and refuses an unsigned bundle.
 
 ## Not verified
 
@@ -153,9 +209,9 @@ The app's pages come from `https://localhost` (Capacitor), so every engine call 
 - Camera and microphone permission prompts, the camera capture and Hold to talk inside the web view.
 - Take a photo inside the app on a phone: whether the Android web view offers ImageCapture and what size of still it gives, the still's turn when the phone is held sideways (a still turned against the screen is dropped for the frame the screen showed), the front camera, turning between cameras, memory on the Galaxy A16 with a full size still, and Share unseen opened again after Android stops the app during the gallery picker. Only Chrome's fake camera has run it.
 - Share unseen's graphics memory on the Galaxy A16: before the face filter gave back its kept textures, `dumpsys meminfo` showed 346 MB of Graphics for the app after a photo, and taps on the screen's buttons often needed a second try. That the texture fix lowers that number and makes the first tap answer has been measured only in desktop Chrome ([modules/filter.md](modules/filter.md#memory)); nobody has looked on the phone yet.
-- The status and navigation bars on a phone: only the page's calls to ForgeBars and the JVM rules are tested. The app's theme stays a light AppCompat theme (so the web view's colour scheme is unchanged), so Follow the phone setting may not see a dark phone inside the app.
+- The status and navigation bars, edge to edge, on a phone. On the Android 15 emulator (API 35 image, the target 36 debug build, 2026-11-21) they were checked against the target 34 build: the same page height between the bars (839 CSS px), the same height with the keyboard open on Type (527), Midnight and Light bars with gesture and three-button navigation, a tall cutout in landscape, and Back (keyboard, then Type to home, then out of the app) by key, gesture and button. On the Android 10 emulator (API 29) the bars' colour, the keyboard and Back were checked with a stand-in page, as its WebView 74 cannot run the app. No Android 16 image was on hand, so API 36's predictive back was not seen; Android 13 to 15 take the same path through `enableOnBackInvokedCallback`. No real phone has run it. The app's theme stays a light AppCompat theme (so the web view's colour scheme is unchanged), so Follow the phone setting may not see a dark phone inside the app.
 - Hold to talk heard by the phone's recogniser: only its availability was checked on the two phones (2026-11-15, debug `forge.speechCheck`: the A16 offers it for `en-US`, the GrapheneOS Pixel has none); nothing was recorded or heard on a phone.
 - A photo shared in from Signal or another app, and the share sheet and save screen on a phone. Save of a full size photo from the in-app camera stopped the app on the Galaxy A16 5G (2026-11-20, before staging); staging and the save after Android stops the app are covered by the JVM tests and the UI tests' stand-in for the plugin only; no phone has run them yet.
-- The release-signed APK (the script was run only up to its keystore checks) and installing it from `/download`.
+- The release-signed APK and installing it from `/download`. On 2026-11-21 `scripts/android-release.sh` and `scripts/android-bundle.sh` each ran once end to end with a throwaway key (deleted after): the APK and the bundle target API 36, the bundle is signed (`jar verified`), and the APKs bundletool made from it have their native libraries stored and on 16 KB boundaries and ran on the Android 15 emulator. Nothing has been uploaded to Google Play.
 - The app talking to `https://ai.forge-reserve.com` or a sealed Bellows.
 - Links to Lightning and Bitcoin wallets from Add funds (Capacitor hands them to Android).
