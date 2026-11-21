@@ -14,6 +14,11 @@ const plist = read('ios/App/App/Info.plist');
 const plistString = (key: string) => plist.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`))?.[1] ?? null;
 
 describe('iPhone app project', () => {
+  it('carries the owner\'s export compliance answer, so App Store Connect does not ask for each build', () => {
+    const plist = readFileSync(resolve(import.meta.dirname, '../../ios/App/App/Info.plist'), 'utf8');
+    expect(plist).toMatch(/<key>ITSAppUsesNonExemptEncryption<\/key>\s*<false\/>/);
+  });
+
   it('is com.forgereserve.ai, named Forge, at the version in package.json, iPhone only', () => {
     // The app, Debug and Release, and its unit tests' bundle (AppTests).
     expect(project.match(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)).toEqual([
