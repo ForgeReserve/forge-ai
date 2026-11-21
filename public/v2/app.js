@@ -2332,7 +2332,7 @@ function screenFor(name, params) {
       if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home'), addMoney: () => nav('addFunds', {}, { replace: true }) });
       return modelScreen({ ...ctx, photo: photoChoice });
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() }, micFacts: () => adapters.mic.last?.() ?? null } });
     case 'history':
       return historyScreen(ctx);
     case 'voiceLab':

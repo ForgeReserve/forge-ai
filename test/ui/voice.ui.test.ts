@@ -4,6 +4,7 @@ import { MOCK_TRANSCRIPT } from '../../src/suppliers/mock.ts';
 import { createInvite, type Gateway, MINT_A, mintsUp, mintToken, startGateway } from '../e2e/helpers.ts';
 import { pastFirstRun } from './firstrun-seen.ts';
 import { micArgs, micFile } from './mic.ts';
+import { strictAudio } from './phonon-setup.ts';
 
 // Hold to talk in a phone-sized Chrome. The microphone is Chrome's fake capture device (a steady beep),
 // reached through the app's own microphone adapter; the engine is a local gateway whose mock audio
@@ -44,10 +45,11 @@ interface Phone {
 }
 
 /** A phone with a funded balance, the microphone allowed, Private only off and the mock-echo model. */
-async function phone(from: Browser = browser): Promise<Phone> {
+async function phone(from: Browser = browser, init?: () => void): Promise<Phone> {
   const ctx = await from.newContext({ ...PHONE });
   await pastFirstRun(ctx);
   await ctx.grantPermissions(['microphone'], { origin: g.url });
+  if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -81,6 +83,14 @@ async function hold(page: Page, sel: string, ms: number, { slideOff = false } = 
 }
 
 const balance = (page: Page) => page.textContent('#balanceText');
+
+/** The last recording's facts as More, Voice shows them: {state, way, chunks, ...} (screens/settings.js micRows). */
+async function micFacts(page: Page): Promise<Record<string, string>> {
+  await page.goto(`${g.url}/v2/#/more/voice`);
+  await page.waitForSelector('#micFacts:not([hidden])');
+  const rows = await page.$$eval('#micFacts li', (lis) => lis.map((li) => [li.getAttribute('data-fact'), li.querySelector('span')?.textContent ?? '']));
+  return Object.fromEntries(rows);
+}
 
 /** The settings as the app saved them in its database (IndexedDB forge2, kv). */
 const settings = (page: Page) =>
@@ -162,6 +172,105 @@ describe('hold to talk', () => {
     expect(errors).toEqual([]);
     await ctx.close();
   }, 90_000);
+
+  // iPhone Safari heard nothing (owner, 2026-11-21): the capture is an AudioWorklet now, with the old
+  // ScriptProcessorNode only where the worklet cannot load. More, Voice shows the last recording's facts.
+  it('records through the capture worklet, and More, Voice shows the last recording: its way, its pieces and its sound', async () => {
+    const { ctx, page, errors, calls } = await phone();
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('[data-screen=voice]');
+    // No recording on this page yet: no facts shown.
+    expect(await page.isVisible('#micFacts')).toBe(false);
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 1500);
+    await page.waitForSelector('[data-screen=answer]');
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    expect(calls.transcriptions).toHaveLength(1);
+    const f = await micFacts(page);
+    expect(f.way).toBe('worklet');
+    expect(f.result).toBe('voice (sent)');
+    expect(f.state).toMatch(/running$/);
+    expect(Number(f.chunks)).toBeGreaterThan(5);
+    expect(Number(f.peak)).toBeGreaterThan(0.1);
+    expect(Number(f.heard)).toBeGreaterThan(0.1);
+    expect(f.muted).toBe('no');
+    expect(f.echo).toBe('no');
+    expect(f.rate).toMatch(/^\d+ Hz$/);
+    expect(f.length).toMatch(/^1\.\d s of 1\.\d s$/);
+    expect(await page.textContent('#micFactsHead')).toBe('Last recording');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it("under iPhone Safari's sound rules (a press is not a tap; sound may start while recording), the first hold is heard and later ones reuse the context", async () => {
+    const { ctx, page, errors, calls } = await phone();
+    await strictAudio(ctx);
+    await page.reload();
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 1200);
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    let f = await micFacts(page);
+    expect(f.state).toMatch(/running, made again$/);
+    expect(f.way).toBe('worklet');
+    expect(f.result).toBe('voice (sent)');
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 1200);
+    await expect.poll(() => calls.transcriptions.length).toBe(2);
+    f = await micFacts(page);
+    expect(f.state).not.toMatch(/made again/);
+    expect(f.result).toBe('voice (sent)');
+    // The recording contexts made: one refused in the first press, one made while recording, kept since.
+    const made = await page.evaluate(() => (window as any).__audio.made.length);
+    expect(made).toBeLessThanOrEqual(4);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('records the old way where the capture worklet does not load, and still sends', async () => {
+    const { ctx, page, errors, calls } = await phone(browser, () => {
+      AudioWorklet.prototype.addModule = () => Promise.reject(new DOMException('blocked', 'AbortError'));
+    });
+    await hold(page, '#talkBtn', 1200);
+    await page.waitForSelector('[data-screen=answer]');
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    expect(calls.transcriptions).toHaveLength(1);
+    const f = await micFacts(page);
+    expect(f.way).toBe('script (worklet: AbortError)');
+    expect(Number(f.chunks)).toBeGreaterThan(5);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('a microphone that gives no sound says so, sends nothing, and the next hold opens it again and is heard', async () => {
+    // While __deadMic is set, the microphone's source reaches nothing (as on iOS when the capture never fires).
+    const { ctx, page, errors, calls } = await phone(browser, () => {
+      const real = AudioContext.prototype.createMediaStreamSource;
+      (window as any).__deadMic = true;
+      AudioContext.prototype.createMediaStreamSource = function (this: AudioContext, s: MediaStream) {
+        if ((window as any).__deadMic) return { connect() {}, disconnect() {} } as any;
+        return real.call(this, s);
+      };
+    });
+    await hold(page, '#talkBtn', 2000);
+    await expect.poll(() => page.textContent('#answerErrorText'), { timeout: 8000 }).toMatch(/^No sound from the microphone\./);
+    expect(await page.textContent('#answerError')).toContain('Hold to say it again.');
+    expect(calls.transcriptions).toEqual([]);
+    const f = await micFacts(page);
+    expect(f.chunks).toBe('0');
+    expect(f.result).toBe('no pieces (dead)');
+    expect(f.way).toBe('worklet');
+    await page.evaluate(() => ((window as any).__deadMic = false));
+    await page.goto(`${g.url}/v2/#/`);
+    await page.waitForSelector('[data-screen=home]');
+    await hold(page, '#talkBtn', 1200);
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    expect(calls.transcriptions).toHaveLength(1);
+    expect(Number((await micFacts(page)).chunks)).toBeGreaterThan(5);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
 
   it('prices Ask again with the reading aloud when the question was spoken, and charges no more than that', async () => {
     const { ctx, page, errors, calls } = await phone();
@@ -270,6 +379,12 @@ describe('hold to talk', () => {
       await page.waitForTimeout(500);
       expect(calls.transcriptions).toEqual([]);
       expect(chats).toEqual([]);
+      // The microphone gave its samples (all silence): that is Nothing was heard, not a microphone problem.
+      const f = await micFacts(page);
+      expect(parseInt(f.chunks!, 10)).toBeGreaterThan(5);
+      expect(Number(f.peak)).toBeLessThan(0.05);
+      expect(f.result).toMatch(/^pieces (of exact zeros|below the voice level) \(quiet\)$/);
+      expect(f.level).toMatch(/^0\.\d{4} \(voice at 0\.0500\)$/);
       await page.goto(`${g.url}/v2/#/`);
       await page.waitForSelector('[data-screen=home]');
       await expect.poll(() => page.textContent('#balanceText')).toBe('$3.00');

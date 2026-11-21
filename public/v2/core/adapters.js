@@ -3,6 +3,8 @@
 // sheet, vibration, and card taps (NFC, which only the Android app has: core/native.js).
 import { loadScript } from '../../js/ui.js';
 import { largestFrame, stillShape, stillSize, turnedAway } from './camera.js';
+import { isIOS } from './getapp.js';
+import { level } from './wav.js';
 
 const Recognition = () => (typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined);
 
@@ -68,6 +70,380 @@ const blockedError = () => Object.assign(new Error('the phone kept the sound off
  * read as "nothing was heard". Noise suppression and automatic gain stay on.
  */
 export const MIC_SOUND = { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true };
+
+/** The samples in each chunk of sound the microphone hands on (what ScriptProcessorNode(4096) gave). */
+export const MIC_CHUNK = 4096;
+/** A recording that has run this long with no sample at all from the microphone gave no sound (a dead microphone, not silence). */
+export const NO_SAMPLES_MS = 1000;
+/** On an iPhone, this much sound of pure zeros at the start of a recording opens the microphone again once, with echo cancelling. */
+export const SILENT_START_SECONDS = 0.5;
+/** How long a press waits, once the microphone is open, for the recording context to run before it makes a new one. */
+export const RUN_WAIT_MS = 50;
+/** How long a press waits for the capture worklet to load before it records the old way this once. */
+export const WORKLET_WAIT_MS = 2000;
+/** The capture worklet (core/mic-worklet.js), a file of this origin, so it loads under the page's COEP and from the apps' own schemes. */
+export const MIC_WORKLET = new URL('./mic-worklet.js', import.meta.url).href;
+
+/**
+ * The microphone as raw sound. open() asks for the microphone and resolves to {sampleRate,
+ * onData(fn), facts(), stop()}: fn gets each chunk of MIC_CHUNK float samples while recording, and
+ * facts() what this recording looks like so far (the same facts last() keeps once it stops). The sound
+ * stays in this page's memory; nothing here stores or sends it. The facts hold no sound and no words.
+ *
+ * The recording context. iPhone Safari (every browser on iOS) starts Web Audio only inside a tap, so
+ * open() makes or wakes the context first, before anything is awaited: the talk button calls it from
+ * the press itself (core/talkctl.js). One context is kept for the page and reused by every press, as iOS
+ * allows a page only a few; it is suspended between recordings and resumed whenever it is not running
+ * (suspended, or 'interrupted', which iOS also has): in the press, again once the microphone is open,
+ * and on every state change while recording. One that still does not run RUN_WAIT_MS after the
+ * microphone opened is made again then: WebKit takes a touch's end, not its start, as the tap that may
+ * start sound, and lets a page start sound while it records. The context is let go, so the next press starts a new
+ * one with a new stream, after a recording that got no sample at all, one that ended with the context
+ * not running, one whose track was muted or ended while it recorded, and on any devicechange (headphones
+ * in or out: iOS interrupts and re-routes the audio then). Every press opens its own stream, and every
+ * stream is stopped when its recording ends.
+ *
+ * The capture. An AudioWorkletNode (core/mic-worklet.js, loaded once per context) hands on the chunks.
+ * ScriptProcessorNode is used only where there is no AudioWorklet or its file did not load in time: on
+ * iOS a ScriptProcessorNode never fires with AirPods or another Bluetooth or wired microphone (WebKit bug
+ * 216349). An AnalyserNode on the same source takes the loudest sample it sees, for the facts only: it
+ * tells "the capture never fired" apart from "no sound reached Web Audio".
+ *
+ * An iPhone whose recording starts with SILENT_START_SECONDS of pure zeros (digital silence, never a
+ * quiet room) opens the microphone again once, with echo cancelling on, which is how iOS records for
+ * calls. Only once per recording, only on iOS, and the first stream is stopped first (WebKit does not
+ * capture with and without echo cancelling at once). When that brings sound, later recordings on this
+ * page ask for echo cancelling from the start. Android and computers never do this (a Galaxy A16 needs
+ * echo cancelling off: MIC_SOUND).
+ */
+export function createMic({
+  media = () => globalThis.navigator?.mediaDevices,
+  Context = () => globalThis.AudioContext ?? globalThis.webkitAudioContext,
+  WorkletNode = () => globalThis.AudioWorkletNode,
+  ios = () => isIOS({ ua: globalThis.navigator?.userAgent, platform: globalThis.navigator?.platform, touchPoints: globalThis.navigator?.maxTouchPoints }),
+  workletUrl = MIC_WORKLET,
+  workletWaitMs = WORKLET_WAIT_MS,
+  runWaitMs = RUN_WAIT_MS,
+  now = () => Date.now(),
+  log = (facts) => console.info('[forge] microphone', JSON.stringify(facts)),
+} = {}) {
+  let ctx = null; // the recording context
+  let made = 0; // contexts made (tests: none leak)
+  let loaded = null; // {ctx, ready: Promise<{ok, error}>}: the worklet module, once per context
+  let using = 0; // recordings open on ctx now
+  const live = new Set(); // the facts of each recording open now
+  let echo = false; // echo cancelling brought sound on this iPhone: ask for it from the start
+  let last = null;
+
+  const note = (facts, state) => {
+    if (facts.states.at(-1) !== state) facts.states.push(state);
+  };
+  let resting = null; // the context a suspend was asked of, which may still read 'running'
+  const wake = (c) => {
+    if (c.state === 'closed' || (c.state === 'running' && resting !== c)) return;
+    resting = null;
+    c.resume?.().catch(() => {});
+  };
+  function context() {
+    if (ctx && ctx.state !== 'closed') return ctx;
+    const Ctx = Context();
+    const c = new Ctx();
+    made++;
+    c.addEventListener?.('statechange', () => {
+      for (const f of live) note(f, c.state);
+      // A context iOS interrupted (a call, another app's sound, a headset change) or suspended while
+      // recording is resumed at once; between recordings it is left as it is.
+      if (using > 0 && c === ctx) wake(c);
+    });
+    ctx = c;
+    loaded = null;
+    return c;
+  }
+  /** Lets this context go: the next press makes a new one. */
+  function drop(c) {
+    if (ctx === c) ctx = null;
+    if (loaded?.ctx === c) loaded = null;
+    if (stale === c) stale = null;
+    if (c.state !== 'closed') c.close?.().catch(() => {});
+  }
+  let stale = null; // the context to let go once its recordings end (the sound's route changed)
+  /**
+   * The sound's route changed (headphones in or out, a Bluetooth microphone, a call): iOS interrupts and
+   * re-routes the audio then. The context is let go now, or once the recording on it ends, so the next
+   * press starts with a new context and a new stream on the input iOS picked.
+   */
+  function retire(c) {
+    if (!c || c.state === 'closed') return;
+    if (using === 0) drop(c);
+    else stale = c;
+  }
+  let listening = false;
+  function listen() {
+    const md = media();
+    if (listening || typeof md?.addEventListener !== 'function') return;
+    listening = true;
+    md.addEventListener('devicechange', () => {
+      for (const f of live) f.changed = true;
+      retire(ctx);
+    });
+  }
+  /** Resolves true once `c` runs, or false after `ms` with it still not running. */
+  function running(c, ms) {
+    if (c.state === 'running' && resting !== c) return Promise.resolve(true);
+    return new Promise((res) => {
+      let timer = 0;
+      const on = () => c.state === 'running' && done(true);
+      const done = (v) => {
+        clearTimeout(timer);
+        c.removeEventListener?.('statechange', on);
+        res(v);
+      };
+      c.addEventListener?.('statechange', on);
+      timer = setTimeout(() => done(c.state === 'running'), ms);
+    });
+  }
+  /** Resolves {ok, error}: the capture worklet registered in this context, or why not (it records the old way then). */
+  function worklet(c) {
+    if (!c.audioWorklet?.addModule || typeof WorkletNode() !== 'function') return Promise.resolve({ ok: false, error: 'none' });
+    if (loaded?.ctx !== c) {
+      loaded = {
+        ctx: c,
+        ready: Promise.resolve()
+          .then(() => c.audioWorklet.addModule(workletUrl))
+          .then(
+            () => ({ ok: true, error: null }),
+            (e) => ({ ok: false, error: String(e?.name ?? e) }),
+          ),
+      };
+    }
+    let timer = 0;
+    // A file that has not loaded yet is waited for a moment; this press then records the old way and
+    // a later press uses the worklet once it is in.
+    const late = new Promise((res) => (timer = setTimeout(() => res({ ok: false, error: 'slow' }), workletWaitMs)));
+    return Promise.race([loaded.ready, late]).finally(() => clearTimeout(timer));
+  }
+
+  return {
+    available: () => !!media()?.getUserMedia && typeof Context() === 'function',
+    /** The facts of the last recording once it stopped, or null: for More, Voice. */
+    last: () => (last ? { ...last, states: [...last.states] } : null),
+    /** Contexts made and open, for tests: one for the page, a new one only after a dead recording. */
+    contexts: () => ({ made, open: ctx && ctx.state !== 'closed' ? 1 : 0, using }),
+    async open() {
+      // In the press, before any await (iOS).
+      listen();
+      let c = context();
+      wake(c);
+      using++;
+      const facts = { method: null, worklet: null, remade: false, states: [c.state], sampleRate: c.sampleRate, label: '', muted: false, ended: false, echoCancellation: echo, reopened: false, changed: false, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, heardPeak: null, ms: 0 };
+      live.add(facts);
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        live.delete(facts);
+        using--;
+        if (using > 0 || ctx !== c) return;
+        // A context the route change made stale, or one that is not running (interrupted, or suspended by
+        // the phone) is not kept for the next press: that press makes a new one inside its tap.
+        if (stale === c || c.state !== 'running') drop(c);
+        else if (c.suspend) {
+          resting = c;
+          c.suspend().catch(() => {});
+        }
+      };
+      const ask = (ec) => media().getUserMedia({ audio: ec ? { ...MIC_SOUND, echoCancellation: true } : MIC_SOUND });
+      let stream;
+      let w;
+      try {
+        stream = await ask(echo);
+        // The permission sheet may have come and gone: wake it again, now that the microphone is open.
+        wake(c);
+        // A context that still does not run is made again, now. WebKit counts a touch's end as the tap
+        // that may start sound, not its start (the press), and lets a page start sound while it records:
+        // a context made with the microphone on runs (the way this page recorded before 2026-11-21).
+        if (!(await running(c, runWaitMs)) && using === 1 && ctx === c) {
+          drop(c);
+          c = context();
+          wake(c);
+          facts.remade = true;
+          facts.sampleRate = c.sampleRate;
+          note(facts, c.state);
+        }
+        w = await worklet(c);
+      } catch (e) {
+        if (stream) for (const t of stream.getTracks()) t.stop();
+        release();
+        throw e;
+      }
+      note(facts, c.state);
+      let listener = () => {};
+      let stopped = false;
+      let began = now();
+      const iphone = !echo && ios();
+      let zeros = iphone ? 0 : -1; // samples of pure zeros at the start, while that is still being watched
+      let rescue = false; // opened again with echo cancelling: the first sound says it helped
+      const deliver = (buf) => {
+        if (stopped || !buf?.length) return;
+        facts.chunks++;
+        facts.samples += buf.length;
+        let peak = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const a = Math.abs(buf[i]);
+          if (a > peak) peak = a;
+        }
+        if (peak > facts.peak) facts.peak = peak;
+        if (peak === 0) facts.zeroChunks++;
+        // The same level the level bars and the voice-in module's "was anything heard" read (core/wav.js).
+        const l = level(buf);
+        if (l > facts.level) facts.level = l;
+        if (zeros >= 0) {
+          if (peak > 0) zeros = -1;
+          else if ((zeros += buf.length) >= c.sampleRate * SILENT_START_SECONDS) {
+            zeros = -1;
+            again();
+          }
+        }
+        if (rescue && peak > 0) {
+          rescue = false;
+          echo = true;
+        }
+        listener(buf);
+      };
+
+      let node = null;
+      if (w.ok) {
+        try {
+          const Node = WorkletNode();
+          node = new Node(c, 'forge-mic', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { size: MIC_CHUNK } });
+          node.port.onmessage = (e) => deliver(e.data);
+          facts.method = 'worklet';
+        } catch (e) {
+          w = { ok: false, error: String(e?.name ?? e) };
+          node = null;
+        }
+      }
+      if (!node) {
+        node = c.createScriptProcessor(MIC_CHUNK, 1, 1);
+        node.onaudioprocess = (e) => deliver(new Float32Array(e.inputBuffer.getChannelData(0)));
+        facts.method = 'script';
+      }
+      facts.worklet = w.ok ? 'loaded' : w.error;
+      const mute = c.createGain();
+      mute.gain.value = 0;
+      node.connect(mute);
+      mute.connect(c.destination);
+      let probe = null;
+      let probeBuf = null;
+      let poll = 0;
+      try {
+        probe = c.createAnalyser?.() ?? null;
+        if (probe && typeof probe.getFloatTimeDomainData === 'function') {
+          probe.fftSize = 2048;
+          probeBuf = new Float32Array(probe.fftSize);
+          facts.heardPeak = 0;
+          poll = setInterval(() => {
+            probe.getFloatTimeDomainData(probeBuf);
+            for (let i = 0; i < probeBuf.length; i++) if (Math.abs(probeBuf[i]) > facts.heardPeak) facts.heardPeak = Math.abs(probeBuf[i]);
+          }, 200);
+        } else probe = null;
+      } catch {
+        probe = null;
+      }
+
+      let source = null;
+      let track = null;
+      const watch = (s) => {
+        track = s.getAudioTracks?.()[0] ?? s.getTracks()[0] ?? null;
+        facts.label = String(track?.label ?? '');
+        if (track?.muted) facts.muted = true;
+        if (track?.readyState === 'ended') facts.ended = true;
+        // Muted or ended while recording (a route change, another app taking the microphone): this
+        // recording goes on as it can, and the next press opens everything afresh.
+        track?.addEventListener?.('mute', () => {
+          if (stopped) return;
+          facts.muted = true;
+          retire(c);
+        });
+        track?.addEventListener?.('ended', () => {
+          if (stopped) return;
+          facts.ended = true;
+          retire(c);
+        });
+        source = c.createMediaStreamSource(s);
+        source.connect(node);
+        if (probe) source.connect(probe);
+      };
+      const unplug = () => {
+        for (const t of stream.getTracks()) t.stop();
+        try {
+          source?.disconnect();
+        } catch {
+          /* already */
+        }
+      };
+      watch(stream);
+
+      /** The iPhone retry: the first stream stopped, then the microphone opened again with echo cancelling. */
+      async function again() {
+        facts.reopened = true;
+        unplug();
+        try {
+          const s = await ask(true);
+          if (stopped) {
+            for (const t of s.getTracks()) t.stop();
+            return;
+          }
+          stream = s;
+          facts.echoCancellation = true;
+          rescue = true;
+          watch(s);
+          wake(c);
+        } catch {
+          /* no sound comes: the recording ends as Nothing was heard */
+        }
+      }
+
+      const snapshot = () => ({ ...facts, states: [...facts.states], state: c.state, ms: now() - began });
+      return {
+        sampleRate: c.sampleRate,
+        onData: (fn) => {
+          listener = fn;
+          began = now();
+        },
+        facts: snapshot,
+        /** More facts from the voice-in module (its voice level, its verdict), kept with this recording's. */
+        addFacts(more) {
+          Object.assign(facts, more);
+          if (stopped && last) Object.assign(last, more);
+        },
+        stop() {
+          if (stopped) return;
+          stopped = true;
+          listener = () => {};
+          clearInterval(poll);
+          if (node.port) {
+            node.port.onmessage = null;
+            node.port.postMessage?.('stop');
+          } else node.onaudioprocess = null;
+          unplug();
+          for (const n of [node, mute, probe]) {
+            try {
+              n?.disconnect();
+            } catch {
+              /* already */
+            }
+          }
+          last = snapshot();
+          log(last);
+          release();
+          // No sample at all for a second or more: this context is let go, so the next press starts afresh.
+          if (!facts.chunks && last.ms >= NO_SAMPLES_MS) drop(c);
+        },
+      };
+    },
+  };
+}
 
 const defaults = {
   camera: {
@@ -158,45 +534,7 @@ const defaults = {
     },
   },
 
-  /**
-   * The microphone as raw sound. open() asks for the microphone and resolves to {sampleRate,
-   * onData(fn), stop()}: fn gets each chunk of float samples while recording. The sound stays in this
-   * page's memory; nothing here stores or sends it.
-   */
-  mic: {
-    available: () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof (window.AudioContext ?? window.webkitAudioContext) === 'function',
-    async open() {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_SOUND });
-      const Ctx = window.AudioContext ?? window.webkitAudioContext;
-      const ctx = new Ctx();
-      if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
-      const source = ctx.createMediaStreamSource(stream);
-      // ScriptProcessorNode is deprecated but needs no separate worklet file, and runs in every browser.
-      const node = ctx.createScriptProcessor(4096, 1, 1);
-      const mute = ctx.createGain();
-      mute.gain.value = 0;
-      let listener = () => {};
-      node.onaudioprocess = (e) => listener(new Float32Array(e.inputBuffer.getChannelData(0)));
-      source.connect(node);
-      node.connect(mute);
-      mute.connect(ctx.destination);
-      let stopped = false;
-      return {
-        sampleRate: ctx.sampleRate,
-        onData: (fn) => (listener = fn),
-        stop() {
-          if (stopped) return;
-          stopped = true;
-          listener = () => {};
-          node.onaudioprocess = null;
-          for (const t of stream.getTracks()) t.stop();
-          source.disconnect();
-          node.disconnect();
-          ctx.close().catch(() => {});
-        },
-      };
-    },
-  },
+  mic: createMic(),
 
   /**
    * The browser's own speech recogniser, where there is one. Which service hears the voice is up to the

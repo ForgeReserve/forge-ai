@@ -440,7 +440,7 @@ describe('voice in through the engine', () => {
       const mic = fakeMic(secs);
       const audio = audioFor(sttModel());
       const session = await VIN.create({ mic, audio }).start({});
-      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null, empty: 'short' });
       expect(audio.sent).toHaveLength(0);
       expect(mic.stopped).toBe(1);
     }
@@ -459,7 +459,7 @@ describe('voice in through the engine', () => {
       const levels: number[] = [];
       const session = await VIN.create({ mic, audio }).start({ onLevel: (l: number) => levels.push(l) });
       expect(Math.max(...levels)).toBeLessThan(VIN.VOICE_LEVEL);
-      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null });
+      expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null, empty: 'quiet' });
       expect(audio.sent).toHaveLength(0);
       expect(mic.stopped).toBe(1);
     }
@@ -467,6 +467,56 @@ describe('voice in through the engine', () => {
     const audio = audioFor(sttModel());
     await (await VIN.create({ mic: fakeMic(2, 48000, 0.02), audio }).start({})).finish({});
     expect(audio.sent).toHaveLength(1);
+  });
+
+  // iPhone Safari (owner, 2026-11-21): every hold read as "Nothing was heard" while no sample ever came
+  // from the microphone. A microphone that gives nothing is said as a microphone problem.
+  it('a microphone that gives no sample at all for a second is a microphone error, never Nothing was heard, and sends nothing', async () => {
+    let clock = 0;
+    const audio = audioFor(sttModel());
+    const mic = fakeMic(0);
+    const session = await VIN.create({ mic, audio, now: () => clock }).start({});
+    clock += VIN.NO_SOUND_MS + 500;
+    await expect(session.finish({})).rejects.toMatchObject({ code: 'mic_silent', key: 'talk.micSilent' });
+    expect(audio.sent).toHaveLength(0);
+    expect(mic.stopped).toBe(1);
+    expect(EN['talk.micSilent']).toBeTruthy();
+    // A track that ended says so at once, however short the hold.
+    const ended = { ...fakeMic(0), async open() {
+      const r = await fakeMic(0).open();
+      return { ...r, facts: () => ({ ended: true }) };
+    } };
+    await expect((await VIN.create({ mic: ended, audio, now: () => clock }).start({})).finish({})).rejects.toMatchObject({ key: 'talk.micSilent' });
+  });
+
+  it('More, Voice tells no pieces, pieces of exact zeros and pieces below the voice level apart, with the loudest to 4 places', async () => {
+    const SET: any = await import('../../../public/v2/screens/settings.js' as string);
+    const rows = (f: any) => Object.fromEntries(SET.micRows(f, (k: string) => k).map(([k, v]: [string, string]) => [k.slice(10), v]));
+    const base = { method: 'worklet', worklet: 'loaded', states: ['suspended', 'running'], sampleRate: 48000, label: 'iPhone Microphone', muted: false, ended: false, echoCancellation: false, reopened: false, changed: false, samples: 96000, heardPeak: 0, ms: 2100, voiceLevel: VIN.VOICE_LEVEL };
+    expect(rows({ ...base, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, verdict: 'dead' }).result).toBe('no pieces (dead)');
+    const zeros = rows({ ...base, chunks: 23, zeroChunks: 23, peak: 0, level: 0, verdict: 'quiet' });
+    expect(zeros.result).toBe('pieces of exact zeros (quiet)');
+    expect(zeros.chunks).toBe('23 (23 all zeros)');
+    const low = rows({ ...base, chunks: 23, zeroChunks: 0, peak: 0.00731, level: 0.0123, heardPeak: 0.0081, verdict: 'quiet' });
+    expect(low.result).toBe('pieces below the voice level (quiet)');
+    expect(low.peak).toBe('0.0073');
+    expect(low.level).toBe('0.0123 (voice at 0.0500)');
+    expect(low.heard).toBe('0.0081');
+    expect(rows({ ...base, chunks: 23, zeroChunks: 0, peak: 0.4, level: 0.3, verdict: 'sent' }).result).toBe('voice (sent)');
+    expect(rows({ ...base, chunks: 3, peak: 0.4, level: 0.3, changed: true, label: 'Headphones' }).label).toBe('Headphones, changed');
+    expect(SET.micRows(null, (k: string) => k)).toEqual([]);
+  });
+
+  it('tells the three empty recordings apart: no sound yet (short), sound with no voice (quiet), and a dead microphone', () => {
+    const r = 48000;
+    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 400 })).toBe('short');
+    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 1000 })).toBe('dead');
+    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 100, ended: true })).toBe('dead');
+    expect(VIN.judge({ samples: r * 0.3, voiced: r * 0.3, rate: r, ms: 2000 })).toBe('short');
+    // Silent or muted samples: Nothing was heard.
+    expect(VIN.judge({ samples: r * 3, voiced: 0, rate: r, ms: 3000 })).toBe('quiet');
+    expect(VIN.judge({ samples: r * 3, voiced: r * 0.05, rate: r, ms: 3000 })).toBe('quiet');
+    expect(VIN.judge({ samples: r * 3, voiced: r * 0.2, rate: r, ms: 3000 })).toBeNull();
   });
 
   it('the browser recogniser is free and never private', async () => {
@@ -772,7 +822,7 @@ describe('voice out through the engine', () => {
 });
 
 describe('the talk controller', () => {
-  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?', result = null as any } = {}) {
+  function setup({ blocked = null as any, failWith = null as any, text = 'What should I bring?', result = null as any, opening = null as any } = {}) {
     let now = 0;
     const S: any = {};
     const store = { S, set: (p: object) => Object.assign(S, p) };
@@ -781,10 +831,11 @@ describe('the talk controller', () => {
     const asked: any[] = [];
     const pulses: unknown[] = [];
     let cancelled = 0;
+    let starts = 0;
     const voiceInMod = {
       id: 'engine',
       maxSeconds: () => 30,
-      start: async () => ({
+      start: async () => (starts++, opening && starts === 1 && (await opening), {
         finish: async () => {
           if (failWith) throw failWith;
           return result ?? { text, chargedMsub: 1300, balanceMsub: 4000 };
@@ -806,7 +857,7 @@ describe('the talk controller', () => {
       errorText: () => 'error',
       now: () => now,
     });
-    return { S, ctl, toasts, navs, asked, pulses, advance: (ms: number) => (now += ms), cancelled: () => cancelled };
+    return { S, ctl, toasts, navs, asked, pulses, advance: (ms: number) => (now += ms), cancelled: () => cancelled, starts: () => starts };
   }
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -871,6 +922,73 @@ describe('the talk controller', () => {
     expect(x.asked).toEqual([]);
     x.ctl.clearError();
     expect(x.S.talk.error).toBeNull();
+  });
+
+  it('says a recording was too short, apart from nothing heard', async () => {
+    const x = setup({ result: { text: '', chargedMsub: 0, balanceMsub: null, empty: 'short' } });
+    x.ctl.down();
+    await flush();
+    x.advance(450);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.talk.error).toEqual({ key: 'talk.short' });
+    expect(x.asked).toEqual([]);
+  });
+
+  it('says a microphone that gave no sound as a microphone problem, and the next hold records again', async () => {
+    const VIN_ERR = VIN.micSilent();
+    const x = setup({ failWith: VIN_ERR });
+    x.ctl.down();
+    await flush();
+    x.advance(2000);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.S.talk.error).toEqual({ key: 'talk.micSilent' });
+    expect(x.S.talk.phase).toBe('idle');
+    x.ctl.down();
+    expect(x.S.talk.phase).toBe('recording');
+    expect(x.starts()).toBe(2);
+  });
+
+  it('a press the permission sheet took (pointercancel while the microphone opens) leaves it clean, says the microphone is on, and the next press records', async () => {
+    let open!: () => void;
+    const x = setup({ opening: new Promise<void>((r) => (open = r)) });
+    x.ctl.down();
+    expect(x.S.talk.phase).toBe('recording');
+    x.advance(600);
+    // The sheet takes the touch: the screen's pointercancel cancels the press.
+    x.ctl.cancel();
+    expect(x.S.talk.phase).toBe('idle');
+    expect(x.toasts).toEqual(['talk.cancelled']);
+    // The person taps Allow a while later; the microphone that opened is let go at once.
+    x.advance(2400);
+    open();
+    await flush();
+    await flush();
+    expect(x.cancelled()).toBe(1);
+    expect(x.toasts).toEqual(['talk.cancelled', 'talk.micReady']);
+    expect(x.S.talk.error).toBeFalsy();
+    // The next hold records and sends as usual.
+    x.ctl.down();
+    await flush();
+    x.advance(1500);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.asked).toEqual([{ q: 'What should I bring?', meta: { voice: true } }]);
+    expect(x.S.talk.phase).toBe('idle');
+  });
+
+  it('a quick tap with the microphone already allowed says nothing more than the tap', async () => {
+    const x = setup();
+    x.ctl.down();
+    x.advance(100);
+    x.ctl.up();
+    await flush();
+    await flush();
+    expect(x.toasts).toEqual(['talk.explain']);
   });
 
   it('says so when nothing was heard', async () => {

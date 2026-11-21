@@ -7,6 +7,12 @@ import { speechPieces } from './speech.js';
 
 const HAPTIC = { start: 15, leave: [8, 40, 8], back: 8, send: 25, cancel: [20, 60, 20] };
 const TICK_MS = 100;
+/**
+ * A press let go (or taken by the phone: pointercancel) before the microphone opened, where the opening
+ * took this long, was a press the phone asked about the microphone in (the permission sheet). Once it
+ * opens, the app says the microphone is on, so the next hold is the one that records.
+ */
+export const ASKED_MS = 1000;
 
 /**
  * deps: store ({S, set}), t, ui, nav, haptics, voiceIn() and voiceOut() (the chosen module instance or
@@ -100,6 +106,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       .then((session) => {
         if (r.dropped) {
           session.cancel();
+          // The phone asked for the microphone during this press: say it is on now, once nothing else records.
+          if (now() - r.at >= ASKED_MS && !rec && S.talk.phase === 'idle') ui.toast(t('talk.micReady'), 3500);
           return null;
         }
         r.session = session;
@@ -152,7 +160,8 @@ export function createTalk({ store, t, ui, nav, haptics, voiceIn, voiceOut, bloc
       if (out.freeVoiceLeft != null && S.freeVoice) store.set({ freeVoice: { ...S.freeVoice, left: out.freeVoiceLeft } });
       const text = String(out.text ?? '').trim();
       dispatch({ type: 'done' });
-      if (!text) set({ error: { key: 'talk.empty' } });
+      // Too short to send, or nothing heard (a voice-in module's empty: modules/voice-in/engine judge).
+      if (!text) set({ error: { key: out.empty === 'short' ? 'talk.short' : 'talk.empty' } });
       // The phone's recogniser: counted after the line is set, so a question the app asks opens over it.
       if (r.mod?.id === 'phone') notePhone({ heard: !!text || r.words, noSpeech: !!out.noSpeech, holdMs, loud: r.loud });
       if (!text) return;

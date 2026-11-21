@@ -224,6 +224,34 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
 }
 
 /**
+ * The last recording's facts, as rows of [string key, value] for More, Voice: what the owner reads off
+ * a phone whose Hold to talk hears nothing (core/adapters.js mic.last). No sound and no words.
+ */
+export function micRows(f, t) {
+  if (!f) return [];
+  const yes = (b) => t(b ? 'voice.mic.yes' : 'voice.mic.no');
+  const n = (x, d = 3) => (x == null ? '?' : Number(x).toFixed(d));
+  // What came from the microphone, in the words the owner reads off a phone: no pieces at all, pieces of
+  // exact zeros (digital silence), pieces under the voice level, or a voice.
+  const heard = !f.chunks ? 'no pieces' : !f.peak ? 'pieces of exact zeros' : f.voiceLevel != null && (f.level ?? 0) < f.voiceLevel ? 'pieces below the voice level' : 'voice';
+  const way = f.method === 'worklet' ? 'worklet' : `script${f.worklet && f.worklet !== 'loaded' ? ` (worklet: ${f.worklet})` : ''}`;
+  return [
+    ['voice.mic.state', `${(f.states ?? []).join(' > ')}${f.remade ? ', made again' : ''}`],
+    ['voice.mic.rate', `${f.sampleRate ?? '?'} Hz`],
+    ['voice.mic.label', `${f.label || '?'}${f.changed ? ', changed' : ''}`],
+    ['voice.mic.muted', `${yes(f.muted)}${f.ended ? ', ended' : ''}`],
+    ['voice.mic.way', way],
+    ['voice.mic.echo', `${yes(f.echoCancellation)}${f.reopened ? ', opened again' : ''}`],
+    ['voice.mic.result', `${heard}${f.verdict ? ` (${f.verdict})` : ''}`],
+    ['voice.mic.chunks', `${f.chunks ?? 0}${f.zeroChunks ? ` (${f.zeroChunks} all zeros)` : ''}`],
+    ['voice.mic.peak', n(f.peak, 4)],
+    ['voice.mic.level', `${n(f.level, 4)}${f.voiceLevel != null ? ` (voice at ${n(f.voiceLevel, 4)})` : ''}`],
+    ['voice.mic.heard', f.heardPeak == null ? '?' : n(f.heardPeak, 4)],
+    ['voice.mic.length', `${n(f.samples && f.sampleRate ? f.samples / f.sampleRate : 0, 1)} s of ${n((f.ms ?? 0) / 1000, 1)} s`],
+  ];
+}
+
+/**
  * Voice (from More): how talking becomes words, and how answers are read aloud. Only ways that work here
  * are listed (On this phone only in the apps, where the phone's recogniser has the language); the
  * browser's recogniser is shown but cannot be chosen while Private only is on.
@@ -257,7 +285,19 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
   const preferSub = el('p', { class: 'hint', id: 'preferNaturalSub', text: t('voice.preferNaturalSub') });
   const preferInfo = infoToggle(preferSub, t('voice.info', { name: t('voice.preferNatural') }), 'preferNaturalInfo');
   const preferRow = el('div', { class: 'with-info', hidden: true }, prefer, preferInfo);
+  // The last recording's facts, once there was one on this page (Hold to talk through the engine).
+  const micHead = el('h2', { class: 'caps', id: 'micFactsHead', text: t('voice.mic'), hidden: true });
+  const micList = el('ul', { class: 'mic-facts', id: 'micFacts', hidden: true });
+  const drawMic = () => {
+    const rows = micRows(voice.micFacts?.() ?? null, t);
+    micHead.hidden = micList.hidden = !rows.length;
+    const key = JSON.stringify(rows);
+    if (micList._shown === key) return;
+    micList._shown = key;
+    micList.replaceChildren(...rows.map(([k, v]) => el('li', { 'data-fact': k.slice(10) }, el('b', { text: t(k) }), el('span', { text: v }))));
+  };
   const draw = () => {
+    drawMic();
     const v = state.view();
     const ins = voice.inMods();
     const outs = voice.outMods();
@@ -314,7 +354,7 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
     'main',
     { class: 'screen sub voice', 'data-screen': 'voice' },
     listenHeader(t('voice.title'), back, t('common.back'), listen.node),
-    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, phoneOff, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, preferRow, preferSub),
+    el('div', { class: 'scroll' }, el('h2', { class: 'caps', id: 'voiceInHead', text: t('voice.in') }), inList, phoneOff, el('h2', { class: 'caps', id: 'voiceOutHead', text: t('voice.out') }), outList, naturalHead, naturalList, preferRow, preferSub, micHead, micList),
   );
   listen.update();
   return { node: main, update: draw, destroy: listen.destroy, focus: main.querySelector('h1') };
