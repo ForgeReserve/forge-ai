@@ -1093,6 +1093,12 @@ function estimateAgain(model) {
 
 async function ask(text, meta = null) {
   if (gen) return;
+  // Where the question was asked from. The answer screen opens once the question is saved, unless the
+  // person opened another screen meanwhile (More, Voice, say, while slow storage saved it), or, for a
+  // spoken question, left the answer screen Hold to talk opened while the voice became words: they stay
+  // where they went, and the answer is made all the same, waiting on the answer screen.
+  const from = currentName;
+  const away = meta?.voice && from !== 'answer';
   const model = pickModel(S.models, S.settings);
   if (!model) return nav('model');
   talk.clearError();
@@ -1109,7 +1115,8 @@ async function ask(text, meta = null) {
   S.pending = [];
   await savePending();
   await saveConv();
-  nav('answer');
+  if (!away && currentName === from) nav('answer');
+  else store.set({});
   generate();
 }
 

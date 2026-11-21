@@ -228,6 +228,65 @@ describe('hold to talk', () => {
     await ctx.close();
   }, 60_000);
 
+  // CI, 2026-11-21: "Go online switches it" timed out on More, Voice now and then. The app had opened the
+  // answer screen over it: ask() saved the question (IndexedDB) and then opened the answer screen, even
+  // when the person had opened another screen meanwhile. Saving is made slow here so it always happens.
+  it('a screen opened while a spoken question is being saved stays open; the answer waits on the answer screen', async () => {
+    const { ctx, page, errors, calls } = await phone(browser, () => {
+      const real = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...a: any[]) {
+        const t: any = (real as any).apply(this, a);
+        if ((window as any).__slowChats && a[1] === 'readwrite' && String(a[0]) === 'chats') {
+          const d = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')!;
+          Object.defineProperty(t, 'oncomplete', { set: (f: any) => d.set!.call(t, () => setTimeout(() => f(), 1500)), get: () => d.get!.call(t) });
+        }
+        return t;
+      };
+    });
+    await page.evaluate(() => ((window as any).__slowChats = true));
+    const heard = page.waitForResponse((r) => r.url().endsWith('/v1/audio/transcriptions'));
+    await hold(page, '#talkBtn', 1200);
+    await heard;
+    // While the question is saved, the person opens More, Voice.
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('#voiceIn-engine');
+    await page.waitForTimeout(2500);
+    expect(await page.getAttribute('[data-screen]', 'data-screen')).toBe('voice');
+    expect(new URL(page.url()).hash).toBe('#/more/voice');
+    expect(await page.getAttribute('#voiceIn-engine', 'aria-checked')).toBe('true');
+    // The answer was made all the same.
+    await page.goto(`${g.url}/v2/#/answer`);
+    await expect.poll(() => page.textContent('.asked')).toBe(MOCK_TRANSCRIPT);
+    await page.waitForSelector('#copyBtn', { timeout: 20_000 });
+    expect(calls.transcriptions).toHaveLength(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('More, Voice opened before the engine lists its models shows Online once they come, with no reload', async () => {
+    const ctx = await browser.newContext({ ...PHONE });
+    await pastFirstRun(ctx);
+    await ctx.grantPermissions(['microphone'], { origin: g.url });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    await ctx.route('**/v1/models', async (route) => {
+      await held;
+      await route.continue();
+    });
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${g.url}/v2/#/more/voice`);
+    await page.waitForSelector('[data-screen=voice]');
+    await page.waitForTimeout(500);
+    expect(await page.locator('#voiceIn-engine').count()).toBe(0);
+    release();
+    await page.waitForSelector('#voiceIn-engine', { timeout: 8000 });
+    expect(await page.getAttribute('[data-screen]', 'data-screen')).toBe('voice');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
   it('records the old way where the capture worklet does not load, and still sends', async () => {
     const { ctx, page, errors, calls } = await phone(browser, () => {
       AudioWorklet.prototype.addModule = () => Promise.reject(new DOMException('blocked', 'AbortError'));
