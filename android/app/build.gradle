@@ -44,7 +44,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // No signing here: scripts/android-release.sh signs the APK with a keystore the owner supplies.
+            // No signing config here. scripts/android-release.sh signs the APK with a keystore the owner
+            // supplies; bundleUniversalRelease signs the Play bundle with the upload key named by the
+            // environment (below).
         }
     }
     compileOptions {
@@ -97,4 +99,49 @@ def asrFiles = tasks.register('forgeAsrFiles', Exec) {
 }
 tasks.configureEach { t ->
     if (t.name ==~ /prePrivatevoice\w*Build/) t.dependsOn asrFiles
+}
+
+// The Play app bundle (docs/ANDROID.md, Google Play): universal only (Forge), signed with the upload key the
+// environment names at build time, never with a debug key and never with anything in this repository.
+// The APKs keep no signing config, so scripts/android-release.sh and the debug builds are unchanged.
+//   FORGE_UPLOAD_KEYSTORE        the keystore file, outside the repository
+//   FORGE_UPLOAD_KEY_ALIAS       the key's alias in it
+//   FORGE_UPLOAD_STORE_PASSWORD  the keystore's password
+//   FORGE_UPLOAD_KEY_PASSWORD    the key's password, when it differs from the keystore's
+// The passwords go to jarsigner by name (-storepass:env), so they are never on a command line or in a log.
+def uploadKey = { ->
+    def missing = ['FORGE_UPLOAD_KEYSTORE', 'FORGE_UPLOAD_KEY_ALIAS', 'FORGE_UPLOAD_STORE_PASSWORD'].findAll { !System.getenv(it) }
+    if (missing) {
+        throw new GradleException("The Play bundle is signed with the upload key, and ${missing.join(', ')} ${missing.size() == 1 ? 'is' : 'are'} not set (docs/ANDROID.md, Google Play). Nothing was built.")
+    }
+    def ks = new File(System.getenv('FORGE_UPLOAD_KEYSTORE')).canonicalFile
+    if (!ks.isFile()) throw new GradleException("No keystore at ${ks}. Nothing was built.")
+    if (ks.path.startsWith(repoRoot.canonicalPath + File.separator)) {
+        throw new GradleException("The keystore is inside the repository (${ks}). Move it out, so it can never be committed. Nothing was built.")
+    }
+    [keystore: ks, alias: System.getenv('FORGE_UPLOAD_KEY_ALIAS'),
+     keyPassEnv: System.getenv('FORGE_UPLOAD_KEY_PASSWORD') ? 'FORGE_UPLOAD_KEY_PASSWORD' : 'FORGE_UPLOAD_STORE_PASSWORD']
+}
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.path == ':app:bundlePrivatevoiceRelease' }) {
+        throw new GradleException('Only Forge (the universal flavour) has a Play bundle: run bundleUniversalRelease. Forge Private Voice is an APK (scripts/android-release.sh --flavour privatevoice).')
+    }
+    // Checked before any task runs, so a missing key stops the build at once.
+    if (graph.allTasks.any { it.path == ':app:bundleUniversalRelease' }) uploadKey()
+}
+tasks.configureEach { t ->
+    if (t.name != 'bundleUniversalRelease') return
+    t.doLast {
+        def key = uploadKey()
+        def aab = file("build/outputs/bundle/universalRelease/app-universal-release.aab")
+        if (!aab.isFile()) throw new GradleException("The build made no bundle at ${aab}.")
+        def jarsigner = new File(System.getProperty('java.home'), 'bin/jarsigner').path
+        def cmd = [jarsigner, '-keystore', key.keystore.path,
+                   '-storepass:env', 'FORGE_UPLOAD_STORE_PASSWORD', '-keypass:env', key.keyPassEnv,
+                   '-digestalg', 'SHA-256', aab.path, key.alias]
+        def p = new ProcessBuilder(cmd).redirectErrorStream(true).start()
+        def out = p.inputStream.text
+        if (p.waitFor() != 0) throw new GradleException("jarsigner could not sign the bundle with ${key.alias} from ${key.keystore}:\n${out}")
+        logger.lifecycle("Signed ${aab} with the upload key ${key.alias}.")
+    }
 }

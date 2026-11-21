@@ -5,10 +5,12 @@ import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.content.ContextCompat
 import com.getcapacitor.BridgeActivity
 import com.getcapacitor.BridgeWebViewClient
 
@@ -47,10 +49,17 @@ class MainActivity : BridgeActivity() {
                 },
             )
         }
+        // Edge to edge, the page clear of the bars, the cutout and the keyboard, in Midnight's colour until
+        // the page sets its own (Edge, BarsPlugin).
+        (bridge?.webView?.parent as? View)?.let { frame ->
+            Edge.fit(this, frame, BarRules.forRgb(ContextCompat.getColor(this, R.color.forge_bg)))
+        }
         takeLabAuto(intent)
         speechCheck(intent)
         asrCheck(intent)
-        // The back button walks back through the app's screens (they are web history), then leaves.
+        // The back button walks back through the app's screens (they are web history), then leaves. Through
+        // the dispatcher, so it works with predictive back too (enableOnBackInvokedCallback, and the default
+        // at API 36), where Android no longer calls onBackPressed or sends the back key.
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {

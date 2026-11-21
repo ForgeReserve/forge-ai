@@ -62,9 +62,93 @@ describe('Android app project', () => {
     expect(manifest).toMatch(/android:exported="false"\s+android:grantUriPermissions="true"/);
   });
 
-  it('never commits a signing key and signs nothing in the build', () => {
+  it('never commits a signing key, and signs only the Play bundle, with the upload key the environment names', () => {
     expect(read('android/.gitignore')).toMatch(/\*\.jks[\s\S]*\*\.keystore/);
-    expect(read('android/app/build.gradle')).not.toMatch(/signingConfig|storePassword|keyPassword/);
+    const app = code('android/app/build.gradle');
+    // No signing config: the APKs stay unsigned for scripts/android-release.sh, and nothing is signed with a debug key.
+    expect(app).not.toMatch(/signingConfig|storePassword|keyPassword|debug\.keystore|android\.injected\.signing/);
+    // The bundle: universal only, from four environment variables, passwords handed to jarsigner by name.
+    for (const v of ['FORGE_UPLOAD_KEYSTORE', 'FORGE_UPLOAD_KEY_ALIAS', 'FORGE_UPLOAD_STORE_PASSWORD', 'FORGE_UPLOAD_KEY_PASSWORD']) expect(app).toContain(`'${v}'`);
+    expect(app).toMatch(/'-storepass:env', 'FORGE_UPLOAD_STORE_PASSWORD', '-keypass:env', key\.keyPassEnv/);
+    expect(app).not.toMatch(/'-storepass',|'-keypass',/);
+    expect(app).toMatch(/if \(t\.name != 'bundleUniversalRelease'\) return/);
+    // Checked before any task runs; a keystore inside the repository and a privatevoice bundle are refused.
+    expect(app).toMatch(/gradle\.taskGraph\.whenReady[\s\S]*':app:bundlePrivatevoiceRelease'[\s\S]*throw new GradleException[\s\S]*':app:bundleUniversalRelease' \}\) uploadKey\(\)/);
+    expect(app).toMatch(/ks\.path\.startsWith\(repoRoot\.canonicalPath \+ File\.separator\)/);
+    expect(app).toMatch(/are'\} not set[\s\S]*Nothing was built/);
+  });
+});
+
+describe('Android 16 (API 36) and Google Play', () => {
+  const vars = read('android/variables.gradle');
+  const activity = read('android/app/src/main/java/com/forgereserve/ai/MainActivity.kt');
+  const bars = read('android/app/src/main/java/com/forgereserve/ai/BarsPlugin.kt');
+
+  it('compiles against and targets API 36, still for Android 9 and up', () => {
+    expect(vars).toMatch(/compileSdkVersion = 36\b/);
+    expect(vars).toMatch(/targetSdkVersion = 36\b/);
+    expect(vars).toMatch(/minSdkVersion = 28\b/);
+    // The app's build.gradle takes them from variables.gradle, and so does Capacitor's module.
+    const app = read('android/app/build.gradle');
+    expect(app).toMatch(/compileSdk rootProject\.ext\.compileSdkVersion/);
+    expect(app).toMatch(/targetSdkVersion rootProject\.ext\.targetSdkVersion/);
+    expect(readFileSync(join(ROOT, 'node_modules/@capacitor/android/capacitor/build.gradle'), 'utf8')).toMatch(/compileSdk project\.hasProperty\('compileSdkVersion'\) \? rootProject\.ext\.compileSdkVersion/);
+  });
+
+  it('builds with an Android Gradle plugin tested with compileSdk 36, on Gradle 8.13 and Capacitor 6', () => {
+    const agp = read('android/build.gradle').match(/com\.android\.tools\.build:gradle:(\d+)\.(\d+)\.(\d+)/);
+    expect(agp).not.toBeNull();
+    // 8.7 was tested up to compileSdk 35 and warns at 36; 8.10 is the first tested with 36. AGP 9 is a larger move.
+    expect(Number(agp![1])).toBe(8);
+    expect(Number(agp![2])).toBeGreaterThanOrEqual(10);
+    expect(read('android/gradle/wrapper/gradle-wrapper.properties')).toContain('gradle-8.13-bin.zip');
+    const pkg = JSON.parse(read('package.json'));
+    expect(pkg.devDependencies['@capacitor/android']).toMatch(/^6\./);
+  });
+
+  it('is drawn edge to edge with the page kept clear of the bars, the cutout and the keyboard', () => {
+    // Every Android version the same way (Android 15 and up force it; the opt-out is gone at 36, and not used).
+    expect(activity).toMatch(/Edge\.fit\(this, frame, BarRules\.forRgb\(ContextCompat\.getColor\(this, R\.color\.forge_bg\)\)\)/);
+    expect(bars).toMatch(/WindowCompat\.setDecorFitsSystemWindows\(window, false\)/);
+    for (const t of ['systemBars', 'displayCutout', 'ime']) expect(bars).toContain(`WindowInsetsCompat.Type.${t}()`);
+    expect(bars).toMatch(/v\.setPadding\(room\.left, room\.top, room\.right, room\.bottom\)\s*WindowInsetsCompat\.CONSUMED/);
+    // The bars' colour comes from the frame behind them; no scrim over three-button navigation.
+    expect(bars).toMatch(/window\.statusBarColor = Color\.TRANSPARENT/);
+    expect(bars).toMatch(/window\.navigationBarColor = Color\.TRANSPARENT/);
+    expect(bars).toMatch(/window\.isNavigationBarContrastEnforced = false/);
+    expect(bars).toMatch(/frame\.setBackgroundColor\(bars\.argb\)/);
+    expect(bars).not.toMatch(/statusBarColor = bars|navigationBarColor = bars/);
+    for (const f of [manifest, read('android/app/src/main/res/values/styles.xml')]) expect(f).not.toContain('windowOptOutEdgeToEdgeEnforcement');
+    // The keyboard resizes the page, as Android chose for it before (interactive-widget=resizes-content).
+    expect(manifest).toContain('android:windowSoftInputMode="adjustResize"');
+    expect(read('public/v2/index.html')).toMatch(/interactive-widget=resizes-content/);
+  });
+
+  it('handles Back through the dispatcher, as predictive back requires', () => {
+    expect(manifest).toMatch(/android:enableOnBackInvokedCallback="true"\s+tools:targetApi="33"/);
+    expect(activity).toMatch(/onBackPressedDispatcher\.addCallback\(/);
+    expect(activity).toMatch(/BackRule\.Step\.WEB_BACK -> web\?\.goBack\(\)\s*BackRule\.Step\.LEAVE -> moveTaskToBack\(true\)/);
+    // Neither is called at API 36.
+    const kotlin = readdirSync(join(ROOT, 'android/app/src'), { recursive: true }).map(String).filter((f) => f.endsWith('.kt'));
+    for (const f of kotlin) expect(read(`android/app/src/${f}`), f).not.toMatch(/fun onBackPressed\(|KEYCODE_BACK/);
+  });
+
+  it('keeps no orientation or resizing limits, which large screens ignore at API 36', () => {
+    expect(manifest).not.toMatch(/screenOrientation|resizeableActivity|maxAspectRatio|minAspectRatio/);
+  });
+
+  it('calls no Java collection method that compileSdk 35 would pick over Kotlin\'s', () => {
+    // List.removeFirst() and friends compile to the Java 21 method at compileSdk 35+, which phones below Android 15 lack.
+    const kotlin = readdirSync(join(ROOT, 'android/app/src'), { recursive: true }).map(String).filter((f) => f.endsWith('.kt'));
+    expect(kotlin.length).toBeGreaterThan(20);
+    for (const f of kotlin) expect(code(`android/app/src/${f}`), f).not.toMatch(/\.(removeFirst|removeLast|getFirst|getLast|addFirst|addLast|reversed)\(\)/);
+  });
+
+  it('runs no foreground service in a release build', () => {
+    // Only the debug check from adb has one (src/debug); Android 15's foreground service limits do not reach the app.
+    expect(manifest).not.toMatch(/FOREGROUND_SERVICE|foregroundServiceType/);
+    expect(read('android/app/src/privatevoice/AndroidManifest.xml')).not.toMatch(/FOREGROUND_SERVICE|foregroundServiceType/);
+    expect(read('android/app/src/debug/AndroidManifest.xml')).toContain('android:foregroundServiceType="specialUse"');
   });
 });
 
