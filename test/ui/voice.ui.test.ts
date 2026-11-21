@@ -195,7 +195,12 @@ describe('hold to talk', () => {
     expect(Number(f.peak)).toBeGreaterThan(0.1);
     expect(Number(f.heard)).toBeGreaterThan(0.1);
     expect(f.muted).toBe('no');
-    expect(f.echo).toBe('no');
+    // A computer (Chrome): echo cancelling asked off and applied off; Chrome says it applied gain and noise.
+    expect(f.echo).toBe('asked no, got no');
+    expect(f.got).toMatch(/^gain yes, noise yes, \d+ Hz, 1 ch$/);
+    // The loud tone is a voice by the loud rule, sent as it came.
+    expect(f.rule).toMatch(/^floor \d\.\d{4}, needs \d\.\d{4}, loud part \d\.\d{4}$/);
+    expect(f.gain).toBe('x1.0');
     expect(f.rate).toMatch(/^\d+ Hz$/);
     expect(f.length).toMatch(/^1\.\d s of 1\.\d s$/);
     expect(await page.textContent('#micFactsHead')).toBe('Last recording');
@@ -443,7 +448,8 @@ describe('hold to talk', () => {
       expect(parseInt(f.chunks!, 10)).toBeGreaterThan(5);
       expect(Number(f.peak)).toBeLessThan(0.05);
       expect(f.result).toMatch(/^pieces (of exact zeros|below the voice level) \(quiet\)$/);
-      expect(f.level).toMatch(/^0\.\d{4} \(voice at 0\.0500\)$/);
+      expect(f.level).toMatch(/^0\.\d{4} \(loud voice at 0\.0500\)$/);
+      expect(f.gain).toBe('x1.0');
       await page.goto(`${g.url}/v2/#/`);
       await page.waitForSelector('[data-screen=home]');
       await expect.poll(() => page.textContent('#balanceText')).toBe('$3.00');

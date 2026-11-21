@@ -229,23 +229,30 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
  */
 export function micRows(f, t) {
   if (!f) return [];
-  const yes = (b) => t(b ? 'voice.mic.yes' : 'voice.mic.no');
+  const yes = (b) => (b == null ? '?' : t(b ? 'voice.mic.yes' : 'voice.mic.no'));
   const n = (x, d = 3) => (x == null ? '?' : Number(x).toFixed(d));
   // What came from the microphone, in the words the owner reads off a phone: no pieces at all, pieces of
-  // exact zeros (digital silence), pieces under the voice level, or a voice.
-  const heard = !f.chunks ? 'no pieces' : !f.peak ? 'pieces of exact zeros' : f.voiceLevel != null && (f.level ?? 0) < f.voiceLevel ? 'pieces below the voice level' : 'voice';
+  // exact zeros (digital silence), pieces with no voice in them, a quiet voice (found by the clip's own
+  // shape) or a voice (modules/voice-in/engine hearing).
+  const ruled = f.rule === undefined ? ((f.level ?? 0) < (f.voiceLevel ?? 0) ? null : 'loud') : f.rule;
+  const heard = !f.chunks ? 'no pieces' : !f.peak ? 'pieces of exact zeros' : ruled === 'quiet' ? 'a quiet voice' : ruled === 'loud' ? 'voice' : 'pieces below the voice level';
   const way = f.method === 'worklet' ? 'worklet' : `script${f.worklet && f.worklet !== 'loaded' ? ` (worklet: ${f.worklet})` : ''}`;
+  const g = f.got ?? {};
   return [
     ['voice.mic.state', `${(f.states ?? []).join(' > ')}${f.remade ? ', made again' : ''}`],
     ['voice.mic.rate', `${f.sampleRate ?? '?'} Hz`],
     ['voice.mic.label', `${f.label || '?'}${f.changed ? ', changed' : ''}`],
     ['voice.mic.muted', `${yes(f.muted)}${f.ended ? ', ended' : ''}`],
     ['voice.mic.way', way],
-    ['voice.mic.echo', `${yes(f.echoCancellation)}${f.reopened ? ', opened again' : ''}`],
+    // Asked for, then what the browser applied (track.getSettings: '?' where it does not say).
+    ['voice.mic.echo', `asked ${yes(f.echoCancellation)}, got ${yes(g.echoCancellation)}${f.reopened ? ', opened again' : ''}`],
+    ['voice.mic.got', `gain ${yes(g.autoGainControl)}, noise ${yes(g.noiseSuppression)}, ${g.sampleRate ?? '?'} Hz, ${g.channelCount ?? '?'} ch`],
     ['voice.mic.result', `${heard}${f.verdict ? ` (${f.verdict})` : ''}`],
     ['voice.mic.chunks', `${f.chunks ?? 0}${f.zeroChunks ? ` (${f.zeroChunks} all zeros)` : ''}`],
     ['voice.mic.peak', n(f.peak, 4)],
-    ['voice.mic.level', `${n(f.level, 4)}${f.voiceLevel != null ? ` (voice at ${n(f.voiceLevel, 4)})` : ''}`],
+    ['voice.mic.level', `${n(f.level, 4)}${f.voiceLevel != null ? ` (loud voice at ${n(f.voiceLevel, 4)})` : ''}`],
+    ['voice.mic.rule', f.floor == null ? '?' : `floor ${n(f.floor, 4)}, needs ${n(f.needs, 4)}, loud part ${n(f.loud, 4)}`],
+    ['voice.mic.gain', f.gain == null ? '?' : `x${n(f.gain, 1)}`],
     ['voice.mic.heard', f.heardPeak == null ? '?' : n(f.heardPeak, 4)],
     ['voice.mic.length', `${n(f.samples && f.sampleRate ? f.samples / f.sampleRate : 0, 1)} s of ${n((f.ms ?? 0) / 1000, 1)} s`],
   ];
