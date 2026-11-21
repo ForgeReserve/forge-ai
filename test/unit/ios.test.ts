@@ -196,6 +196,57 @@ describe('iPhone app project', () => {
     expect(existsSync(join(ROOT, 'ios/App/Podfile.lock'))).toBe(true);
   });
 
+  it('is an iPhone app in portrait that installs without NFC, with its version and build from the project', () => {
+    const caps = plist.match(/<key>UIRequiredDeviceCapabilities<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1] ?? '';
+    expect([...caps.matchAll(/<string>([^<]+)<\/string>/g)].map((m) => m[1])).toEqual(['arm64']);
+    const orient = plist.match(/<key>UISupportedInterfaceOrientations<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1] ?? '';
+    expect([...orient.matchAll(/<string>([^<]+)<\/string>/g)].map((m) => m[1])).toEqual(['UIInterfaceOrientationPortrait']);
+    expect(project.match(/TARGETED_DEVICE_FAMILY = ([^;]+);/g)?.every((s) => s === 'TARGETED_DEVICE_FAMILY = 1;')).toBe(true);
+    expect(plistString('CFBundleShortVersionString')).toBe('$(MARKETING_VERSION)');
+    expect(plistString('CFBundleVersion')).toBe('$(CURRENT_PROJECT_VERSION)');
+    expect(project.match(/CURRENT_PROJECT_VERSION = \d+;/g)).toHaveLength(2);
+    expect(plistString('UILaunchStoryboardName')).toBe('LaunchScreen');
+    expect(project).not.toMatch(/ENABLE_BITCODE = YES/);
+  });
+
+  it('has a privacy manifest in the app: no tracking, no required reason API, what the engine keeps unlinked', () => {
+    const manifest = read('ios/App/App/PrivacyInfo.xcprivacy');
+    // A file of the App target, copied into the app with its resources.
+    const ref = project.match(/(\w{24}) \/\* PrivacyInfo\.xcprivacy \*\/ = \{isa = PBXFileReference;[^}]*path = PrivacyInfo\.xcprivacy;/)?.[1];
+    expect(ref).toBeTruthy();
+    const build = project.match(new RegExp(`(\\w{24}) /\\* PrivacyInfo\\.xcprivacy in Resources \\*/ = \\{isa = PBXBuildFile; fileRef = ${ref} `))?.[1];
+    expect(build).toBeTruthy();
+    const appResources = project.match(/504EC3021FED79650016851F \/\* Resources \*\/ = \{[^}]*files = \(([^)]*)\)/)?.[1] ?? '';
+    expect(appResources).toContain(`${build} /* PrivacyInfo.xcprivacy in Resources */`);
+    expect(project.match(/PrivacyInfo\.xcprivacy in Resources \*\/,/g)).toHaveLength(1);
+
+    const key = (k: string) => manifest.match(new RegExp(`<key>${k}</key>\\s*(<false/>|<true/>|<array/>|<array>)`))?.[1];
+    expect(key('NSPrivacyTracking')).toBe('<false/>');
+    expect(key('NSPrivacyTrackingDomains')).toBe('<array/>');
+    // The app's own code calls none of Apple's required reason APIs (UserDefaults, file timestamps, disk
+    // space, system boot time, active keyboards): add one, and it must be declared here with its reason.
+    expect(key('NSPrivacyAccessedAPITypes')).toBe('<array/>');
+    for (const f of readdirSync(join(ROOT, 'ios/App/App')).filter((f) => f.endsWith('.swift'))) {
+      expect(read(`ios/App/App/${f}`), f).not.toMatch(
+        /UserDefaults|creationDate|modificationDate|attributesOfItem|getattrlist|\bf?stat\(|systemUptime|mach_absolute_time|volumeAvailableCapacity|systemFreeSize|systemSize|activeInputModes/,
+      );
+    }
+    // What the engine keeps for a balance (docs/PRIVACY.md): its top-ups and charges, and a metering row
+    // per request. For the app to work, never tracking, and not linked to a person.
+    const types = [...manifest.matchAll(/<dict>\s*<key>NSPrivacyCollectedDataType<\/key>\s*<string>(\w+)<\/string>([\s\S]*?)<\/dict>/g)];
+    expect(types.map((m) => m[1])).toEqual(['NSPrivacyCollectedDataTypePurchaseHistory', 'NSPrivacyCollectedDataTypeProductInteraction']);
+    for (const [, , body = ''] of types) {
+      expect(body).toMatch(/<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<false\/>/);
+      expect(body).toMatch(/<key>NSPrivacyCollectedDataTypeTracking<\/key>\s*<false\/>/);
+      expect([...body.matchAll(/<string>(\w+)<\/string>/g)].map((m) => m[1])).toEqual(['NSPrivacyCollectedDataTypePurposeAppFunctionality']);
+    }
+    // Capacitor's pods ship their own manifests.
+    for (const p of ['Capacitor', 'CapacitorCordova']) {
+      expect(read(`node_modules/@capacitor/ios/${p}.podspec`)).toContain(`${p}/${p}/PrivacyInfo.xcprivacy`);
+      expect(existsSync(join(ROOT, `node_modules/@capacitor/ios/${p}/${p}/PrivacyInfo.xcprivacy`))).toBe(true);
+    }
+  });
+
   it('has an opaque 1024 icon, as App Store Connect wants', () => {
     const png = readFileSync(join(ROOT, 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png'));
     expect(png.readUInt32BE(16)).toBe(1024);
