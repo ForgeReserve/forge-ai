@@ -644,6 +644,10 @@ button.mode-on, button.mode-card { width: 100%; border: 0; text-align: left; }
 .home .search-box { width: min(336px, 100%); }
 
 /* The voice lab (#/voice-lab), a developer page. */
+.voice .mic-facts { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 4px; color: var(--text-body); font-size: 14px; }
+.voice .mic-facts li { display: flex; justify-content: space-between; gap: 12px; }
+.voice .mic-facts span { text-align: right; overflow-wrap: anywhere; }
+.voice .mic-facts[hidden] { display: none; }
 .voicelab .lab-env { margin: 0 0 12px; padding-left: 18px; color: var(--text-body); font-size: 14px; }
 .voicelab .lab-check { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
 .voicelab .lab-check input { width: 22px; height: 22px; flex: none; }

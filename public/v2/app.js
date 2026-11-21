@@ -1093,6 +1093,12 @@ function estimateAgain(model) {
 
 async function ask(text, meta = null) {
   if (gen) return;
+  // Where the question was asked from. The answer screen opens once the question is saved, unless the
+  // person opened another screen meanwhile (More, Voice, say, while slow storage saved it), or, for a
+  // spoken question, left the answer screen Hold to talk opened while the voice became words: they stay
+  // where they went, and the answer is made all the same, waiting on the answer screen.
+  const from = currentName;
+  const away = meta?.voice && from !== 'answer';
   const model = pickModel(S.models, S.settings);
   if (!model) return nav('model');
   talk.clearError();
@@ -1109,7 +1115,8 @@ async function ask(text, meta = null) {
   S.pending = [];
   await savePending();
   await saveConv();
-  nav('answer');
+  if (!away && currentName === from) nav('answer');
+  else store.set({});
   generate();
 }
 
@@ -2332,7 +2339,7 @@ function screenFor(name, params) {
       if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home'), addMoney: () => nav('addFunds', {}, { replace: true }) });
       return modelScreen({ ...ctx, photo: photoChoice });
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() } } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() }, micFacts: () => adapters.mic.last?.() ?? null } });
     case 'history':
       return historyScreen(ctx);
     case 'voiceLab':
