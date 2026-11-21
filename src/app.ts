@@ -11,6 +11,7 @@ import { openAccount, releaseIfEmpty, SIBLING_HEADER } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
 import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
 import { BetaWaitlist, parseContact } from './beta.ts';
+import { balanceCacheSecret, CACHE_SECRET_FIELD, CACHE_SECRET_INFO, clientCacheSecret, freshCacheSecret } from './cache-secret.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { type GatewayWallet, PaymentError } from './cashu/wallet.ts';
@@ -157,6 +158,11 @@ export function createApp(d: Deps) {
   const limiter = new RateLimiter(env.FORGE_RATE_LIMIT_RPM);
   const models = new Map(config.catalog.models.map((m) => [m.id, m]));
   const freeModelIds = config.catalog.models.filter(isFreeModel).map((m) => m.id);
+  // The key behind every balance's Tinfoil cache secret (src/cache-secret.ts), made from the wallet seed on
+  // first use and kept in memory only.
+  let cacheKey: Buffer | undefined;
+  const cacheSecretFor = (pay: Payment, clientValue: unknown): string =>
+    pay.kind === 'nut24' ? freshCacheSecret() : balanceCacheSecret((cacheKey ??= wallet.deriveKey(CACHE_SECRET_INFO)), pay.account.id, clientCacheSecret(clientValue));
 
   installRecoveryHooks(d);
 
@@ -1120,19 +1126,32 @@ export function createApp(d: Deps) {
     }
 
     // 6b. Plaintext OpenAI-compatible call.
+    // Tinfoil shares its prompt cache between requests with the same API identity and user_cache_secret,
+    // and every request goes under the gateway's one key. So a plaintext Tinfoil request carries a secret
+    // of its payer: the balance's own, or a fresh one for NUT-24 (docs/PRIVACY.md, Prompt caching). The
+    // body is re-serialised either way; the hold, the size limits and the free-question caps were all
+    // taken from the client's bytes above, so the added field changes no charge. Other suppliers get the
+    // body as before.
+    let cacheSecret: string | undefined;
+    if (supplierCfg.type === 'tinfoil') {
+      cacheSecret = cacheSecretFor(pay, upstreamBody![CACHE_SECRET_FIELD]);
+      upstreamBody![CACHE_SECRET_FIELD] = cacheSecret;
+    }
+    /** Supplier text for the client and the log, with the cache secret taken out should it ever echo it. */
+    const scrub = (s: string) => (cacheSecret ? s.replaceAll(cacheSecret, '[user_cache_secret]') : s);
     let res: Response;
     try {
       res = await supplier.chat({ model, body: upstreamBody!, stream, signal });
     } catch (e) {
-      const r = await settle(undefined, 'none', 'upstream_error', errText(e));
+      const r = await settle(undefined, 'none', 'upstream_error', scrub(errText(e)));
       const status = e instanceof UpstreamError && e.status < 500 && e.status !== 499 ? e.status : 502;
-      return apiError(c, status, 'upstream_error', errText(e), resultHeaders(r));
+      return apiError(c, status, 'upstream_error', scrub(errText(e)), resultHeaders(r));
     }
     if (!res.ok) {
       let msg = `upstream returned HTTP ${res.status}`;
       try {
         const j: any = JSON.parse((await res.text()).slice(0, 4000));
-        if (typeof j?.error?.message === 'string') msg += `: ${j.error.message.slice(0, 300)}`;
+        if (typeof j?.error?.message === 'string') msg += `: ${scrub(j.error.message).slice(0, 300)}`;
       } catch {
         /* not JSON */
       }

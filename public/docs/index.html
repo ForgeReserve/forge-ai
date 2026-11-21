@@ -691,6 +691,10 @@ X-Forge-Request-Id: req_0123456789abcdef0123456789abcdef
 <td><code>web_search_options</code></td>
 <td>Turns on web search (models with <code>capabilities.web_search</code>)</td>
 </tr>
+<tr>
+<td><code>user_cache_secret</code></td>
+<td>Optional, a string. On a private (Tinfoil) model the gateway always sets this field itself, so the prompt cache is shared only within your balance; your value is mixed into your balance&#39;s own secret: it can split your cache further, and two balances that send the same value still get separate caches. Paid with NUT-24, every request gets a fresh secret and no cache hits. Other models get it as you sent it (<a href="https://github.com/ForgeReserve/forge-ai/blob/main/docs/PRIVACY.md#prompt-caching">Prompt caching</a>)</td>
+</tr>
 </tbody></table></div>
 <p>Request headers:</p>
 <div class="table-wrap"><table>
