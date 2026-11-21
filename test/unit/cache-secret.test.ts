@@ -10,6 +10,21 @@ const seed = Buffer.from('ab'.repeat(64), 'hex');
 const key = deriveSeedKey(seed, CACHE_SECRET_INFO);
 
 describe('cache secret derivation', () => {
+  // Known answers, worked out apart from src/cache-secret.ts (node:crypto hkdfSync and createHmac over the
+  // length-prefixed fields). Every balance's Tinfoil prompt cache is named by these values: a change to the
+  // label, the HKDF, the framing, the HMAC or the encoding changes them, and with them every balance's
+  // secret, so every balance starts with an empty cache. Change these strings only on purpose.
+  it('gives the pinned outputs for a fixed seed', () => {
+    expect(CACHE_SECRET_INFO).toBe('forge-ai/tinfoil/user_cache_secret/v1');
+    expect(key.toString('hex')).toBe('2df0a03020278455ba096edaac387ac607aacbc9ed94ad8d9b9ed1a5924860cc');
+    const id = 'acct_00000000-0000-4000-8000-000000000001';
+    const plain = balanceCacheSecret(key, id);
+    const withClient = balanceCacheSecret(key, id, 'client-value');
+    expect(plain).toBe('a5SWOO64_3BYLzIBeCx9pixBcSuFlGdaFXB7xIptKKo');
+    expect(withClient).toBe('Mi-VEB3_Bw2JD3FpzWz2gWuSGlpg80mTXUsh1evYNok');
+    for (const s of [plain, withClient]) expect(s).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
   it('is deterministic for one balance, and 43 base64url characters', () => {
     const a = balanceCacheSecret(key, 'acct_1');
     expect(balanceCacheSecret(deriveSeedKey(seed, CACHE_SECRET_INFO), 'acct_1')).toBe(a);

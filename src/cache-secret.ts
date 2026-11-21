@@ -12,7 +12,9 @@
  * A value the client put in the body is mixed into its balance's HMAC, so a client can split its own
  * cache further but never reach another balance's; on NUT-24 it is replaced like any other.
  *
- * The values are never logged or stored.
+ * The values are never logged or stored. src/app.ts takes the request's value out of supplier error text
+ * before that text is logged or returned. A 200 answer, streamed or not, is passed on unread for it:
+ * Tinfoil's router removes the field from the body before the model sees it.
  */
 import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 

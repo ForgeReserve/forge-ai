@@ -1137,7 +1137,11 @@ export function createApp(d: Deps) {
       cacheSecret = cacheSecretFor(pay, upstreamBody![CACHE_SECRET_FIELD]);
       upstreamBody![CACHE_SECRET_FIELD] = cacheSecret;
     }
-    /** Supplier text for the client and the log, with the cache secret taken out should it ever echo it. */
+    /**
+     * Supplier error text (a thrown error, or error.message of a non-2xx answer) with the cache secret taken
+     * out, before it is logged or returned. A 200 answer is passed on unread for it: Tinfoil's router removes
+     * the field from the body before the model sees it.
+     */
     const scrub = (s: string) => (cacheSecret ? s.replaceAll(cacheSecret, '[user_cache_secret]') : s);
     let res: Response;
     try {
