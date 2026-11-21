@@ -137,7 +137,7 @@ The repository signs nothing: the team is empty. The owner, once:
 2. Select the **App** target, **Signing & Capabilities**, keep **Automatically manage signing**, and pick the team under **Team**. The bundle id `com.forgereserve.ai` must be free in that team, or registered to it.
 3. Plug in the iPhone, turn on Developer Mode on it (Settings, Privacy & Security), pick it as the run destination and press Run. The first time, trust the developer on the phone (Settings, General, VPN & Device Management).
 
-Xcode writes the team into `project.pbxproj` (`DEVELOPMENT_TEAM`). Do not commit that line; `test/unit/ios.test.ts` keeps it empty. For TestFlight: Product, Archive, then Distribute App.
+Xcode writes the team into `project.pbxproj` (`DEVELOPMENT_TEAM`). Do not commit that line; `test/unit/ios.test.ts` keeps it empty. For TestFlight, `scripts/ios-archive.sh` (TestFlight, below).
 
 Card taps need the **NFC Tag Reading** capability on the App ID `com.forgereserve.ai` in the team (Certificates, Identifiers & Profiles, Identifiers, the App ID, Capabilities). With automatic signing Xcode turns it on when it makes the profile, because the entitlements file asks for it; a profile made by hand must be made again after the capability is on.
 
@@ -152,6 +152,31 @@ Card taps need the **NFC Tag Reading** capability on the App ID `com.forgereserv
 - NFC: "Forge reads an eCash card only when you hold it to the phone to add money." iOS shows no prompt for it: the NFC sheet itself is the permission.
 
 Capacitor grants the web view's own camera and microphone prompt once iOS has, so the person sees one prompt, not two.
+
+## TestFlight
+
+Status: 2026-11-21, a Release archive was made and signed for development. The App Store IPA was not exported (below), and nothing has been uploaded.
+
+**Privacy manifest.** `ios/App/App/PrivacyInfo.xcprivacy` is in the App target's resources and lands at the root of the app. Capacitor and CapacitorCordova carry their own (`Capacitor.framework`, `Cordova.framework`), with no tracking, no data and no required reason API. The app's says:
+
+- No tracking, and no tracking domains.
+- No required reason API. The app's Swift calls none of them (UserDefaults, file timestamps, disk space, system boot time, active keyboards); the built app imports none of their symbols, and Capacitor's pods call none either. The web app's storage (IndexedDB, `localStorage`, Cache Storage) is WebKit's, kept by WebKit's own processes. `test/unit/ios.test.ts` fails when a Swift file uses one of those APIs, so it gets declared with its reason.
+- Two kinds of data the engine keeps ([PRIVACY.md](PRIVACY.md)), both for the app to work, neither for tracking, and neither linked to a person: **purchase history** (a balance's top-ups, charges and payouts) and **product interaction** (a metering row per request: model, token counts, cost, time). A balance is a random key: the engine has no name, email, phone number or device id for it. Questions, answers, photos and recordings pass through the engine in memory and are never kept, so they are not listed. The answers given in App Store Connect, App Privacy, should match the manifest.
+
+**Building it.** `scripts/ios-archive.sh --team <team id>` (or `FORGE_IOS_TEAM`) bundles the web app (`pnpm -s ios:web`), runs `pod install`, makes a Release archive for any iPhone (`generic/platform=iOS`) with automatic signing and `-allowProvisioningUpdates`, and exports it with method `app-store-connect` and destination `export`: an IPA in a folder. It prints the IPA's path, size, version and build number. It uploads nothing. The team id goes to xcodebuild for that run only; if xcodebuild changes `project.pbxproj`, the script puts it back. Output goes to `dist/ios` (git ignores `dist`) or `--out`, which must be outside the repository or in `dist/`.
+
+The export needs an Apple account of the team in Xcode (Settings, Accounts), so Xcode can make the App Store profile for `com.forgereserve.ai` with the NFC Tag Reading capability. Without one it stops with `No Accounts` and `No profiles for 'com.forgereserve.ai' were found`, after the archive is made.
+
+**What the owner does in App Store Connect.**
+
+1. Make the app record: name, bundle id `com.forgereserve.ai`, SKU, primary language.
+2. App Privacy: answer the data questions to match the manifest above.
+3. Raise `CURRENT_PROJECT_VERSION` (both configurations) before each upload after the first: App Store Connect refuses a build number it has seen for the version.
+4. Upload the IPA with Transporter, or the archive with Xcode's Organizer (Distribute App).
+5. Answer the export compliance question for the build. The app does not set `ITSAppUsesNonExemptEncryption`, so App Store Connect asks. What it uses: HTTPS (TLS) through iOS; in the web app, HPKE (DHKEM X25519 with HKDF-SHA256 and AES-256-GCM, in JavaScript from Tinfoil's SDK and the noble libraries) to encrypt questions and answers to private models' attested enclaves; ECDSA and Sigstore checks of the enclave's attestation; Cashu's blind signatures, DLEQ proofs and Schnorr signatures on secp256k1; SHA-256 and HMAC-SHA256. The Swift code has no cryptography of its own.
+6. TestFlight: add testers. Internal testers can install once the build has processed; external testers need Beta App Review first.
+
+**Checked for upload (2026-11-21, Xcode 26.6, iOS 26.5 SDK):** the 1024 icon is opaque RGB; the built app's Info.plist has the version 0.1.0 and build 1 from the project, `UIRequiredDeviceCapabilities` `arm64` only (NFC is not required: a phone without it says it cannot read cards), portrait only, iPhone only, the launch storyboard, and a usage description for each permission the code asks for (camera, microphone, speech recognition, adding to Photos, NFC); the signed app's entitlements are NFC `TAG` only, with the AIDs in Info.plist; no setting turns on bitcode (Xcode 26 has none); the archive has dSYMs for the app and both frameworks. Not checked: App Store Connect's own validation, which runs on upload, and the distribution signing.
 
 ## Checked in the Simulator (2026-11-16)
 
@@ -192,6 +217,7 @@ A long press on a control selected its words and brought up Copy, Look Up and Tr
 
 ## Not verified
 
+- TestFlight: the App Store IPA export, its distribution signing, the upload and App Store Connect's checks on it (TestFlight, above). Only the Release archive, signed for development, was made.
 - A real card tap: the Simulator has no NFC. Nothing in `NfcPlugin.swift` past `status` and the refusals has run: the sheet, a card's connection, a command, the 5 second limit, a card lost mid-command, the sheet's words.
 - Hold to talk on the phone (ForgeSpeech) past `available` and the refusals: no request has run, so the permission prompts, live words, the joining after a pause, a silent hold on a phone, Apple's error codes as they really come, the audio session's effect on playback afterwards, a call or a route change mid-hold and airplane mode are all untested (Checking it on an iPhone, above). Which languages an iPhone hears on the phone is not known.
 - Hold to talk through the page on a real iPhone (Safari, or the app through the engine): seen once on a current iPhone (2026-11-21), where the capture ran and a voice was too quiet with echo cancelling off. Not yet seen: the level with echo cancelling on (Apple's gain), whether the quiet rule takes a quiet room on an iPhone for a voice or refuses a quiet voice spoken without pauses, how the engine's model hears a clip made up to 16 times louder, Bluetooth and wired headset microphones, and the retry with echo cancelling off. The recording context made in the press, its fallback, and the microphone messages ran only in tests with a stand-in Web Audio, in Chrome with its fake microphone, and in desktop WebKit (Playwright, a mock microphone), which do not follow iOS's audio rules (Hold to talk in Safari on an iPhone, above). Whether the worklet file loads from the app's `capacitor://` address is unseen; where it does not, the page records the old way.
