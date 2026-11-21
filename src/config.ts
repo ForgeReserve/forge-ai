@@ -293,6 +293,12 @@ const ModelSchema = z.object({
   /** Supplier cost per million tokens in USD. Required on a paid model; 0 (or left out) on a free one. */
   input_usd_per_mtok: z.number().nonnegative().optional(),
   output_usd_per_mtok: z.number().nonnegative().optional(),
+  /**
+   * Supplier cost per million input tokens served from the supplier's prompt cache, in USD, when its rate
+   * card lists one (Tinfoil's cachedInputTokenPricePer1M). At most input_usd_per_mtok. Left out, cached
+   * input is charged at input_usd_per_mtok (docs/PAYMENTS.md, Cached input).
+   */
+  cached_input_usd_per_mtok: z.number().nonnegative().optional(),
   /** true once the cost above has been checked against the supplier's rate card. */
   price_verified: z.boolean().default(false),
   max_output_tokens: z.number().int().positive().default(4096),
@@ -319,10 +325,13 @@ const ModelSchema = z.object({
         ctx.addIssue({ code: 'custom', message: `free model ${m.id}: a free model carries no token price (leave input_usd_per_mtok and output_usd_per_mtok out, or 0)` });
       // A search has a fee of its own; a free request takes no hold to cover it.
       if (m.web_search) ctx.addIssue({ code: 'custom', message: `free model ${m.id}: web_search is not offered on a free model` });
+      if (m.cached_input_usd_per_mtok !== undefined) ctx.addIssue({ code: 'custom', message: `free model ${m.id}: a free model carries no cached input price (leave cached_input_usd_per_mtok out)` });
     } else {
       if (m.input_usd_per_mtok === undefined || m.output_usd_per_mtok === undefined)
         ctx.addIssue({ code: 'custom', message: `model ${m.id}: input_usd_per_mtok and output_usd_per_mtok (price per million tokens) are required on a paid model` });
       if (m.free_reason) ctx.addIssue({ code: 'custom', message: `model ${m.id}: free_reason is only for pricing "free"` });
+      if (m.cached_input_usd_per_mtok !== undefined && m.input_usd_per_mtok !== undefined && m.cached_input_usd_per_mtok > m.input_usd_per_mtok)
+        ctx.addIssue({ code: 'custom', message: `model ${m.id}: cached_input_usd_per_mtok must not be above input_usd_per_mtok` });
     }
   })
   // A free model's prices are 0 everywhere they are read, so no path can charge for one.

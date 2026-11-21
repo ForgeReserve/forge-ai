@@ -640,7 +640,7 @@ export function createAdminRouter(d: Deps): Hono {
     const limit = Math.min(1000, Math.max(1, Number(c.req.query('limit')) || 100));
     const rows = db
       .prepare(
-        `SELECT id, created_at, model, supplier, unit, payment, encrypted, status, input_tokens, output_tokens, usage_source,
+        `SELECT id, created_at, model, supplier, unit, payment, encrypted, status, input_tokens, cached_input_tokens, output_tokens, usage_source,
            reserved_msub, charged_msub, latency_ms, account_id
          FROM requests ORDER BY created_at DESC LIMIT ?`,
       )
@@ -756,9 +756,20 @@ export function createAdminRouter(d: Deps): Hono {
         free_reason: m.free_reason ?? null,
         verified: m.price_verified,
         max_output_tokens: m.max_output_tokens,
-        cost_usd_per_mtok: { input: m.input_usd_per_mtok, output: m.output_usd_per_mtok },
-        price_usd_per_mtok: { input: displayPrice(m.input_usd_per_mtok, markup, 'usd'), output: displayPrice(m.output_usd_per_mtok, markup, 'usd') },
-        price_sat_per_mtok: rate ? { input: displayPrice(m.input_usd_per_mtok, markup, 'sat', rate), output: displayPrice(m.output_usd_per_mtok, markup, 'sat', rate) } : null,
+        // cached_input: the price of input served from the supplier's prompt cache, where the model has one.
+        cost_usd_per_mtok: { input: m.input_usd_per_mtok, output: m.output_usd_per_mtok, cached_input: m.cached_input_usd_per_mtok ?? null },
+        price_usd_per_mtok: {
+          input: displayPrice(m.input_usd_per_mtok, markup, 'usd'),
+          output: displayPrice(m.output_usd_per_mtok, markup, 'usd'),
+          cached_input: m.cached_input_usd_per_mtok === undefined ? null : displayPrice(m.cached_input_usd_per_mtok, markup, 'usd'),
+        },
+        price_sat_per_mtok: rate
+          ? {
+              input: displayPrice(m.input_usd_per_mtok, markup, 'sat', rate),
+              output: displayPrice(m.output_usd_per_mtok, markup, 'sat', rate),
+              cached_input: m.cached_input_usd_per_mtok === undefined ? null : displayPrice(m.cached_input_usd_per_mtok, markup, 'sat', rate),
+            }
+          : null,
       })),
     });
   });
@@ -777,6 +788,11 @@ export interface ModelCost {
   supplier: string;
   requests: number;
   input_tokens: number;
+  /**
+   * The part of input_tokens the supplier reported as served from its prompt cache (bounded to the input
+   * tokens). On a model with a cached_input price these were charged at it; on one without, at the input price.
+   */
+  cached_input_tokens: number;
   output_tokens: number;
   /** Customer price, nano-USD. */
   price_nusd: number;
@@ -785,7 +801,7 @@ export interface ModelCost {
   supplier_reported: number;
   /** Our catalog cost per million tokens (before markup). */
   /** free: a free model (pricing "free"), charged nothing; its catalog prices are 0 on purpose. */
-  catalog: { input: number; output: number; verified: boolean; free: boolean };
+  catalog: { input: number; output: number; cached_input: number | null; verified: boolean; free: boolean };
   /** Per-million prices fitted to the supplier's reported costs, when there is enough data. */
   derived: { input: number; output: number; samples: number } | null;
   /** Fitted price differs from the catalog by more than 10% (either way). */
@@ -795,27 +811,32 @@ export interface ModelCost {
 /**
  * Supplier cost per model over a window: what customers paid (price_nusd), what it cost us (the
  * supplier's reported cost, else usage at catalog cost), and per-million prices fitted to the reported
- * costs by least squares (cost = a*input + b*output), to replace placeholder catalog prices.
+ * costs by least squares (cost = a*input + b*output), to replace placeholder catalog prices. Input served
+ * from the supplier's prompt cache is taken out of the fit at the catalog's cached price (else the input
+ * price), so a cache hit does not read as a cheaper input price.
  */
 export function supplierCosts(db: DB, config: Config, days: number) {
   const since = Date.now() - days * 86_400_000;
   const rows = db
     .prepare(
-      `SELECT model, supplier, input_tokens AS i, output_tokens AS o, price_nusd AS p, supplier_cost_nusd AS c, cost_source AS s
+      `SELECT model, supplier, input_tokens AS i, COALESCE(cached_input_tokens, 0) AS k, output_tokens AS o, price_nusd AS p, supplier_cost_nusd AS c, cost_source AS s
        FROM requests WHERE created_at >= ? AND status = 'settled' AND price_nusd IS NOT NULL`,
     )
-    .all(since) as Array<{ model: string; supplier: string; i: number | null; o: number | null; p: number; c: number | null; s: string | null }>;
+    .all(since) as Array<{ model: string; supplier: string; i: number | null; k: number; o: number | null; p: number; c: number | null; s: string | null }>;
   const by = new Map<string, typeof rows>();
   for (const x of rows) by.set(x.model, [...(by.get(x.model) ?? []), x]);
   const models: ModelCost[] = [];
   for (const [id, rs] of by) {
     const m = config.catalog.models.find((x: { id: string }) => x.id === id);
     const rep = rs.filter((x) => x.s === 'supplier' && x.c != null && x.i != null && x.o != null);
+    // nano-USD per cached input token at catalog cost: what a cache hit is taken out of the fit at.
+    const cachedNusd = 1000 * (m?.cached_input_usd_per_mtok ?? m?.input_usd_per_mtok ?? 0);
     let derived: ModelCost['derived'] = null;
     if (rep.length >= 2) {
       let ii = 0, io = 0, oo = 0, ic = 0, oc = 0;
-      for (const x of rep) {
-        ii += x.i! * x.i!; io += x.i! * x.o!; oo += x.o! * x.o!; ic += x.i! * x.c!; oc += x.o! * x.c!;
+      for (const r of rep) {
+        const x = { i: r.i! - r.k, o: r.o!, c: r.c! - r.k * cachedNusd };
+        ii += x.i * x.i; io += x.i * x.o; oo += x.o * x.o; ic += x.i * x.c; oc += x.o * x.c;
       }
       const det = ii * oo - io * io;
       // Needs requests with different input/output mixes to separate the two prices.
@@ -825,7 +846,7 @@ export function supplierCosts(db: DB, config: Config, days: number) {
         if (a >= 0 && b >= 0) derived = { input: a / 1000, output: b / 1000, samples: rep.length };
       }
     }
-    const catalog = { input: m?.input_usd_per_mtok ?? 0, output: m?.output_usd_per_mtok ?? 0, verified: !!m?.price_verified, free: m?.pricing === 'free' };
+    const catalog = { input: m?.input_usd_per_mtok ?? 0, output: m?.output_usd_per_mtok ?? 0, cached_input: m?.cached_input_usd_per_mtok ?? null, verified: !!m?.price_verified, free: m?.pricing === 'free' };
     const off = (d: number, c: number) => (c === 0 ? d > 0 : Math.abs(d - c) / c > 0.1);
     models.push({
       model: id,
@@ -833,6 +854,7 @@ export function supplierCosts(db: DB, config: Config, days: number) {
       supplier: rs[0]!.supplier,
       requests: rs.length,
       input_tokens: rs.reduce((t, x) => t + (x.i ?? 0), 0),
+      cached_input_tokens: rs.reduce((t, x) => t + x.k, 0),
       output_tokens: rs.reduce((t, x) => t + (x.o ?? 0), 0),
       price_nusd: rs.reduce((t, x) => t + x.p, 0),
       cost_nusd: rs.reduce((t, x) => t + (x.c ?? 0), 0),

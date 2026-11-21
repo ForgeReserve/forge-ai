@@ -95,7 +95,7 @@ A model entry names its supplier and the model's name there:
 }
 ```
 
-Its other fields are `name`, `pricing` (`paid` or `free`, with `free_reason`), `context_length`, `vision`, `reasoning`, `reasoning_efforts`, `speed` and `web_search`. Prices are the supplier's cost per million tokens in US dollars; the engine adds `FORGE_MARKUP`. An audio model goes in the catalog's `audio` list, with `kind` (`transcription` or `speech`), its prices per request and per second or per thousand characters, `max_seconds` or `max_chars`, and `voices`.
+Its other fields are `name`, `pricing` (`paid` or `free`, with `free_reason`), `cached_input_usd_per_mtok` (the supplier's price for input served from its prompt cache, at most the input price), `context_length`, `vision`, `reasoning`, `reasoning_efforts`, `speed` and `web_search`. Prices are the supplier's cost per million tokens in US dollars; the engine adds `FORGE_MARKUP`. An audio model goes in the catalog's `audio` list, with `kind` (`transcription` or `speech`), its prices per request and per second or per thousand characters, `max_seconds` or `max_chars`, and `voices`.
 
 ### Adding a supplier
 

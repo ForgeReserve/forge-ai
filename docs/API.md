@@ -249,6 +249,7 @@ An example from the listing on 16 November 2026: `tinfoil/gpt-oss-120b` had `byt
 What is charged:
 
 - The tokens the supplier reports, at the model's prices, plus the search fee when the model searched. Capped at the hold.
+- Input tokens the supplier served from its prompt cache (`usage.prompt_tokens_details.cached_tokens` in its answer) at the `cached_input` price, on a model that lists one. The hold always uses the full input price.
 - No usage reported on a plaintext stream: the gateway counts the answer as it passes and charges that estimate, capped at the hold.
 - No usage reported on a complete non-streaming or encrypted answer: the hold.
 - A flat-priced supplier: its schedule.
@@ -496,7 +497,7 @@ The model list, in OpenAI's shape with extra fields. No key needed.
 | `data[].max_output_tokens` | The most `max_tokens` can be |
 | `data[].pricing.free`, `free_reason` | A free model, and why (`free_reason` only on free models) |
 | `data[].pricing.mode` | `metered` or `flat` |
-| `data[].pricing.usd_per_mtok`, `sat_per_mtok` | Price per million tokens, input and output, markup included. `sat_per_mtok` is `null` without a rate |
+| `data[].pricing.usd_per_mtok`, `sat_per_mtok` | Price per million tokens, input and output, markup included. A model whose supplier bills input from its prompt cache at a lower price also lists it as `cached_input`. `sat_per_mtok` is `null` without a rate |
 | `data[].pricing.hold` | The figures the hold is computed from (see [Holds and charges](#holds-and-charges)) |
 | `data[].upstream_model` | The enclave's own name for the model (private models only) |
 | `audio` | Speech to text and text to speech models, listed apart from chat |
