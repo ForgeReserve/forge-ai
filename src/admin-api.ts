@@ -763,7 +763,13 @@ export function createAdminRouter(d: Deps): Hono {
           output: displayPrice(m.output_usd_per_mtok, markup, 'usd'),
           cached_input: m.cached_input_usd_per_mtok === undefined ? null : displayPrice(m.cached_input_usd_per_mtok, markup, 'usd'),
         },
-        price_sat_per_mtok: rate ? { input: displayPrice(m.input_usd_per_mtok, markup, 'sat', rate), output: displayPrice(m.output_usd_per_mtok, markup, 'sat', rate) } : null,
+        price_sat_per_mtok: rate
+          ? {
+              input: displayPrice(m.input_usd_per_mtok, markup, 'sat', rate),
+              output: displayPrice(m.output_usd_per_mtok, markup, 'sat', rate),
+              cached_input: m.cached_input_usd_per_mtok === undefined ? null : displayPrice(m.cached_input_usd_per_mtok, markup, 'sat', rate),
+            }
+          : null,
       })),
     });
   });
@@ -782,7 +788,10 @@ export interface ModelCost {
   supplier: string;
   requests: number;
   input_tokens: number;
-  /** The part of input_tokens charged (and, by the supplier, billed) at the cached input price. */
+  /**
+   * The part of input_tokens the supplier reported as served from its prompt cache (bounded to the input
+   * tokens). On a model with a cached_input price these were charged at it; on one without, at the input price.
+   */
   cached_input_tokens: number;
   output_tokens: number;
   /** Customer price, nano-USD. */

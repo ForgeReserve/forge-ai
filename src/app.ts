@@ -953,8 +953,8 @@ export function createApp(d: Deps) {
             costSource = 'catalog';
           }
         }
-        // The input tokens charged at the cached price (0 when the supplier reported none), bounded to the
-        // input tokens: stored and logged as it was charged.
+        // The input tokens the supplier served from its cache (0 when it reported none), bounded to the input
+        // tokens: stored and logged as charged (at the cached price on a model that has one).
         const cachedTokens = usage ? cachedInputTokens(usage) : undefined;
         // Cross-check: the supplier's own cost against the same usage at catalog cost (no markup). They
         // differ when the catalog is out of date with the supplier's rate card, or a figure is wrong.
@@ -1165,8 +1165,15 @@ export function createApp(d: Deps) {
       // fee is charged (it is in the hold); with metrics, only when they show a search.
       if (usage && metrics) Object.assign(usage, { webSearchCalls: metrics.webSearchCalls, otherCostUsd: metrics.otherCostUsd });
       else if (usage && search) usage.webSearchCalls = 1;
-      // Cached input: from the body's usage, else from Tinfoil's metrics (the same count, from its router).
-      if (usage && usage.cachedInputTokens === undefined && metrics?.cachedInputTokens !== undefined) usage.cachedInputTokens = metrics.cachedInputTokens;
+      // Cached input: Tinfoil bills by its usage metrics, so their count is charged when they carry one; the
+      // body's prompt_tokens_details.cached_tokens only when they do not. Its router derives both from one
+      // figure, so a difference is logged (counts only). Either is bounded to the input tokens when charged.
+      if (usage && metrics?.cachedInputTokens !== undefined) {
+        if (usage.cachedInputTokens !== undefined && usage.cachedInputTokens !== metrics.cachedInputTokens) {
+          log.warn('cached_tokens_differ', { request_id: requestId, model: model.id, body_cached_tokens: usage.cachedInputTokens, metrics_cached_tokens: metrics.cachedInputTokens });
+        }
+        usage.cachedInputTokens = metrics.cachedInputTokens;
+      }
       if (!usage) {
         source = noUsage;
         usage = worst;

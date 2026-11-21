@@ -1,7 +1,9 @@
 // Cached input (docs/PAYMENTS.md, Cached input): input tokens the supplier served from its prompt cache are
 // charged at the model's cached_input_usd_per_mtok, the rest of the input at the input price. The hold
 // stays at the full input price. A missing or wrong cached count charges as before.
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { supplierCosts } from '../../src/admin-api.ts';
 import { CatalogSchema, loadConfig } from '../../src/config.ts';
@@ -201,5 +203,27 @@ describe('cached input: admin costs', () => {
     const m = supplierCosts(db, config, 30).models[0]!;
     expect(m.cached_input_tokens).toBe(0);
     expect(m.derived!.input).toBeCloseTo(1, 6);
+  });
+});
+
+describe('cached input: the database', () => {
+  it('adds requests.cached_input_tokens to a database from before it; old rows read as NULL', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'forge-cached-')), 'forge.db');
+    // A database as the previous release left it: the requests table without the column, with a row.
+    let db = openDb(path);
+    db.exec('ALTER TABLE requests DROP COLUMN cached_input_tokens');
+    db.prepare(
+      "INSERT INTO requests (id, payment, unit, model, supplier, status, input_tokens, output_tokens, price_nusd, created_at) VALUES ('old', 'balance', 'usd', 'm1', 'tf', 'settled', 10, 2, 5, ?)",
+    ).run(Date.now());
+    expect((db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>).map((c) => c.name)).not.toContain('cached_input_tokens');
+    db.close();
+    db = openDb(path);
+    expect((db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>).map((c) => c.name)).toContain('cached_input_tokens');
+    expect(db.prepare("SELECT input_tokens, cached_input_tokens FROM requests WHERE id = 'old'").get()).toEqual({ input_tokens: 10, cached_input_tokens: null });
+    // Opening it again changes nothing.
+    db.close();
+    db = openDb(path);
+    expect(db.prepare("SELECT cached_input_tokens FROM requests WHERE id = 'old'").get()).toEqual({ cached_input_tokens: null });
+    db.close();
   });
 });

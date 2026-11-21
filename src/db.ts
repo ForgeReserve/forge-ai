@@ -264,7 +264,7 @@ CREATE TABLE IF NOT EXISTS requests (
   encrypted INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL,
   input_tokens INTEGER,
-  cached_input_tokens INTEGER,      -- the part of input_tokens charged at the cached input price
+  cached_input_tokens INTEGER,      -- the part of input_tokens the supplier served from its prompt cache (charged at the model's cached input price, if it has one)
   output_tokens INTEGER,
   usage_source TEXT,                -- upstream | estimate | flat | tinfoil-metrics
   reserved_msub INTEGER,

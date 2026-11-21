@@ -48,16 +48,23 @@ interface Next {
   body?: boolean;
   /** cost_usd as if every input token were billed at the full price (a supplier figure the catalog disagrees with). */
   costAtFull?: boolean;
+  /** The metrics' cached_prompt_tokens when it differs from the body's count. */
+  metricsCached?: number;
+  /** Cut the connection: a plaintext stream before or after its usage chunk, an encrypted stream before its trailer. */
+  cut?: 'before-usage' | 'after-usage' | 'encrypted';
 }
 
 describe.skipIf(!up)('cached input (stub Tinfoil)', () => {
   let enclave: http.Server;
   let g: Gateway;
+  /** The same catalog at FORGE_MARKUP=1.25. */
+  let g125: Gateway;
   let next: Next = { prompt: 1000, completion: 20 };
 
   /** Tinfoil's X-Tinfoil-Usage-Metrics for the next request, cost_usd at its published rates. */
   const metricsFor = (model: string): string => {
-    const cached = typeof next.cached === 'number' ? Math.min(next.prompt, Math.max(0, next.cached)) : undefined;
+    const reported = next.metricsCached ?? next.cached;
+    const cached = typeof reported === 'number' ? Math.min(next.prompt, Math.max(0, reported)) : undefined;
     let s = `prompt=${next.prompt},completion=${next.completion},total=${next.prompt + next.completion}`;
     if (next.metrics !== false && cached !== undefined) s += `,cached_prompt_tokens=${cached},uncached_prompt_tokens=${next.prompt - cached}`;
     const cost = nano(model, next.prompt, next.costAtFull ? 0 : (cached ?? 0), next.completion);
@@ -75,6 +82,10 @@ describe.skipIf(!up)('cached input (stub Tinfoil)', () => {
           if (String(req.headers.accept).includes('text/event-stream')) {
             res.writeHead(200, { 'content-type': 'text/event-stream', 'ehbp-response-nonce': 'ab'.repeat(32), trailer: 'X-Tinfoil-Usage-Metrics' });
             res.write(frames(3));
+            if (next.cut === 'encrypted') {
+              setTimeout(() => res.socket?.destroy(), 30);
+              return;
+            }
             res.addTrailers({ 'X-Tinfoil-Usage-Metrics': metricsFor(model) });
             res.end();
             return;
@@ -91,7 +102,15 @@ describe.skipIf(!up)('cached input (stub Tinfoil)', () => {
           // the gateway's fetch cannot read, so none are sent here.
           res.writeHead(200, { 'content-type': 'text/event-stream' });
           res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: 'Hello again.' } }] })}\n\n`);
+          if (next.cut === 'before-usage') {
+            setTimeout(() => res.socket?.destroy(), 30);
+            return;
+          }
           res.write(`data: ${JSON.stringify({ choices: [], usage })}\n\n`);
+          if (next.cut === 'after-usage') {
+            setTimeout(() => res.socket?.destroy(), 30);
+            return;
+          }
           res.end('data: [DONE]\n\n');
           return;
         }
@@ -100,20 +119,24 @@ describe.skipIf(!up)('cached input (stub Tinfoil)', () => {
       });
     });
     await new Promise<void>((r) => enclave.listen(0, '127.0.0.1', r));
+    const editCatalog = (cat: any) => {
+      Object.assign(
+        cat.models.find((x: any) => x.id === 'tinfoil/enc-model'),
+        { cached_input_usd_per_mtok: PRICES['enc-model']!.cached },
+      );
+      cat.models.push({ ...cat.models.find((x: any) => x.id === 'tinfoil/enc-model'), id: 'tinfoil/enc-nocache', upstream: 'enc-nocache', cached_input_usd_per_mtok: undefined });
+    };
+    const enclavePort = (enclave.address() as AddressInfo).port;
     g = await startGateway({
-      enclavePort: (enclave.address() as AddressInfo).port,
+      enclavePort,
       env: { FORGE_ADMIN_TOKEN_HASH: createHash('sha256').update(TOKEN).digest('hex'), FORGE_ADMIN_RATE_LIMIT_RPM: '100000' },
-      editCatalog: (cat) => {
-        Object.assign(
-          cat.models.find((x: any) => x.id === 'tinfoil/enc-model'),
-          { cached_input_usd_per_mtok: PRICES['enc-model']!.cached },
-        );
-        cat.models.push({ ...cat.models.find((x: any) => x.id === 'tinfoil/enc-model'), id: 'tinfoil/enc-nocache', upstream: 'enc-nocache', cached_input_usd_per_mtok: undefined });
-      },
+      editCatalog,
     });
+    g125 = await startGateway({ enclavePort, env: { FORGE_MARKUP: '1.25' }, editCatalog });
   });
   afterAll(async () => {
     await g.close();
+    await g125.close();
     enclave.close();
   });
 
@@ -323,6 +346,125 @@ describe.skipIf(!up)('cached input (stub Tinfoil)', () => {
     for (const w of Object.values(o.windows) as any[]) expect(w.total.margin_msub.usd).toBe(0);
     const reqs = (await (await fetch(`${g.url}/admin/api/requests?limit=5`, { headers: { 'X-Forge-Admin-Token': TOKEN } })).json()) as any;
     expect(reqs.data.some((x: any) => x.cached_input_tokens === 800)).toBe(true);
+    // Settings lists the cached price in usd and sat, cost and sale, and null on a model without one.
+    const st = (await (await fetch(`${g.url}/admin/api/settings`, { headers: { 'X-Forge-Admin-Token': TOKEN } })).json()) as any;
+    const sm = st.models.find((x: any) => x.id === 'tinfoil/enc-model');
+    expect(sm.cost_usd_per_mtok.cached_input).toBe(10);
+    expect(sm.price_usd_per_mtok.cached_input).toBe(10);
+    // $10 per million at $100,000 per bitcoin is 10,000 sat per million.
+    expect(sm.price_sat_per_mtok.cached_input).toBe(10_000);
+    const none = st.models.find((x: any) => x.id === 'tinfoil/enc-nocache');
+    expect([none.cost_usd_per_mtok.cached_input, none.price_usd_per_mtok.cached_input, none.price_sat_per_mtok.cached_input]).toEqual([null, null, null]);
+  });
+
+  /** Runs fn with the gateway's warning lines captured; returns them parsed. */
+  const warnings = async (fn: () => Promise<void>): Promise<any[]> => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: any) => (lines.push(String(chunk)), true));
+    setLogSilent(false);
+    try {
+      await fn();
+    } finally {
+      setLogSilent(process.env.FORGE_TEST_LOGS !== '1');
+      spy.mockRestore();
+    }
+    return lines.map((l) => JSON.parse(l));
+  };
+
+  it('plaintext: the metrics count is charged when both carry one; the body count only when the metrics carry none', async () => {
+    const key = await balance(200);
+    const charge = async (n: Next) => {
+      next = n;
+      const res = await plain(key, plainBody('tinfoil/enc-model'));
+      await res.json();
+      return row(res.headers.get('x-forge-request-id')!);
+    };
+    let r: any;
+    let w = await warnings(async () => {
+      // Both, equal.
+      r = await charge({ prompt: 1000, completion: 20, cached: 800 });
+    });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([800, msub(nano('enc-model', 1000, 800, 20))]);
+    expect(w.filter((l) => l.msg === 'cached_tokens_differ')).toEqual([]);
+    // Both, the metrics lower than the body: the metrics count is charged, and the difference logged.
+    w = await warnings(async () => {
+      r = await charge({ prompt: 1000, completion: 20, cached: 800, metricsCached: 600 });
+    });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([600, msub(nano('enc-model', 1000, 600, 20))]);
+    expect(w.filter((l) => l.msg === 'cached_tokens_differ')).toEqual([
+      expect.objectContaining({ request_id: r.id, model: 'tinfoil/enc-model', body_cached_tokens: 800, metrics_cached_tokens: 600 }),
+    ]);
+    // Both, the metrics higher than the body.
+    w = await warnings(async () => {
+      r = await charge({ prompt: 1000, completion: 20, cached: 300, metricsCached: 900 });
+    });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([900, msub(nano('enc-model', 1000, 900, 20))]);
+    expect(w.find((l) => l.msg === 'cached_tokens_differ')).toMatchObject({ body_cached_tokens: 300, metrics_cached_tokens: 900 });
+    // Only the body.
+    r = await charge({ prompt: 1000, completion: 20, cached: 700, metrics: false });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([700, msub(nano('enc-model', 1000, 700, 20))]);
+    // Only the metrics.
+    r = await charge({ prompt: 1000, completion: 20, cached: 400, body: false });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([400, msub(nano('enc-model', 1000, 400, 20))]);
+    // Neither.
+    r = await charge({ prompt: 1000, completion: 20 });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([0, 12_000]);
+    // The metrics count is bounded to the input tokens too.
+    r = await charge({ prompt: 1000, completion: 20, cached: 100, metricsCached: 4000 });
+    expect([r.cached_input_tokens, r.charged_msub]).toEqual([1000, msub(nano('enc-model', 1000, 1000, 20))]);
+  });
+
+  it('at FORGE_MARKUP=1.25: the exact charge with cached tokens', async () => {
+    const r0 = await fetch(`${g125.url}/v1/wallet/topup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: await mintToken(MINT_A, 'usd', 100), invite: createInvite(g125) }),
+    });
+    const key = (await r0.json()).key;
+    next = { prompt: 1000, completion: 20, cached: 800 };
+    const res = await fetch(`${g125.url}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify(plainBody('tinfoil/enc-model')) });
+    expect(res.status).toBe(200);
+    const r = g125.deps.db.prepare('SELECT * FROM requests WHERE id = ?').get(res.headers.get('x-forge-request-id')!) as any;
+    // 125,000 nano-USD per uncached input token, 12,500 per cached one, 1,250,000 per output token:
+    // 200 * 125,000 + 800 * 12,500 + 20 * 1,250,000 = 60,000,000 nano-USD, 6,000 msub (15,000 at the full price).
+    expect(r.price_nusd).toBe(60_000_000);
+    expect(r.charged_msub).toBe(6000);
+    expect(r.cached_input_tokens).toBe(800);
+    // Our cost is Tinfoil's figure, at its own (markup 1) prices.
+    expect(r.supplier_cost_nusd).toBe(nano('enc-model', 1000, 800, 20));
+    const m = ((await (await fetch(`${g125.url}/v1/models`)).json()).data as any[]).find((x) => x.id === 'tinfoil/enc-model');
+    expect(m.pricing.usd_per_mtok).toEqual({ input: 125, output: 1250, cached_input: 12.5 });
+  });
+
+  it('a stream cut off before its usage is charged the full-price estimate, as before', async () => {
+    const key = await balance(100);
+    // Plaintext: the cached count was in the usage chunk that never came.
+    next = { prompt: 1000, completion: 20, cached: 800, cut: 'before-usage' };
+    const body = plainBody('tinfoil/enc-model', { stream: true });
+    let res = await plain(key, body);
+    let { forge } = await readSse(res);
+    expect(forge.partial).toBe(true);
+    let r = row(forge.request_id);
+    // Input estimated as body bytes / 4 at the input price; one content chunk of 12 characters is 3 tokens out.
+    const estIn = Math.ceil(Buffer.byteLength(JSON.stringify(body)) / 4);
+    expect([r.usage_source, r.cached_input_tokens, r.charged_msub]).toEqual(['estimate', 0, msub(estIn * 100_000 + 3 * 1_000_000)]);
+    // Encrypted: the cached count was in the trailer that never came.
+    next = { prompt: 1000, completion: 20, cached: 800, cut: 'encrypted' };
+    res = await encrypted(key, 'enc-model', 'text/event-stream');
+    await res.arrayBuffer().catch(() => undefined);
+    r = await settledRow(res.headers.get('x-forge-request-id')!);
+    // 4,000 bytes / 4 = 1,000 input tokens at the input price, and 3 frames out.
+    expect([r.usage_source, r.cached_input_tokens, r.charged_msub]).toEqual(['estimate', 0, msub(1000 * 100_000 + 3 * 1_000_000)]);
+  });
+
+  it('a plaintext stream cut off after its usage chunk is charged that usage, cached input at the cached price', async () => {
+    const key = await balance(100);
+    next = { prompt: 1000, completion: 20, cached: 800, cut: 'after-usage' };
+    const res = await plain(key, plainBody('tinfoil/enc-model', { stream: true }));
+    const { forge } = await readSse(res);
+    expect(forge.partial).toBe(true);
+    const r = row(forge.request_id);
+    expect([r.usage_source, r.cached_input_tokens, r.charged_msub]).toEqual(['upstream', 800, 4800]);
   });
 
   // Last: the request it makes on purpose has a supplier cost above the price, which the costs test above would count.
