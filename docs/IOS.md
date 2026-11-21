@@ -155,7 +155,7 @@ Capacitor grants the web view's own camera and microphone prompt once iOS has, s
 
 ## TestFlight
 
-Status: 2026-11-21, a Release archive was made and signed for development. The App Store IPA was not exported (below), and nothing has been uploaded.
+Status: 2026-11-21, a Release archive was made and an App Store IPA exported from it (68 MB, version 0.1.0, build 1), signed with the team's Apple Distribution certificate and a named App Store profile. Nothing has been uploaded.
 
 **Privacy manifest.** `ios/App/App/PrivacyInfo.xcprivacy` is in the App target's resources and lands at the root of the app. Capacitor and CapacitorCordova carry their own (`Capacitor.framework`, `Cordova.framework`), with no tracking, no data and no required reason API. The app's says:
 
@@ -165,7 +165,7 @@ Status: 2026-11-21, a Release archive was made and signed for development. The A
 
 **Building it.** `scripts/ios-archive.sh --team <team id>` (or `FORGE_IOS_TEAM`) bundles the web app (`pnpm -s ios:web`), runs `pod install`, makes a Release archive for any iPhone (`generic/platform=iOS`) with automatic signing and `-allowProvisioningUpdates`, and exports it with method `app-store-connect` and destination `export`: an IPA in a folder. It prints the IPA's path, size, version and build number. It uploads nothing. The team id goes to xcodebuild for that run only; if xcodebuild changes `project.pbxproj`, the script puts it back. Output goes to `dist/ios` (git ignores `dist`) or `--out`, which must be outside the repository or in `dist/`.
 
-The export needs an Apple account of the team in Xcode (Settings, Accounts), so Xcode can make the App Store profile for `com.forgereserve.ai` with the NFC Tag Reading capability. Without one it stops with `No Accounts` and `No profiles for 'com.forgereserve.ai' were found`, after the archive is made.
+The export needs an Apple account of the team in Xcode (Settings, Accounts), so Xcode can make the App Store profile for `com.forgereserve.ai` with the NFC Tag Reading capability. Without one it stops with `No Accounts` and `No profiles for 'com.forgereserve.ai' were found`, after the archive is made. On a Mac with no account in Xcode, give an App Store Connect API key of the team: `--key <file.p8> --key-id <id> --issuer <id>` (or `FORGE_ASC_KEY`, `FORGE_ASC_KEY_ID`, `FORGE_ASC_ISSUER`). The key file stays outside this repository and goes to xcodebuild by path; the script never reads it. Where the key may not sign in the cloud (`Cloud signing permission error`), make an App Store provisioning profile for the App ID with the team's Apple Distribution certificate, install it on the Mac, and name it: `--profile "<profile name>"` (or `FORGE_IOS_PROFILE`). The export then signs with that profile and the Apple Distribution certificate in the keychain.
 
 **What the owner does in App Store Connect.**
 

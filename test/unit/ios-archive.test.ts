@@ -31,6 +31,24 @@ describe('the iPhone archive script', () => {
     expect(badEnv.stderr).toContain('ten capital letters and digits');
   });
 
+  it('takes an App Store Connect API key only whole, from a file that exists outside the repository, and never reads it', () => {
+    const half = run(['--team', 'ABCDE12345', '--key-id', 'ABC123']);
+    expect(half.status).toBe(1);
+    expect(half.stderr).toContain('An API key needs all three');
+    const missing = run(['--team', 'ABCDE12345', '--key', '/nowhere/key.p8', '--key-id', 'ABC123', '--issuer', 'x']);
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('No API key file at /nowhere/key.p8');
+    const inside = run(['--team', 'ABCDE12345', '--key', 'package.json', '--key-id', 'ABC123', '--issuer', 'x']);
+    expect(inside.status).toBe(1);
+    expect(inside.stderr).toContain('The API key is inside the repository');
+    const env = run(['--team', 'ABCDE12345'], { FORGE_ASC_KEY_ID: 'ABC123' });
+    expect(env.stderr).toContain('An API key needs all three');
+    // The key file goes to xcodebuild by path, for the archive and the export; the script never opens it.
+    expect(code.match(/\$\{AUTH\[@\]\+"\$\{AUTH\[@\]\}"\}/g)).toHaveLength(2);
+    expect(code).toContain('AUTH=(-authenticationKeyPath "$KEY" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER")');
+    expect(code).not.toMatch(/cat "\$KEY"|<\s*"\$KEY"/);
+  });
+
   it('keeps its output out of git: dist/, or a folder outside the repository', () => {
     const r = run(['--team', 'ABCDE12345', '--out', 'ios/not-here']);
     expect(r.status).toBe(1);
@@ -50,7 +68,7 @@ describe('the iPhone archive script', () => {
   it('archives Release for any iPhone with automatic signing and the team for this run only', () => {
     expect(code).toContain('xcodebuild -workspace "$IOS/App.xcworkspace" -scheme App -configuration Release');
     expect(code).toContain("-destination 'generic/platform=iOS'");
-    expect(code).toMatch(/-allowProvisioningUpdates CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="\$TEAM" archive$/m);
+    expect(code).toMatch(/-allowProvisioningUpdates \$\{AUTH\[@\]\+"\$\{AUTH\[@\]\}"\} CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="\$TEAM" archive$/m);
     // The project file is put back if xcodebuild changed it, so no team is ever left in it to commit.
     expect(code).toContain('cp "$PROJECT" "$WORK/project.pbxproj"');
     expect(code).toMatch(/trap restore EXIT/);
@@ -65,11 +83,20 @@ describe('the iPhone archive script', () => {
     expect(code).toMatch(/<key>destination<\/key>\s*<string>export<\/string>/);
     expect(code).not.toMatch(/<string>upload<\/string>/);
     expect(code).toContain('xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT"');
-    // No upload tool, and no App Store Connect API key.
-    expect(code).not.toMatch(/altool|notarytool|iTMSTransporter|Transporter\.app|upload-app|appstoreconnect|authenticationKey|private_keys/i);
+    // No upload tool, and no API key of its own: one is only passed to xcodebuild to sign in, when given.
+    expect(code).not.toMatch(/altool|notarytool|iTMSTransporter|Transporter\.app|upload-app|appstoreconnect|private_keys/i);
     // The export options, which name the team, are written to a temporary folder that is removed.
     expect(code).toContain('cat > "$WORK/ExportOptions.plist"');
     expect(code).toContain('rm -rf "$WORK"');
+  });
+
+  it('exports with a named profile and the distribution certificate when asked, else with automatic signing', () => {
+    expect(code).toMatch(/<key>signingStyle<\/key>\s*<string>manual<\/string>\s*<key>signingCertificate<\/key>\s*<string>Apple Distribution<\/string>/);
+    expect(code).toMatch(/<key>com\.forgereserve\.ai<\/key>\s*<string>\$PROFILE<\/string>/);
+    expect(code).toMatch(/<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
+    expect(code).toContain('PROFILE="${FORGE_IOS_PROFILE:-}"');
+    // A name that could break out of the options file is refused.
+    expect(code).toContain('[[ "$PROFILE" =~ ^[A-Za-z0-9\\ ._-]+$ ]]');
   });
 
   it('prints the IPA, its size, version and build number', () => {
