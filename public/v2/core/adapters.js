@@ -75,8 +75,17 @@ export const MIC_SOUND = { channelCount: 1, echoCancellation: false, noiseSuppre
 export const MIC_CHUNK = 4096;
 /** A recording that has run this long with no sample at all from the microphone gave no sound (a dead microphone, not silence). */
 export const NO_SAMPLES_MS = 1000;
-/** On an iPhone, this much sound of pure zeros at the start of a recording opens the microphone again once, with echo cancelling. */
+/** On an iPhone, this much sound of pure zeros at the start of a recording opens the microphone again once, the other way (MIC_IOS). */
 export const SILENT_START_SECONDS = 0.5;
+/**
+ * How an iPhone asks for the microphone: with echo cancelling on. WebKit captures through Apple's
+ * voice-processing unit (VoiceProcessingIO) only with echo cancelling on; with it off it uses the plain
+ * RemoteIO unit, "to bypass voice specific processing" (WebKit 258428@main), and WebKit offers no
+ * autoGainControl or noiseSuppression of its own (CoreAudioCaptureSource lists only echoCancellation,
+ * volume and sampleRate). So with it off an iPhone gets no automatic gain: a person speaking at a normal
+ * distance arrived at a level of about 0.024 (owner's iPhone, 2026-11-21), far under a voice elsewhere.
+ */
+export const MIC_IOS = { ...MIC_SOUND, echoCancellation: true };
 /** How long a press waits, once the microphone is open, for the recording context to run before it makes a new one. */
 export const RUN_WAIT_MS = 50;
 /** How long a press waits for the capture worklet to load before it records the old way this once. */
@@ -109,12 +118,13 @@ export const MIC_WORKLET = new URL('./mic-worklet.js', import.meta.url).href;
  * 216349). An AnalyserNode on the same source takes the loudest sample it sees, for the facts only: it
  * tells "the capture never fired" apart from "no sound reached Web Audio".
  *
- * An iPhone whose recording starts with SILENT_START_SECONDS of pure zeros (digital silence, never a
- * quiet room) opens the microphone again once, with echo cancelling on, which is how iOS records for
- * calls. Only once per recording, only on iOS, and the first stream is stopped first (WebKit does not
- * capture with and without echo cancelling at once). When that brings sound, later recordings on this
- * page ask for echo cancelling from the start. Android and computers never do this (a Galaxy A16 needs
- * echo cancelling off: MIC_SOUND).
+ * Echo cancelling. An iPhone asks with it on (MIC_IOS: Apple's voice processing, with its automatic
+ * gain); Android and computers with it off (MIC_SOUND: a Galaxy A16's web view gives silence with it on).
+ * On an iPhone only, a recording that starts with SILENT_START_SECONDS of pure zeros (digital silence,
+ * never a quiet room), or gives no piece at all for NO_SAMPLES_MS, opens the microphone again once, the
+ * other way. The first stream is stopped first (WebKit does not capture with and without echo cancelling
+ * at once). When that brings sound, later recordings on this page ask that way from the start. The
+ * settings the browser actually applied (track.getSettings()) are kept with the facts.
  */
 export function createMic({
   media = () => globalThis.navigator?.mediaDevices,
@@ -124,6 +134,7 @@ export function createMic({
   workletUrl = MIC_WORKLET,
   workletWaitMs = WORKLET_WAIT_MS,
   runWaitMs = RUN_WAIT_MS,
+  quietMs = NO_SAMPLES_MS,
   now = () => Date.now(),
   log = (facts) => console.info('[forge] microphone', JSON.stringify(facts)),
 } = {}) {
@@ -132,7 +143,7 @@ export function createMic({
   let loaded = null; // {ctx, ready: Promise<{ok, error}>}: the worklet module, once per context
   let using = 0; // recordings open on ctx now
   const live = new Set(); // the facts of each recording open now
-  let echo = false; // echo cancelling brought sound on this iPhone: ask for it from the start
+  let iosEcho = null; // on an iPhone, the way the retry found sound (echo cancelling on or off), else null: MIC_IOS
   let last = null;
 
   const note = (facts, state) => {
@@ -235,7 +246,7 @@ export function createMic({
       let c = context();
       wake(c);
       using++;
-      const facts = { method: null, worklet: null, remade: false, states: [c.state], sampleRate: c.sampleRate, label: '', muted: false, ended: false, echoCancellation: echo, reopened: false, changed: false, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, heardPeak: null, ms: 0 };
+      const facts = { method: null, worklet: null, remade: false, states: [c.state], sampleRate: c.sampleRate, label: '', muted: false, ended: false, echoCancellation: null, got: null, reopened: false, changed: false, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, heardPeak: null, ms: 0 };
       live.add(facts);
       let released = false;
       const release = () => {
@@ -252,11 +263,15 @@ export function createMic({
           c.suspend().catch(() => {});
         }
       };
-      const ask = (ec) => media().getUserMedia({ audio: ec ? { ...MIC_SOUND, echoCancellation: true } : MIC_SOUND });
+      const ask = (ec) => media().getUserMedia({ audio: ec ? MIC_IOS : MIC_SOUND });
+      const iphone = ios();
+      // Echo cancelling asked for: on, on an iPhone (MIC_IOS); off elsewhere (MIC_SOUND).
+      const first = iphone ? (iosEcho ?? true) : false;
+      facts.echoCancellation = first;
       let stream;
       let w;
       try {
-        stream = await ask(echo);
+        stream = await ask(first);
         // The permission sheet may have come and gone: wake it again, now that the microphone is open.
         wake(c);
         // A context that still does not run is made again, now. WebKit counts a touch's end as the tap
@@ -280,9 +295,8 @@ export function createMic({
       let listener = () => {};
       let stopped = false;
       let began = now();
-      const iphone = !echo && ios();
       let zeros = iphone ? 0 : -1; // samples of pure zeros at the start, while that is still being watched
-      let rescue = false; // opened again with echo cancelling: the first sound says it helped
+      let rescue = false; // opened again the other way: the first sound says it helped
       const deliver = (buf) => {
         if (stopped || !buf?.length) return;
         facts.chunks++;
@@ -306,7 +320,7 @@ export function createMic({
         }
         if (rescue && peak > 0) {
           rescue = false;
-          echo = true;
+          iosEcho = !first;
         }
         listener(buf);
       };
@@ -370,6 +384,15 @@ export function createMic({
           facts.ended = true;
           retire(c);
         });
+        // What the browser applied, not what was asked (null where it does not say: WebKit has no
+        // autoGainControl or noiseSuppression).
+        try {
+          const g = track?.getSettings?.() ?? {};
+          const v = (k) => (g[k] === undefined ? null : g[k]);
+          facts.got = { echoCancellation: v('echoCancellation'), autoGainControl: v('autoGainControl'), noiseSuppression: v('noiseSuppression'), sampleRate: v('sampleRate'), channelCount: v('channelCount') };
+        } catch {
+          facts.got = null;
+        }
         source = c.createMediaStreamSource(s);
         source.connect(node);
         if (probe) source.connect(probe);
@@ -384,18 +407,23 @@ export function createMic({
       };
       watch(stream);
 
-      /** The iPhone retry: the first stream stopped, then the microphone opened again with echo cancelling. */
+      // On an iPhone: no piece at all for NO_SAMPLES_MS opens it again the other way too.
+      const quiet = iphone ? setTimeout(() => !stopped && !facts.chunks && !facts.reopened && again(), quietMs) : 0;
+
+      /** The iPhone retry, once: the first stream stopped, then the microphone opened again the other way. */
       async function again() {
+        if (facts.reopened) return;
         facts.reopened = true;
+        zeros = -1;
         unplug();
         try {
-          const s = await ask(true);
+          const s = await ask(!first);
           if (stopped) {
             for (const t of s.getTracks()) t.stop();
             return;
           }
           stream = s;
-          facts.echoCancellation = true;
+          facts.echoCancellation = !first;
           rescue = true;
           watch(s);
           wake(c);
@@ -422,6 +450,7 @@ export function createMic({
           stopped = true;
           listener = () => {};
           clearInterval(poll);
+          clearTimeout(quiet);
           if (node.port) {
             node.port.onmessage = null;
             node.port.postMessage?.('stop');

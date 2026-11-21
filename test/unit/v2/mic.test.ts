@@ -30,6 +30,10 @@ class FakeTrack {
   label = 'iPhone Microphone';
   muted = false;
   readyState = 'live';
+  settings: Record<string, unknown> = {};
+  getSettings() {
+    return this.settings;
+  }
   on: Record<string, (() => void)[]> = {};
   addEventListener(k: string, f: () => void) {
     (this.on[k] ??= []).push(f);
@@ -44,7 +48,7 @@ class FakeTrack {
   }
 }
 
-function fakeAudio({ state = 'suspended', resumeWorks = true, worklet = 'loads' as 'loads' | 'fails' | 'slow' | 'none', ios = false, slowSuspend = false, onlyWhileCapturing = false } = {}) {
+function fakeAudio({ state = 'suspended', resumeWorks = true, worklet = 'loads' as 'loads' | 'fails' | 'slow' | 'none', ios = false, slowSuspend = false, onlyWhileCapturing = false, quietMs = 60_000 } = {}) {
   const all: any[] = [];
   const asked: any[] = [];
   const streams: any[] = [];
@@ -147,6 +151,8 @@ function fakeAudio({ state = 'suspended', resumeWorks = true, worklet = 'loads' 
       if (refuse) return Promise.reject(refuse);
       const track = new FakeTrack();
       track.label = label;
+      // As WebKit says it: echo cancelling and the rate, nothing about gain or noise. Chrome says all five.
+      track.settings = ios ? { echoCancellation: c.audio.echoCancellation, sampleRate: 48000, channelCount: 1 } : { echoCancellation: c.audio.echoCancellation, autoGainControl: true, noiseSuppression: true, sampleRate: 48000, channelCount: 1 };
       const s = { track, getTracks: () => [track], getAudioTracks: () => [track] };
       streams.push(s);
       if (holdAsk) return new Promise((res) => (pendingAsk = () => res(s)));
@@ -154,7 +160,7 @@ function fakeAudio({ state = 'suspended', resumeWorks = true, worklet = 'loads' 
     },
   };
   const logged: any[] = [];
-  const mic = A.createMic({ media: () => media, Context: () => Ctx, WorkletNode: () => WorkletNode, ios: () => ios, workletUrl: '/v2/core/mic-worklet.js', workletWaitMs: 20, runWaitMs: 20, now: () => clock, log: (f: any) => logged.push(f) });
+  const mic = A.createMic({ media: () => media, Context: () => Ctx, WorkletNode: () => WorkletNode, ios: () => ios, workletUrl: '/v2/core/mic-worklet.js', workletWaitMs: 20, runWaitMs: 20, quietMs, now: () => clock, log: (f: any) => logged.push(f) });
   return {
     mic,
     all,
@@ -435,15 +441,26 @@ describe('the microphone adapter', () => {
     rec.stop();
   });
 
-  it('on an iPhone, a start of pure zeros opens the microphone again once, with echo cancelling', async () => {
+  // Owner's iPhone, 2026-11-21: with echo cancelling off (WebKit's RemoteIO unit, no voice processing,
+  // no automatic gain) a voice came in at a quarter of the level needed. An iPhone asks with it on.
+  it('on an iPhone, asks with echo cancelling on, and says what the browser applied', async () => {
+    const x = fakeAudio({ state: 'running', ios: true });
+    const rec = await x.mic.open();
+    expect(x.asked).toEqual([A.MIC_IOS]);
+    expect(A.MIC_IOS).toEqual({ ...A.MIC_SOUND, echoCancellation: true });
+    feed(x.all[0], 3, 0.01);
+    rec.stop();
+    expect(x.mic.last()).toMatchObject({ echoCancellation: true, reopened: false, got: { echoCancellation: true, autoGainControl: null, noiseSuppression: null, sampleRate: 48000, channelCount: 1 } });
+  });
+
+  it('on an iPhone, a start of pure zeros opens the microphone again once, with echo cancelling off; when that brings sound, the page keeps it', async () => {
     const x = fakeAudio({ state: 'running', ios: true });
     const rec = await x.mic.open();
     const got: number[] = [];
     rec.onData((b: Float32Array) => got.push(b[0]!));
-    expect(x.asked).toEqual([A.MIC_SOUND]);
     feed(x.all[0], 6, 0); // 24576 samples: over half a second at 48 kHz
     await flush();
-    expect(x.asked).toEqual([A.MIC_SOUND, { ...A.MIC_SOUND, echoCancellation: true }]);
+    expect(x.asked).toEqual([A.MIC_IOS, A.MIC_SOUND]);
     // The first stream was stopped before the second was asked for.
     expect(x.streams[0].track.readyState).toBe('ended');
     expect(x.all[0].sources).toHaveLength(2);
@@ -454,14 +471,27 @@ describe('the microphone adapter', () => {
     feed(x.all[0], 2, 0.3);
     rec.stop();
     expect(got.at(-1)).toBeCloseTo(0.3, 5);
-    expect(x.mic.last()).toMatchObject({ reopened: true, echoCancellation: true, chunks: 20, zeroChunks: 18 });
-    expect(x.mic.last().level).toBeGreaterThan(0.5);
-    // It brought sound: the next recording asks for echo cancelling from the start, and is never reopened.
+    expect(x.mic.last()).toMatchObject({ reopened: true, echoCancellation: false, got: { echoCancellation: false }, chunks: 20, zeroChunks: 18 });
+    // It brought sound: the next recording asks that way from the start.
     const next = await x.mic.open();
-    expect(x.asked.at(-1)).toEqual({ ...A.MIC_SOUND, echoCancellation: true });
-    feed(x.all[0], 20, 0);
+    expect(x.asked.at(-1)).toEqual(A.MIC_SOUND);
+    feed(x.all[0], 20, 0.2);
     await flush();
+    next.stop();
     expect(x.asked).toHaveLength(3);
+  });
+
+  it('on an iPhone, no piece at all opens the microphone again once, the other way', async () => {
+    const x = fakeAudio({ state: 'running', ios: true, quietMs: 30 });
+    const rec = await x.mic.open();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(x.asked).toEqual([A.MIC_IOS, A.MIC_SOUND]);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(x.asked).toHaveLength(2);
+    rec.stop();
+    // Nothing came after it either: the page keeps asking with echo cancelling on.
+    const next = await x.mic.open();
+    expect(x.asked.at(-1)).toEqual(A.MIC_IOS);
     next.stop();
   });
 
@@ -479,7 +509,7 @@ describe('the microphone adapter', () => {
     await flush();
     r2.stop();
     expect(android.asked).toEqual([A.MIC_SOUND]);
-    expect(android.mic.last()).toMatchObject({ reopened: false, echoCancellation: false });
+    expect(android.mic.last()).toMatchObject({ reopened: false, echoCancellation: false, got: { echoCancellation: false, autoGainControl: true, noiseSuppression: true } });
   });
 
   it('a reopen that is refused, or that lands after the recording stopped, leaves nothing open', async () => {

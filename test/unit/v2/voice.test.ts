@@ -458,7 +458,9 @@ describe('voice in through the engine', () => {
       const audio = audioFor(sttModel());
       const levels: number[] = [];
       const session = await VIN.create({ mic, audio }).start({ onLevel: (l: number) => levels.push(l) });
-      expect(Math.max(...levels)).toBeLessThan(VIN.VOICE_LEVEL);
+      // The bars: a silent room stays low (each piece against the bars' floor).
+      expect(Math.max(...levels)).toBeLessThanOrEqual(1);
+      if (!hiss) expect(Math.max(...levels)).toBe(0);
       expect(await session.finish({})).toEqual({ text: '', chargedMsub: 0, balanceMsub: null, empty: 'quiet' });
       expect(audio.sent).toHaveLength(0);
       expect(mic.stopped).toBe(1);
@@ -489,34 +491,147 @@ describe('voice in through the engine', () => {
     await expect((await VIN.create({ mic: ended, audio, now: () => clock }).start({})).finish({})).rejects.toMatchObject({ key: 'talk.micSilent' });
   });
 
-  it('More, Voice tells no pieces, pieces of exact zeros and pieces below the voice level apart, with the loudest to 4 places', async () => {
+  it('More, Voice tells no pieces, exact zeros, no voice, a quiet voice and a voice apart, with the settings applied, the rule and the gain', async () => {
     const SET: any = await import('../../../public/v2/screens/settings.js' as string);
-    const rows = (f: any) => Object.fromEntries(SET.micRows(f, (k: string) => k).map(([k, v]: [string, string]) => [k.slice(10), v]));
-    const base = { method: 'worklet', worklet: 'loaded', states: ['suspended', 'running'], sampleRate: 48000, label: 'iPhone Microphone', muted: false, ended: false, echoCancellation: false, reopened: false, changed: false, samples: 96000, heardPeak: 0, ms: 2100, voiceLevel: VIN.VOICE_LEVEL };
-    expect(rows({ ...base, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, verdict: 'dead' }).result).toBe('no pieces (dead)');
-    const zeros = rows({ ...base, chunks: 23, zeroChunks: 23, peak: 0, level: 0, verdict: 'quiet' });
+    const rows = (f: any) => Object.fromEntries(SET.micRows(f, (k: string) => EN[k] ?? k).map(([k, v]: [string, string]) => [k.slice(10), v]));
+    const base = { method: 'worklet', worklet: 'loaded', states: ['suspended', 'running'], sampleRate: 44100, label: 'iPhone Microphone', muted: false, ended: false, echoCancellation: true, got: { echoCancellation: true, autoGainControl: null, noiseSuppression: null, sampleRate: 48000, channelCount: 1 }, reopened: false, changed: false, samples: 81920, heardPeak: 0, ms: 2000, voiceLevel: VIN.VOICE_LEVEL };
+    expect(rows({ ...base, chunks: 0, zeroChunks: 0, samples: 0, peak: 0, level: 0, rule: null, verdict: 'dead' }).result).toBe('no pieces (dead)');
+    const zeros = rows({ ...base, chunks: 20, zeroChunks: 20, peak: 0, level: 0, rule: null, verdict: 'quiet' });
     expect(zeros.result).toBe('pieces of exact zeros (quiet)');
-    expect(zeros.chunks).toBe('23 (23 all zeros)');
-    const low = rows({ ...base, chunks: 23, zeroChunks: 0, peak: 0.00731, level: 0.0123, heardPeak: 0.0081, verdict: 'quiet' });
-    expect(low.result).toBe('pieces below the voice level (quiet)');
-    expect(low.peak).toBe('0.0073');
-    expect(low.level).toBe('0.0123 (voice at 0.0500)');
-    expect(low.heard).toBe('0.0081');
-    expect(rows({ ...base, chunks: 23, zeroChunks: 0, peak: 0.4, level: 0.3, verdict: 'sent' }).result).toBe('voice (sent)');
+    expect(zeros.chunks).toBe('20 (20 all zeros)');
+    const room = rows({ ...base, chunks: 20, peak: 0.0259, level: 0.024, floor: 0.0228, needs: 0.057, loud: 0.0238, rule: null, gain: 1, verdict: 'quiet' });
+    expect(room.result).toBe('pieces below the voice level (quiet)');
+    expect(room.rule).toBe('floor 0.0228, needs 0.0570, loud part 0.0238');
+    // The owner's iPhone (2026-11-21): a real voice at about a quarter of the loud rule's level.
+    const owner = rows({ ...base, chunks: 20, peak: 0.0259, level: 0.024, floor: 0.0032, needs: 0.008, loud: 0.022, rule: 'quiet', gain: 16, heardPeak: 0.0174, verdict: 'sent' });
+    expect(owner.result).toBe('a quiet voice (sent)');
+    expect(owner.peak).toBe('0.0259');
+    expect(owner.level).toBe('0.0240 (loud voice at 0.0500)');
+    expect(owner.gain).toBe('x16.0');
+    expect(owner.heard).toBe('0.0174');
+    expect(owner.echo).toBe('asked yes, got yes');
+    expect(owner.got).toBe('gain ?, noise ?, 48000 Hz, 1 ch');
+    expect(rows({ ...base, chunks: 20, peak: 0.6, level: 0.4, rule: 'loud', gain: 1, verdict: 'sent' }).result).toBe('voice (sent)');
+    expect(rows({ ...base, chunks: 3, peak: 0.4, level: 0.3, changed: true, label: 'Headphones', reopened: true, echoCancellation: false, got: null }).echo).toBe('asked no, got ?, opened again');
     expect(rows({ ...base, chunks: 3, peak: 0.4, level: 0.3, changed: true, label: 'Headphones' }).label).toBe('Headphones, changed');
     expect(SET.micRows(null, (k: string) => k)).toEqual([]);
   });
 
+  // The voice rule (owner's iPhone, 2026-11-21: with echo cancelling off it had no automatic gain, and a
+  // person speaking normally gave 20 pieces at 44.1 kHz, loudest sample 0.0259, top level 0.0240 against
+  // the loud rule's 0.05). Pieces of 4096 at 44.1 kHz, built with a seeded noise at a set level.
+  const RATE = 44100;
+  function piece(lvl: number, seed: number, peak = 0) {
+    const b = new Float32Array(4096);
+    let x = seed * 9301 + 49297;
+    const rms = lvl / 4;
+    for (let i = 0; i < b.length; i++) {
+      x = (x * 9301 + 49297) % 233280;
+      b[i] = (x / 233280 - 0.5) * 2 * rms * Math.sqrt(3); // uniform noise of this RMS
+    }
+    if (peak) b[100] = peak;
+    return b;
+  }
+  const clipOf = (levels: number[], peak = 0) => levels.map((l, i) => piece(l, i + 1, i === levels.indexOf(Math.max(...levels)) ? peak : 0));
+  /** The owner's hold: a breath of room before and after, three words rising and falling at about 0.006 RMS. */
+  const OWNER = [0.003, 0.0032, 0.0029, 0.016, 0.024, 0.02, 0.006, 0.018, 0.023, 0.012, 0.005, 0.021, 0.024, 0.017, 0.007, 0.0031, 0.0033, 0.003, 0.0028, 0.003];
+  /** A steady room at the same level as the voice: a fan or a hiss, within 5% of itself. */
+  const ROOM = Array.from({ length: 20 }, (_, i) => 0.024 * (1 + 0.05 * Math.sin(i)));
+  function micOf(buffers: Float32Array[]) {
+    const m = {
+      stopped: 0,
+      facts: null as any,
+      available: () => true,
+      async open() {
+        return {
+          sampleRate: RATE,
+          onData: (f: any) => buffers.forEach((b) => f(b)),
+          stop: () => m.stopped++,
+          addFacts: (x: any) => (m.facts = { ...m.facts, ...x }),
+        };
+      },
+    };
+    return m;
+  }
+  const levelsOf = (bufs: Float32Array[]) => bufs.map((b) => WAV.level(b));
+  const lengths = (n: number) => Array(n).fill(4096 / RATE);
+
+  it("hears a quiet voice by the clip's own shape, and sends it louder; a steady room at the same level is not sent", async () => {
+    const owner = clipOf(OWNER, 0.0259);
+    expect(Math.max(...levelsOf(owner))).toBeCloseTo(0.024, 2);
+    expect(Math.max(...levelsOf(owner))).toBeLessThan(VIN.VOICE_LEVEL); // the old rule refused it
+    const h = VIN.hearing(levelsOf(owner), lengths(20));
+    expect(h.rule).toBe('quiet');
+    expect(h.floor).toBeLessThan(0.0035);
+    expect(h.needs).toBe(VIN.QUIET_FLOOR);
+    expect(h.seconds).toBeGreaterThan(0.5);
+    const room = VIN.hearing(levelsOf(clipOf(ROOM)), lengths(20));
+    expect(room.rule).toBeNull();
+    expect(room.needs).toBeGreaterThan(0.05);
+    expect(room.seconds).toBe(0);
+    // Sent through the module: the quiet voice goes, louder (capped gain, no clipping); the room does not.
+    const audio = audioFor(sttModel());
+    const mic = micOf(owner);
+    const bars: number[] = [];
+    const s1 = await VIN.create({ mic, audio }).start({ onLevel: (l: number) => bars.push(l) });
+    await s1.finish({});
+    expect(audio.sent).toHaveLength(1);
+    expect(mic.facts).toMatchObject({ rule: 'quiet', verdict: 'sent', gain: VIN.MAX_GAIN });
+    const info = wavInfo(audio.sent[0].wav)!;
+    expect(info.sampleRate).toBe(16000);
+    // The bars move for it: its words reach the top, its room stays low.
+    expect(Math.max(...bars)).toBe(1);
+    expect(bars[0]).toBeLessThan(0.2);
+    const quiet = micOf(clipOf(ROOM));
+    const s2 = await VIN.create({ mic: quiet, audio }).start({});
+    expect(await s2.finish({})).toMatchObject({ text: '', empty: 'quiet' });
+    expect(audio.sent).toHaveLength(1);
+    expect(quiet.facts).toMatchObject({ rule: null, verdict: 'quiet', gain: 1 });
+  });
+
+  it('refuses exact zeros, a silent room and digital near-silence; sends a loud voice and a loud steady tone as before; a short clip is short', () => {
+    const n = 20;
+    expect(VIN.hearing(Array(n).fill(0), lengths(n)).rule).toBeNull();
+    // A quiet room, with a little rise and fall of its own.
+    expect(VIN.hearing(Array.from({ length: n }, (_, i) => 0.003 * (1 + 0.3 * Math.sin(i))), lengths(n)).rule).toBeNull();
+    // Near-silence with a few pieces three times their floor: still under QUIET_FLOOR.
+    expect(VIN.hearing([...Array(16).fill(0.0004), 0.0015, 0.0015, 0.0015, 0.0015], lengths(n)).rule).toBeNull();
+    expect(VIN.hearing([0.01, 0.3, 0.4, 0.35, 0.02, 0.3, 0.01, 0.01], lengths(8)).rule).toBe('loud');
+    // The UI tests' fake microphone: a steady loud tone. The loud rule sends it, as it always did.
+    expect(VIN.hearing(Array(n).fill(0.85), lengths(n)).rule).toBe('loud');
+    // Under MIN_FLOOR_PIECES pieces there is no floor to judge by.
+    expect(VIN.hearing([0.001, 0.02, 0.02], lengths(3)).rule).toBeNull();
+    expect(VIN.judge({ samples: 4096 * 4, voicedSeconds: 0.3, rate: RATE, ms: 400 })).toBe('short');
+  });
+
+  it('normalises a clip with a bounded gain: never louder than the cap, never clipped, never quieter', () => {
+    const quiet = Float32Array.from({ length: 1000 }, (_, i) => 0.006 * Math.sin(i / 5));
+    const a = VIN.normalise(quiet, 0.024);
+    expect(a.gain).toBe(VIN.MAX_GAIN);
+    expect(Math.max(...a.pcm.map(Math.abs))).toBeCloseTo(0.006 * 16, 2);
+    // A peak near the top: the gain stops at HEADROOM, so nothing clips.
+    const spiky = Float32Array.from({ length: 1000 }, (_, i) => (i === 10 ? 0.3 : 0.004 * Math.sin(i)));
+    const b = VIN.normalise(spiky, 0.016);
+    expect(b.gain).toBeCloseTo(VIN.HEADROOM / 0.3, 5);
+    expect(Math.max(...b.pcm.map(Math.abs))).toBeLessThanOrEqual(VIN.HEADROOM + 1e-6);
+    // Loud enough already: left as it is.
+    const loud = Float32Array.from({ length: 1000 }, (_, i) => 0.5 * Math.sin(i));
+    const c = VIN.normalise(loud, 0.8);
+    expect(c.gain).toBe(1);
+    expect(c.pcm).toBe(loud);
+    expect(VIN.normalise(new Float32Array(100), 0).gain).toBe(1);
+  });
+
   it('tells the three empty recordings apart: no sound yet (short), sound with no voice (quiet), and a dead microphone', () => {
     const r = 48000;
-    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 400 })).toBe('short');
-    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 1000 })).toBe('dead');
-    expect(VIN.judge({ samples: 0, voiced: 0, rate: r, ms: 100, ended: true })).toBe('dead');
-    expect(VIN.judge({ samples: r * 0.3, voiced: r * 0.3, rate: r, ms: 2000 })).toBe('short');
+    expect(VIN.judge({ samples: 0, voicedSeconds: 0, rate: r, ms: 400 })).toBe('short');
+    expect(VIN.judge({ samples: 0, voicedSeconds: 0, rate: r, ms: 1000 })).toBe('dead');
+    expect(VIN.judge({ samples: 0, voicedSeconds: 0, rate: r, ms: 100, ended: true })).toBe('dead');
+    expect(VIN.judge({ samples: r * 0.3, voicedSeconds: 0.3, rate: r, ms: 2000 })).toBe('short');
     // Silent or muted samples: Nothing was heard.
-    expect(VIN.judge({ samples: r * 3, voiced: 0, rate: r, ms: 3000 })).toBe('quiet');
-    expect(VIN.judge({ samples: r * 3, voiced: r * 0.05, rate: r, ms: 3000 })).toBe('quiet');
-    expect(VIN.judge({ samples: r * 3, voiced: r * 0.2, rate: r, ms: 3000 })).toBeNull();
+    expect(VIN.judge({ samples: r * 3, voicedSeconds: 0, rate: r, ms: 3000 })).toBe('quiet');
+    expect(VIN.judge({ samples: r * 3, voicedSeconds: 0.05, rate: r, ms: 3000 })).toBe('quiet');
+    expect(VIN.judge({ samples: r * 3, voicedSeconds: 0.2, rate: r, ms: 3000 })).toBeNull();
   });
 
   it('the browser recogniser is free and never private', async () => {
