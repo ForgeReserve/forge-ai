@@ -525,6 +525,7 @@ OpenAI chat completions, streaming and non-streaming. Fields such as `tools`, `t
 | `stream_options.include_usage` | Ask for the usage chunk. Without it the gateway still meters, and removes the usage chunk from your stream |
 | `n` | Must be 1 if sent |
 | `web_search_options` | Turns on web search (models with `capabilities.web_search`) |
+| `user_cache_secret` | Optional, a string. On a private (Tinfoil) model the gateway always sets this field itself, so the prompt cache is shared only within your balance; your value is mixed into your balance's own secret: it can split your cache further, and two balances that send the same value still get separate caches. Paid with NUT-24, every request gets a fresh secret and no cache hits. Other models get it as you sent it ([Prompt caching](https://github.com/ForgeReserve/forge-ai/blob/main/docs/PRIVACY.md#prompt-caching)) |
 
 Request headers:
 

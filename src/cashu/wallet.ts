@@ -17,6 +17,7 @@ import {
   type SwapPreview,
   Wallet,
 } from '@cashu/cashu-ts';
+import { deriveSeedKey } from '../cache-secret.ts';
 import { normalizeMintUrl, type Unit } from '../config.ts';
 import type { CreditKeysets } from '../credits.ts';
 import { type DB, now, tx } from '../db.ts';
@@ -225,6 +226,14 @@ export class GatewayWallet {
     const seed = randomBytes(64);
     this.db.prepare("INSERT INTO meta (key, value) VALUES ('wallet_seed', ?)").run(seed.toString('hex'));
     return seed;
+  }
+
+  /**
+   * A 32-byte key for another purpose, derived from the wallet seed with HKDF-SHA256 under its own label
+   * (src/cache-secret.ts). The seed itself never leaves this class.
+   */
+  deriveKey(info: string): Buffer {
+    return deriveSeedKey(this.seed, info);
   }
 
   isTrusted(mint: string): boolean {
