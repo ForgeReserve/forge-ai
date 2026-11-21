@@ -517,6 +517,26 @@ describe('voice in through the engine', () => {
     expect(SET.micRows(null, (k: string) => k)).toEqual([]);
   });
 
+  it('More, Voice says which copy of the app made the recording: its build, a saved copy, a newer one waiting', async () => {
+    const SET: any = await import('../../../public/v2/screens/settings.js' as string);
+    const A = '2807668292606615';
+    const B = '9f00aa1122334455';
+    expect(SET.buildText({ loaded: A, now: A, saved: false })).toBe('28076682');
+    expect(SET.buildText({ loaded: A, now: A, saved: true })).toBe('28076682, saved copy (offline)');
+    // The owner's iPhone (2026-11-21): a page that kept running the build before the one deployed.
+    expect(SET.buildText({ loaded: A, now: B, saved: false })).toBe('28076682, newer one ready: reload');
+    expect(SET.buildText({ loaded: A, now: B, saved: true })).toBe('28076682, saved copy (offline), newer one ready: reload');
+    // An app from a store (no worker), or a page its worker has not answered yet.
+    expect(SET.buildText({ loaded: null, now: null, saved: false })).toBe('app');
+    expect(SET.buildText(null)).toBe('app');
+    const f = { chunks: 3, peak: 0.4, level: 0.3 };
+    const t = (k: string) => k;
+    expect(SET.micRows(f, t, { loaded: A, now: A, saved: false })[0]).toEqual(['voice.mic.build', '28076682']);
+    expect(SET.micRows(f, t, null)[0]).toEqual(['voice.mic.build', 'app']);
+    expect(SET.micRows(f, t)[0][0]).toBe('voice.mic.state');
+    expect(EN['voice.mic.build']).toBe('Build');
+  });
+
   // The voice rule (owner's iPhone, 2026-11-21: with echo cancelling off it had no automatic gain, and a
   // person speaking normally gave 20 pieces at 44.1 kHz, loudest sample 0.0259, top level 0.0240 against
   // the loud rule's 0.05). Pieces of 4096 at 44.1 kHz, built with a seeded noise at a set level.

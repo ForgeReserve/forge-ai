@@ -2339,7 +2339,7 @@ function screenFor(name, params) {
       if (!photoWaiting) return modelScreen({ ...ctx, done: () => backTo('home'), addMoney: () => nav('addFunds', {}, { replace: true }) });
       return modelScreen({ ...ctx, photo: photoChoice });
     case 'voice':
-      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() }, micFacts: () => adapters.mic.last?.() ?? null } });
+      return voiceScreen({ ...ctx, voice: { inMods: () => voiceMods('voice-in'), outMods: () => voiceMods('voice-out'), outUsed: () => voiceOut()?.id ?? null, audio, natural: { voices: () => phonon.index()?.voices ?? [], picked: () => phonon.voice() }, micFacts: () => adapters.mic.last?.() ?? null, build: () => build } });
     case 'history':
       return historyScreen(ctx);
     case 'voiceLab':
@@ -2837,13 +2837,21 @@ function registerWorker() {
   check();
 }
 
-/** Puts the build id of the worker that serves this page on <html data-build>, so a stale page can be told apart. */
+// The build this page loaded under, the build of the worker that serves it now (a later one: this page
+// still runs the older files until it reloads), and whether the worker handed it a saved copy because
+// the network gave nothing. More, Voice shows them with the last recording (screens/settings.js buildText).
+const build = { loaded: null, now: null, saved: false };
+
+/** Puts the build id of the worker that serves this page on <html data-build> (and data-saved on a page opened from the kept copy), so a stale page can be told apart. */
 function showBuild() {
   const c = navigator.serviceWorker?.controller;
   if (!c || typeof MessageChannel !== 'function') return;
   const ch = new MessageChannel();
   ch.port1.onmessage = (e) => {
-    if (e.data?.version) document.documentElement.dataset.build = e.data.version;
+    if (!e.data?.version) return;
+    document.documentElement.dataset.build = build.now = e.data.version;
+    build.loaded ??= e.data.version;
+    if (e.data.saved) document.documentElement.dataset.saved = (build.saved = true) && 'yes';
   };
   c.postMessage({ type: 'version' }, [ch.port2]);
 }

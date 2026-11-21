@@ -34,9 +34,14 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// The page asks for the build id, or (a worker left waiting) asks it to take over now.
+// The pages that were handed a saved copy because the network gave nothing (networkFirst below), by
+// client id. Kept in memory only: the page asks as it loads, while this worker is still awake.
+const SAVED = new Set();
+
+// The page asks for the build id (and whether it was handed a saved copy), or (a worker left waiting)
+// asks it to take over now.
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'version') event.ports?.[0]?.postMessage({ version: VERSION });
+  if (event.data?.type === 'version') event.ports?.[0]?.postMessage({ version: VERSION, saved: SAVED.has(event.source?.id) });
   if (event.data?.type === 'skipWaiting') self.skipWaiting();
 });
 
@@ -85,15 +90,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || NEVER.test(url.pathname) || VOICE_FILES.test(url.pathname)) return;
   if (req.mode === 'navigate') {
-    if (url.pathname.startsWith('/v2/')) event.respondWith(networkFirst(req, '/v2/'));
+    if (url.pathname.startsWith('/v2/')) event.respondWith(networkFirst(req, '/v2/', event.resultingClientId));
     return;
   }
-  if (MINE.test(url.pathname)) event.respondWith(networkFirst(req));
+  if (MINE.test(url.pathname)) event.respondWith(networkFirst(req, undefined, event.clientId));
 });
 
 // Only install creates the cache. Once it is gone (Erase everything deleted it), nothing is put back, even
 // by a worker that still runs for the page that erased it.
-async function networkFirst(req, fallback) {
+async function networkFirst(req, fallback, client) {
   try {
     const res = await fetch(req);
     if (res.ok && res.type === 'basic' && (await caches.has(CACHE))) await (await caches.open(CACHE)).put(fallback ?? req, res.clone());
@@ -101,6 +106,7 @@ async function networkFirst(req, fallback) {
   } catch (e) {
     const opts = { cacheName: CACHE };
     const hit = (await caches.match(fallback ?? req, { ...opts, ignoreSearch: true })) ?? (fallback ? await caches.match(fallback, opts) : undefined);
+    if (hit && client) SAVED.add(client);
     if (hit) return hit;
     throw e;
   }

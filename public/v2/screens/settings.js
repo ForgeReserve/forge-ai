@@ -224,10 +224,21 @@ export function modelScreen({ t, state, back, actions, format, reader, done = ba
 }
 
 /**
- * The last recording's facts, as rows of [string key, value] for More, Voice: what the owner reads off
- * a phone whose Hold to talk hears nothing (core/adapters.js mic.last). No sound and no words.
+ * Which copy of the app made the recording (app.js build): the first eight characters of its build id,
+ * then "saved copy" when the network gave nothing and the phone's kept copy opened, and "newer one ready"
+ * when a newer build has arrived that this page has not loaded yet. An app from a store has no build id.
  */
-export function micRows(f, t) {
+export function buildText(b) {
+  if (!b?.loaded) return 'app';
+  return [b.loaded.slice(0, 8), b.saved ? 'saved copy (offline)' : '', b.now && b.now !== b.loaded ? 'newer one ready: reload' : ''].filter(Boolean).join(', ');
+}
+
+/**
+ * The last recording's facts, as rows of [string key, value] for More, Voice: what the owner reads off
+ * a phone whose Hold to talk hears nothing (core/adapters.js mic.last). No sound and no words. With
+ * build (app.js), the first row says which copy of the app made the recording.
+ */
+export function micRows(f, t, build) {
   if (!f) return [];
   const yes = (b) => (b == null ? '?' : t(b ? 'voice.mic.yes' : 'voice.mic.no'));
   const n = (x, d = 3) => (x == null ? '?' : Number(x).toFixed(d));
@@ -239,6 +250,7 @@ export function micRows(f, t) {
   const way = f.method === 'worklet' ? 'worklet' : `script${f.worklet && f.worklet !== 'loaded' ? ` (worklet: ${f.worklet})` : ''}`;
   const g = f.got ?? {};
   return [
+    ...(build === undefined ? [] : [['voice.mic.build', buildText(build)]]),
     ['voice.mic.state', `${(f.states ?? []).join(' > ')}${f.remade ? ', made again' : ''}`],
     ['voice.mic.rate', `${f.sampleRate ?? '?'} Hz`],
     ['voice.mic.label', `${f.label || '?'}${f.changed ? ', changed' : ''}`],
@@ -296,7 +308,7 @@ export function voiceScreen({ t, state, back, actions, voice, reader, native = n
   const micHead = el('h2', { class: 'caps', id: 'micFactsHead', text: t('voice.mic'), hidden: true });
   const micList = el('ul', { class: 'mic-facts', id: 'micFacts', hidden: true });
   const drawMic = () => {
-    const rows = micRows(voice.micFacts?.() ?? null, t);
+    const rows = micRows(voice.micFacts?.() ?? null, t, voice.build?.() ?? null);
     micHead.hidden = micList.hidden = !rows.length;
     const key = JSON.stringify(rows);
     if (micList._shown === key) return;

@@ -403,6 +403,7 @@ export default {
   'voice.in.none': 'No talking here yet. Talking is not available on this engine yet. Type your question instead.',
   'voice.in.phoneOff': 'You chose to go online. This phone could not hear you, so your voice goes online to become words. Tap On this phone to use the phone again.',
   'voice.mic': 'Last recording',
+  'voice.mic.build': 'Build',
   'voice.mic.state': 'Sound',
   'voice.mic.rate': 'Rate',
   'voice.mic.label': 'Microphone',

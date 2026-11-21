@@ -36,6 +36,14 @@ describe('service workers', () => {
     expect(v2).not.toMatch(/cache\.match\(/);
   });
 
+  it('v2 tells a page that it was handed a saved copy, and only when the network gave nothing', () => {
+    expect(v2).toMatch(/postMessage\(\{ version: VERSION, saved: SAVED\.has\(event\.source\?\.id\) \}\)/);
+    expect(v2.match(/SAVED\.add\(/g)).toHaveLength(1);
+    expect(v2.indexOf('if (hit && client) SAVED.add(client);')).toBeGreaterThan(v2.indexOf('} catch (e) {'));
+    expect(v2).toMatch(/networkFirst\(req, '\/v2\/', event\.resultingClientId\)/);
+    expect(v2).toMatch(/networkFirst\(req, undefined, event\.clientId\)/);
+  });
+
   it('v2 leaves the natural voice files to the voice package, which keeps its own copy, but keeps their index', () => {
     const voice = regex(v2, 'VOICE_FILES');
     for (const p of ['/v2/voice/phonon/31m-en-92741c5/model.q8.gguf', '/v2/voice/phonon/voices-0ee1720/6PWnV0Nq4wu7RVBT.safetensors']) expect(voice.test(p), p).toBe(true);
