@@ -15,9 +15,15 @@ const nf = (n, d = 0) => (n == null || Number.isNaN(n) ? '–' : Number(n).toLoc
 const units = (n, unit) => (n == null ? '–' : unit === 'usd' ? '$' + nf(n / 100, 2) : nf(n) + ' sat');
 /** msub (thousandths of a cent or sat) as money, with sub-unit precision. */
 const msub = (n, unit) => (n == null ? '–' : unit === 'usd' ? '$' + nf(n / 100_000, n % 1000 === 0 ? 2 : 4) : nf(n / 1000, n % 1000 === 0 ? 0 : 3) + ' sat');
+/**
+ * Amounts per unit as money. A unit that is present at 0 (a margin at markup 1, revenue from free models
+ * only) reads as zero; '–' means no amount at all.
+ */
 const money = (m) => {
-  const parts = Object.entries(m || {}).filter(([, v]) => v);
-  return parts.length ? parts.map(([u, v]) => msub(v, u)).join(' + ') : '–';
+  const all = Object.entries(m || {}).filter(([, v]) => v != null);
+  const parts = all.filter(([, v]) => v);
+  if (!parts.length) return all.length ? msub(0, all[0][0]) : '–';
+  return parts.map(([u, v]) => msub(v, u)).join(' + ');
 };
 const usdEq = (v) => (v == null ? '' : '≈ $' + nf(v, v < 1 ? 4 : 2));
 const dur = (s) => (s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : s < 86400 ? Math.round(s / 3600) + 'h' : Math.round(s / 86400) + 'd');
@@ -198,7 +204,12 @@ const nusd = (n) => {
   const d = a === 0 || a >= 1 ? 2 : a >= 0.01 ? 4 : Math.min(9, Math.ceil(-Math.log10(a)) + 2);
   return (v < 0 ? '−$' : '$') + nf(a, d);
 };
-const pct = (part, whole) => (whole ? nf((part / whole) * 100, 1) + '%' : '–');
+/** A share in percent, one decimal. A share that rounds to 0.0 reads 0.0%, never -0.0%. */
+const pct = (part, whole) => {
+  if (!whole) return '–';
+  const v = (part / whole) * 100;
+  return nf(Math.abs(v) < 0.05 ? 0 : v, 1) + '%';
+};
 /** USD per million tokens. */
 const mtok = (v) => (v == null ? '–' : '$' + nf(v, v !== 0 && v < 1 ? 3 : 2));
 const usd = (v, dp = 2) => `$${Number(v).toFixed(v !== 0 && Math.abs(v) < 0.01 ? 5 : dp)}`;
