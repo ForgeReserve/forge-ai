@@ -134,18 +134,12 @@ CREATE TABLE IF NOT EXISTS passes (
   created_at INTEGER NOT NULL
 );
 
+-- beta_signups, the old waitlist (one contact and an optional note a row), is no longer made here: the
+-- waitlist was removed and nothing reads or writes the table. A database from before keeps it with its
+-- rows until the operator removes it by hand (docs/OPERATING.md, The old waitlist table).
+
 -- Funding a balance through the Forge mint: Lightning (NUT-04 bolt11), on-chain (NUT-30) or eCash
 -- from another mint (received there, melted to pay a Forge bolt11 quote). Keys never appear here.
--- Beta waitlist: one contact (email or Nostr npub) and an optional note. No IP or other metadata.
-CREATE TABLE IF NOT EXISTS beta_signups (
-  id TEXT PRIMARY KEY,
-  contact TEXT NOT NULL UNIQUE,
-  kind TEXT NOT NULL,               -- email | npub
-  note TEXT,
-  created_at INTEGER NOT NULL,
-  invited_at INTEGER
-);
-
 CREATE TABLE IF NOT EXISTS fundings (
   id TEXT PRIMARY KEY,
   method TEXT NOT NULL,             -- lightning | onchain | foreign

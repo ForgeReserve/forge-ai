@@ -1,0 +1,109 @@
+/* The website's own pages share this: the landing page (/), the download page (/download) and the
+   privacy page (/privacy). The app's Midnight look by default; each page's script puts in the look this
+   phone keeps from the app (public/v2/core/pagelook.js). Inter from this origin. The top (the brand and
+   its actions), the footer, the icons, the tags and the motion of the way in are the same on all three.
+   Each page adds its own file: about.css, download.css, privacy.css. */
+@font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+:root {
+  --bg: #0B0D10; --surface: #111317; --surface-2: #171A22; --ink: #F1EFE9; --text-2: #9A9DA3; --text-body: #D2D0CA;
+  --line: #2A2F3A; --line-2: #333946;
+  --teal: #3FCFB4; --teal-tint: #16292A; --teal-line: #2C5A55;
+  --gold: #D4A544; --gold-ink: #D4A544; --gold-tint: #2A2416; --gold-line: #6B5527; --blue: #7FB4FF;
+  --primary: #F1EFE9; --primary-ink: #0B0D10;
+  --shadow-primary: inset 0 -5px 0 rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5);
+  --shadow-raised-sm: inset 0 -4px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.07);
+  --shadow-float: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  --focus: #7FB4FF;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --out: cubic-bezier(0.16, 1, 0.3, 1);
+  --io: cubic-bezier(0.65, 0, 0.35, 1);
+  --gutter: 16px;
+  --maxw: 1480px;
+  color-scheme: dark;
+}
+:root[data-scheme="light"] { color-scheme: light; }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text-body); font-family: var(--font); font-size: 16px; line-height: 1.45; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1, p { margin: 0; }
+a { color: var(--gold-ink); text-underline-offset: 3px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 12px; }
+img { display: block; }
+.ico { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gh { width: 24px; height: 24px; flex: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.skip { position: absolute; left: var(--gutter); top: 10px; z-index: 30; opacity: 0; pointer-events: none; background: var(--primary); color: var(--primary-ink); padding: 12px 16px; border-radius: 12px; font-weight: 700; text-decoration: none; }
+.skip:focus { opacity: 1; pointer-events: auto; }
+
+/* ---------- the top: the brand on the left, the actions on the right ---------- */
+.top {
+  position: relative; z-index: 10; width: 100%; max-width: var(--maxw); margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: calc(64px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) max(var(--gutter), env(safe-area-inset-right)) 0 max(var(--gutter), env(safe-area-inset-left));
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; min-width: 48px; color: var(--ink); text-decoration: none; font-weight: 800; letter-spacing: 0.1em; font-size: 15px; white-space: nowrap; }
+.brand svg { width: 30px; height: 21px; color: var(--gold); }
+.brand .ai { color: var(--gold); }
+.actions { display: flex; align-items: center; gap: 8px; }
+.act {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; min-width: 48px; padding: 0 18px;
+  border-radius: 24px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink);
+  text-decoration: none; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.act .ico { width: 20px; height: 20px; }
+.act:hover { border-color: var(--text-2); }
+.act-open { background: var(--primary); color: var(--primary-ink); border-color: transparent; box-shadow: var(--shadow-primary); }
+.act-open:hover { border-color: transparent; }
+.act-icon { padding: 0; border-radius: 50%; }
+
+/* A tag on a part that is not there yet: Soon, in gold. */
+.soon { padding: 2px 10px; border-radius: 999px; background: var(--gold-tint); color: var(--gold-ink); border: 1px solid var(--gold-line); font-size: 13px; font-weight: 700; }
+
+/* ---------- the footer: a short row of links with an icon each ---------- */
+.foot {
+  width: 100%; max-width: var(--maxw); margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  /* Each link has 12 px of room inside it, so the first word lines up with the page's edge. */
+  padding: 0 max(calc(var(--gutter) - 12px), env(safe-area-inset-right)) env(safe-area-inset-bottom) max(calc(var(--gutter) - 12px), env(safe-area-inset-left));
+}
+.foot a { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-radius: 14px; color: var(--text-2); font-size: 14px; font-weight: 600; text-decoration: none; }
+.foot a:hover { color: var(--ink); }
+.foot .ico, .foot .gh { width: 18px; height: 18px; }
+.foot a[aria-current="page"] { color: var(--ink); }
+
+@media (min-width: 900px), (orientation: landscape) and (min-width: 620px) {
+  :root { --gutter: clamp(20px, 3.4vw, 48px); }
+  .top { min-height: calc(76px + env(safe-area-inset-top)); }
+}
+
+/* A small phone: the brand is its mark, Download is its icon, and Open the app is its words. */
+@media (max-width: 559px) {
+  .brand .word { display: none; }
+  .act-dl { padding: 0; width: 48px; border-radius: 50%; }
+  .act-dl .act-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .act-open { padding: 0 16px; }
+}
+@media (max-width: 359px) {
+  .actions { gap: 6px; }
+  .act-open { padding: 0 14px; font-size: 14px; }
+  .act-open .ico { display: none; }
+}
+
+/* ---------- motion: the way in ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .top .brand { animation: drop 0.8s var(--out) both; }
+  .top .actions { animation: drop 0.8s var(--out) 0.08s both; }
+  .act, .foot a { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
+  .act:active { transform: scale(0.97); }
+}
+@keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

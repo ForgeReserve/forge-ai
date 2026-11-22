@@ -33,12 +33,12 @@ There is no iPhone app to download yet: no TestFlight link and no App Store page
 
 - **Tap a Cashu card**, on the website: in place of Get the app, the Home Screen steps: one line, *Put Forge on your Home Screen.*, then Safari's two buttons as icons with their words, **Share** and **Add to Home Screen**. Opened from the Home Screen already (`navigator.standalone`, or `display-mode: standalone`): no steps and no button.
 - **Tap a Fedimint card**: no button and no steps, as the iPhone app has no till either.
-- **`/download`** (also `/j` with no pass): **Forge for iPhone** with the same steps after **Open Forge**, which goes to `/v2/` first, so what goes on the Home Screen is Forge itself. An APK on the site is never offered to an iPhone.
+- **`/download`** (also `/j` with no pass): **Forge for iPhone**, two cards: the web app with the same steps after **Open Forge**, which goes to `/v2/` first, so what goes on the Home Screen is Forge itself, and the iPhone card, greyed with Soon while there is no link. An APK, Google Play or any other Android way is never offered to an iPhone.
 - `/j#<pass>` opens the web app on the pass, as before.
 
 `public/v2/index.html` has what Safari reads when Forge is put on the Home Screen: the web app manifest (`/v2/manifest.webmanifest`, standalone), `apple-mobile-web-app-capable`, the name **Forge AI** (`apple-mobile-web-app-title`) and the 180 by 180 icon (`/icons/apple-touch-icon.png`).
 
-Once there is an app to give, set **`FORGE_IOS_URL`** on the gateway to its TestFlight invitation or its App Store page (https only; the gateway does not start with another link). `/download/info` then carries it as `ios: {available: true, url}`, and on an iPhone or iPad, in Safari or from the Home Screen, Get the app on the Cashu card and the `/download` page open that link in place of the steps. Unset by default. Android and computers are not affected: they keep the `/download` page and its APKs ([ANDROID.md](ANDROID.md)). Inside the apps Get the app never shows.
+Once there is an app to give, set **`FORGE_IOS_URL`** on the gateway to its TestFlight invitation or its App Store page (https only; the gateway does not start with another link). `/download/info` then carries it as `ios: {available: true, url}`, and on an iPhone or iPad, in Safari or from the Home Screen, Get the app on the Cashu card opens that link in place of the steps, and the `/download` page leads with the iPhone card as a link (named TestFlight or App Store by the link's host), then Open Forge. Unset by default. Android and computers keep the `/download` page and its APKs ([ANDROID.md](ANDROID.md)); there the iPhone card is one of the other ways, Soon until the link is set. Inside the apps Get the app never shows. The App Store listing's privacy policy is `https://ai.forge-reserve.com/privacy` ([PRIVACY.md](PRIVACY.md)).
 
 ## Card taps (ForgeNfc)
 

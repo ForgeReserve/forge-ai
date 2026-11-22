@@ -10,9 +10,9 @@ const AI_SECTION = `<section id="ai"><style>#ai .ai-row{display:grid;grid-templa
       <p class="kicker">Private beta</p>
       <h2>Forge AI</h2>
       <p>Chat with capable open AI models and pay for each message with Forge eCash, in dollars or sats, straight from your Cashu wallet. Agents can pay the same way, one request at a time.</p>
-      <p>Forge AI is invite-only while we test it. Join the waitlist and we will send you an invite.</p>
+      <p>Forge AI is invite-only while we test it: a balance opens with an invite code or an event pass.</p>
     </div>
-    <a class="ai-join" href="https://ai.forge-reserve.com/beta/">Join the waitlist <span aria-hidden="true">&rarr;</span></a>
+    <a class="ai-join" href="https://ai.forge-reserve.com/">Forge AI <span aria-hidden="true">&rarr;</span></a>
   </div>
 </section>
 `;

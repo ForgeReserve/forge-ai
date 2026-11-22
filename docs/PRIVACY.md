@@ -2,6 +2,8 @@
 
 What the gateway can see depends on the tier and on whether the client encrypts.
 
+The public policy, in plain words for people and for the app store listings, is the page at [`/privacy`](https://ai.forge-reserve.com/privacy) (`public/privacy/index.html`, tested by `test/unit/privacy.test.ts`). It is written from this page and the code. When a fact here changes, change that page in the same pull request, with its Last updated date.
+
 ## Never stored or logged, any tier
 
 - Prompt and completion content. Logs and the `requests` table hold only request id, model, supplier, token counts, how usage was measured, cost, status and latency.
@@ -165,4 +167,4 @@ Files are read on the device. The file itself is never uploaded: only its text, 
 
 ### Installed app and offline use
 
-The page is an installable web app (`manifest.webmanifest`). A service worker (`/sw.js`) keeps the app shell so the app opens without a connection: the chat history, stored on the device, can be read offline, and sending waits for a connection. The service worker never caches or intercepts `/v1/*`, `/admin`, `/beta`, POST requests, or any request with an `Authorization` or `X-Cashu` header; those always go to the network.
+The page is an installable web app (`manifest.webmanifest`). A service worker (`/sw.js`) keeps the app shell so the app opens without a connection: the chat history, stored on the device, can be read offline, and sending waits for a connection. The service worker never caches or intercepts `/v1/*`, `/admin`, POST requests, or any request with an `Authorization` or `X-Cashu` header; those always go to the network.

@@ -10,7 +10,6 @@ import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty, SIBLING_HEADER } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
 import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
-import { BetaWaitlist, parseContact } from './beta.ts';
 import { balanceCacheSecret, CACHE_SECRET_FIELD, CACHE_SECRET_INFO, clientCacheSecret, freshCacheSecret } from './cache-secret.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
@@ -112,6 +111,9 @@ export const ISOLATION_HEADERS = Object.freeze({
 
 /** The landing page's Content-Security-Policy (the page at /, and its files under /about/): files from this origin only, no inline code, never framed. */
 export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/** The /download page's policy: the landing page's, and it may ask this site for /download/info. */
+export const DOWNLOAD_CSP = ABOUT_CSP.replace("font-src 'self';", "font-src 'self'; connect-src 'self';");
 
 async function isolated(c: Context, next: () => Promise<void>) {
   await next();
@@ -1309,28 +1311,14 @@ export function createApp(d: Deps) {
   });
 
   // ------------------------------------------------------------------ the apps' download (docs/ANDROID.md, docs/IOS.md)
-  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL), env.FORGE_IOS_URL);
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL), { ios: env.FORGE_IOS_URL, play: env.FORGE_PLAY_URL });
   // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
   registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 
-  // ------------------------------------------------------------------ beta waitlist
-  // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
-  const waitlist = new BetaWaitlist(d.db);
-  const signupLimiter = new RateLimiter(3, 3);
-  app.get('/beta', (c) => c.redirect('/beta/', 301));
-  app.post('/v1/beta/signup', async (c) => {
-    const wait = signupLimiter.take('ip:' + clientIp(c));
-    if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many signups from here; try again later', { 'Retry-After': String(wait) });
-    const body = (await readJson(c).catch(() => ({}))) as { contact?: unknown; note?: unknown; website?: unknown };
-    // Honeypot field the page hides from people: bots that fill it get the same answer and nothing is stored.
-    if (body?.website) return c.json({ ok: true });
-    const parsed = parseContact(body?.contact);
-    if (!parsed) return apiError(c, 400, 'invalid_contact', 'enter an email address or a Nostr npub');
-    const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null;
-    const { created } = waitlist.add(parsed.contact, parsed.kind, note);
-    if (created) log.info('beta_signup', { kind: parsed.kind });
-    return c.json({ ok: true });
-  });
+  // ------------------------------------------------------------------ the old waitlist page
+  // The waitlist was removed: its old addresses go to the front page, so no link to them breaks. Its
+  // table (beta_signups) may still be in an older database; nothing reads or writes it (src/db.ts).
+  for (const p of ['/beta', '/beta/', '/beta/*']) app.get(p, (c) => c.redirect('/', 301));
 
   // ------------------------------------------------------------------ operator admin (404 unless FORGE_ADMIN_TOKEN_HASH is set)
   app.route('/', createAdminRouter(d));
@@ -1369,7 +1357,10 @@ export function createApp(d: Deps) {
     app.get('/free/', freePage);
     app.use('/v2/free/*', async (c, next) => (faucet ? next() : c.notFound()));
     // The Android app's download page (public/v2/download/), at /download. It reads /download/info.
-    const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    const downloadPage = (c: Context) => {
+      c.header('Content-Security-Policy', DOWNLOAD_CSP);
+      return c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    };
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
     // The event link (public/v2/join/), at /j: the QR code on a slide reads /j#<pass>. The pass stays in
@@ -1397,6 +1388,24 @@ export function createApp(d: Deps) {
     app.get('/index.html', landingPage);
     for (const p of ['/about', '/about/', '/about/index.html']) app.get(p, (c) => c.redirect('/', 301));
     app.use('/about/*', async (c, next) => {
+      await next();
+      c.header('Content-Security-Policy', ABOUT_CSP);
+    });
+    // The privacy page (public/privacy/index.html), the policy the app stores link to, at /privacy under
+    // the landing page's policy, as are its files under /privacy/. /privacy/ moves to /privacy. It comes
+    // from the network: neither service worker keeps it.
+    app.get('/privacy', (c) => {
+      let html: string;
+      try {
+        html = readFileSync(join(publicDir, 'privacy', 'index.html'), 'utf8');
+      } catch {
+        return c.notFound();
+      }
+      c.header('Content-Security-Policy', ABOUT_CSP);
+      return c.html(html);
+    });
+    for (const p of ['/privacy/', '/privacy/index.html']) app.get(p, (c) => c.redirect('/privacy', 301));
+    app.use('/privacy/*', async (c, next) => {
       await next();
       c.header('Content-Security-Policy', ABOUT_CSP);
     });

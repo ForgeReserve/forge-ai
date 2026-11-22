@@ -155,12 +155,12 @@ describe('Android 16 (API 36) and Google Play', () => {
 describe('the web bundle in the APK', () => {
   const PUBLIC = join(ROOT, 'public');
 
-  it('carries the v2 app and what it imports, never v1, admin, beta or the website pages', () => {
+  it('carries the v2 app and what it imports, never v1, admin or the website pages', () => {
     for (const p of ['v2/app.js', 'v2/core/engine.js', 'v2/strings/en.js', 'js/ui.js', 'js/files.js', 'vendor/tinfoil.js', 'vendor/face-api/face-api.js', 'icons/icon-192.png', 'icon.svg']) {
       expect(existsSync(join(PUBLIC, p)), p).toBe(true);
       expect(inBundle(p), p).toBe(true);
     }
-    for (const p of ['index.html', 'classic/index.html', 'about/index.html', 'about/about.js', 'about/forward.js', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'beta/index.html', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/join/index.html', 'v2/join/join.js', 'v2/sw.js']) {
+    for (const p of ['index.html', 'classic/index.html', 'about/index.html', 'about/about.js', 'about/forward.js', 'app.js', 'sw.js', 'style.css', 'offline.html', 'manifest.webmanifest', 'theme.js', 'admin/index.html', 'privacy/index.html', 'about/site.css', 'v2/free/index.html', 'v2/free/free.js', 'v2/download/index.html', 'v2/join/index.html', 'v2/join/join.js', 'v2/sw.js']) {
       expect(inBundle(p), p).toBe(false);
     }
     const files = bundleFiles(PUBLIC);

@@ -1,0 +1,79 @@
+/* The privacy page at /privacy: the landing page's top, footer and tokens (/about/site.css), then short
+   sections with an icon and a label each. A phone: one column. A wide screen: the list of sections on
+   the left, kept in view, and the text beside it at a readable width. */
+:root { --maxw: 1160px; }
+body {
+  min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+  background: radial-gradient(70vmax 46vmax at 8% -6%, color-mix(in srgb, var(--teal) 6%, transparent), transparent 70%), var(--bg);
+  background-repeat: no-repeat;
+}
+body > .foot { margin-top: 8px; padding-top: 4px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+h1, h2 { margin: 0; }
+html { scroll-padding-top: 16px; }
+.pv-page { flex: 1 0 auto; width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 4px max(var(--gutter), env(safe-area-inset-right)) 32px max(var(--gutter), env(safe-area-inset-left)); }
+
+/* ---------- the title ---------- */
+.pv-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 14px; row-gap: 12px; padding: 10px 0 24px; }
+.pv-badge { width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center; box-shadow: var(--shadow-raised-sm); grid-row: span 2; }
+.pv-badge .ico { width: 30px; height: 30px; }
+.pv-hero h1 { align-self: end; color: var(--ink); font-size: clamp(32px, 9vw, 40px); line-height: 1.02; font-weight: 700; letter-spacing: -0.035em; }
+.pv-date { align-self: start; color: var(--text-2); font-size: 14.5px; font-weight: 550; }
+.pv-short { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.pv-short li {
+  display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line);
+  color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.15; white-space: nowrap;
+}
+.pv-chip { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); flex: none; }
+.pv-chip .ico { width: 17px; height: 17px; }
+.pv-early {
+  grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 10px; margin-top: 4px; padding: 12px 14px; border-radius: 16px;
+  background: var(--gold-tint); border: 1px solid var(--gold-line); color: var(--ink); font-size: 15px; font-weight: 550; line-height: 1.4;
+}
+.pv-early .ico { width: 20px; height: 20px; color: var(--gold-ink); margin-top: 1px; }
+.i-ink { color: var(--ink); background: var(--surface-2); }
+.i-teal { color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, var(--surface)); }
+.i-gold { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--surface)); }
+.i-blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
+
+/* ---------- the sections ---------- */
+.pv-toc { display: none; }
+.pv-sections { display: grid; gap: 12px; min-width: 0; }
+.pv { padding: 16px 16px 6px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+.pv h2 { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; color: var(--ink); font-size: 19px; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; }
+.pv-ico { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; box-shadow: var(--shadow-raised-sm); }
+.pv-ico .ico { width: 21px; height: 21px; }
+.pv p { margin: 0 0 10px; color: var(--text-body); font-size: 16px; line-height: 1.5; }
+.pv ul { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 8px; }
+.pv li { position: relative; padding-left: 20px; color: var(--text-body); font-size: 16px; line-height: 1.5; }
+.pv li::before { content: ""; position: absolute; left: 4px; top: 0.66em; width: 6px; height: 6px; border-radius: 50%; background: var(--text-2); }
+.pv b { color: var(--ink); font-weight: 650; }
+.pv a { font-weight: 600; overflow-wrap: anywhere; }
+.pv a[href^="mailto:"] { white-space: nowrap; }
+
+/* ---------- a wide screen ---------- */
+@media (min-width: 720px) {
+  .pv-hero { column-gap: 20px; padding: 24px 0 32px; }
+  .pv-badge { width: 76px; height: 76px; border-radius: 22px; }
+  .pv-badge .ico { width: 36px; height: 36px; }
+  .pv-hero h1 { font-size: clamp(44px, 5vw, 58px); letter-spacing: -0.04em; }
+  .pv-short, .pv-early { grid-column: 2; }
+  .pv-early { max-width: 640px; }
+  .pv { padding: 22px 24px 10px; }
+}
+@media (min-width: 980px) {
+  .pv-layout { display: grid; grid-template-columns: 250px minmax(0, 720px); gap: 40px; align-items: start; }
+  .pv-toc { display: block; position: sticky; top: 16px; }
+  .pv-toc ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+  .pv-toc a { display: flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 12px; color: var(--text-2); font-size: 14.5px; font-weight: 600; text-decoration: none; }
+  .pv-toc a:hover { color: var(--ink); background: var(--surface); }
+  .pv-hero { max-width: 1010px; padding-left: 290px; }
+  .pv-early { max-width: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+  .pv-hero { animation: rise 0.9s var(--out) 0.05s both; }
+  .pv-layout { animation: rise 0.9s var(--out) 0.15s both; }
+  .pv-toc a { transition: background-color 0.15s, color 0.2s; }
+}

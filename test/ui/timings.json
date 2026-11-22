@@ -13,6 +13,7 @@
     "test/ui/classic.ui.test.ts": 12.3,
     "test/ui/convert.ui.test.ts": 13.1,
     "test/ui/docs.ui.test.ts": 8.2,
+    "test/ui/download.ui.test.ts": 8,
     "test/ui/ecash.ui.test.ts": 58,
     "test/ui/fedimint.ui.test.ts": 29.7,
     "test/ui/firstrun.ui.test.ts": 44.5,

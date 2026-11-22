@@ -221,6 +221,18 @@ export const EnvSchema = z.object({
     .refine((u) => URL.canParse(u) && new URL(u).protocol === 'https:', 'FORGE_IOS_URL: must be an https link')
     .optional()
     .or(z.literal('').transform(() => undefined)),
+
+  // ---------------------------------------------------------------- Google Play (docs/ANDROID.md, Google Play)
+  /**
+   * Forge's page on Google Play, https only. Set, /download/info carries it as `play.url` and the
+   * /download page's Google Play card links there. Unset: the card says Soon and is no link.
+   */
+  FORGE_PLAY_URL: z
+    .string()
+    .url('FORGE_PLAY_URL: must be a link')
+    .refine((u) => URL.canParse(u) && new URL(u).protocol === 'https:', 'FORGE_PLAY_URL: must be an https link')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

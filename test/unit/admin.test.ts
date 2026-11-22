@@ -103,7 +103,7 @@ describe('admin access control', () => {
   });
 });
 
-describe('admin invites and waitlist', () => {
+describe('admin invites', () => {
   it('creates invites shown once, lists them without codes, revokes them', async () => {
     const { call, deps } = gateway();
     const created = (await (await call('/admin/api/invites', { method: 'POST', body: { count: 3, label: 'friends' } })).json()) as any;
@@ -119,51 +119,24 @@ describe('admin invites and waitlist', () => {
     expect((await call('/admin/api/invites/invite_nope/revoke', { method: 'POST', body: {} })).status).toBe(404);
   });
 
-  it('invites a waitlist signup with a ready message and deletes a signup', async () => {
+  it('has no waitlist any more, and leaves an old waitlist table and its rows as they were', async () => {
     const { call, app, deps } = gateway();
-    const signup = (contact: string) =>
-      app.request(`${ORIGIN}/v1/beta/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact }) });
-    await signup('Alice@Example.com');
-    const npub = 'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6';
-    await signup(npub);
-    const list = ((await (await call('/admin/api/waitlist')).json()) as any).data as any[];
-    expect(list.map((s) => s.contact).sort()).toEqual(['alice@example.com', npub]);
-    const email = list.find((s) => s.kind === 'email');
-    const res = (await (await call(`/admin/api/waitlist/${email.id}/invite`, { method: 'POST', body: {} })).json()) as any;
-    expect(res.code).toMatch(/^inv-/);
-    expect(res.message).toContain(res.code);
-    // The link opens the app (the front page is the landing page), where the code is asked for.
-    expect(res.message).toContain('Open https://ai.forge-reserve.com/v2/, add funds with eCash, Lightning or bitcoin, and enter the code when it asks for an invite.');
-    expect(res.link).toBe('https://ai.forge-reserve.com/v2/');
-    expect(res.message).not.toMatch(/—/);
-    expect(res.mailto).toMatch(/^mailto:alice@example\.com\?subject=/);
-    expect(decodeURIComponent(res.mailto)).toContain(res.code);
-    expect(deps.invites.lookup(res.code)?.status).toBe('open');
-    const after = ((await (await call('/admin/api/waitlist')).json()) as any).data.find((s: any) => s.id === email.id);
-    expect(after.invited_at).toBeGreaterThan(0);
-    expect((await call(`/admin/api/waitlist/${email.id}/invite`, { method: 'POST', body: {} })).status).toBe(409);
-    const nostr = list.find((s) => s.kind === 'npub');
-    const nres = (await (await call(`/admin/api/waitlist/${nostr.id}/invite`, { method: 'POST', body: {} })).json()) as any;
-    expect(nres.mailto).toBeNull();
-    expect(nres.message).toContain(nres.code);
-    expect((await call(`/admin/api/waitlist/${nostr.id}`, { method: 'DELETE' })).status).toBe(200);
-    const left = ((await (await call('/admin/api/waitlist')).json()) as any).data;
-    expect(left.map((s: any) => s.id)).toEqual([email.id]);
-    expect(JSON.stringify(deps.db.prepare('SELECT * FROM invites').all())).not.toContain(npub);
-  });
-
-  it('refuses a contact carrying mailto query controls and never links one stored earlier (finding 11)', async () => {
-    const { call, app, deps } = gateway();
-    const injected = 'victim@example.com?bcc=thief%40evil.net&x=.org';
-    const res = await app.request(`${ORIGIN}/v1/beta/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact: injected }) });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as any).error.code).toBe('invalid_contact');
-    expect(deps.db.prepare('SELECT COUNT(*) AS n FROM beta_signups').get()).toEqual({ n: 0 });
-    // A row the older, looser rule let in: the invite still works, but no mailto link is built for it.
-    deps.db.prepare("INSERT INTO beta_signups (id, contact, kind, note, created_at) VALUES ('beta_legacy', ?, 'email', NULL, 1)").run(injected);
-    const inv = (await (await call('/admin/api/waitlist/beta_legacy/invite', { method: 'POST', body: {} })).json()) as any;
-    expect(inv.code).toMatch(/^inv-/);
-    expect(inv.mailto).toBeNull();
+    // A new database has no waitlist table.
+    expect(deps.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'beta_signups'").get()).toBeUndefined();
+    // One from before keeps it: nothing reads, writes or deletes it.
+    deps.db.exec('CREATE TABLE beta_signups (id TEXT PRIMARY KEY, contact TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, note TEXT, created_at INTEGER NOT NULL, invited_at INTEGER)');
+    deps.db.prepare("INSERT INTO beta_signups (id, contact, kind, note, created_at) VALUES ('beta_old', 'ana@example.org', 'email', 'hi', 1)").run();
+    const rows = () => deps.db.prepare('SELECT * FROM beta_signups').all();
+    const before = JSON.stringify(rows());
+    expect((await call('/admin/api/waitlist')).status).toBe(404);
+    expect((await call('/admin/api/waitlist/beta_old/invite', { method: 'POST', body: {} })).status).toBe(404);
+    expect((await call('/admin/api/waitlist/beta_old', { method: 'DELETE' })).status).toBe(404);
+    const signup = await app.request(`${ORIGIN}/v1/beta/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact: 'bob@example.org' }) });
+    expect(signup.status).toBe(404);
+    expect(JSON.stringify(rows())).toBe(before);
+    // The admin page has no Waitlist section.
+    const page = await (await call('/admin/', { token: null })).text();
+    expect(page).not.toMatch(/waitlist/i);
   });
 });
 

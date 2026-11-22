@@ -1,4 +1,4 @@
-/* The /j page: the /download page's parts, two numbered steps. */
+/* The /j page: two numbered steps, the first with the /download page's choice of APK. */
 .join-page h1 { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font-size: 28px; }
 .join-page h1 svg { color: var(--gold-ink, var(--teal)); flex: none; }
 .join-page .lead { margin: 0; color: var(--text-body); }
@@ -7,3 +7,9 @@
 .join-page .join-num { flex: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px; background: var(--teal-tint); color: var(--teal); font-size: 20px; font-weight: 800; }
 .join-page .join-step.attention { border-color: var(--teal); }
 .join-page .join-web { align-self: center; }
+.join-page .apk-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.join-page .apk-choice { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+.join-page .apk-kind { flex: 1; min-width: 0; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 15px; font-weight: 600; }
+.join-page .apk-kind[aria-checked="true"] { border-color: var(--teal); background: var(--teal-tint); color: var(--teal); }
+.join-page .apk-kind span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.join-page .apk-info { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 22px; background: transparent; color: var(--text-body); }

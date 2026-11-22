@@ -1,8 +1,8 @@
 /**
  * The web app as the Android app bundles it (docs/ANDROID.md), and the iPhone app the same (docs/IOS.md). The APK carries these files and loads
  * nothing else as code: the v2 app (public/v2), the shared modules it imports (public/js), the vendored
- * libraries with their licences (public/vendor) and the icons. Never v1, the admin page, the beta page,
- * the /free page, the /download page or the /j page: those are the website's.
+ * libraries with their licences (public/vendor) and the icons. Never v1, the admin page, the privacy
+ * page, the /free page, the /download page or the /j page: those are the website's.
  *
  * Capacitor serves the bundle at https://localhost/. Its index.html is the v2 page (every path in it is
  * absolute, so /v2/app.js and the rest load as they do on the website), and an address the bundle does

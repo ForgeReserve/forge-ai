@@ -12,7 +12,8 @@ import { openWay } from './ways.ts';
 // Home Screen steps (Share, Add to Home Screen), the /download page says Forge for iPhone with the same
 // steps after Open Forge, and the Fedimint card (no till in the iPhone app) offers nothing. A site with
 // the iPhone app's link (FORGE_IOS_URL) gets that link instead. Put on the Home Screen already, an
-// iPhone is shown no steps. Android and a computer keep the /download page and its APK, as before.
+// iPhone is shown no steps. Android and a computer keep the /download page and its APK, as before; there
+// the iPhone app's link, once set, is one of the other ways (test/ui/download.ui.test.ts has the page itself).
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
 const DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
@@ -183,11 +184,11 @@ describe('Get the app on an iPhone', () => {
 });
 
 describe('Get the app on Android and a computer, as before', () => {
-  for (const [name, device] of [
-    ['Android', ANDROID],
-    ['a computer', DESKTOP],
+  for (const [name, device, title] of [
+    ['Android', ANDROID, 'Forge for Android'],
+    ['a computer', DESKTOP, 'Get Forge'],
   ] as const) {
-    it(`${name}: the button opens /download, which offers the APK; the iPhone link is never shown`, async () => {
+    it(`${name}: the button opens /download, which offers the APK; the iPhone link only as one of the other ways`, async () => {
       for (const g of [plain, linked]) {
         const { ctx, page, errors, asked } = await phone(device);
         await cardScreen(page, g);
@@ -202,11 +203,13 @@ describe('Get the app on Android and a computer, as before', () => {
         expect(asked).not.toContain('/download/info');
         await page.click('#fedGetApp');
         await page.waitForSelector('[data-screen=download]');
-        expect(await page.textContent('h1')).toBe('Forge for Android');
-        expect(await page.title()).toBe('Forge for Android');
+        expect(await page.textContent('h1')).toBe(title);
+        expect(await page.title()).toBe(title);
         if (g === plain) expect(await (await page.waitForSelector('#downloadApk')).getAttribute('href')).toBe('/download/forge.apk');
         else await page.waitForSelector('#downloadComing');
-        expect(await linksTo(page, /testflight/)).toBe(false);
+        // The iPhone app's link is there only as its own card under Other ways.
+        expect(await linksTo(page, /testflight/)).toBe(g === linked);
+        if (g === linked) expect(await page.$eval('#downloadIos', (a) => !!a.closest('#downloadOther'))).toBe(true);
         expect(await page.$('#addHome')).toBeNull();
         expect(errors).toEqual([]);
         await ctx.close();
