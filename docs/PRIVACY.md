@@ -2,7 +2,7 @@
 
 What the gateway can see depends on the tier and on whether the client encrypts.
 
-The public policy, in plain words for people and for the app store listings, is the page at [`/privacy`](https://ai.forge-reserve.com/privacy) (`public/privacy/index.html`, tested by `test/unit/privacy.test.ts`). It is written from this page and the code. When a fact here changes, change that page in the same pull request, with its Last updated date.
+The public policy, in plain words for people and for the app store listings, is the page at [`/privacy`](https://ai.forge-reserve.com/privacy) (`public/privacy/index.html`, tested by `test/unit/privacy.test.ts`). It is written from this page and the code. When a fact here changes, change that page in the same pull request, with its Last updated date. It is linked from the landing page's and the download page's footers and from More, Privacy in the app (on the website `/privacy` on the same site; in the Android and iPhone apps `https://ai.forge-reserve.com/privacy`, opened in the phone's browser only when the person taps it).
 
 ## Never stored or logged, any tier
 

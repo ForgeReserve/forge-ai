@@ -2,7 +2,8 @@
 // in this release are listed (Link, Guide and Protection come with later slices).
 import { ACCEPT } from '../../js/files.js';
 import { engineLabel } from '../core/engineaddr.js';
-import { el, listRow } from '../core/ui.js';
+import { privacyAddress } from '../core/native.js';
+import { el, linkRow, listRow } from '../core/ui.js';
 
 export function addSheet({ t, nav, actions }) {
   const file = el('input', { type: 'file', accept: ACCEPT.split(',').filter((x) => x !== 'image/*').join(','), id: 'fileInput', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
@@ -34,6 +35,9 @@ export function moreSheet({ t, state, nav, registry, engineBase = '', native = n
     listRow({ ico: 'sun', tint: 'blue', title: t('more.look'), sub: native ? t('more.lookSubApp') : t('more.lookSub'), id: 'moreLook', onclick: () => nav('look') }),
     // The first run again: how paying works, what Forge can and cannot hide, Private only.
     listRow({ ico: 'shield', tint: 'teal', title: t('more.intro'), sub: t('more.introSub'), id: 'moreIntro', onclick: () => nav('intro') }),
+    // The privacy policy, the page the app stores link to (public/privacy/). Nothing is asked of any
+    // server before the tap: on the website it opens beside the app, in the apps in the phone's browser.
+    linkRow({ ico: 'shield', tint: 'blue', title: t('more.privacy'), href: privacyAddress(!!native), id: 'morePrivacy', newTab: !native }),
     listRow({ ico: 'trash', tint: 'danger', title: t('more.erase'), sub: t('more.eraseSub'), id: 'moreErase', cls: 'danger-row', onclick: () => nav('erase') }),
   );
 }

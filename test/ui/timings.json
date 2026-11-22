@@ -30,6 +30,7 @@
     "test/ui/mic-room.ui.test.ts": 15,
     "test/ui/midnight.ui.test.ts": 43.1,
     "test/ui/model-money.ui.test.ts": 2,
+    "test/ui/more-privacy.ui.test.ts": 4,
     "test/ui/note.ui.test.ts": 20.4,
     "test/ui/phonon-lab.ui.test.ts": 179.9,
     "test/ui/phonon.ui.test.ts": 111.1,

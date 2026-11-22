@@ -34,6 +34,15 @@ export function nativeBridge(win = globalThis) {
 /** The engine to use when none is set: the same origin on the website, Forge's engine in the app. */
 export const defaultEngine = (native) => (native ? DEFAULT_ENGINE : '');
 
+/**
+ * Where More, Privacy goes: the public privacy policy. On the website, /privacy on this site. In the
+ * Android and iPhone apps the page is not in the bundle, so it is Forge's engine's page, which the
+ * phone's browser opens (Capacitor hands a link to another site to the system). An engine set in More,
+ * Server is not followed: nothing is asked of it before the tap, so whether it serves such a page cannot
+ * be known, and the page names Forge AI as the one who runs the service.
+ */
+export const privacyAddress = (native) => (native ? `${DEFAULT_ENGINE}/privacy` : '/privacy');
+
 // ------------------------------------------------------------------ base64 for files over the bridge
 
 export function bytesToBase64(bytes) {

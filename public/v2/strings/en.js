@@ -289,6 +289,7 @@ export default {
   'more.introSub': 'Paying, limits, Private only',
   'more.engine': 'Server',
   'more.engineSite': 'Forge',
+  'more.privacy': 'Privacy',
   // In the Android app, which has no Classic mode.
   'more.lookSubApp': 'Default, Playful. Light, Dark, Midnight',
 
