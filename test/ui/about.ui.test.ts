@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Browser, chromium, type Page } from 'playwright-core';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type Gateway, startGateway } from '../e2e/helpers.ts';
+import { fakeApk } from '../support/apk.ts';
+
+const { tokens: LIGHT }: { tokens: Record<string, string> } = await import('../../public/v2/modules/look/light/index.js' as string);
 
 // The landing page, the site's front page at /, in a real browser. It is one screen: at each of six
 // sizes (three computer screens, three phones) the page is exactly as tall and wide as the window and
@@ -9,21 +15,34 @@ import { type Gateway, startGateway } from '../e2e/helpers.ts';
 // keyboard, stop with Pause, pause under the mouse, and stand still under reduced motion; Share unseen
 // shows its photo as it was taken, taps After and shows it covered, with its labels; the title's
 // last words turn on a quicker clock of their own and stop whenever the moments stop, and a screen
-// reader hears one sentence. The download
-// buttons show Soon while their links are empty and become links once set. What was meant for the
+// reader hears one sentence. Download opens a quiet panel with the /download page's row of ways, filled
+// from /download/info only once it is opened: each way that is there goes where /download would take
+// it, one that is not is dim and says Soon, and an iPhone sees no Android way. What was meant for the
 // Classic page at / goes on to /classic/. Nothing is asked of another site and nothing is logged as an
 // error.
 let g: Gateway;
+/** A site with both APKs; and one with an APK, Google Play's link and the iPhone app's link. */
+let withApk: Gateway;
+let linked: Gateway;
 let browser: Browser;
+const PLAY = 'https://play.google.com/store/apps/details?id=com.forgereserve.ai';
+const TESTFLIGHT = 'https://testflight.apple.com/join/AbCd1234';
+const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
 
 beforeAll(async () => {
   g = await startGateway();
+  const dir = mkdtempSync(join(tmpdir(), 'forge-about-apk-'));
+  writeFileSync(join(dir, 'forge.apk'), fakeApk('1.2.3', 7, 30_000));
+  writeFileSync(join(dir, 'pv.apk'), fakeApk('1.2.3', 7, 70_000));
+  withApk = await startGateway({ env: { FORGE_APK_PATH: join(dir, 'forge.apk'), FORGE_APK_PRIVATE_VOICE_PATH: join(dir, 'pv.apk') } });
+  linked = await startGateway({ env: { FORGE_APK_PATH: join(dir, 'forge.apk'), FORGE_PLAY_URL: PLAY, FORGE_IOS_URL: TESTFLIGHT } });
   browser = await chromium.launch({ channel: 'chrome', headless: true });
 }, 60_000);
 
 afterAll(async () => {
   await browser?.close();
-  await g?.close();
+  await Promise.all([g?.close(), withApk?.close(), linked?.close()]);
 });
 
 interface Opened {
@@ -31,6 +50,8 @@ interface Opened {
   errors: string[];
   /** Every request to another origin. */
   away: string[];
+  /** Every path asked of this site. */
+  asked: string[];
 }
 
 /** The title as one sentence: what a screen reader reads, and what shows under reduced motion. */
@@ -51,10 +72,10 @@ const SIZES = [
 
 async function open(
   [width, height]: readonly [number, number],
-  { links, still = false, look, path = '/' }: { links?: Record<string, string>; still?: boolean; look?: object; path?: string } = {},
+  { still = false, look, path = '/', site = g, ua }: { still?: boolean; look?: object; path?: string; site?: Gateway; ua?: string } = {},
 ): Promise<Opened> {
   const mobile = width < 600;
-  const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 2, reducedMotion: still ? 'reduce' : 'no-preference' });
+  const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 2, reducedMotion: still ? 'reduce' : 'no-preference', ...(ua ? { userAgent: ua } : {}) });
   if (look) await ctx.addInitScript((l) => localStorage.setItem('forge2.look', JSON.stringify(l)), look);
   // Every layout shift the page makes, from its first paint.
   await ctx.addInitScript(() => {
@@ -66,25 +87,18 @@ async function open(
   const page = await ctx.newPage();
   const errors: string[] = [];
   const away: string[] = [];
+  const asked: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   // A file the page's policy refused shows here too.
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('request', (r) => {
-    if (new URL(r.url()).origin !== g.url) away.push(r.url());
+    const u = new URL(r.url());
+    if (u.origin !== site.url) away.push(r.url());
+    else asked.push(u.pathname);
   });
-  if (links)
-    await page.route(
-      (u) => u.pathname === '/',
-      async (route) => {
-        const res = await route.fetch();
-        let body = await res.text();
-        for (const [k, v] of Object.entries(links)) body = body.replace(`data-download="${k}" data-href=""`, `data-download="${k}" data-href="${v}"`);
-        await route.fulfill({ response: res, body });
-      },
-    );
-  await page.goto(`${g.url}${path}`);
+  await page.goto(`${site.url}${path}`);
   await page.waitForLoadState('networkidle');
-  return { page, errors, away };
+  return { page, errors, away, asked };
 }
 
 /** The moments' state: which moment, which screen, playing or stopped. */
@@ -140,6 +154,35 @@ const fit = (page: Page) =>
 
 /** The box of an element, or fails. */
 const box = async (page: Page, sel: string) => (await page.locator(sel).boundingBox())!;
+
+/** WCAG contrast of an element's text against the page's ground. */
+const contrast = (page: Page, sel: string) =>
+  page.$eval(sel, (e) => {
+    const rgb = (s: string) => (s.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => {
+      const [r, g, b] = c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const a = lum(rgb(getComputedStyle(e).color));
+    const b = lum(rgb(getComputedStyle(document.body).backgroundColor));
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+
+/** Anything in the Download panel drawn as a pill, a tile or a card: a class of that kind, or a rounded box with a fill, an edge or a shadow. */
+const boxes = (page: Page) =>
+  page.$$eval('#download *', (xs) =>
+    xs
+      .filter((x) => !x.closest('svg'))
+      .filter((x) => {
+        if (/\b(tag|chip|pill|card|badge|soon|tile)\b/i.test(x.getAttribute('class') ?? '')) return true;
+        const s = getComputedStyle(x);
+        const r = parseFloat(s.borderTopLeftRadius) || 0;
+        const fill = s.backgroundColor !== 'rgba(0, 0, 0, 0)' && (s.backgroundColor.match(/[\d.]+/g) ?? []).map(Number)[3] !== 0;
+        const edge = ['Top', 'Right', 'Bottom', 'Left'].some((k) => parseFloat((s as any)[`border${k}Width`]) > 0 && (s as any)[`border${k}Style`] !== 'none');
+        return r > 4 && (fill || edge || s.boxShadow !== 'none');
+      })
+      .map((x) => `${x.tagName.toLowerCase()}.${x.getAttribute('class') ?? ''}#${x.id}`),
+  );
 
 /** Whether two boxes overlap. */
 const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -559,36 +602,52 @@ describe('the landing page in a browser', () => {
 
   it.each([
     [1440, 900],
+    [360, 640],
     [320, 568],
-  ] as const)('opens the download panel by tap and keyboard at %i by %i, with Soon and no links', async (width, height) => {
-    const { page, errors, away } = await open([width, height]);
+  ] as const)('opens the Download panel by tap and keyboard at %i by %i: the row of ways, asked for only once it opens', async (width, height) => {
+    const { page, errors, away, asked } = await open([width, height]);
     const opened = () => page.evaluate(() => document.getElementById('download')!.matches(':popover-open'));
     expect(await opened()).toBe(false);
     expect(await page.getAttribute('#topDownload', 'aria-expanded')).toBe('false');
+    // Nothing about the downloads is asked before the panel opens.
+    await page.waitForTimeout(300);
+    expect(asked.filter((p) => p.startsWith('/download') || p.startsWith('/v2/download/'))).toEqual([]);
     if (width < 600) await page.tap('#topDownload');
     else await page.click('#topDownload');
     expect(await opened()).toBe(true);
     await expect.poll(() => page.getAttribute('#topDownload', 'aria-expanded')).toBe('true');
-    // No link yet: each download button says Soon and goes nowhere.
-    for (const sel of ['#dlAndroid', '#dlIphone']) {
-      expect(await page.getAttribute(sel, 'href'), sel).toBeNull();
-      expect(await page.textContent(`${sel} .soon`), sel).toBe('Soon');
-      expect(await page.isVisible(`${sel} .soon`), sel).toBe(true);
-    }
-    expect(await page.textContent('#dlAndroid')).toContain('Android');
-    expect(await page.textContent('#dlIphone')).toContain('iPhone');
+    await page.waitForSelector('#dlWays:not([aria-busy])', { state: 'attached' });
+    expect(asked.filter((p) => p === '/download/info')).toEqual(['/download/info']);
+    // A computer, and a site with nothing yet: the browser first and there, the rest dim with Soon.
+    expect(await page.getAttribute('#dlWays', 'data-plan')).toBe('web android? play? iphone?');
     expect(await page.getAttribute('#dlWeb', 'href')).toBe('/v2/');
-    // One quiet way to the Classic page, under the rest, big enough to tap.
+    expect(await page.getAttribute('#dlWeb', 'aria-label')).toBe('Forge in the browser');
+    for (const [sel, name] of [['#dlAndroid', 'Android'], ['#dlPlay', 'Google Play'], ['#dlIphone', 'iPhone']]) {
+      expect(await page.getAttribute(sel!, 'href'), sel).toBeNull();
+      expect(await page.getAttribute(sel!, 'aria-disabled'), sel).toBe('true');
+      expect(await page.getAttribute(sel!, 'aria-label'), sel).toBe(`${name}, Soon`);
+      expect(await page.textContent(`${sel} .way-word`), sel).toBe('Soon');
+      // Not focusable: no link behind it.
+      expect(await page.$eval(sel!, (a) => ((a as HTMLElement).focus(), document.activeElement === a)), sel).toBe(false);
+    }
+    expect(await page.isVisible('#dlGraphene')).toBe(false);
+    // All downloads, and one quiet way to the Classic page.
+    expect(await page.getAttribute('#dlAll', 'href')).toBe('/download');
     expect(await page.getAttribute('#dlClassic', 'href')).toBe('/classic/');
     expect(await page.textContent('#dlClassic')).toBe('Classic app');
-    // The panel is inside the window.
-    await page.waitForTimeout(400);
-    expect((await box(page, '#dlClassic')).height).toBeGreaterThanOrEqual(44);
+    // Big enough to tap, inside the window, and no box, tile or tag in it.
+    await page.waitForTimeout(700);
+    for (const sel of ['#dlWeb', '#dlAndroid', '#dlPlay', '#dlIphone']) {
+      const b = await box(page, sel);
+      expect(Math.min(b.width, b.height), sel).toBeGreaterThanOrEqual(56);
+    }
+    for (const sel of ['#dlAll', '#dlClassic']) expect((await box(page, sel)).height, sel).toBeGreaterThanOrEqual(48);
     const p = await box(page, '#download');
     expect(p.x).toBeGreaterThanOrEqual(0);
     expect(p.x + p.width).toBeLessThanOrEqual(width);
     expect(p.y + p.height).toBeLessThanOrEqual(height);
-    // Escape closes it; Enter on Download opens it again, and Tab goes into it.
+    expect(await boxes(page)).toEqual([]);
+    // Escape closes it and Download has the focus; Enter opens it again, and Tab goes into it.
     await page.keyboard.press('Escape');
     expect(await opened()).toBe(false);
     await expect.poll(() => page.getAttribute('#topDownload', 'aria-expanded')).toBe('false');
@@ -597,23 +656,76 @@ describe('the landing page in a browser', () => {
     expect(await opened()).toBe(true);
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('dlWeb');
-    // A tap outside closes it.
+    await page.keyboard.press('Escape');
+    expect(await opened()).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('topDownload');
+    // A tap on the dimmed page under it closes it, and Download has the focus.
+    await page.click('#topDownload');
+    expect(await opened()).toBe(true);
     await page.mouse.click(10, height - 10);
     expect(await opened()).toBe(false);
+    await expect.poll(() => page.getAttribute('#topDownload', 'aria-expanded')).toBe('false');
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('topDownload');
+    // It asked once, however often it opened.
+    expect(asked.filter((p) => p === '/download/info')).toHaveLength(1);
     expect(away).toEqual([]);
     expect(errors).toEqual([]);
     await page.context().close();
   });
 
-  it('turns a download button into a link once its link is set', async () => {
-    const { page, errors } = await open([390, 844], { links: { android: '/download/' } });
-    expect(await page.getAttribute('#dlAndroid', 'href')).toBe('/download/');
-    expect(await page.locator('#dlAndroid .soon').count()).toBe(0);
-    expect(await page.getAttribute('#dlIphone', 'href')).toBeNull();
-    expect(await page.textContent('#dlIphone .soon')).toBe('Soon');
+  it('on Android with both APKs: Android and Graphene go to /download with that way picked', async () => {
+    const { page, errors } = await open([390, 844], { site: withApk, ua: ANDROID_UA });
     await page.tap('#topDownload');
-    await page.tap('#dlAndroid');
-    await page.waitForURL(/\/download\/?$/);
+    await page.waitForSelector('#dlWays:not([aria-busy])', { state: 'attached' });
+    expect(await page.getAttribute('#dlWays', 'data-plan')).toBe('android graphene play? iphone? web');
+    expect(await page.getAttribute('#dlAndroid', 'href')).toBe('/download#way=android');
+    expect(await page.getAttribute('#dlGraphene', 'href')).toBe('/download#way=graphene');
+    expect(await page.getAttribute('#dlGraphene', 'aria-label')).toBe('GrapheneOS');
+    expect(await page.textContent('#dlGraphene .way-word')).toBe('Graphene');
+    expect(await page.$$eval('#dlWays li:not([hidden]) a', (xs) => xs.map((x) => x.id))).toEqual(['dlAndroid', 'dlGraphene', 'dlPlay', 'dlIphone', 'dlWeb']);
+    // Words keep 4.5:1 against the page's ground.
+    for (const sel of ['#dlAndroid .way-word', '#dlPlay .way-word']) expect(await contrast(page, sel), sel).toBeGreaterThanOrEqual(4.5);
+    await page.waitForTimeout(600);
+    await page.tap('#dlGraphene');
+    await page.waitForURL(/\/download#way=graphene$/);
+    await page.waitForSelector('#downloadBody:not([aria-busy])', { state: 'attached' });
+    expect(await page.getAttribute('#way-graphene', 'aria-checked')).toBe('true');
+    expect(await page.getAttribute('.go', 'href')).toBe('/download/forge-private-voice.apk');
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('with Google Play\'s and the iPhone app\'s links set: both go straight there', async () => {
+    const { page, errors } = await open([390, 844], { site: linked, ua: ANDROID_UA });
+    await page.tap('#topDownload');
+    await page.waitForSelector('#dlWays:not([aria-busy])', { state: 'attached' });
+    expect(await page.getAttribute('#dlWays', 'data-plan')).toBe('android play iphone web');
+    expect(await page.getAttribute('#dlPlay', 'href')).toBe(PLAY);
+    expect(await page.getAttribute('#dlIphone', 'href')).toBe(TESTFLIGHT);
+    expect(await page.getAttribute('#dlPlay', 'aria-disabled')).toBeNull();
+    expect(await page.textContent('#dlIphone .way-word')).toBe('iPhone');
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('on an iPhone: the iPhone app and the browser only, never an Android way', async () => {
+    const { page, errors } = await open([390, 844], { site: withApk, ua: IPHONE_UA });
+    await page.tap('#topDownload');
+    await page.waitForSelector('#dlWays:not([aria-busy])', { state: 'attached' });
+    expect(await page.getAttribute('#dlWays', 'data-plan')).toBe('iphone? web');
+    expect(await page.$$eval('#dlWays li:not([hidden]) a', (xs) => xs.map((x) => x.id))).toEqual(['dlIphone', 'dlWeb']);
+    expect(await page.evaluate(() => document.getElementById('download')!.innerText)).not.toMatch(/Android|Graphene|Play/);
+    expect(await page.locator('#download a[href*="#way="]').count()).toBe(0);
+    expect(errors).toEqual([]);
+    await page.context().close();
+  });
+
+  it('keeps 4.5:1 in the light look the phone keeps from the app', async () => {
+    const { page, errors } = await open([390, 844], { site: withApk, ua: ANDROID_UA, look: { look: 'light', scheme: 'light', tokens: LIGHT } });
+    await page.tap('#topDownload');
+    await page.waitForSelector('#dlWays:not([aria-busy])', { state: 'attached' });
+    await page.waitForTimeout(700);
+    for (const sel of ['#dlAndroid .way-word', '#dlPlay .way-word', '#dlClassic', '#dlAll span']) expect(await contrast(page, sel), sel).toBeGreaterThanOrEqual(4.5);
     expect(errors).toEqual([]);
     await page.context().close();
   });

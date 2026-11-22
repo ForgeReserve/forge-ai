@@ -61,7 +61,7 @@ describe('GET /', () => {
       expect(page.headers.get('cross-origin-embedder-policy')).toBeNull();
       expect(await page.text()).toBe(html);
     }
-    expect(ABOUT_CSP).toBe("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+    expect(ABOUT_CSP).toBe("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   });
 
   it('moves its old address, /about/, to /', async () => {
@@ -174,14 +174,26 @@ describe('the page source', () => {
     expect(/property="og:image" content="https:\/\/ai\.forge-reserve\.com(\/[^"]+)"/.exec(html)?.[1]).toBe('/icons/icon-512.png');
   });
 
-  it('keeps the download links in one place, empty until the apps are public', () => {
-    const dls = [...html.matchAll(/<a class="dl"[^>]*>/g)].map((m) => m[0]);
-    expect(dls).toHaveLength(2);
-    for (const tag of dls) {
-      expect(tag).toMatch(/data-download="(android|iphone)"/);
-      expect(tag).toContain('data-href=""');
-      expect(tag).not.toMatch(/\shref=/);
-    }
+  it('has the /download page\'s row of ways in its Download panel, with no link until the site says what it has', () => {
+    const pop = /<div class="dl-pop"[^]*?<\/div>\n<\/header>/.exec(html)?.[0] ?? '';
+    const ways = [...pop.matchAll(/<li data-way="([a-z]+)" hidden><a class="way" id="(dl[A-Za-z]+)" data-word="([^"]+)" data-name="([^"]+)">/g)].map((m) => m.slice(1));
+    expect(ways).toEqual([
+      ['android', 'dlAndroid', 'Android', 'Android'],
+      ['graphene', 'dlGraphene', 'Graphene', 'GrapheneOS'],
+      ['play', 'dlPlay', 'Play', 'Google Play'],
+      ['iphone', 'dlIphone', 'iPhone', 'iPhone'],
+      ['web', 'dlWeb', 'Browser', 'Forge in the browser'],
+    ]);
+    // No way is a link until about.js has asked /download/info, and each has its picture.
+    expect(pop.match(/<a class="way"[^>]*\shref=/g)).toBeNull();
+    expect(pop.match(/<span class="way-ico" aria-hidden="true"><svg class="ico"/g)).toHaveLength(5);
+    // No box, tile or tag in it.
+    expect(pop).not.toMatch(/class="[^"]*\b(tag|chip|pill|card|soon|dl-row)\b/);
+    expect(pop).toContain('<a class="dl-all" id="dlAll" href="/download">');
+    // The panel asks for /download/info when it opens, from this site only.
+    const js = readFileSync(join(ABOUT, 'about.js'), 'utf8');
+    expect(js).toContain("fetch('/download/info'");
+    expect(js).toContain("await import('/v2/download/view.js')");
   });
 
   it('has four moments, each a tab with its words and its screens in the phone', () => {
