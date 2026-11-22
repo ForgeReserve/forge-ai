@@ -82,6 +82,11 @@ const PATHS = {
   // The iPhone's own Share and Add to Home Screen buttons, as Safari draws them (core/getapp.js).
   iosShare: '<path d="M12 3v11"/><path d="M8 7l4-4 4 4"/><path d="M8.5 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2.5"/>',
   addSquare: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>',
+  // The website's download page (public/v2/download/): the platforms, as the landing page draws them.
+  android: '<path d="M4 17a8 8 0 0 1 16 0z"/><path d="M7 10.5L5 7.5M17 10.5l2-3"/><path d="M9 14h.01M15 14h.01"/>',
+  apple: '<path d="M12 8c-1.5-1.2-5-1.6-6.5 1.2-1.6 3 .3 8 2.3 10.4 1.1 1.3 2.1 1.6 3.2 1 .6-.3 1.4-.3 2 0 1.1.6 2.1.3 3.2-1 1.4-1.7 2.6-4.4 2.8-6.6"/><path d="M12 8c1.2-1 3.6-1.5 5.3-.3"/><path d="M12 8c0-2 1-4 3-5"/>',
+  play: '<path d="M7 4.6v14.8a1 1 0 0 0 1.5.9l11.8-7.4a1 1 0 0 0 0-1.8L8.5 3.7A1 1 0 0 0 7 4.6z"/>',
+  fingerprint: '<path d="M5.5 9.5a7 7 0 0 1 13 0"/><path d="M8 19.5c1-1.6 1.5-3.4 1.5-5.5a2.5 2.5 0 0 1 5 0c0 1.3-.1 2.5-.4 3.7"/><path d="M5 14c0 1.6-.3 3-1 4.3"/><path d="M12 14c0 2.8-.7 5.2-2 7"/><path d="M6.6 14a5.4 5.4 0 0 1 10.8 0c0 2.1-.3 4.1-.9 6"/>',
   star: '<path d="M12 3l2.7 5.6 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 2.9 1.2-6.2L3 9.4l6.3-.8z"/>',
 };
 

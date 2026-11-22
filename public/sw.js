@@ -11,6 +11,8 @@
 //   them takes over as soon as it is installed, without waiting for the person (the open Classic page
 //   reloads on the change, so it lands on the landing page, or on /classic/ for a chat's link), and
 //   deletes their caches on activate, so / is never answered from a cache again.
+// - The site's other pages, /download and /privacy, are not in the shell either: a visit to one goes to
+//   the network, with the offline page when there is none.
 // - Vendor files are cache first in their own cache, versioned by the vendor hash.
 // - API calls, the admin and beta pages, POST requests and anything carrying Authorization or X-Cashu
 //   are never cached or intercepted: they go straight to the network.

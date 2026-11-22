@@ -105,9 +105,10 @@ Environment variables, validated with zod at startup. `src/config.ts` is the com
 | `FORGE_FAUCET_POW_BITS` / `FORGE_FAUCET_POW_MAX_BITS` | `22` / `28` | Proof of work per claim (SHA-256 leading zero bits); it rises one bit per doubling of claims over the drip, up to the most |
 | `FORGE_FAUCET_PER_ADDRESS` | `3` | Claims per address per day, counted in memory only (never stored or logged). `0`: off |
 | `FORGE_FAUCET_CHALLENGE_SECONDS` | `300` | How long a puzzle may be worked on |
-| `FORGE_APK_PATH` | unset | The signed Android APK `/download` offers ([ANDROID.md](ANDROID.md)). Unset: the page says the app is coming |
+| `FORGE_APK_PATH` | unset | The signed Android APK `/download` offers, with the version read from its manifest ([ANDROID.md](ANDROID.md)). Unset: the Android card says it is not on this site yet |
 | `FORGE_ANDROID_CERT_SHA256` | unset | SHA-256 fingerprints of the APKs' signing certificates, comma separated. Set: `/.well-known/assetlinks.json` links both apps, so event links (`/j#<pass>`) open in the app. Unset: that file is 404 |
 | `FORGE_APK_PRIVATE_VOICE_PATH` | unset | The signed Forge Private Voice APK (for GrapheneOS). Set: `/download` offers Android or GrapheneOS. Unset: that choice is hidden |
+| `FORGE_PLAY_URL` | unset | Forge's Google Play page, https only ([ANDROID.md](ANDROID.md), Google Play). Set: `/download/info` carries it as `play.url` and the `/download` page's Google Play card links there. Unset: the card says Soon |
 | `FORGE_IOS_URL` | unset | The iPhone app's link, a TestFlight invitation or the App Store page, https only ([IOS.md](IOS.md), Getting the app). Set: `/download/info` carries it and Get the app on an iPhone opens it. Unset: an iPhone is shown how to put Forge on its Home Screen |
 | `TOKENFACTORY_API_KEY`, `TINFOIL_API_KEY` | | Supplier keys, named by `apiKeyEnv` in the model catalog |
 

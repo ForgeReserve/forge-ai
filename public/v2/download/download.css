@@ -1,14 +1,216 @@
-/* The /download page: built from the v2 app's tokens and parts, like the /free page. */
-.download-page h1 { margin: 8px 0 0; font-size: 28px; }
-.download-page .lead { margin: 0; color: var(--text-body); }
-.download-page .apk-box { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); }
-.download-page .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.6; word-break: break-all; margin: 0; }
-.download-page ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
-.download-page .apk-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.download-page .apk-choice { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
-.download-page .apk-kind { flex: 1; min-width: 0; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 15px; font-weight: 600; }
-.download-page .apk-kind[aria-checked="true"] { border-color: var(--teal); background: var(--teal-tint); color: var(--teal); }
-.download-page .apk-kind span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.download-page .apk-info { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 22px; background: transparent; color: var(--text-body); }
-/* Forge for iPhone (an offer drawn, core/getapp.js): the link and Use in browser apart. */
-.download-page .download-body[data-offer] { display: flex; flex-direction: column; gap: 12px; }
+/* The /download page: every way to get Forge, a card each. The top, the footer, the tokens, the icons
+   and Soon are the landing page's (/about/site.css); this file lays out the cards. A phone first: one
+   column. A wide screen: the Android card on the left, the other ways beside it. The cards come in by
+   transform and opacity only, and stand still under prefers-reduced-motion. */
+:root { --maxw: 1160px; }
+body {
+  min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+  background:
+    radial-gradient(70vmax 46vmax at 8% -6%, color-mix(in srgb, var(--gold) 7%, transparent), transparent 70%),
+    radial-gradient(60vmax 44vmax at 100% 4%, color-mix(in srgb, var(--teal) 6%, transparent), transparent 72%),
+    var(--bg);
+  background-repeat: no-repeat;
+}
+.dl-root { flex: 1 0 auto; }
+body > .foot { margin-top: 8px; padding-top: 4px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+h2, h3 { margin: 0; }
+.dl-page {
+  width: 100%; max-width: var(--maxw); margin: 0 auto;
+  padding: 4px max(var(--gutter), env(safe-area-inset-right)) 28px max(var(--gutter), env(safe-area-inset-left));
+}
+
+/* ---------- the title: the app's icon, the name for this phone, three facts ---------- */
+.dl-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 14px; row-gap: 14px; padding: 10px 0 22px; }
+.dl-icon { width: 60px; height: 60px; border-radius: 16px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.dl-hero h1 { color: var(--ink); font-size: clamp(28px, 8.4vw, 36px); line-height: 1.06; font-weight: 700; letter-spacing: -0.035em; text-wrap: balance; }
+/* A phone: three tiles in a row, an icon over a word or two. A wide screen: three labels in a line. */
+.dl-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.fact {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-width: 0; padding: 10px 4px 9px; border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line);
+  color: var(--ink); font-size: 13.5px; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.fact-ico { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); flex: none; }
+.fact-ico .ico { width: 18px; height: 18px; }
+/* The tints of the landing page's labels. */
+.i-ink { color: var(--ink); }
+.i-teal { color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, var(--surface)); }
+.i-gold { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--surface)); }
+.i-blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
+.i-green { color: var(--green, var(--teal)); background: color-mix(in srgb, var(--green, var(--teal)) 13%, var(--surface)); }
+
+/* ---------- the cards ---------- */
+.dl-body { display: grid; gap: 14px; }
+.dl-main, .dl-side, .dl-lead { display: grid; gap: 12px; min-width: 0; align-content: start; }
+.dl-side { gap: 14px; }
+
+.way {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px;
+  min-height: 80px; padding: 14px 16px 14px 14px; border-radius: 22px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: var(--ink); text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+a.way:hover { background: var(--surface-2); border-color: var(--line-2); }
+a.way:focus-visible { border-radius: 22px; }
+.way-tile { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--surface-2); box-shadow: var(--shadow-raised-sm); }
+.way-tile .ico { width: 25px; height: 25px; }
+.way-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.way-name { color: inherit; font-size: 17px; font-weight: 650; line-height: 1.2; letter-spacing: -0.01em; }
+.way-sub { color: var(--text-2); font-size: 14px; font-weight: 500; line-height: 1.3; }
+.way-go { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); }
+.way-go .ico { width: 19px; height: 19px; }
+.way .soon, .tag-ready { justify-self: end; white-space: nowrap; line-height: 1.35; }
+.tag-ready { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 7px; border-radius: 999px; background: var(--teal-tint); color: var(--teal); border: 1px solid var(--teal-line); font-size: 13px; font-weight: 700; }
+.tag-ready .ico { width: 14px; height: 14px; stroke-width: 2.6; }
+
+/* A way that is not there yet: no link, a dashed edge, a quiet icon and Soon. Its words stay readable. */
+.way[data-state="soon"] { background: color-mix(in srgb, var(--surface) 45%, transparent); border: 1px dashed var(--line-2); box-shadow: none; }
+.way[data-state="soon"] .way-tile { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.way[data-state="soon"] .way-name { color: var(--text-2); }
+
+/* ---------- Android, from this site: the big card ---------- */
+.way-apk {
+  container: apk / inline-size;
+  display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 16px; border-radius: 26px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--teal) 6%, var(--surface)), var(--surface) 160px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.way-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.way-apk .way-name { font-size: 20px; }
+
+/* The choice of two: on a phone one row each, an icon and a word, with the info button at the end;
+   wider, side by side. */
+.apk-pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); }
+.apk-choice { display: flex; align-items: stretch; min-width: 0; border-radius: 16px; }
+.apk-kind {
+  flex: 1; min-width: 0; min-height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 0 4px 0 14px;
+  border: 0; border-radius: 16px 0 0 16px; background: transparent; color: var(--text-2); font-size: 15.5px; font-weight: 650; cursor: pointer;
+}
+.apk-kind span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apk-kind .ico { width: 21px; height: 21px; }
+@container apk (min-width: 480px) {
+  .apk-pick { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .apk-kind { justify-content: center; gap: 8px; padding: 0 4px 0 10px; font-size: 15px; }
+}
+.apk-info { flex: none; width: 48px; min-height: 52px; display: grid; place-items: center; border: 0; border-radius: 0 16px 16px 0; background: transparent; color: var(--text-2); cursor: pointer; }
+.apk-info .ico { width: 19px; height: 19px; }
+.apk-choice:has([aria-checked="true"]) { background: var(--surface-2); box-shadow: var(--shadow-raised-sm); }
+.apk-kind[aria-checked="true"], .apk-choice:has([aria-checked="true"]) .apk-info { color: var(--ink); }
+.apk-kind[aria-checked="true"] .ico { color: var(--teal); }
+.apk-info[aria-expanded="true"] { color: var(--ink); }
+.dl-about { margin: -6px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); color: var(--text-body); font-size: 15px; line-height: 1.4; }
+
+.dl-get {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 58px; padding: 0 20px; border-radius: 29px;
+  background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary);
+  font-size: 17px; font-weight: 700; text-decoration: none; text-align: center; -webkit-tap-highlight-color: transparent;
+}
+.dl-get .ico { width: 22px; height: 22px; stroke-width: 2.3; }
+.dl-get:hover { filter: brightness(1.04); }
+.dl-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: -4px 0 0; padding: 0; list-style: none; color: var(--text-2); font-size: 14px; font-weight: 550; }
+.dl-meta li { display: inline-flex; align-items: center; gap: 6px; }
+.dl-meta .ico { width: 16px; height: 16px; }
+
+/* The fingerprint: eight groups of eight, four to a row where they fit, and Copy. */
+.dl-check { container-type: inline-size; padding: 12px 14px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); }
+.dl-check-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dl-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
+.dl-label .ico { width: 18px; height: 18px; color: var(--gold); }
+.dl-label h3 { font-size: 15px; font-weight: 650; letter-spacing: 0; }
+.dl-copy {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 48px; padding: 0 16px; margin-right: -6px; border-radius: 24px;
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 14.5px; font-weight: 650; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.dl-copy .ico { width: 18px; height: 18px; }
+.dl-copy:hover { border-color: var(--text-2); }
+.dl-copy[data-done] { border-color: var(--teal-line); background: var(--teal-tint); color: var(--teal); }
+.dl-hash {
+  display: grid; grid-template-columns: repeat(2, max-content); justify-content: start; gap: 2px 16px; margin: 8px 0 4px;
+  font-family: var(--mono); font-size: 15px; line-height: 1.6; letter-spacing: 0.03em; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+@container (min-width: 280px) { .dl-hash { grid-template-columns: repeat(4, max-content); gap: 2px 10px; font-size: 13px; } }
+@container (min-width: 380px) { .dl-hash { gap: 2px 16px; font-size: 15px; } }
+
+/* The steps, an icon each with its number, then how to update. */
+.dl-install { container-type: inline-size; display: grid; gap: 12px; padding: 2px 2px 0; }
+.dl-steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.dl-steps li { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.step-ico { position: relative; flex: none; width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-raised-sm); }
+.step-ico .ico { width: 22px; height: 22px; }
+.step-n { position: absolute; top: -6px; left: -6px; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 800; line-height: 1; }
+.step-word { color: var(--ink); font-size: 16px; font-weight: 600; line-height: 1.3; }
+@container (min-width: 560px) {
+  .dl-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .dl-steps li { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .step-word { font-size: 15px; }
+}
+
+/* The short notes (core/ui.js say): the first sentence, and the rest behind a round info button. */
+.say { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+.say > .ico { flex: none; width: 18px; height: 18px; }
+.say > .say-head { flex: 1 1 0; min-width: 0; }
+.say > .info-btn { margin: -12px -10px -12px 0; }
+.say > .info-more { flex-basis: 100%; order: 5; }
+.info-btn { flex: none; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.info-btn .ico { width: 19px; height: 19px; }
+.info-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--ink); }
+.info-more { display: block; margin: 0 0 4px; font-size: 14.5px; font-weight: 400; line-height: 1.4; color: var(--text-body); }
+.dl-note { color: var(--text-2); font-size: 14px; font-weight: 500; line-height: 1.35; }
+
+/* ---------- the web app on an iPhone with nothing else to give: the Home Screen steps ---------- */
+.way-home { display: block; padding: 16px; border-radius: 26px; }
+.way-home .add-home { display: grid; gap: 14px; }
+.way-home .add-home > p { color: var(--ink); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.add-home-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.add-home-step { display: flex; align-items: center; gap: 14px; color: var(--ink); font-size: 17px; font-weight: 600; }
+.add-home-ico { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-raised-sm); }
+.add-home-ico .ico { width: 24px; height: 24px; }
+.way-home .btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 58px; padding: 0 20px; border-radius: 29px;
+  background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); font-size: 17px; font-weight: 700; text-decoration: none;
+}
+.way-home .btn .ico { width: 21px; height: 21px; }
+
+/* ---------- Other ways: a quiet label, then the cards ---------- */
+.dl-other { display: grid; gap: 10px; margin-top: 10px; }
+.dl-other-head { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-size: 15px; font-weight: 650; letter-spacing: 0; }
+.dl-other-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.dl-grid { display: grid; gap: 10px; }
+
+/* ---------- a wide screen ---------- */
+@media (min-width: 720px) {
+  .dl-hero { grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; padding: 24px 0 32px; }
+  .dl-icon { width: 76px; height: 76px; border-radius: 20px; }
+  .dl-hero h1 { font-size: clamp(40px, 5vw, 58px); line-height: 1.02; letter-spacing: -0.04em; }
+  .dl-facts { grid-column: 2; display: flex; flex-wrap: wrap; }
+  .fact { flex-direction: row; gap: 8px; padding: 4px 14px 4px 4px; border-radius: 999px; font-size: 14px; white-space: nowrap; }
+  .fact-ico { width: 30px; height: 30px; }
+  .fact-ico .ico { width: 17px; height: 17px; }
+  .dl-lead, .dl-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .way-apk { padding: 22px; gap: 18px; }
+}
+@media (min-width: 980px) {
+  .dl-page { padding-top: 8px; }
+  /* The Android card on the left; the rest beside it, in one column. */
+  .dl-body.split { grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 22px; align-items: start; }
+  .dl-body.split .dl-lead, .dl-body.split .dl-grid { grid-template-columns: minmax(0, 1fr); }
+  .dl-body.split .dl-other { margin-top: 8px; }
+  .dl-body:not(.split) .dl-lead { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .dl-body:not(.split) .dl-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+}
+
+/* ---------- motion: the way in ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .dl-hero { animation: rise 0.9s var(--out) 0.05s both; }
+  .way { animation: rise 0.8s var(--out) both; }
+  .dl-main .way, .dl-lead > :nth-child(1) { animation-delay: 0.12s; }
+  .dl-lead > :nth-child(2) { animation-delay: 0.18s; }
+  .dl-lead > :nth-child(3) { animation-delay: 0.24s; }
+  .dl-other { animation: fade-in 0.8s ease 0.3s both; }
+  .dl-grid .way { animation-delay: 0.32s; }
+  .dl-grid .way:nth-child(2) { animation-delay: 0.38s; }
+  .dl-grid .way:nth-child(3) { animation-delay: 0.44s; }
+  a.way, .apk-kind, .apk-info, .dl-copy, .info-btn { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
+  .dl-get:active, .dl-copy:active, .way-home .btn:active { transform: scale(0.985); }
+}

@@ -2,6 +2,8 @@
 
 What the gateway can see depends on the tier and on whether the client encrypts.
 
+The public policy, in plain words for people and for the app store listings, is the page at [`/privacy`](https://ai.forge-reserve.com/privacy) (`public/privacy/index.html`, tested by `test/unit/privacy.test.ts`). It is written from this page and the code. When a fact here changes, change that page in the same pull request, with its Last updated date.
+
 ## Never stored or logged, any tier
 
 - Prompt and completion content. Logs and the `requests` table hold only request id, model, supplier, token counts, how usage was measured, cost, status and latency.

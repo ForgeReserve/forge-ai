@@ -113,6 +113,9 @@ export const ISOLATION_HEADERS = Object.freeze({
 /** The landing page's Content-Security-Policy (the page at /, and its files under /about/): files from this origin only, no inline code, never framed. */
 export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+/** The /download page's policy: the landing page's, and it may ask this site for /download/info. */
+export const DOWNLOAD_CSP = ABOUT_CSP.replace("font-src 'self';", "font-src 'self'; connect-src 'self';");
+
 async function isolated(c: Context, next: () => Promise<void>) {
   await next();
   for (const [k, v] of Object.entries(ISOLATION_HEADERS)) c.header(k, v);
@@ -1309,7 +1312,7 @@ export function createApp(d: Deps) {
   });
 
   // ------------------------------------------------------------------ the apps' download (docs/ANDROID.md, docs/IOS.md)
-  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL), env.FORGE_IOS_URL);
+  registerDownloadRoutes(app, apkSource(env.FORGE_APK_PATH), apkSource(env.FORGE_APK_PRIVATE_VOICE_PATH, PRIVATE_VOICE_APK_URL), { ios: env.FORGE_IOS_URL, play: env.FORGE_PLAY_URL });
   // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
   registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 
@@ -1369,7 +1372,10 @@ export function createApp(d: Deps) {
     app.get('/free/', freePage);
     app.use('/v2/free/*', async (c, next) => (faucet ? next() : c.notFound()));
     // The Android app's download page (public/v2/download/), at /download. It reads /download/info.
-    const downloadPage = (c: Context) => c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    const downloadPage = (c: Context) => {
+      c.header('Content-Security-Policy', DOWNLOAD_CSP);
+      return c.html(readFileSync(join(publicDir, 'v2', 'download', 'index.html'), 'utf8'));
+    };
     app.get('/download', downloadPage);
     app.get('/download/', downloadPage);
     // The event link (public/v2/join/), at /j: the QR code on a slide reads /j#<pass>. The pass stays in
@@ -1397,6 +1403,24 @@ export function createApp(d: Deps) {
     app.get('/index.html', landingPage);
     for (const p of ['/about', '/about/', '/about/index.html']) app.get(p, (c) => c.redirect('/', 301));
     app.use('/about/*', async (c, next) => {
+      await next();
+      c.header('Content-Security-Policy', ABOUT_CSP);
+    });
+    // The privacy page (public/privacy/index.html), the policy the app stores link to, at /privacy under
+    // the landing page's policy, as are its files under /privacy/. /privacy/ moves to /privacy. It comes
+    // from the network: neither service worker keeps it.
+    app.get('/privacy', (c) => {
+      let html: string;
+      try {
+        html = readFileSync(join(publicDir, 'privacy', 'index.html'), 'utf8');
+      } catch {
+        return c.notFound();
+      }
+      c.header('Content-Security-Policy', ABOUT_CSP);
+      return c.html(html);
+    });
+    for (const p of ['/privacy/', '/privacy/index.html']) app.get(p, (c) => c.redirect('/privacy', 301));
+    app.use('/privacy/*', async (c, next) => {
       await next();
       c.header('Content-Security-Policy', ABOUT_CSP);
     });

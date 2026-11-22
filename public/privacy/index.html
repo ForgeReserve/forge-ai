@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forge AI privacy</title>
+<meta name="description" content="What Forge AI keeps, what it never stores, and how to remove your data. For the website and the Android and iPhone apps.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B0D10">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="canonical" href="https://ai.forge-reserve.com/privacy">
+<link rel="preload" href="/v2/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/about/site.css">
+<link rel="stylesheet" href="/privacy/privacy.css">
+<script type="module" src="/privacy/privacy.js"></script>
+</head>
+<body>
+<!-- The privacy policy for the website and the apps, served at /privacy (src/app.ts) under the landing
+     page's policy. The facts come from docs/PRIVACY.md and the code; change this page with them, and
+     its date. Short sections, an icon and a label each. Icons are the app's own (public/v2/core/ui.js). -->
+<a class="skip" href="#main">Skip to the policy</a>
+<header class="top">
+  <a class="brand" href="/" aria-label="Forge AI">
+    <svg viewBox="0 0 26 18" aria-hidden="true"><path fill="currentColor" d="M0 2.6 6.2 0H25v5.2h-4.6c-1.5 1.3-2.1 3.6-2.1 5.9H23V18H6v-6.9h5.1c0-2.3-.6-4.6-2.1-5.9H6.2Z"/></svg>
+    <span class="word">FORGE <span class="ai">AI</span></span>
+  </a>
+  <nav class="actions" aria-label="Forge AI">
+    <a class="act act-open" id="topOpen" href="/v2/">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      <span>Open the app</span>
+    </a>
+  </nav>
+</header>
+
+<main class="pv-page" id="main">
+  <div class="pv-hero">
+    <span class="pv-badge i-teal" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg></span>
+    <h1>Privacy</h1>
+    <p class="pv-date">Last updated <time datetime="2026-11-21">21 November 2026</time></p>
+    <ul class="pv-short" aria-label="In short">
+      <li><span class="pv-chip i-ink"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M3 3l18 18"/></svg></span>No account</li>
+      <li><span class="pv-chip i-teal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M3 3l18 18"/></svg></span>We keep no questions</li>
+      <li><span class="pv-chip i-blue"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg></span>No tracking</li>
+      <li><span class="pv-chip i-gold"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M3 3l18 18"/></svg></span>No ads</li>
+    </ul>
+    <p class="pv-early" id="early"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg><span>This is an early build. Its privacy has not been checked by an outside reviewer yet.</span></p>
+  </div>
+
+  <div class="pv-layout">
+    <nav class="pv-toc" aria-label="On this page">
+      <ol>
+        <li><a href="#who">Who runs it</a></li>
+        <li><a href="#phone">On your phone</a></li>
+        <li><a href="#engine">What the engine keeps</a></li>
+        <li><a href="#never">Never stored</a></li>
+        <li><a href="#models">Private and Standard models</a></li>
+        <li><a href="#voice">Voice</a></li>
+        <li><a href="#photos">Photos</a></li>
+        <li><a href="#pay">Payments</a></li>
+        <li><a href="#ads">Ads and tracking</a></li>
+        <li><a href="#children">Children</a></li>
+        <li><a href="#delete">Questions and deletion</a></li>
+        <li><a href="#changes">Changes</a></li>
+        <li><a href="#review">Early build</a></li>
+      </ol>
+    </nav>
+
+    <div class="pv-sections">
+      <section class="pv" id="who" aria-labelledby="h-who">
+        <h2 id="h-who"><span class="pv-ico i-ink" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/></svg></span>Who runs it</h2>
+        <ul>
+          <li>Forge AI runs this service: the website at ai.forge-reserve.com and the Forge apps for Android and iPhone.</li>
+          <li>Write to us at <a href="mailto:security@forge-reserve.com">security@forge-reserve.com</a>.</li>
+          <li>The code is public. Anyone can read how it works on <a href="https://github.com/ForgeReserve/forge-ai">GitHub</a>.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="phone" aria-labelledby="h-phone">
+        <h2 id="h-phone"><span class="pv-ico i-teal" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg></span>On your phone</h2>
+        <p>The app keeps these on your phone only:</p>
+        <ul>
+          <li><b>Your balance key.</b> It is the key to your money. Anyone who has it can spend the balance.</li>
+          <li><b>Your history.</b> Your questions and answers, with the photos and files you added.</li>
+          <li><b>Your settings</b>, and eCash on its way in or out.</li>
+        </ul>
+        <p>To remove them:</p>
+        <ul>
+          <li><b>Erase everything</b> (in More) removes all of it from this phone. Take funds out first: without the key, the money cannot be recovered.</li>
+          <li><b>Burn</b> removes one conversation. <b>Auto-delete</b> removes old ones, after 1 day unless you change it.</li>
+          <li>A copy made elsewhere stays, such as a screenshot or a shared file.</li>
+          <li>The Android app turns backups off, so none of it goes into a cloud backup. Uninstalling it removes everything it kept.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="engine" aria-labelledby="h-engine">
+        <h2 id="h-engine"><span class="pv-ico i-gold" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></span>What the engine keeps</h2>
+        <p>The engine is our server. It answers questions and holds balances. For each balance it keeps:</p>
+        <ul>
+          <li>A fingerprint of the key (a SHA-256 hash). Never the key itself.</li>
+          <li>The amount on it, in dollars or in sats.</li>
+          <li>Each top-up, charge and payout, with its amount and time.</li>
+          <li>One row per request: the model, the number of words in and out (tokens), the cost and the time.</li>
+          <li>The Lightning invoices and Bitcoin addresses it made to fund that balance.</li>
+          <li>The invite code or event pass that opened it, if any, as a fingerprint.</li>
+          <li>If you have a balance in dollars and one in sats, that the two belong together.</li>
+        </ul>
+        <p>It keeps no name, email, phone number or device id. A balance is a random key. Every request on one balance can be linked to the others on it.</p>
+        <p>These records have no set date to be deleted yet.</p>
+        <p><b>The waitlist.</b> If you join the waitlist, we keep the email address or Nostr key you give, and your note, to invite you later.</p>
+      </section>
+
+      <section class="pv" id="never" aria-labelledby="h-never">
+        <h2 id="h-never"><span class="pv-ico i-blue" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg></span>Never stored</h2>
+        <ul>
+          <li>Your questions, answers, photos, files and recordings pass through the engine in memory, on their way to the model. They are never written to its logs or its database.</li>
+          <li>Your network address reaches the engine, as with any website. The engine uses it in memory to limit abuse. It is not stored with your balance or your requests.</li>
+          <li>To hide your network address, use Tor or a VPN.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="models" aria-labelledby="h-models">
+        <h2 id="h-models"><span class="pv-ico i-teal" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>Private and Standard models</h2>
+        <ul>
+          <li><b>Private</b> models run in sealed hardware, at Tinfoil. The app encrypts your question on your phone, and only that hardware can open it. The engine cannot read it.</li>
+          <li><b>Standard</b> models run at an outside provider, Token Factory. The engine passes your question on in memory. The provider can read it and may keep what it was sent.</li>
+          <li>The app shows which kind you use. Private only is on until you turn it off.</li>
+          <li><b>Search the web</b> is off until you turn it on, for one question. The sealed hardware sends the search to a search service. That service sees the search. It does not learn who asked.</li>
+          <li>In the Classic chat page you can turn its encryption off. The engine can then read the question on its way.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="voice" aria-labelledby="h-voice">
+        <h2 id="h-voice"><span class="pv-ico i-ink" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span>Voice</h2>
+        <p>Hold to talk turns your voice into words in one of four ways. More, Voice shows which one you use.</p>
+        <ul>
+          <li><b>On this phone</b>, in the Android and iPhone apps where the phone can: the sound never leaves the phone. The phone's own recogniser hears it, under the phone's own terms.</li>
+          <li><b>Forge Private Voice</b>, the Android app for GrapheneOS, has its own speech model. The sound never leaves the phone.</li>
+          <li><b>Engine</b>: the recording goes to our engine and on to a speech model in sealed hardware. It is not encrypted on the way, so the engine could hear it. It is not kept.</li>
+          <li><b>This browser</b>: the browser's own recogniser, which may send your voice to the browser's maker. It is offered only when Private only is off.</li>
+        </ul>
+        <p>Reading answers aloud: the phone's voice and the natural voice run on the phone. When the engine reads aloud, the answer's text goes to a speech model in sealed hardware, the same way.</p>
+      </section>
+
+      <section class="pv" id="photos" aria-labelledby="h-photos">
+        <h2 id="h-photos"><span class="pv-ico i-blue" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 5"/></svg></span>Photos</h2>
+        <ul>
+          <li><b>Share unseen</b> runs on your phone. It covers faces and writing, and takes out hidden details such as where and when the photo was taken. The photo is not sent anywhere to be checked.</li>
+          <li>The checks can miss things. Look before you share.</li>
+          <li>A photo you add to a question goes with the question to the model, as your words do.</li>
+          <li>The camera inside the app keeps only the one photo you take, in memory.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="pay" aria-labelledby="h-pay">
+        <h2 id="h-pay"><span class="pv-ico i-gold" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg></span>Payments</h2>
+        <ul>
+          <li><b>eCash</b> is signed blind, so the mint that made it cannot tell whose eCash it is when it is spent. eCash from another mint is swapped by the engine at that mint, from the engine's own address.</li>
+          <li><b>Lightning</b>: the Forge mint sees the invoice, the amount and when it is paid.</li>
+          <li><b>On-chain</b>: the Bitcoin address and the amount are public on the blockchain. Anyone can see them.</li>
+          <li><b>Cards</b>: the engine and a Cashu card's mint can tell it is the same card each time it is tapped. A Fedimint card's till sees the card, its PIN, the amount and the invoice, and keeps a record.</li>
+          <li>Paying for each request with eCash (NUT-24) ties nothing to a balance.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="ads" aria-labelledby="h-ads">
+        <h2 id="h-ads"><span class="pv-ico i-ink" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span>Ads and tracking</h2>
+        <ul>
+          <li>No ads. No tracking. No analytics or advertising SDKs in the website or the apps.</li>
+          <li>We do not sell your data, and we do not share it for advertising.</li>
+          <li>The Android app turns off Google's Safe Browsing link checks and its web view usage reports.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="children" aria-labelledby="h-children">
+        <h2 id="h-children"><span class="pv-ico i-ink" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>Children</h2>
+        <ul>
+          <li>Forge AI is not directed at children under 13.</li>
+          <li>We ask no one for a name or an age.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="delete" aria-labelledby="h-delete">
+        <h2 id="h-delete"><span class="pv-ico i-teal" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg></span>Questions and deletion</h2>
+        <ul>
+          <li><b>To delete your data</b>, use Erase everything on your phone (in More). Take funds out first.</li>
+          <li>A balance has no name, email or phone number on it. So the engine cannot look a person up, and cannot find a balance from who you are.</li>
+          <li>For a question about your data, or a request, write to <a href="mailto:security@forge-reserve.com">security@forge-reserve.com</a>.</li>
+          <li>To take your contact off the waitlist, write to the same address.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="changes" aria-labelledby="h-changes">
+        <h2 id="h-changes"><span class="pv-ico i-ink" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Changes</h2>
+        <ul>
+          <li>When this policy changes, we change it here and change the date at the top.</li>
+          <li>Last updated <time datetime="2026-11-21">21 November 2026</time>.</li>
+        </ul>
+      </section>
+
+      <section class="pv" id="review" aria-labelledby="h-review">
+        <h2 id="h-review"><span class="pv-ico i-gold" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg></span>Early build</h2>
+        <ul>
+          <li>Forge AI is an early build. Its privacy and security have not been independently reviewed yet.</li>
+          <li>What this page says comes from the code, which is public, and its tests.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer class="foot">
+  <a id="footHome" href="/"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/></svg><span>Home</span></a>
+  <a id="footDownload" href="/download"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg><span>All downloads</span></a>
+  <a id="footPrivacy" href="/privacy" aria-current="page"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg><span>Privacy</span></a>
+</footer>
+</body>
+</html>
