@@ -167,4 +167,4 @@ Files are read on the device. The file itself is never uploaded: only its text, 
 
 ### Installed app and offline use
 
-The page is an installable web app (`manifest.webmanifest`). A service worker (`/sw.js`) keeps the app shell so the app opens without a connection: the chat history, stored on the device, can be read offline, and sending waits for a connection. The service worker never caches or intercepts `/v1/*`, `/admin`, `/beta`, POST requests, or any request with an `Authorization` or `X-Cashu` header; those always go to the network.
+The page is an installable web app (`manifest.webmanifest`). A service worker (`/sw.js`) keeps the app shell so the app opens without a connection: the chat history, stored on the device, can be read offline, and sending waits for a connection. The service worker never caches or intercepts `/v1/*`, `/admin`, POST requests, or any request with an `Authorization` or `X-Cashu` header; those always go to the network.

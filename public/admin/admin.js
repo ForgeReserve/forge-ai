@@ -5,7 +5,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
 const KEY = 'forge-admin-token';
-const SECTIONS = ['overview', 'export', 'invites', 'waitlist', 'balances', 'fundings', 'fedimint', 'requests', 'costs', 'settings'];
+const SECTIONS = ['overview', 'export', 'invites', 'balances', 'fundings', 'fedimint', 'requests', 'costs', 'settings'];
 
 // ------------------------------------------------------------------ helpers
 
@@ -765,80 +765,6 @@ async function renderInvites() {
   });
 }
 
-// ------------------------------------------------------------------ waitlist
-
-async function renderWaitlist() {
-  const { data } = await api('/waitlist');
-  const invited = data.filter((s) => s.invited_at).length;
-  view.innerHTML = `
-    ${head('Beta waitlist', `${nf(data.length)} signups · ${nf(invited)} invited`)}
-    <div class="stack">
-      <div id="wout"></div>
-      <section class="card" id="wlist">${table(
-        [
-          { h: 'Signed up', v: (r) => when(r.created_at) },
-          { h: 'Contact', v: (r) => `${badge(r.kind)} <span class="mono">${esc(r.contact.length > 34 ? r.contact.slice(0, 20) + '…' + r.contact.slice(-8) : r.contact)}</span>` },
-          { h: 'Note', wrap: true, v: (r) => esc(r.note || '') },
-          { h: 'Invited', v: (r) => (r.invited_at ? badge('invited ' + ago(r.invited_at), 'ok') : badge('waiting', 'warn')) },
-          {
-            h: '',
-            v: (r) =>
-              `<div class="actions"><button class="btn small ${r.invited_at ? '' : 'primary'}" data-invite="${esc(r.id)}" data-again="${r.invited_at ? '1' : ''}">${r.invited_at ? 'New code' : 'Invite'}</button><button class="btn small danger ghost" data-del="${esc(r.id)}">Delete</button></div>`,
-          },
-        ],
-        data,
-        'No signups yet.',
-      )}</section>
-    </div>`;
-  $('#wlist').addEventListener(
-    'click',
-    async (e) => {
-      const inv = e.target.closest('[data-invite]');
-      const del = e.target.closest('[data-del]');
-      if (inv) {
-        const again = !!inv.dataset.again;
-        if (again && !confirm('This signup was already invited. Make a new invite code anyway?')) return;
-        try {
-          const r = await api(`/waitlist/${inv.dataset.invite}/invite`, { method: 'POST', body: { again } });
-          const out = $('#wout');
-          out.innerHTML = `
-            <section class="card">
-              <div class="card-head"><h3>Invite ready for ${esc(r.kind === 'email' ? r.contact : 'this npub')}</h3>${badge('code shown once', 'brass')}</div>
-              ${r.kind === 'npub' ? `<p class="muted small">Send it as a Nostr DM to <span class="mono">${esc(r.contact)}</span>.</p>` : ''}
-              <textarea readonly rows="8" id="wmsg">${esc(r.message)}</textarea>
-              <div class="actions spaced">
-                ${r.mailto ? `<a class="btn primary" id="wmail" href="${esc(r.mailto)}">Open in email</a>` : ''}
-                <button class="btn ${r.mailto ? '' : 'primary'}" type="button" id="wcp">Copy message</button>
-                ${r.kind === 'npub' ? '<button class="btn" type="button" id="wnpub">Copy npub</button>' : ''}
-                <button class="btn ghost" type="button" id="wcode">Copy code only</button>
-              </div>
-            </section>`;
-          $('#wcp').addEventListener('click', () => copy(r.message, 'Message copied'));
-          $('#wcode').addEventListener('click', () => copy(r.code, 'Code copied'));
-          $('#wnpub')?.addEventListener('click', () => copy(r.contact, 'npub copied'));
-          const row = inv.closest('tr');
-          row.querySelector('td:nth-child(4)').innerHTML = badge('invited just now', 'ok');
-          inv.textContent = 'New code';
-          inv.classList.remove('primary');
-          inv.dataset.again = '1';
-          out.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch (x) {
-          toast(x.message);
-        }
-      } else if (del) {
-        if (!confirm('Delete this signup for good? This removes the contact and note from the database.')) return;
-        try {
-          await api(`/waitlist/${del.dataset.del}`, { method: 'DELETE', body: {} });
-          toast('Signup deleted');
-          route(true);
-        } catch (x) {
-          toast(x.message);
-        }
-      }
-    },
-  );
-}
-
 // ------------------------------------------------------------------ balances
 
 async function renderBalances() {
@@ -1376,7 +1302,6 @@ const RENDER = {
   fedimint: renderFedimint,
   export: renderExport,
   invites: renderInvites,
-  waitlist: renderWaitlist,
   balances: renderBalances,
   fundings: renderFundings,
   requests: renderRequests,

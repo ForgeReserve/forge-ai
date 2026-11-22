@@ -147,7 +147,7 @@ describe.skipIf(!up)('admin: export crash safety', () => {
   });
 });
 
-describe.skipIf(!up)('admin: accounts, invites, waitlist and overview', () => {
+describe.skipIf(!up)('admin: accounts, invites and overview', () => {
   let g: Gateway;
   beforeAll(async () => {
     g = await startGateway({ env: ADMIN_ENV });
@@ -188,16 +188,12 @@ describe.skipIf(!up)('admin: accounts, invites, waitlist and overview', () => {
     expect(listed.status).toBe('revoked');
   });
 
-  it('a waitlist invite opens a balance', async () => {
+  it('an invite made on the admin page opens a balance', async () => {
     const a = admin(g);
-    await fetch(`${g.url}/v1/beta/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: j({ contact: 'bob@example.org' }) });
-    const s = (await a('/waitlist')).body.data.find((x: any) => x.contact === 'bob@example.org');
-    const inv = await a(`/waitlist/${s.id}/invite`, { method: 'POST', body: {} });
-    expect(inv.status).toBe(200);
-    expect(inv.body.mailto).toContain('mailto:bob@example.org');
-    const t = await topup(g, 5, inv.body.code);
+    const created = (await a('/invites', { method: 'POST', body: { count: 1, label: 'friend' } })).body.data[0];
+    const t = await topup(g, 5, created.code);
     expect(t.status).toBe(200);
-    const listed = (await a('/invites')).body.data.find((i: any) => i.id === inv.body.invite_id);
+    const listed = (await a('/invites')).body.data.find((i: any) => i.id === created.id);
     expect(listed).toMatchObject({ status: 'redeemed', account_id: t.body.account_id });
   });
 

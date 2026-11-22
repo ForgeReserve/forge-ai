@@ -127,7 +127,6 @@
 <li><a href="#post-v1-wallet-fund-card-restore"><span class="verb verb-post">POST</span> <code>/v1/wallet/fund/card/restore</code></a></li>
 </ul></li>
 <li><a href="#other-routes">Other routes</a><ul>
-<li><a href="#post-v1-beta-signup"><span class="verb verb-post">POST</span> <code>/v1/beta/signup</code></a></li>
 <li><a href="#get-healthz"><span class="verb verb-get">GET</span> <code>/healthz</code></a></li>
 <li><a href="#get-attestation"><span class="verb verb-get">GET</span> <code>/attestation</code></a></li>
 <li><a href="#get-well-known-hpke-keys"><span class="verb verb-get">GET</span> <code>/.well-known/hpke-keys</code></a></li>
@@ -148,7 +147,7 @@
 <p>The hosted gateway is at <code>https://ai.forge-reserve.com</code>. Every API route is under <code>/v1</code>.</p>
 <p>This page is generated from <code>docs/API.md</code> in the Forge AI repository by <code>scripts/build-docs.ts</code>. Everything on it is read from the gateway&#39;s code.</p>
 <h2 id="quickstart">Quickstart<a class="anchor" href="#quickstart" aria-label="Link to this section">#</a></h2>
-<p>Five steps from nothing to an answer. You need <code>curl</code> and an invite code. The hosted gateway opens new balances only with an invite code (<code>invite_only: true</code> in <code>GET /v1/models</code>); ask for one on the waitlist at <a href="/beta/">/beta/</a>.</p>
+<p>Five steps from nothing to an answer. You need <code>curl</code> and an invite code. The hosted gateway opens new balances only with an invite code (<code>invite_only: true</code> in <code>GET /v1/models</code>), which its operator gives out.</p>
 <h3 id="1-list-the-models">1. List the models<a class="anchor" href="#1-list-the-models" aria-label="Link to this section">#</a></h3>
 <div class="code"><span class="lang">bash</span><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs language-bash">curl -s https://ai.forge-reserve.com/v1/models</code></pre></div>
 <p>Each model has an <code>id</code>, a <code>tier</code> (<code>enclave</code> for private models, <code>standard</code> for the rest) and a <code>pricing</code> block. Models with <code>pricing.free: true</code> cost nothing on a balance key.</p>
@@ -1051,8 +1050,6 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <p>Body: <code>mint</code>, <code>outputs</code>, optional <code>accept_unlisted</code>. Passed to the mint&#39;s <code>/v1/restore</code> (NUT-09). Returns <code>{outputs, signatures}</code>.</p>
 <p>A refusal by the mint answers <code>400 mint_refused</code> with the mint&#39;s own <code>mint_code</code>. A mint that fails, times out or rate-limits answers <code>503 mint_unavailable</code>.</p>
 <h2 id="other-routes">Other routes<a class="anchor" href="#other-routes" aria-label="Link to this section">#</a></h2>
-<h3 id="post-v1-beta-signup" class="endpoint"><span class="verb verb-post">POST</span> <code>/v1/beta/signup</code><a class="anchor" href="#post-v1-beta-signup" aria-label="Link to this section">#</a></h3>
-<p>Joins the waitlist for an invite. Body: <code>contact</code> (an email address or a Nostr <code>npub</code>), optional <code>note</code> (up to 500 characters). Returns <code>{&quot;ok&quot;: true}</code>. Errors: <code>400 invalid_contact</code>, <code>429 rate_limited</code> (3 signups a minute from one address).</p>
 <h3 id="get-healthz" class="endpoint"><span class="verb verb-get">GET</span> <code>/healthz</code><a class="anchor" href="#get-healthz" aria-label="Link to this section">#</a></h3>
 <p><code>{&quot;ok&quot;: true, &quot;rate&quot;: {&quot;btc_usd&quot;, &quot;age_s&quot;} | null, &quot;invite_only&quot;}</code>.</p>
 <h3 id="get-attestation" class="endpoint"><span class="verb verb-get">GET</span> <code>/attestation</code><a class="anchor" href="#get-attestation" aria-label="Link to this section">#</a></h3>
@@ -1424,7 +1421,7 @@ data: {&quot;request_id&quot;:&quot;req_...&quot;,&quot;unit&quot;:&quot;usd&quo
 <li>Each limit is a token bucket. The defaults are 60 requests a minute with a burst of 15. The operator can change them.</li>
 <li>Past the limit the answer is <code>429 rate_limited</code> with <code>Retry-After</code> in seconds.</li>
 <li>Request bodies are limited too: 1,000,000 bytes by default, and 4,000,000 bytes for speech to text uploads. Over that, <code>413 request_too_large</code>.</li>
-<li>The faucet adds its own daily budget and per-address limit. The waitlist takes 3 signups a minute from one address.</li>
+<li>The faucet adds its own daily budget and per-address limit.</li>
 </ul>
 <h2 id="cors">CORS<a class="anchor" href="#cors" aria-label="Link to this section">#</a></h2>
 <p>Every <code>/v1</code> route answers cross-origin requests from any origin (<code>Access-Control-Allow-Origin: *</code>), for GET, POST and OPTIONS, with preflight results cached for 600 seconds. <code>/attestation</code> and <code>/.well-known/*</code> allow GET from any origin.</p>

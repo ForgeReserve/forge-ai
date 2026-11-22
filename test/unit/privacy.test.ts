@@ -131,7 +131,7 @@ describe('the policy', () => {
 
   it('says what the engine keeps per balance, and what it never has', () => {
     const t = section('engine');
-    for (const w of ['SHA-256', 'top-up, charge and payout', 'the model', 'tokens', 'the cost', 'the time', 'no name, email, phone number or device id', 'random key', 'waitlist']) expect(t, w).toContain(w);
+    for (const w of ['SHA-256', 'top-up, charge and payout', 'the model', 'tokens', 'the cost', 'the time', 'no name, email, phone number or device id', 'random key']) expect(t, w).toContain(w);
     const never = section('never');
     for (const w of ['questions, answers, photos, files and recordings', 'in memory', 'never written', 'network address', 'Tor or a VPN']) expect(never, w).toContain(w);
   });

@@ -19,7 +19,6 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { OPEN_FUNDING_STATES } from './accounts.ts';
 import type { Deps } from './app.ts';
-import { BetaWaitlist, mailtoLink } from './beta.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
 import { PaymentError } from './cashu/wallet.ts';
 import type { Config, Unit } from './config.ts';
@@ -31,7 +30,6 @@ import { displayPrice, MSUB_PER_UNIT } from './pricing.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { ExportError, exportHistory, holdings, issueExport, oweExport, planExport, revenue } from './revenue.ts';
 
-export const BETA_LINK = 'https://ai.forge-reserve.com/v2/';
 const DAY = 86_400_000;
 
 function sha256hex(s: string): string {
@@ -44,19 +42,6 @@ function json(c: Context, status: number, body: unknown) {
 
 function fail(c: Context, status: number, code: string, message: string, extra: object = {}) {
   return json(c, status, { error: { code, message }, ...extra });
-}
-
-/** The message an operator sends to a waitlist signup with their invite code. */
-export function inviteMessage(code: string): string {
-  return [
-    'Hi, your Forge AI beta invite is ready.',
-    '',
-    `Invite code: ${code}`,
-    '',
-    `Open ${BETA_LINK}, add funds with eCash, Lightning or bitcoin, and enter the code when it asks for an invite. The code works once.`,
-    '',
-    'Forge AI',
-  ].join('\n');
 }
 
 /** Where supplier API keys are read from: the env given to buildDeps (tests), else the process env. */
@@ -72,7 +57,6 @@ export function createAdminRouter(d: Deps): Hono {
   const tokenHash = env.FORGE_ADMIN_TOKEN_HASH?.toLowerCase();
   const limiter = new RateLimiter(env.FORGE_ADMIN_RATE_LIMIT_RPM, Math.max(20, Math.ceil(env.FORGE_ADMIN_RATE_LIMIT_RPM / 3)));
   const authFailures = new RateLimiter(10, 10);
-  const waitlist = new BetaWaitlist(db);
   const markup = env.FORGE_MARKUP;
   const r = new Hono();
 
@@ -497,38 +481,6 @@ export function createAdminRouter(d: Deps): Hono {
     invites.revoke(id);
     audit('invite_revoke', { invite_id: id, was: inv.status });
     return json(c, 200, { ok: true, id, status: 'revoked' });
-  });
-
-  // -------------------------------------------------------------- beta waitlist
-  r.get('/admin/api/waitlist', (c) => json(c, 200, { data: [...waitlist.list()].reverse() }));
-
-  r.post('/admin/api/waitlist/:id/invite', async (c) => {
-    const id = c.req.param('id');
-    const b = await body(c);
-    const s = waitlist.get(id);
-    if (!s) return fail(c, 404, 'not_found', 'unknown signup');
-    if (s.invited_at && b.again !== true) return fail(c, 409, 'already_invited', 'this signup was already invited; send again to make a new code');
-    const inv = invites.create(`beta:${s.id}`);
-    db.prepare('UPDATE beta_signups SET invited_at = ? WHERE id = ?').run(Date.now(), id);
-    const message = inviteMessage(inv.code);
-    audit('waitlist_invite', { signup_id: id, kind: s.kind, again: !!s.invited_at });
-    return json(c, 200, {
-      signup_id: id,
-      invite_id: inv.id,
-      code: inv.code,
-      kind: s.kind,
-      contact: s.contact,
-      link: BETA_LINK,
-      message,
-      mailto: s.kind === 'email' ? mailtoLink(s.contact, 'Your Forge AI beta invite', message) : null,
-    });
-  });
-
-  r.delete('/admin/api/waitlist/:id', (c) => {
-    const ok = waitlist.delete(c.req.param('id'));
-    if (!ok) return fail(c, 404, 'not_found', 'unknown signup');
-    audit('waitlist_delete', { signup_id: c.req.param('id') });
-    return json(c, 200, { ok: true });
   });
 
   // -------------------------------------------------------------- balances

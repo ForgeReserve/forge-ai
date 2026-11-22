@@ -8,7 +8,7 @@ This page is generated from `docs/API.md` in the Forge AI repository by `scripts
 
 ## Quickstart
 
-Five steps from nothing to an answer. You need `curl` and an invite code. The hosted gateway opens new balances only with an invite code (`invite_only: true` in `GET /v1/models`); ask for one on the waitlist at [/beta/](/beta/).
+Five steps from nothing to an answer. You need `curl` and an invite code. The hosted gateway opens new balances only with an invite code (`invite_only: true` in `GET /v1/models`), which its operator gives out.
 
 ### 1. List the models
 
@@ -843,10 +843,6 @@ A refusal by the mint answers `400 mint_refused` with the mint's own `mint_code`
 
 ## Other routes
 
-### `POST /v1/beta/signup`
-
-Joins the waitlist for an invite. Body: `contact` (an email address or a Nostr `npub`), optional `note` (up to 500 characters). Returns `{"ok": true}`. Errors: `400 invalid_contact`, `429 rate_limited` (3 signups a minute from one address).
-
 ### `GET /healthz`
 
 `{"ok": true, "rate": {"btc_usd", "age_s"} | null, "invite_only"}`.
@@ -949,7 +945,7 @@ Every error from an API route has the same shape:
 - Each limit is a token bucket. The defaults are 60 requests a minute with a burst of 15. The operator can change them.
 - Past the limit the answer is `429 rate_limited` with `Retry-After` in seconds.
 - Request bodies are limited too: 1,000,000 bytes by default, and 4,000,000 bytes for speech to text uploads. Over that, `413 request_too_large`.
-- The faucet adds its own daily budget and per-address limit. The waitlist takes 3 signups a minute from one address.
+- The faucet adds its own daily budget and per-address limit.
 
 ## CORS
 

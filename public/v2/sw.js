@@ -17,7 +17,7 @@ const SHELL = ['/v2/', '/v2/app.js', '/v2/style.css', '/v2/vendor/inter/InterVar
 // offline. A missing one does not stop the worker installing.
 const VOICE = ['/v2/voice/en/manifest.json', '/v2/voice/en/welcome.ogg', '/v2/voice/en/pay.ogg', '/v2/voice/en/limits.ogg', '/v2/voice/en/private.ogg', '/v2/voice/en/private-off.ogg'];
 const MINE = /^\/(v2\/|js\/|vendor\/|icons\/|icon\.svg$)/;
-const NEVER = /^\/(v1\/|v1$|admin|beta|attestation|\.well-known\/|healthz|__dev)/;
+const NEVER = /^\/(v1\/|v1$|admin|attestation|\.well-known\/|healthz|__dev)/;
 // The natural voice's model and voices (about 67 MB): the voice package keeps its own copy in its own
 // cache (phonon-tts-v1) and reads it from there first, so this worker leaves them alone rather than
 // keep them twice. Their small index stays in this worker's cache, so the voice is offered offline.

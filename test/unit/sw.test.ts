@@ -17,7 +17,7 @@ describe('service worker script', () => {
     for (const p of ['/app.js', '/style.css', '/theme.js', '/icon.svg', '/manifest.webmanifest', '/offline.html', '/js/files.js', '/js/extract.js', '/js/wallet.js', '/icons/icon-192.png', '/icons/apple-touch-icon.png']) expect(shell).toContain(p);
     expect(shell).not.toContain('/sw.js');
     expect(shell).not.toContain('/index.html');
-    expect(shell.some((p) => p.startsWith('/vendor/') || p.startsWith('/admin') || p.startsWith('/beta') || p.startsWith('/v1'))).toBe(false);
+    expect(shell.some((p) => p.startsWith('/vendor/') || p.startsWith('/admin') || p.startsWith('/privacy') || p.startsWith('/v1'))).toBe(false);
   });
 
   it('fills in the version and changes it when a shell file or a vendor file changes', () => {

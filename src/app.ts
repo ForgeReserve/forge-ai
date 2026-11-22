@@ -10,7 +10,6 @@ import { cors } from 'hono/cors';
 import { openAccount, releaseIfEmpty, SIBLING_HEADER } from './accounts.ts';
 import { createAdminRouter } from './admin-api.ts';
 import { audioModelList, MIN_SECONDS, registerAudioRoutes, TRANSCRIPTIONS_PATH } from './audio.ts';
-import { BetaWaitlist, parseContact } from './beta.ts';
 import { balanceCacheSecret, CACHE_SECRET_FIELD, CACHE_SECRET_INFO, clientCacheSecret, freshCacheSecret } from './cache-secret.ts';
 import { installCardRelay } from './cardrelay.ts';
 import { parseOptionalLockPubkey } from './cashu/lock.ts';
@@ -1316,24 +1315,10 @@ export function createApp(d: Deps) {
   // Android App Links: an event link (/j#<pass>) opens in the app when the app is installed.
   registerAppLinks(app, env.FORGE_ANDROID_CERT_SHA256);
 
-  // ------------------------------------------------------------------ beta waitlist
-  // One contact and an optional note. The client IP is used only by the in-memory rate limiter.
-  const waitlist = new BetaWaitlist(d.db);
-  const signupLimiter = new RateLimiter(3, 3);
-  app.get('/beta', (c) => c.redirect('/beta/', 301));
-  app.post('/v1/beta/signup', async (c) => {
-    const wait = signupLimiter.take('ip:' + clientIp(c));
-    if (wait > 0) return apiError(c, 429, 'rate_limited', 'too many signups from here; try again later', { 'Retry-After': String(wait) });
-    const body = (await readJson(c).catch(() => ({}))) as { contact?: unknown; note?: unknown; website?: unknown };
-    // Honeypot field the page hides from people: bots that fill it get the same answer and nothing is stored.
-    if (body?.website) return c.json({ ok: true });
-    const parsed = parseContact(body?.contact);
-    if (!parsed) return apiError(c, 400, 'invalid_contact', 'enter an email address or a Nostr npub');
-    const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null;
-    const { created } = waitlist.add(parsed.contact, parsed.kind, note);
-    if (created) log.info('beta_signup', { kind: parsed.kind });
-    return c.json({ ok: true });
-  });
+  // ------------------------------------------------------------------ the old waitlist page
+  // The waitlist was removed: its old addresses go to the front page, so no link to them breaks. Its
+  // table (beta_signups) may still be in an older database; nothing reads or writes it (src/db.ts).
+  for (const p of ['/beta', '/beta/', '/beta/*']) app.get(p, (c) => c.redirect('/', 301));
 
   // ------------------------------------------------------------------ operator admin (404 unless FORGE_ADMIN_TOKEN_HASH is set)
   app.route('/', createAdminRouter(d));

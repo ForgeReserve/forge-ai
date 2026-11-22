@@ -158,6 +158,10 @@ pnpm admin fedimint:list                               # federations: state, cap
 pnpm admin fedimint:pause <federation-id>              # stop taking its notes; fedimint:resume takes them again
 ```
 
+### The old waitlist table
+
+The waitlist (the `/beta/` page) was removed; its old addresses move to `/`. A database made before that keeps its `beta_signups` table and rows: nothing reads or writes them any more, and a new database does not make the table. To remove it, stop the gateway and run `DROP TABLE beta_signups;` on the database by hand.
+
 `revenue:export` never exports eCash that backs customer balances or unpaid change. Exports are recorded in `revenue_exports` (amount, lock, token hash; never the token). The admin page at `/admin/` does the same tasks and more; see [ADMIN.md](ADMIN.md).
 
 ## Printing paper notes
