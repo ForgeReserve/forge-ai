@@ -52,26 +52,26 @@
       <svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
     </a>
   </nav>
-  <!-- The download buttons, in a small panel under Download. Put each app's link in its data-href; while
-       it is empty, the button shows Soon and is no link (about.js). -->
+  <!-- The Download panel: a quiet layer that comes down under the top, with the /download page's row of
+       ways (the same row, /about/site.css). Nothing is asked of the site until it is first opened; then
+       about.js asks /download/info and shows the ways this phone can use, in the /download page's order
+       (public/v2/download/view.js): each one that is there goes straight to what /download does for it
+       (an APK to /download with that way picked), and one that is not is dim and says Soon. An iPhone is
+       never shown an Android way. -->
   <div class="dl-pop" id="download" popover role="dialog" aria-label="Download">
-    <div class="dl-row">
-      <a class="dl" id="dlAndroid" data-download="android" data-href="">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M7 10.5L5 7.5M17 10.5l2-3"/><path d="M9 14h.01M15 14h.01"/></svg>
-        <span class="dl-name">Android</span>
-        <span class="soon">Soon</span>
-      </a>
-      <a class="dl" id="dlIphone" data-download="iphone" data-href="">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c-1.5-1.2-5-1.6-6.5 1.2-1.6 3 .3 8 2.3 10.4 1.1 1.3 2.1 1.6 3.2 1 .6-.3 1.4-.3 2 0 1.1.6 2.1.3 3.2-1 1.4-1.7 2.6-4.4 2.8-6.6"/><path d="M12 8c1.2-1 3.6-1.5 5.3-.3"/><path d="M12 8c0-2 1-4 3-5"/></svg>
-        <span class="dl-name">iPhone</span>
-        <span class="soon">Soon</span>
-      </a>
+    <div class="dl-sheet">
+    <ul class="ways dl-ways" id="dlWays" aria-label="Ways to get Forge" aria-busy="true">
+      <li data-way="android" hidden><a class="way" id="dlAndroid" data-word="Android" data-name="Android"><span class="way-ico" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M7 10.5L5 7.5M17 10.5l2-3"/><path d="M9 14h.01M15 14h.01"/></svg></span><span class="way-word">Android</span></a></li>
+      <li data-way="graphene" hidden><a class="way" id="dlGraphene" data-word="Graphene" data-name="GrapheneOS"><span class="way-ico" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg></span><span class="way-word">Graphene</span></a></li>
+      <li data-way="play" hidden><a class="way" id="dlPlay" data-word="Play" data-name="Google Play"><span class="way-ico" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M7 4.6v14.8a1 1 0 0 0 1.5.9l11.8-7.4a1 1 0 0 0 0-1.8L8.5 3.7A1 1 0 0 0 7 4.6z"/></svg></span><span class="way-word">Play</span></a></li>
+      <li data-way="iphone" hidden><a class="way" id="dlIphone" data-word="iPhone" data-name="iPhone"><span class="way-ico" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8c-1.5-1.2-5-1.6-6.5 1.2-1.6 3 .3 8 2.3 10.4 1.1 1.3 2.1 1.6 3.2 1 .6-.3 1.4-.3 2 0 1.1.6 2.1.3 3.2-1 1.4-1.7 2.6-4.4 2.8-6.6"/><path d="M12 8c1.2-1 3.6-1.5 5.3-.3"/><path d="M12 8c0-2 1-4 3-5"/></svg></span><span class="way-word">iPhone</span></a></li>
+      <li data-way="web" hidden><a class="way" id="dlWeb" data-word="Browser" data-name="Forge in the browser"><span class="way-ico" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg></span><span class="way-word">Browser</span></a></li>
+    </ul>
+    <div class="dl-more">
+      <a class="dl-all" id="dlAll" href="/download"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg><span>All downloads</span></a>
+      <a class="dl-classic" id="dlClassic" href="/classic/">Classic app</a>
     </div>
-    <a class="dl-web" id="dlWeb" href="/v2/">
-      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
-      <span>Open it in the browser</span>
-    </a>
-    <a class="dl-classic" id="dlClassic" href="/classic/">Classic app</a>
+    </div>
   </div>
 </header>
 

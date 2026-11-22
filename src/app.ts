@@ -109,11 +109,15 @@ export const ISOLATION_HEADERS = Object.freeze({
   'Cross-Origin-Resource-Policy': 'same-origin',
 });
 
-/** The landing page's Content-Security-Policy (the page at /, and its files under /about/): files from this origin only, no inline code, never framed. */
-export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+/**
+ * The landing page's Content-Security-Policy (the page at /, and its files under /about/): files from this
+ * origin only, no inline code, never framed. It may ask this site, and only this site, for /download/info
+ * (the Download panel, once opened).
+ */
+export const ABOUT_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-/** The /download page's policy: the landing page's, and it may ask this site for /download/info. */
-export const DOWNLOAD_CSP = ABOUT_CSP.replace("font-src 'self';", "font-src 'self'; connect-src 'self';");
+/** The /download page's policy: the landing page's. */
+export const DOWNLOAD_CSP = ABOUT_CSP;
 
 async function isolated(c: Context, next: () => Promise<void>) {
   await next();

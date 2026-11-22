@@ -14,28 +14,35 @@ body {
 body > .foot { justify-content: center; padding-bottom: calc(2px + env(safe-area-inset-bottom)); }
 body > .foot a { min-height: 40px; font-size: 13.5px; }
 
-/* The download panel: the browser's popover under Download (about.js has a plain toggle where there is none). */
+/* The Download panel: a quiet layer that comes down under the top (the browser's popover; about.js has a
+   plain toggle where there is none). Under the top bar, the page's own ground holds the /download page's
+   row of ways (/about/site.css), a hairline, All downloads and the Classic page; below it the page dims,
+   and a tap there closes it. No box, no tile, no tag. */
 .dl-pop {
-  display: none; position: fixed; inset: auto; top: calc(env(safe-area-inset-top) + 64px); right: max(var(--gutter), env(safe-area-inset-right));
-  margin: 0; width: min(340px, calc(100vw - 2 * var(--gutter))); padding: 12px; gap: 10px;
-  border: 1px solid var(--line-2); border-radius: 26px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float);
+  display: none; position: fixed; inset: calc(env(safe-area-inset-top) + 64px) 0 0 0; width: auto; height: auto; max-width: none; max-height: none;
+  margin: 0; padding: 0; border: 0; overflow: hidden; color: var(--ink);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
 }
-.dl-pop:popover-open { display: grid; }
-.dl-pop.open { display: grid; }
-.dl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.dl {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 112px; padding: 14px 8px;
-  border-radius: 18px; background: var(--surface-2); box-shadow: var(--shadow-raised-sm); color: var(--ink);
-  text-decoration: none; font-weight: 700; font-size: 16px; text-align: center;
+.dl-pop:popover-open, .dl-pop.open { display: block; }
+.dl-sheet {
+  display: grid; justify-items: center; background: var(--bg); border-bottom: 1px solid var(--line);
+  padding: 4px max(var(--gutter), env(safe-area-inset-right)) 6px max(var(--gutter), env(safe-area-inset-left));
 }
-.dl .ico { width: 30px; height: 30px; }
-.dl[href]:hover { background: var(--line); }
-.dl:not([href]) { color: var(--text-2); background: transparent; box-shadow: inset 0 0 0 1px var(--line); cursor: default; }
-.dl-web { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border-radius: 16px; color: var(--ink); font-weight: 600; font-size: 15px; text-decoration: none; }
-.dl-web .ico { width: 20px; height: 20px; color: var(--teal); }
-.dl-web:hover { background: var(--surface-2); }
-/* The Classic chat page, for the few who still use it: a quiet line under the rest. */
-.dl-classic { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: -6px; border-radius: 14px; color: var(--text-2); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.dl-ways { margin: 0; padding: 0; list-style: none; min-height: 80px; }
+.dl-ways[aria-busy="true"] { visibility: hidden; }
+.dl-ways li { display: flex; min-width: 0; }
+.dl-ways li[hidden] { display: none; }
+.dl-ways .way { flex: 1; }
+/* Here every way that is there is lit; a Soon one stays dim, as on /download. */
+.dl-ways .way[data-state="ready"] { color: var(--ink); }
+.dl-ways .way[data-state="ready"] .way-word { color: var(--text-body); }
+.dl-ways a.way:hover .way-word, .dl-ways a.way:focus-visible .way-word { color: var(--ink); }
+.dl-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 18px; width: 100%; max-width: 460px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.dl-all { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 6px; color: var(--ink); font-size: 15px; font-weight: 650; text-decoration: none; }
+.dl-all .ico { width: 20px; height: 20px; }
+.dl-all:hover .ico { color: var(--teal); }
+/* The Classic chat page, for the few who still use it: quiet, beside the rest. */
+.dl-classic { display: inline-flex; align-items: center; min-height: 48px; padding: 0 6px; color: var(--text-2); font-size: 13.5px; font-weight: 600; text-decoration: none; }
 .dl-classic:hover { color: var(--ink); }
 
 /* ---------- the page: a title, the moments and the phone, in one screen ---------- */
@@ -307,7 +314,10 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
 
 /* ---------- a phone held sideways, a tablet or a computer: words on the left, the phone on the right ---------- */
 @media (min-width: 900px), (orientation: landscape) and (min-width: 620px) {
-  .dl-pop { top: calc(env(safe-area-inset-top) + 72px); }
+  .dl-pop { top: calc(env(safe-area-inset-top) + 76px); }
+  /* It hangs from Download, at the right of the page's width. */
+  .dl-sheet { justify-items: end; padding-right: max(var(--gutter), env(safe-area-inset-right), calc((100vw - var(--maxw)) / 2 + var(--gutter))); }
+  .dl-more { justify-content: flex-end; }
   .hero {
     grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
     grid-template-rows: minmax(0, 1fr) auto auto auto minmax(0, 1.15fr);
@@ -368,14 +378,19 @@ h1 .t-b { color: var(--text-2); font-weight: 560; }
   .aura { animation: fade-in 1.6s ease 0.2s both, breathe 7s ease-in-out 1.8s infinite alternate; }
   .phone-float { animation: float 9s ease-in-out 1.6s infinite alternate; }
   .tip { animation: glow 2.4s ease-in-out infinite alternate; }
-  .play, .tab, .dl, .dl-web, .dl-classic { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
+  .play, .tab, .dl-all, .dl-classic { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
   .play:active { transform: scale(0.97); }
-  .dl-pop { opacity: 0; transform: translateY(-8px) scale(0.98); transform-origin: top right; transition: opacity 0.2s ease, transform 0.3s var(--out), overlay 0.3s allow-discrete, display 0.3s allow-discrete; }
-  .dl-pop:popover-open { opacity: 1; transform: none; }
-  .dl-pop.open { opacity: 1; transform: none; }
+  /* The way in, the /download page's in miniature: the layer fades in, the ground slides down into
+     place, and the ways rise one after another once they are known. */
+  .dl-pop { opacity: 0; transition: opacity 0.22s ease, overlay 0.3s allow-discrete, display 0.3s allow-discrete; }
+  .dl-pop:popover-open, .dl-pop.open { opacity: 1; }
+  .dl-sheet { transform: translateY(-14px); transition: transform 0.4s var(--out); }
+  .dl-pop:popover-open .dl-sheet, .dl-pop.open .dl-sheet { transform: none; }
+  .dl-ways:not([aria-busy]) .way { animation: rise 0.55s var(--out) both; animation-delay: calc(var(--n, 0) * 0.05s); }
 }
 @starting-style {
-  .dl-pop:popover-open { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  .dl-pop:popover-open { opacity: 0; }
+  .dl-pop:popover-open .dl-sheet { transform: translateY(-14px); }
 }
 @keyframes phone-in { from { opacity: 0; transform: translateY(7%) scale(0.94); } to { opacity: 1; transform: none; } }
 @keyframes rings-in { from { opacity: 0; transform: rotate(-35deg) scale(0.9); } to { opacity: 1; transform: none; } }

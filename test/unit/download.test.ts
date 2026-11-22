@@ -240,6 +240,20 @@ describe('the ways to get Forge', () => {
     expect([0, 1].map((i) => V.tipAngle(i, 2))).toEqual([220, 140]);
   });
 
+  it('picks the way the address names (#way=graphene, from the landing page\'s panel) when it is there', () => {
+    expect(V.wayFrom('#way=graphene')).toBe('graphene');
+    expect(V.wayFrom('#way=web')).toBe('web');
+    for (const bad of ['', '#graphene', '#way=nope', '#way=', '#way=android&x', 'way=android', '#pass-AbCd1234']) expect(V.wayFrom(bad), bad).toBeNull();
+    const row = V.waysRow('android', { apk: true, graphene: true });
+    expect(V.pickWay(row, 'graphene')).toBe('graphene');
+    expect(V.pickWay(row, 'play')).toBe('android'); // Soon: not picked
+    expect(V.pickWay(row, null)).toBe('android');
+    // An iPhone is never handed an Android way, whatever the address says.
+    expect(V.pickWay(V.waysRow('ios', { apk: true, graphene: true }), 'graphene')).toBe('web');
+    // A way the address names is not an event pass, so Open stays plain.
+    expect(V.webAddress(null)).toBe('/v2/');
+  });
+
   it('takes a store link only as https, and names TestFlight or the App Store by its host', () => {
     expect(V.storeLink({ play: { available: true, url: 'https://play.google.com/store/apps/details?id=x' } }, 'play')).toBe('https://play.google.com/store/apps/details?id=x');
     for (const bad of [null, {}, { play: null }, { play: { url: 'http://play.google.com/x' } }, { play: { url: 'javascript:alert(1)' } }, { play: { url: 42 } }]) expect(V.storeLink(bad, 'play')).toBeNull();

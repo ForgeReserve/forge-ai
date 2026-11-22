@@ -83,3 +83,15 @@ export const tipAngle = (i, n) => (n < 2 ? 180 : Math.round(180 + 40 - (80 * i) 
 
 /** The web app's address: with an event pass from this page's address (#<pass> or #join=<pass>), it opens a free balance with it. */
 export const webAddress = (pass) => (pass ? webJoin(pass) : '/v2/');
+
+/** The ways a row can show. */
+export const WAY_IDS = ['android', 'graphene', 'play', 'iphone', 'web'];
+
+/** A way named in the page's address (#way=android, as the landing page's Download panel links), or null. */
+export function wayFrom(hash) {
+  const m = /^#way=([a-z]+)$/.exec(String(hash ?? ''));
+  return m && WAY_IDS.includes(m[1]) ? m[1] : null;
+}
+
+/** The way to pick: the one the address names when it is there in the row, else the row's own pick. */
+export const pickWay = ({ ways, pick }, wanted) => (ways.some((w) => w.id === wanted && w.ready) ? wanted : pick);

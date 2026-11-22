@@ -4,8 +4,7 @@
 // First, an address meant for the Classic chat page (at / before it moved to /classic/) goes on there
 // (forward.js).
 //
-// Download buttons: each button's link is its data-href in index.html. While that is empty the button
-// shows Soon and is no link; once it is set the button links there and Soon goes.
+// The Download panel: the /download page's row of ways, filled the first time it opens (fillWays below).
 //
 // The moments (Talk, Private, Pay, Share unseen): the selected tab's ring is a CSS animation, and it is the
 // clock. Its first half ending shows the moment's second screen (if it has one); its second half ending
@@ -30,27 +29,80 @@ if (classic) location.replace(classic);
 
 applyPageLook();
 
-for (const a of document.querySelectorAll('a[data-download]')) {
-  const href = (a.dataset.href ?? '').trim();
-  if (!href) {
-    a.removeAttribute('href');
-    continue;
-  }
-  a.href = href;
-  a.querySelector('.soon')?.remove();
-}
+/**
+ * The panel's ways, once: asks /download/info (only now, when the person opened the panel) and shows the
+ * ways this phone can use in the /download page's order (public/v2/download/view.js). A way that is
+ * there links straight to what /download does for it: an APK to /download with that way picked, the
+ * stores to their pages, the browser to the app. A way that is not there is dim, says Soon and is no
+ * link. An iPhone is never shown an Android way. With no answer, only the browser is there.
+ */
+let filled = null;
+const fillWays = () =>
+  (filled ??= (async () => {
+    const list = document.getElementById('dlWays');
+    if (!list) return;
+    const { apkChoices, deviceOf, storeLink, waysRow } = await import('/v2/download/view.js');
+    let info = null;
+    try {
+      const res = await fetch('/download/info', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+      info = res.ok ? await res.json() : null;
+    } catch {
+      /* offline or no answer: the browser, and the rest as Soon */
+    }
+    const device = deviceOf({ ua: navigator.userAgent, platform: navigator.platform, touchPoints: navigator.maxTouchPoints });
+    const apks = device === 'ios' ? [] : apkChoices(info);
+    const has = (id) => apks.some((c) => c.id === id);
+    const play = storeLink(info, 'play');
+    const ios = storeLink(info, 'ios');
+    const { ways } = waysRow(device, { apk: has('android'), graphene: has('graphene'), play: !!play, iphone: !!ios });
+    const href = { android: '/download#way=android', graphene: '/download#way=graphene', play, iphone: ios, web: '/v2/' };
+    for (const [n, w] of ways.entries()) {
+      const li = list.querySelector(`li[data-way="${w.id}"]`);
+      const a = li?.querySelector('a');
+      if (!a) continue;
+      list.append(li);
+      li.hidden = false;
+      a.style.setProperty('--n', String(n));
+      a.dataset.state = w.ready ? 'ready' : 'soon';
+      a.querySelector('.way-word').textContent = w.ready ? a.dataset.word : 'Soon';
+      if (w.ready) {
+        a.href = href[w.id];
+        a.removeAttribute('aria-disabled');
+        a.removeAttribute('role');
+        a.setAttribute('aria-label', a.dataset.name);
+      } else {
+        a.removeAttribute('href');
+        a.setAttribute('role', 'link');
+        a.setAttribute('aria-disabled', 'true');
+        a.setAttribute('aria-label', `${a.dataset.name}, Soon`);
+      }
+    }
+    list.style.setProperty('--count', String(ways.length));
+    list.dataset.plan = ways.map((w) => `${w.id}${w.ready ? '' : '?'}`).join(' ');
+    list.removeAttribute('aria-busy');
+  })());
 
 // The download panel: the browser's popover (Escape and a tap outside close it). Where there is none, a
 // plain toggle that does the same.
 const pop = document.getElementById('download');
 const dlBtn = document.getElementById('topDownload');
 if (pop && dlBtn) {
-  const shown = (open) => dlBtn.setAttribute('aria-expanded', String(open));
+  const shown = (open) => {
+    dlBtn.setAttribute('aria-expanded', String(open));
+    if (open) fillWays();
+  };
   if (typeof pop.showPopover === 'function') {
     pop.addEventListener('toggle', (e) => shown(e.newState === 'open'));
+    // A tap on the dimmed page under the panel closes it, and Download has the focus again.
+    pop.addEventListener('click', (e) => {
+      if (e.target !== pop) return;
+      pop.hidePopover();
+      dlBtn.focus();
+    });
   } else {
     pop.removeAttribute('popover');
     const set = (open) => (pop.classList.toggle('open', open), shown(open));
+    pop.addEventListener('click', (e) => e.target === pop && (set(false), dlBtn.focus()));
     dlBtn.addEventListener('click', () => set(!pop.classList.contains('open')));
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && pop.classList.contains('open')) (set(false), dlBtn.focus());

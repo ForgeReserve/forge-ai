@@ -9,6 +9,8 @@
 //   iPhone and the browser, never an Android way; with no link, the browser is picked and the pictures
 //   show how to put Forge on the Home Screen.
 // - The browser: the button opens Forge, with an event pass from this page's address (#<pass>).
+// The address can name the way to pick (#way=android, #way=graphene and so on), as the landing page's
+// Download panel does; a way that is not there is ignored.
 // A Soon way is in the row, dim, marked aria-disabled and left out of the keyboard's way. Nothing here is
 // sent anywhere but this site.
 import { appOffer, thisPhone } from '../core/getapp.js';
@@ -16,7 +18,7 @@ import { t } from '../core/i18n.js';
 import { passFrom } from '../core/join.js';
 import { applyPageLook } from '../core/pagelook.js';
 import { el, icon, sayEl } from '../core/ui.js';
-import { apkChoices, deviceOf, iosStore, storeLink, tipAngle, waysRow, webAddress } from './view.js';
+import { apkChoices, deviceOf, iosStore, pickWay, storeLink, tipAngle, waysRow, wayFrom, webAddress } from './view.js';
 
 applyPageLook();
 const phone = thisPhone();
@@ -57,7 +59,10 @@ function draw(info) {
   const apk = Object.fromEntries(choices.map((c) => [c.id, c]));
   const ios = storeLink(info, 'ios');
   const playUrl = storeLink(info, 'play');
-  const { ways, pick } = waysRow(device, { apk: !!apk.android, graphene: !!apk.graphene, play: !!playUrl, iphone: !!ios });
+  const row0 = waysRow(device, { apk: !!apk.android, graphene: !!apk.graphene, play: !!playUrl, iphone: !!ios });
+  // A way named in the address (#way=graphene, from the landing page's Download panel) is picked when it is there.
+  const { ways } = row0;
+  const pick = pickWay(row0, wayFrom(location.hash));
   // On an iPhone, what Get the app offers there (core/getapp.js): the link, the Home Screen steps or nothing.
   const offer = device === 'ios' ? appOffer({ ...phone, iosUrl: ios }) : null;
 

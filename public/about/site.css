@@ -1,7 +1,7 @@
 /* The website's own pages share this: the landing page (/), the download page (/download) and the
    privacy page (/privacy). The app's Midnight look by default; each page's script puts in the look this
    phone keeps from the app (public/v2/core/pagelook.js). Inter from this origin. The top (the brand and
-   its actions), the footer, the icons, the tags and the motion of the way in are the same on all three.
+   its actions), the footer, the icons, the row of ways and the motion of the way in are the same on all three.
    Each page adds its own file: about.css, download.css, privacy.css. */
 @font-face { font-family: Inter; src: url("/v2/vendor/inter/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
@@ -61,8 +61,27 @@ img { display: block; }
 .act-open:hover { border-color: transparent; }
 .act-icon { padding: 0; border-radius: 50%; }
 
-/* A tag on a part that is not there yet: Soon, in gold. */
-.soon { padding: 2px 10px; border-radius: 999px; background: var(--gold-tint); color: var(--gold-ink); border: 1px solid var(--gold-line); font-size: 13px; font-weight: 700; }
+
+/* ---------- the ways to get Forge: a picture and a word each, in one row ----------
+   The /download page's row (radios that pick what its button does) and the landing page's Download
+   panel (links straight to each way) are the same row. A way that is not there yet is dim and says
+   Soon. As links, the one under the finger or the keyboard lights, with a short teal line under it. */
+/* A cell for each way, as wide as the row allows up to 92 px, so two ways sit together and five fill a phone. */
+.ways { --i: 0; --count: 1; position: relative; width: min(100%, calc(var(--count) * 92px)); display: grid; grid-template-columns: repeat(var(--count), minmax(0, 1fr)); }
+.way {
+  min-width: 0; min-height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 6px 0 14px;
+  border: 0; background: none; color: var(--text-body); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.way-ico { display: grid; place-items: center; transition: transform 0.45s var(--out); }
+.way-ico .ico { width: 30px; height: 30px; stroke-width: 1.8; }
+.way-word { max-width: 100%; color: var(--text-2); font-size: 13px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; white-space: nowrap; }
+.way[data-state="soon"] { cursor: default; }
+.way[data-state="soon"] .way-ico { opacity: 0.42; }
+a.way { position: relative; text-decoration: none; }
+a.way::after { content: ""; position: absolute; left: 50%; bottom: 6px; width: 22px; height: 2px; margin-left: -11px; background: var(--teal); opacity: 0; transform: scaleX(0.3); transition: opacity 0.2s ease, transform 0.35s var(--out); }
+a.way:hover, a.way:focus-visible, a.way:hover .way-word, a.way:focus-visible .way-word { color: var(--ink); }
+a.way:hover::after, a.way:focus-visible::after { opacity: 1; transform: none; }
+a.way:hover .way-ico, a.way:focus-visible .way-ico { transform: translateY(-2px) scale(1.08); }
 
 /* ---------- the footer: a short row of links with an icon each ---------- */
 .foot {
