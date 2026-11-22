@@ -208,26 +208,36 @@ describe('the ways to get Forge', () => {
     expect(V.deviceOf({})).toBe('computer');
   });
 
-  it('leads with the ways for this phone, and puts the rest under Other ways, the ones there first', () => {
-    const all = { apk: true, play: true, iphone: true };
-    // Android: the APK, then Google Play once it is set; with neither, the web app and the APK's card saying so.
-    expect(V.waysPlan('android', { apk: true })).toEqual({ lead: ['apk'], other: ['web', 'play', 'iphone'] });
-    expect(V.waysPlan('android', all)).toEqual({ lead: ['apk', 'play'], other: ['web', 'iphone'] });
-    expect(V.waysPlan('android', { play: true })).toEqual({ lead: ['play'], other: ['web', 'apk', 'iphone'] });
-    expect(V.waysPlan('android', {})).toEqual({ lead: ['web', 'apk'], other: ['play', 'iphone'] });
-    expect(V.waysPlan('android', { iphone: true })).toEqual({ lead: ['web', 'apk'], other: ['iphone', 'play'] });
-    // An iPhone: the iPhone app and the web app, the one that works first, and no Android way at all.
-    expect(V.waysPlan('ios', all)).toEqual({ lead: ['iphone', 'web'], other: [] });
-    expect(V.waysPlan('ios', { apk: true, play: true })).toEqual({ lead: ['web', 'iphone'], other: [] });
-    // A computer: the web app, and the APK when the site has one.
-    expect(V.waysPlan('computer', { apk: true })).toEqual({ lead: ['web', 'apk'], other: ['play', 'iphone'] });
-    expect(V.waysPlan('computer', { iphone: true })).toEqual({ lead: ['web'], other: ['iphone', 'apk', 'play'] });
-    // Every way shows once.
-    for (const d of ['android', 'computer'])
+  it('puts the phone\'s own ways first in the row, and picks the first that is there', () => {
+    const all = { apk: true, graphene: true, play: true, iphone: true };
+    const row = (d: string, r: object) => {
+      const { ways, pick } = V.waysRow(d, r);
+      return { ways: ways.map((w: any) => `${w.id}${w.ready ? '' : '?'}`).join(' '), pick };
+    };
+    // Android: the APK, else Google Play, else the browser. GrapheneOS shows only while the site has it.
+    expect(row('android', { apk: true })).toEqual({ ways: 'android play? iphone? web', pick: 'android' });
+    expect(row('android', all)).toEqual({ ways: 'android graphene play iphone web', pick: 'android' });
+    expect(row('android', { play: true })).toEqual({ ways: 'android? play iphone? web', pick: 'play' });
+    expect(row('android', { iphone: true })).toEqual({ ways: 'android? play? iphone web', pick: 'web' });
+    expect(row('android', {})).toEqual({ ways: 'android? play? iphone? web', pick: 'web' });
+    // An iPhone: the iPhone app and the browser only, never an Android way.
+    expect(row('ios', all)).toEqual({ ways: 'iphone web', pick: 'iphone' });
+    expect(row('ios', { apk: true, graphene: true, play: true })).toEqual({ ways: 'iphone? web', pick: 'web' });
+    // A computer: the browser first and picked.
+    expect(row('computer', { apk: true })).toEqual({ ways: 'web android play? iphone?', pick: 'web' });
+    expect(row('computer', all)).toEqual({ ways: 'web android graphene play iphone', pick: 'web' });
+    // The one picked is always there.
+    for (const d of ['android', 'ios', 'computer'])
       for (const r of [{}, all, { apk: true }, { play: true }, { iphone: true }]) {
-        const p = V.waysPlan(d, r);
-        expect([...p.lead, ...p.other].sort(), `${d} ${JSON.stringify(r)}`).toEqual(['apk', 'iphone', 'play', 'web']);
+        const { ways, pick } = V.waysRow(d, r);
+        expect(ways.find((w: any) => w.id === pick)?.ready, `${d} ${JSON.stringify(r)}`).toBe(true);
       }
+  });
+
+  it('turns the rings\' tips towards the way picked: across the bottom of the rings, left to right', () => {
+    expect(V.tipAngle(0, 1)).toBe(180);
+    expect([0, 1, 2, 3, 4].map((i) => V.tipAngle(i, 5))).toEqual([220, 200, 180, 160, 140]);
+    expect([0, 1].map((i) => V.tipAngle(i, 2))).toEqual([220, 140]);
   });
 
   it('takes a store link only as https, and names TestFlight or the App Store by its host', () => {

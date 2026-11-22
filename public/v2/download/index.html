@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Get Forge</title>
+<title>Download</title>
 <meta name="description" content="Every way to get Forge AI: the web app, Android from this site, Google Play and iPhone.">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#0B0D10">
@@ -17,9 +17,11 @@
 <script type="module" src="/v2/download/download.js"></script>
 </head>
 <body>
-<!-- Every way to get Forge (docs/ANDROID.md, docs/IOS.md), served at /download. The top and the footer
-     are the landing page's (public/about/site.css); download.js draws the cards from /download/info, the
-     words from /v2/strings/en.js. -->
+<!-- Download Forge (docs/ANDROID.md, docs/IOS.md), served at /download. The top and the footer are the
+     landing page's (public/about/site.css). The page is the app's own button in its two rings; the row
+     of ways under it picks what the button does, and the rings' bright tips turn to the way picked.
+     download.js fills the row, the button and the quiet details from /download/info, the words from
+     /v2/strings/en.js; download.css draws it and moves it. -->
 <a class="skip" href="#main">Skip to the downloads</a>
 <header class="top">
   <a class="brand" href="/" aria-label="Forge AI">
@@ -32,7 +34,33 @@
     </a>
   </nav>
 </header>
-<div id="download" class="dl-root"></div>
+<main class="dl" id="main" data-screen="download">
+  <h1 id="dlHead">Download</h1>
+  <div class="stage" id="stage">
+    <svg class="rings" viewBox="0 0 336 336" aria-hidden="true">
+      <defs>
+        <linearGradient id="dlGold" gradientUnits="userSpaceOnUse" x1="40" y1="20" x2="300" y2="320"><stop offset="0" stop-color="#F7DC95"/><stop offset="0.5" stop-color="#E2B552"/><stop offset="1" stop-color="#C08A2A"/></linearGradient>
+        <linearGradient id="dlTeal" gradientUnits="userSpaceOnUse" x1="40" y1="20" x2="300" y2="320"><stop offset="0" stop-color="#8EF3DE"/><stop offset="0.5" stop-color="#3FCFB4"/><stop offset="1" stop-color="#1F9E87"/></linearGradient>
+        <radialGradient id="dlTipGold"><stop offset="0.19" stop-color="#FFF6DC"/><stop offset="0.3" stop-color="#E2B552" stop-opacity="0.8"/><stop offset="0.7" stop-color="#E2B552" stop-opacity="0"/></radialGradient>
+        <radialGradient id="dlTipTeal"><stop offset="0.19" stop-color="#E6FFF9"/><stop offset="0.3" stop-color="#3FCFB4" stop-opacity="0.8"/><stop offset="0.7" stop-color="#3FCFB4" stop-opacity="0"/></radialGradient>
+      </defs>
+      <g class="turn">
+        <circle class="track gold" cx="168" cy="168" r="150"/>
+        <circle class="track teal" cx="168" cy="168" r="121"/>
+        <circle class="arc gold" cx="168" cy="168" r="150" pathLength="100" transform="rotate(-90 168 168)"/>
+        <circle class="arc teal" cx="168" cy="168" r="121" pathLength="100" transform="rotate(-90 168 168)"/>
+        <circle class="lit gold" cx="168" cy="168" r="150" pathLength="100" transform="rotate(-90 168 168)"/>
+        <circle class="lit teal" cx="168" cy="168" r="121" pathLength="100" transform="rotate(-90 168 168)"/>
+        <g class="run run-gold"><circle class="tip" cx="168" cy="18" r="14" fill="url(#dlTipGold)"/></g>
+        <g class="run run-teal"><circle class="tip" cx="168" cy="47" r="14" fill="url(#dlTipTeal)"/></g>
+      </g>
+    </svg>
+    <span class="ripple" aria-hidden="true"></span>
+    <a class="go" id="downloadGo" href="/v2/"><span class="face"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg><span class="go-word">Open</span></span></a>
+  </div>
+  <div class="ways-wrap"><div class="ways" id="ways" role="radiogroup" aria-labelledby="dlHead"></div></div>
+  <div class="more" id="downloadBody" aria-live="polite" aria-busy="true"></div>
+</main>
 <footer class="foot">
   <a id="footHome" href="/"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/></svg><span>Home</span></a>
   <a id="footPrivacy" href="/privacy"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg><span>Privacy</span></a>

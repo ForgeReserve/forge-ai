@@ -151,6 +151,11 @@ describe('the Android app\'s web bundle, from its own origin', () => {
     await page.click('#btn-more');
     expect(await page.textContent('#moreEngine')).toContain('ai.forge-reserve.com');
     expect(await page.textContent('#moreLook')).toContain('Light, Dark, Midnight');
+    // Privacy: the page is not in the bundle, so the row links to Forge's engine's page, which Capacitor
+    // hands to the phone's browser (no new tab inside the app). Nothing asks for it before a tap.
+    expect(await page.getAttribute('#morePrivacy', 'href')).toBe('https://ai.forge-reserve.com/privacy');
+    expect(await page.getAttribute('#morePrivacy', 'target')).toBeNull();
+    expect(await page.textContent('#morePrivacy')).toBe('Privacy');
     await page.click('#moreLook');
     await page.waitForSelector('[data-screen=look]');
     expect(await page.locator('#modeClassic').count()).toBe(0);

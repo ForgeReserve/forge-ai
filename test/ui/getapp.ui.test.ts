@@ -9,11 +9,12 @@ import { openWay } from './ways.ts';
 
 // Get the app on an iPhone (public/v2/core/getapp.js), in phone-sized Chrome with each phone's user
 // agent. iPhone Safari never gets the Android page or its APK: the Cashu card's Get the app shows the
-// Home Screen steps (Share, Add to Home Screen), the /download page says Forge for iPhone with the same
-// steps after Open Forge, and the Fedimint card (no till in the iPhone app) offers nothing. A site with
+// Home Screen steps (Share, Add to Home Screen), the /download page's button opens Forge with the same
+// steps under it, and the Fedimint card (no till in the iPhone app) offers nothing. A site with
 // the iPhone app's link (FORGE_IOS_URL) gets that link instead. Put on the Home Screen already, an
 // iPhone is shown no steps. Android and a computer keep the /download page and its APK, as before; there
-// the iPhone app's link, once set, is one of the other ways (test/ui/download.ui.test.ts has the page itself).
+// the iPhone app, once its link is set, is one of the ways in the row (test/ui/download.ui.test.ts has the
+// page itself).
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
 const DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
@@ -119,8 +120,8 @@ describe('Get the app on an iPhone', () => {
     expect(await page.$('#addHome')).toBeNull();
     expect(await linksTo(page, /download/)).toBe(false);
 
-    // /download: Forge for iPhone, Open Forge first (so the Home Screen gets Forge), then the steps. The
-    // site has an APK; the iPhone is not offered it.
+    // /download: the button opens Forge (so the Home Screen gets Forge), and the steps follow. The site
+    // has an APK; the iPhone is not offered it.
     await page.goto(`${plain.url}/download`);
     expect(await offered(page, '#downloadBody')).toBe('addHome');
     expect(await steps(page)).toEqual({
@@ -131,9 +132,9 @@ describe('Get the app on an iPhone', () => {
         ['icon', 'Add to Home Screen'],
       ],
     });
-    expect(await page.textContent('h1')).toBe('Forge for iPhone');
-    expect(await page.title()).toBe('Forge for iPhone');
-    expect(await page.getAttribute('#addHomeOpen', 'href')).toBe('/v2/');
+    expect(await page.textContent('h1')).toBe('Download');
+    expect(await page.title()).toBe('Download');
+    expect(await page.getAttribute('#openWeb', 'href')).toBe('/v2/');
     expect(await page.$('#downloadApk')).toBeNull();
     expect(await linksTo(page, /\.apk$/)).toBe(false);
     expect(await page.evaluate(() => document.body.innerText)).not.toMatch(/Android/);
@@ -141,7 +142,7 @@ describe('Get the app on an iPhone', () => {
     await page.goto(`${plain.url}/j`);
     await page.waitForURL(/\/download$/);
     await page.waitForSelector('#addHome');
-    await page.click('#addHomeOpen');
+    await page.click('#openWeb');
     await page.waitForSelector('[data-screen=home]');
     expect(asked.filter((p) => p.endsWith('.apk'))).toEqual([]);
     expect(errors).toEqual([]);
@@ -173,8 +174,10 @@ describe('Get the app on an iPhone', () => {
       expect(await page.$('#fedGetApp')).toBeNull();
       await page.goto(`${linked.url}/download`);
       expect(await offered(page, '#downloadBody')).toBe('link');
-      expect(await page.textContent('h1')).toBe('Forge for iPhone');
+      expect(await page.textContent('h1')).toBe('Download');
       expect(await page.getAttribute('#downloadIos', 'href')).toBe(LINK);
+      await page.click('#way-web');
+      await page.waitForSelector('#openWeb');
       expect(await page.getAttribute('#openWeb', 'href')).toBe('/v2/');
       expect(await page.$('#addHome')).toBeNull();
       expect(errors).toEqual([]);
@@ -185,10 +188,10 @@ describe('Get the app on an iPhone', () => {
 
 describe('Get the app on Android and a computer, as before', () => {
   for (const [name, device, title] of [
-    ['Android', ANDROID, 'Forge for Android'],
-    ['a computer', DESKTOP, 'Get Forge'],
+    ['Android', ANDROID, 'Download'],
+    ['a computer', DESKTOP, 'Download'],
   ] as const) {
-    it(`${name}: the button opens /download, which offers the APK; the iPhone link only as one of the other ways`, async () => {
+    it(`${name}: the button opens /download, which offers the APK; the iPhone link only as one of the ways`, async () => {
       for (const g of [plain, linked]) {
         const { ctx, page, errors, asked } = await phone(device);
         await cardScreen(page, g);
@@ -205,11 +208,19 @@ describe('Get the app on Android and a computer, as before', () => {
         await page.waitForSelector('[data-screen=download]');
         expect(await page.textContent('h1')).toBe(title);
         expect(await page.title()).toBe(title);
-        if (g === plain) expect(await (await page.waitForSelector('#downloadApk')).getAttribute('href')).toBe('/download/forge.apk');
-        else await page.waitForSelector('#downloadComing');
-        // The iPhone app's link is there only as its own card under Other ways.
-        expect(await linksTo(page, /testflight/)).toBe(g === linked);
-        if (g === linked) expect(await page.$eval('#downloadIos', (a) => !!a.closest('#downloadOther'))).toBe(true);
+        // The APK where the site has one (a computer picks it from the row); else Android says Soon.
+        await page.waitForSelector('#way-android');
+        if (g === plain) {
+          if (device === DESKTOP) await page.click('#way-android');
+          expect(await (await page.waitForSelector('#downloadApk')).getAttribute('href')).toBe('/download/forge.apk');
+        } else expect(await page.getAttribute('#way-android', 'aria-disabled')).toBe('true');
+        // The iPhone app's link only once it is picked from the row, where the site has it.
+        expect(await linksTo(page, /testflight/)).toBe(false);
+        expect(await page.getAttribute('#way-iphone', 'aria-disabled')).toBe(g === linked ? null : 'true');
+        if (g === linked) {
+          await page.click('#way-iphone');
+          expect(await (await page.waitForSelector('#downloadIos')).getAttribute('href')).toBe(LINK);
+        }
         expect(await page.$('#addHome')).toBeNull();
         expect(errors).toEqual([]);
         await ctx.close();

@@ -266,6 +266,20 @@ export function listRow({ ico, tint = 'gold', title, sub, onclick, id, cls = '' 
 }
 
 /**
+ * A row like listRow that is a link to another page: the outside-link picture in place of the arrow.
+ * newTab: open it beside the app (on the website), so the app stays where it was.
+ */
+export function linkRow({ ico, tint = 'gold', title, sub, href, id, newTab = false }) {
+  return el(
+    'a',
+    { class: 'row', id, href, ...(newTab ? { target: '_blank', rel: 'noopener' } : {}) },
+    el('span', { class: `tile-ico tint-${tint}` }, icon(ico, 22)),
+    el('span', { class: 'row-text' }, el('b', { text: title }), sub ? el('small', { text: sub }) : null),
+    icon('external', 18),
+  );
+}
+
+/**
  * A download bar: a progressbar with what is done and the phase in words under it. set({fraction, text,
  * phase}) moves the bar (fraction 0 to 1, or null to leave it) and writes the two lines.
  */

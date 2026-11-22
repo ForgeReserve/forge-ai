@@ -96,6 +96,12 @@ describe('the native bridge', () => {
     expect(N.nativeBridge(fakeCapacitor().win)).not.toBeNull();
   });
 
+  it('links More, Privacy to this site\'s page on the website and to Forge\'s engine\'s page in the apps', () => {
+    expect(N.privacyAddress(null)).toBe('/privacy');
+    expect(N.privacyAddress(N.createNative(fakeCapacitor().win))).toBe('https://ai.forge-reserve.com/privacy');
+    expect(N.privacyAddress(N.createNative(iosCapacitor().win))).toBe('https://ai.forge-reserve.com/privacy');
+  });
+
   it('uses this site on the website and Forge\'s engine in the app', () => {
     expect(N.defaultEngine(null)).toBe('');
     expect(N.defaultEngine({})).toBe('https://ai.forge-reserve.com');
