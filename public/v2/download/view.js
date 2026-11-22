@@ -58,27 +58,28 @@ export function deviceOf({ ua, platform, touchPoints } = {}) {
 }
 
 /**
- * The ways to get Forge, in the order the page shows them: `lead`, the ones for this phone, and
- * `other`, the rest under Other ways. Each is 'apk' (the APKs from this site), 'play' (Google Play),
- * 'iphone' (TestFlight or the App Store) or 'web' (Forge in the browser, always there). `ready` says
- * which are there now: {apk, play, iphone}.
- *   An iPhone: the iPhone app and the web app, the one that works first; never an Android way.
- *   Android: the APK and Google Play where they are there; else the web app first, with the APK's card
- *   saying it is not here yet.
- *   A computer: the web app, then the APK when there is one.
- * Under Other ways, the ones that are there come first.
+ * The row of ways under the button, in order, and the one picked first. Each way is 'android' (Forge,
+ * from this site), 'graphene' (Forge Private Voice, from this site; only while the site has it), 'play'
+ * (Google Play), 'iphone' (TestFlight or the App Store) or 'web' (Forge in the browser, always there).
+ * `ready` says which are there now: {apk, graphene, play, iphone}.
+ *   An iPhone: the iPhone app and the browser only, never an Android way; the iPhone app is picked once
+ *   its link is set, else the browser.
+ *   Android: its own ways first; the APK is picked, else Google Play, else the browser.
+ *   A computer: the browser first and picked, then the rest.
  */
-export function waysPlan(device, ready = {}) {
-  const ok = { web: true, apk: !!ready.apk, play: !!ready.play, iphone: !!ready.iphone };
-  if (device === 'ios') return { lead: ok.iphone ? ['iphone', 'web'] : ['web', 'iphone'], other: [] };
-  let lead;
-  if (device === 'android') {
-    lead = ['apk', 'play'].filter((w) => ok[w]);
-    if (!lead.length) lead = ['web', 'apk'];
-  } else lead = ok.apk ? ['web', 'apk'] : ['web'];
-  const rest = ['web', 'apk', 'play', 'iphone'].filter((w) => !lead.includes(w));
-  return { lead, other: [...rest.filter((w) => ok[w]), ...rest.filter((w) => !ok[w])] };
+export function waysRow(device, ready = {}) {
+  const ok = { android: !!ready.apk, graphene: !!ready.graphene, play: !!ready.play, iphone: !!ready.iphone, web: true };
+  const order = device === 'ios' ? ['iphone', 'web'] : device === 'android' ? ['android', 'graphene', 'play', 'iphone', 'web'] : ['web', 'android', 'graphene', 'play', 'iphone'];
+  const ways = order.filter((w) => w !== 'graphene' || ok.graphene).map((id) => ({ id, ready: ok[id] }));
+  const first = device === 'ios' ? ['iphone', 'web'] : device === 'android' ? ['android', 'play', 'web'] : ['web'];
+  return { ways, pick: first.find((w) => ok[w]) };
 }
+
+/**
+ * Where the rings' bright tips point for the way at index i of n: degrees clockwise from the top, spread
+ * over the bottom of the rings so the tips lean towards that way in the row under them.
+ */
+export const tipAngle = (i, n) => (n < 2 ? 180 : Math.round(180 + 40 - (80 * i) / (n - 1)));
 
 /** The web app's address: with an event pass from this page's address (#<pass> or #join=<pass>), it opens a free balance with it. */
 export const webAddress = (pass) => (pass ? webJoin(pass) : '/v2/');

@@ -1,216 +1,221 @@
-// The /download page: every way to get Forge, a card each, with an icon, a word or two and its state.
-// The ways for this phone come first (view.js waysPlan), the rest under Other ways.
-// - Android, from this site: the APK, its version, size and SHA-256 (with Copy), and how to install it.
-//   Where the site also has Forge Private Voice (the APK for GrapheneOS), a choice of two first: Android
-//   or GrapheneOS, an icon and a word each. With no APK, the card says it is not on this site yet.
-// - Google Play: Soon, and no link, until the site has Forge's Play page (FORGE_PLAY_URL).
-// - iPhone: Soon, and no link, until the site has the iPhone app's link (FORGE_IOS_URL). On an iPhone,
-//   with no link, the web app's card shows how to put Forge on the Home Screen (core/getapp.js), opening
-//   Forge first so what goes on the Home Screen is Forge itself. An iPhone is never offered an APK or
-//   any other Android way.
-// - The web app: Open Forge, always. An event pass in this page's address (#<pass>) goes with it.
-// Nothing here is sent anywhere but this site.
-import { appOffer, offerNode, thisPhone } from '../core/getapp.js';
+// The /download page: the app's own button in its two rings, and under it a row of ways to get Forge, a
+// picture and a word each. Picking a way changes what the button does and says, and turns the rings'
+// bright tips towards it. The ways (view.js waysRow):
+// - Android and GrapheneOS, from this site: the button downloads the APK (Forge, or Forge Private Voice).
+//   Under it, quietly: the version, the SHA-256 behind Check (with Copy), and four pictures of how to
+//   install, which play in turn once the download has started. With no APK, Android says Soon.
+// - Google Play: Soon, and no way to pick it, until the site has Forge's Play page (FORGE_PLAY_URL).
+// - iPhone: Soon until the site has the iPhone app's link (FORGE_IOS_URL). An iPhone sees only the
+//   iPhone and the browser, never an Android way; with no link, the browser is picked and the pictures
+//   show how to put Forge on the Home Screen.
+// - The browser: the button opens Forge, with an event pass from this page's address (#<pass>).
+// A Soon way is in the row, dim, marked aria-disabled and left out of the keyboard's way. Nothing here is
+// sent anywhere but this site.
+import { appOffer, thisPhone } from '../core/getapp.js';
 import { t } from '../core/i18n.js';
 import { passFrom } from '../core/join.js';
 import { applyPageLook } from '../core/pagelook.js';
 import { el, icon, sayEl } from '../core/ui.js';
-import { apkChoices, deviceOf, iosStore, storeLink, waysPlan, webAddress } from './view.js';
+import { apkChoices, deviceOf, iosStore, storeLink, tipAngle, waysRow, webAddress } from './view.js';
 
 applyPageLook();
 const phone = thisPhone();
 const device = deviceOf({ ua: navigator.userAgent, platform: navigator.platform, touchPoints: navigator.maxTouchPoints });
 const web = webAddress(passFrom(location.hash));
-document.title = t(device === 'ios' ? 'download.titleIos' : device === 'android' ? 'download.title' : 'download.titleAny');
+document.title = t('download.heading');
 
-/** A few facts as chips under the title, an icon each. */
-const FACTS = {
-  android: [
-    ['noName', 'download.noAccount', 'ink'],
-    ['shield', 'download.noGoogle', 'blue'],
-    ['lock', 'download.private', 'teal'],
-  ],
-  other: [
-    ['noName', 'download.noAccount', 'ink'],
-    ['lock', 'download.private', 'teal'],
-    ['coins', 'download.payEcash', 'gold'],
-  ],
+const main = document.getElementById('main');
+const stage = document.getElementById('stage');
+const row = document.getElementById('ways');
+const more = document.getElementById('downloadBody');
+let go = document.getElementById('downloadGo');
+const still = matchMedia('(prefers-reduced-motion: reduce)');
+main.dataset.device = device;
+
+/** Each way's picture and word in the row, and its name for a screen reader. */
+const WAYS = {
+  android: { ico: 'android', word: 'download.wayAndroid', name: 'download.android' },
+  graphene: { ico: 'shield', word: 'download.wayGraphene', name: 'download.graphene' },
+  play: { ico: 'play', word: 'download.wayPlay', name: 'download.playName' },
+  iphone: { ico: 'apple', word: 'download.wayIphone', name: 'download.iosName' },
+  web: { ico: 'globe', word: 'download.wayWeb', name: 'download.webName' },
 };
 
-const body = el('div', { class: 'dl-body', id: 'downloadBody', 'aria-live': 'polite', 'aria-busy': 'true' });
-document.getElementById('download').replaceChildren(
-  el(
-    'main',
-    { class: 'dl-page', id: 'main', 'data-screen': 'download', 'data-device': device },
-    el(
-      'div',
-      { class: 'dl-hero' },
-      el('img', { class: 'dl-icon', src: '/icons/icon-192.png', width: '192', height: '192', alt: '' }),
-      el('h1', { text: document.title }),
-      el('ul', { class: 'dl-facts' }, ...(FACTS[device] ?? FACTS.other).map(([ico, key, tint]) => el('li', { class: 'fact' }, el('span', { class: `fact-ico i-${tint}` }, icon(ico, 18)), el('span', { text: t(key) })))),
-    ),
-    body,
-  ),
-);
+/** A row of numbered pictures, a word or three under each (the number comes from the list). */
+const pictures = (id, cls, steps) => el('ol', { class: `steps ${cls}`, id }, ...steps.map(([ico, key]) => el('li', { class: cls === 'home' ? 'add-home-step' : '' }, el('span', { class: 'step-ico', 'aria-hidden': 'true' }, icon(ico, 26)), el('span', { class: 'step-word', text: t(key) }))));
 
-/** The round tile with a way's icon. */
-const tile = (ico, tint) => el('span', { class: `way-tile i-${tint}`, 'aria-hidden': 'true' }, icon(ico, 26));
-
-/** A way's state: Ready, or Soon. */
-const tag = (ready) => (ready ? el('span', { class: 'tag-ready' }, icon('check', 14), el('span', { text: t('download.ready') })) : el('span', { class: 'soon', text: t('download.soon') }));
-
-/**
- * A small card: the whole card is a link when the way is there, else a card that is no link and cannot
- * be focused, marked Soon (aria-disabled).
- */
-function card({ way, ico, tint, name, sub, href = null, id, subId }) {
-  const words = el('span', { class: 'way-words' }, el('span', { class: 'way-name', text: name }), el('span', { class: 'way-sub', id: subId, text: sub }));
-  if (href) return el('a', { class: 'way', id, href, 'data-way': way, 'data-state': 'ready' }, tile(ico, tint), words, el('span', { class: 'way-go', 'aria-hidden': 'true' }, icon(href.startsWith('https:') ? 'external' : 'next', 20)));
-  return el('div', { class: 'way', id: `way-${way}`, 'data-way': way, 'data-state': 'soon', 'aria-disabled': 'true', role: 'group', 'aria-label': `${name}, ${t('download.soon')}` }, tile(ico, tint), words, tag(false));
-}
-
-/** The APK card when the site has one: the choice, the button, the version, the SHA-256 and the steps. */
-function apkCard(choices) {
-  let picked = choices[0];
-  const sub = el('span', { class: 'way-sub', id: 'apkSub' });
-  const get = el('a', { class: 'dl-get', id: 'downloadApk' });
-  const hash = el('code', { class: 'dl-hash', id: 'downloadHash' });
-  const about = el('p', { class: 'dl-about', id: 'downloadAbout', hidden: true });
-  const copied = el('span', { class: 'sr-only', id: 'downloadCopied', role: 'status' });
-  const copyWord = el('span', { text: t('download.copy') });
-  const copy = el('button', { type: 'button', class: 'dl-copy', id: 'downloadCopy', 'aria-label': t('download.copyLabel') }, icon('copy', 18), copyWord);
-  let copyTimer = 0;
-  copy.addEventListener('click', async () => {
-    const text = picked.hash.replaceAll(' ', '');
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // No clipboard here: select it, so the phone's own Copy takes it.
-      getSelection()?.selectAllChildren(hash);
-      return;
-    }
-    copy.dataset.done = '1';
-    copy.replaceChildren(icon('check', 18), el('span', { text: t('download.copied') }));
-    copied.textContent = t('download.copied');
-    clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => {
-      delete copy.dataset.done;
-      copy.replaceChildren(icon('copy', 18), copyWord);
-      copied.textContent = '';
-    }, 2500);
-  });
-  const show = () => {
-    get.href = picked.url;
-    get.download = picked.file;
-    get.replaceChildren(icon('download', 22), el('span', { text: t('download.get', { mb: picked.mb }) }));
-    sub.textContent = picked.version ? `${picked.name} · ${t('download.version', { version: picked.version })}` : picked.name;
-    const groups = picked.hash.split(' ');
-    hash.replaceChildren(...groups.flatMap((g, i) => [el('span', { text: g }), i < groups.length - 1 ? ' ' : null]).filter(Boolean));
-  };
-  const pick =
-    choices.length < 2
-      ? null
-      : el(
-          'div',
-          { class: 'apk-pick', role: 'radiogroup', 'aria-label': t('download.pick') },
-          ...choices.map((c) =>
-            el(
-              'div',
-              { class: 'apk-choice' },
-              el('button', { type: 'button', role: 'radio', class: 'apk-kind', id: `apk-${c.id}`, 'aria-checked': String(c === picked), tabindex: c === picked ? '0' : '-1', onclick: () => choose(c) }, icon(c.icon, 22), el('span', { text: t(`download.${c.id}`) })),
-              el('button', { type: 'button', class: 'apk-info', id: `apk-${c.id}-info`, 'aria-label': t('download.about', { name: t(`download.${c.id}`) }), 'aria-controls': 'downloadAbout', 'aria-expanded': 'false', onclick: () => info(c) }, icon('info', 20)),
-            ),
-          ),
-        );
-  function choose(c) {
-    picked = c;
-    for (const b of pick.querySelectorAll('.apk-kind')) {
-      const on = b.id === `apk-${c.id}`;
-      b.setAttribute('aria-checked', String(on));
-      b.tabIndex = on ? 0 : -1;
-    }
-    about.hidden = true;
-    for (const b of pick.querySelectorAll('.apk-info')) b.setAttribute('aria-expanded', 'false');
-    show();
-  }
-  function info(c) {
-    const text = t(`download.${c.id}Info`);
-    about.hidden = !about.hidden && about.textContent === text;
-    about.textContent = text;
-    for (const b of pick.querySelectorAll('.apk-info')) b.setAttribute('aria-expanded', String(!about.hidden && b.id === `apk-${c.id}-info`));
-  }
-  // Arrow keys move along the choice, as a radio group does.
-  pick?.addEventListener('keydown', (e) => {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-    if (!step) return;
-    e.preventDefault();
-    const next = choices[(choices.indexOf(picked) + step + choices.length) % choices.length];
-    choose(next);
-    document.getElementById(`apk-${next.id}`)?.focus();
-  });
-  show();
-  const STEPS = [
-    ['download', 'download.step1'],
-    ['file', 'download.step2'],
-    ['shield', 'download.step3'],
-    ['external', 'download.step4'],
-  ];
-  return el(
-    'section',
-    { class: 'way way-apk', id: 'way-apk', 'data-way': 'apk', 'data-state': 'ready', 'aria-labelledby': 'apkHead' },
-    el('div', { class: 'way-head' }, tile('android', 'teal'), el('span', { class: 'way-words' }, el('h2', { class: 'way-name', id: 'apkHead', text: t('download.apkName') }), sub), tag(true)),
-    ...(pick ? [pick, about] : []),
-    get,
-    el('ul', { class: 'dl-meta' }, el('li', {}, icon('android', 16), el('span', { text: t('download.android9') })), el('li', {}, icon('server', 16), el('span', { text: t('download.apkSub') }))),
-    el(
-      'div',
-      { class: 'dl-check' },
-      el('div', { class: 'dl-check-head' }, el('span', { class: 'dl-label' }, icon('fingerprint', 18), el('h3', { text: t('download.hash') })), copy),
-      hash,
-      copied,
-      sayEl('p', { class: 'dl-note' }, t('download.hashSub')),
-    ),
-    el(
-      'div',
-      { class: 'dl-install' },
-      el('span', { class: 'dl-label' }, icon('check', 18), el('h3', { text: t('download.steps') })),
-      el('ol', { id: 'downloadSteps', class: 'dl-steps' }, ...STEPS.map(([ico, key], i) => el('li', {}, el('span', { class: 'step-ico', 'aria-hidden': 'true' }, icon(ico, 22), el('span', { class: 'step-n', text: String(i + 1) })), el('span', { class: 'step-word', text: t(key) })))),
-      sayEl('p', { class: 'dl-note' }, t('download.update'), '', 'again'),
-    ),
-  );
-}
-
-/** The web app's card: Open Forge, or on an iPhone with nothing else to give, the Home Screen steps. */
-function webCard(offer) {
-  if (offer?.kind === 'addHome') return el('section', { class: 'way way-home', 'data-way': 'web', 'data-state': 'ready' }, offerNode(offer, { el, icon, sayEl }, t, { open: web }));
-  return card({ way: 'web', ico: 'globe', tint: 'teal', name: t('download.webName'), sub: t('download.webSub'), href: web, id: 'openWeb' });
+/** Lets the steps play in turn, from the first. */
+function play(list) {
+  if (!list || still.matches) return;
+  list.removeAttribute('data-play');
+  void list.offsetWidth;
+  list.dataset.play = '';
 }
 
 function draw(info) {
   const choices = device === 'ios' ? [] : apkChoices(info);
+  const apk = Object.fromEntries(choices.map((c) => [c.id, c]));
   const ios = storeLink(info, 'ios');
-  const play = storeLink(info, 'play');
-  const plan = waysPlan(device, { apk: choices.length > 0, play: !!play, iphone: !!ios });
+  const playUrl = storeLink(info, 'play');
+  const { ways, pick } = waysRow(device, { apk: !!apk.android, graphene: !!apk.graphene, play: !!playUrl, iphone: !!ios });
   // On an iPhone, what Get the app offers there (core/getapp.js): the link, the Home Screen steps or nothing.
   const offer = device === 'ios' ? appOffer({ ...phone, iosUrl: ios }) : null;
-  const make = {
-    apk: () => (choices.length ? apkCard(choices) : card({ way: 'apk', ico: 'android', tint: 'teal', name: t('download.apkName'), sub: t('download.coming'), subId: 'downloadComing' })),
-    play: () => card({ way: 'play', ico: 'play', tint: 'green', name: t('download.playName'), sub: t('download.playSub'), href: play, id: 'downloadPlay' }),
-    iphone: () => card({ way: 'iphone', ico: 'apple', tint: 'ink', name: t('download.iosName'), sub: t(ios ? `download.${iosStore(ios)}` : 'download.appstore'), href: ios, id: 'downloadIos' }),
-    web: () => webCard(offer),
+
+  /** What the button does and says for each way: its address, its id, a picture, a word and a quiet line. */
+  const action = {
+    android: () => ({ href: apk.android.url, file: apk.android.file, id: 'downloadApk', ico: 'download', word: t('download.go'), sub: t('download.mb', { mb: apk.android.mb }) }),
+    graphene: () => ({ href: apk.graphene.url, file: apk.graphene.file, id: 'downloadApk', ico: 'download', word: t('download.go'), sub: t('download.mb', { mb: apk.graphene.mb }) }),
+    play: () => ({ href: playUrl, id: 'downloadPlay', ico: 'external', word: t('download.getIt'), sub: t('download.playName') }),
+    iphone: () => ({ href: ios, id: 'downloadIos', ico: 'external', word: t('download.getIt'), sub: t(`download.${iosStore(ios)}`) }),
+    web: () => ({ href: web, id: 'openWeb', ico: 'external', word: t('download.open'), sub: t('download.forge') }),
   };
-  // The APK's big card stands on its own (on a wide screen, the left column); the rest beside it.
-  const big = choices.length > 0 && plan.lead.includes('apk');
-  const leadCards = plan.lead.filter((w) => !(big && w === 'apk')).map((w) => make[w]());
-  const other = plan.other.length
-    ? el('section', { class: 'dl-other', id: 'downloadOther', 'aria-labelledby': 'otherHead' }, el('h2', { class: 'dl-other-head', id: 'otherHead', text: t('download.other') }), el('div', { class: 'dl-grid' }, ...plan.other.map((w) => make[w]())))
-    : null;
-  const side = el('div', { class: 'dl-side' }, leadCards.length ? el('div', { class: 'dl-lead', id: 'downloadLead' }, ...leadCards) : null, other);
-  body.replaceChildren(...(big ? [el('div', { class: 'dl-main' }, apkCard(choices))] : []), side);
-  body.classList.toggle('split', big);
-  if (offer) body.dataset.offer = offer.kind;
-  body.dataset.plan = [...plan.lead, '|', ...plan.other].join(' ');
-  body.removeAttribute('aria-busy');
+
+  /** The quiet part under the row for the way picked. */
+  function details(way) {
+    if (way === 'android' || way === 'graphene') {
+      const c = apk[way];
+      const hash = el('code', { class: 'hash', id: 'downloadHash' }, ...c.hash.split(' ').flatMap((g, i) => [el('span', { text: g }), i < 7 ? ' ' : null]).filter(Boolean));
+      const copied = el('span', { class: 'sr-only', id: 'downloadCopied', role: 'status' });
+      const copyWord = el('span', { text: t('download.copy') });
+      const copy = el('button', { type: 'button', class: 'quiet', id: 'downloadCopy', 'aria-label': t('download.copyLabel') }, icon('copy', 20), copyWord);
+      let timer = 0;
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(c.hash.replaceAll(' ', ''));
+        } catch {
+          // No clipboard here: select it, so the phone's own Copy takes it.
+          getSelection()?.selectAllChildren(hash);
+          return;
+        }
+        copy.dataset.done = '';
+        copy.replaceChildren(icon('check', 20), el('span', { text: t('download.copied') }));
+        copied.textContent = t('download.copied');
+        clearTimeout(timer);
+        timer = setTimeout(() => (delete copy.dataset.done, copy.replaceChildren(icon('copy', 20), copyWord), (copied.textContent = '')), 2500);
+      });
+      const print = el('div', { class: 'print', id: 'downloadPrint', hidden: true }, hash, el('div', { class: 'print-foot' }, sayEl('p', { class: 'note' }, t('download.hashSub')), copy), copied);
+      const check = el('button', { type: 'button', class: 'quiet', id: 'downloadCheck', 'aria-expanded': 'false', 'aria-controls': 'downloadPrint', 'aria-label': t('download.checkLabel') }, icon('fingerprint', 20), el('span', { text: t('download.check') }));
+      check.addEventListener('click', () => {
+        const open = print.hidden;
+        print.hidden = !open;
+        check.setAttribute('aria-expanded', String(open));
+      });
+      // With both APKs, one line on what the one picked is, behind the info button.
+      const about = el('p', { class: 'about', id: 'downloadAbout', hidden: true, text: t(`download.${way}Info`) });
+      const info = apk.android && apk.graphene ? el('button', { type: 'button', class: 'quiet round', id: 'downloadInfo', 'aria-expanded': 'false', 'aria-controls': 'downloadAbout', 'aria-label': t('download.about', { name: t(`download.${way}`) }) }, icon('info', 20)) : null;
+      info?.addEventListener('click', () => {
+        about.hidden = !about.hidden;
+        info.setAttribute('aria-expanded', String(!about.hidden));
+      });
+      const name = way === 'graphene' ? 'Forge Private Voice' : 'Forge';
+      return [
+        el('div', { class: 'line' }, el('span', { class: 'meta', id: 'apkSub', text: c.version ? `${name} · ${t('download.version', { version: c.version })}` : name }), info, check),
+        about,
+        print,
+        el('h2', { class: 'sr-only', text: t('download.steps') }),
+        pictures('downloadSteps', 'install', [
+          ['download', 'download.s1'],
+          ['file', 'download.s2'],
+          ['shield', 'download.s3'],
+          ['external', 'download.s4'],
+        ]),
+        sayEl('p', { class: 'note' }, t('download.update'), '', 'again'),
+      ];
+    }
+    if (way === 'web' && offer?.kind === 'addHome') {
+      // The Home Screen steps, as Safari's own buttons look: open Forge first, so what goes on the Home
+      // Screen is Forge itself. They play in turn.
+      return [el('section', { class: 'add-home', id: 'addHome', 'aria-labelledby': 'addHomeHead' }, el('h2', { class: 'sr-only', id: 'addHomeHead', text: t('getApp.home') }), pictures('addHomeSteps', 'home', [['external', 'getApp.open'], ['iosShare', 'getApp.share'], ['addSquare', 'getApp.add']]))];
+    }
+    return [];
+  }
+
+  /** Shows a way: the button changes face, the rings turn, the details change in place. */
+  let picked = null;
+  function choose(way, { first = false } = {}) {
+    if (way === picked) return;
+    picked = way;
+    const i = ways.findIndex((w) => w.id === way);
+    for (const b of row.querySelectorAll('[role=radio]')) {
+      const on = b.dataset.way === way;
+      b.setAttribute('aria-checked', String(on));
+      if (b.getAttribute('aria-disabled') !== 'true') b.tabIndex = on ? 0 : -1;
+    }
+    row.style.setProperty('--i', String(i));
+    stage.style.setProperty('--a', `${tipAngle(i, ways.length)}deg`);
+    main.dataset.way = way;
+    main.dataset.state = 'ready';
+    const a = action[way]();
+    const face = el('span', { class: 'face' }, icon(a.ico, 34), el('span', { class: 'go-word', text: a.word }), el('span', { class: 'go-sub', text: a.sub }));
+    const next = el('a', { class: 'go', id: a.id, href: a.href }, face);
+    if (a.file) next.download = a.file;
+    next.addEventListener('click', () => started(way));
+    next.addEventListener('pointerdown', () => ripple());
+    const old = go.querySelector('.face');
+    if (!first && !still.matches && old && typeof old.animate === 'function') {
+      // The old face leaves upward as the new one comes up into place.
+      old.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-10px) scale(0.96)' }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+      face.animate([{ opacity: 0, transform: 'translateY(12px) scale(0.96)' }, { opacity: 1, transform: 'none' }], { duration: 420, delay: 120, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
+      setTimeout(() => swap(next), 150);
+    } else swap(next);
+    more.replaceChildren(...details(way));
+    if (!first && !still.matches && typeof more.animate === 'function') more.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 360, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    play(document.getElementById('addHomeSteps'));
+  }
+  function swap(next) {
+    go.replaceWith(next);
+    go = next;
+  }
+
+  /** The download started (or the link is opening): the rings close once around, the button shows a check, and the steps play. */
+  function started(way) {
+    if (way !== 'android' && way !== 'graphene') return;
+    main.dataset.state = 'ready';
+    void stage.offsetWidth;
+    main.dataset.state = 'started';
+    go.querySelector('.face')?.replaceWith(el('span', { class: 'face' }, icon('check', 34), el('span', { class: 'go-word', text: t('download.started') }), el('span', { class: 'go-sub', text: t('download.mb', { mb: apk[way].mb }) })));
+    play(document.getElementById('downloadSteps'));
+  }
+
+  /** A ring of light goes out from the button under the finger. */
+  function ripple() {
+    if (still.matches) return;
+    stage.classList.remove('pressed');
+    void stage.offsetWidth;
+    stage.classList.add('pressed');
+  }
+
+  row.replaceChildren(
+    ...ways.map((w, i) => {
+      const meta = WAYS[w.id];
+      const b = el(
+        'button',
+        { type: 'button', role: 'radio', class: 'way', id: `way-${w.id}`, 'data-way': w.id, 'data-state': w.ready ? 'ready' : 'soon', 'aria-checked': 'false', 'aria-label': w.ready ? t(meta.name) : `${t(meta.name)}, ${t('download.soon')}`, tabindex: '-1' },
+        el('span', { class: 'way-ico', 'aria-hidden': 'true' }, icon(meta.ico, 30)),
+        el('span', { class: 'way-word', 'aria-hidden': 'true', text: w.ready ? t(meta.word) : t('download.soon') }),
+      );
+      b.style.setProperty('--n', String(i));
+      if (w.ready) b.addEventListener('click', () => choose(w.id));
+      else b.setAttribute('aria-disabled', 'true');
+      return b;
+    }),
+    el('span', { class: 'mark', 'aria-hidden': 'true' }),
+  );
+  row.style.setProperty('--count', String(ways.length));
+  // Arrows move along the ways that are there, as in any radio group.
+  row.addEventListener('keydown', (e) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const open = ways.filter((w) => w.ready);
+    const next = open[(open.findIndex((w) => w.id === picked) + step + open.length) % open.length];
+    choose(next.id);
+    document.getElementById(`way-${next.id}`)?.focus();
+  });
+  choose(pick, { first: true });
+  if (offer) more.dataset.offer = offer.kind;
+  more.dataset.plan = ways.map((w) => `${w.id}${w.ready ? '' : '?'}`).join(' ');
+  more.removeAttribute('aria-busy');
 }
 
 let info = null;
@@ -218,6 +223,6 @@ try {
   const res = await fetch('/download/info', { cache: 'no-store', signal: AbortSignal.timeout(6000) });
   info = res.ok ? await res.json() : null;
 } catch {
-  /* offline or no answer: the web app, and the rest as not here yet */
+  /* offline or no answer: the browser, and the rest as Soon */
 }
 draw(info);

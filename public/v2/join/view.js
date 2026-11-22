@@ -9,7 +9,7 @@ export const PACKAGES = { android: 'com.forgereserve.ai', graphene: 'com.forgere
 
 /**
  * Where /j goes: {go} to leave at once, or {show: pass} for the two steps. No pass: the download page
- * (Forge for iPhone on an iPhone).
+ * (on an iPhone, the iPhone and the browser only).
  * Not Android (an iPhone, a computer): the web app. Android with no APK on this site: the web app too.
  */
 export function joinRoute({ hash, ua, apks = 1 }) {

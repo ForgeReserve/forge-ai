@@ -1,216 +1,191 @@
-/* The /download page: every way to get Forge, a card each. The top, the footer, the tokens, the icons
-   and Soon are the landing page's (/about/site.css); this file lays out the cards. A phone first: one
-   column. A wide screen: the Android card on the left, the other ways beside it. The cards come in by
-   transform and opacity only, and stand still under prefers-reduced-motion. */
+/* The /download page: the app's own button in its two rings (gold for money, teal for memory), the word
+   Download, and a row of ways under it. Nothing sits in a box: space, size, type, a hairline and motion
+   hold it together. The top, the footer, the tokens and the icons' style are the landing page's
+   (/about/site.css).
+
+   Motion, by hand and by transform, opacity and stroke-dashoffset only:
+   - the way in: each ring draws from its bright tip all the way round, the tip running ahead of it, then
+     the button comes up and the ways rise one after another;
+   - picking a way: the rings turn so their tips lean towards it, a short teal line slides under it, and
+     the button's face changes (download.js);
+   - a touch: the button gives a little and a ring of light goes out from it;
+   - a download started: light runs once round both rings, the button shows a check, and the steps play
+     in turn, the only thing that repeats;
+   - prefers-reduced-motion: everything as it ends, nothing moving (site.css). */
 :root { --maxw: 1160px; }
 body {
   min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
   background:
-    radial-gradient(70vmax 46vmax at 8% -6%, color-mix(in srgb, var(--gold) 7%, transparent), transparent 70%),
-    radial-gradient(60vmax 44vmax at 100% 4%, color-mix(in srgb, var(--teal) 6%, transparent), transparent 72%),
+    radial-gradient(60vmax 50vmax at 50% 34%, color-mix(in srgb, var(--teal) 7%, transparent), transparent 70%),
+    radial-gradient(70vmax 46vmax at 8% -8%, color-mix(in srgb, var(--gold) 6%, transparent), transparent 70%),
     var(--bg);
   background-repeat: no-repeat;
 }
-.dl-root { flex: 1 0 auto; }
 body > .foot { margin-top: 8px; padding-top: 4px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+h2 { margin: 0; }
 
-h2, h3 { margin: 0; }
-.dl-page {
-  width: 100%; max-width: var(--maxw); margin: 0 auto;
-  padding: 4px max(var(--gutter), env(safe-area-inset-right)) 28px max(var(--gutter), env(safe-area-inset-left));
+.dl {
+  flex: 1 0 auto; width: 100%; max-width: var(--maxw); margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: start;
+  padding: 0 max(var(--gutter), env(safe-area-inset-right)) 24px max(var(--gutter), env(safe-area-inset-left));
+}
+.dl h1 {
+  justify-self: start; margin: 2px 0 0; color: var(--ink);
+  font-size: clamp(36px, 11vw, 48px); line-height: 1; font-weight: 700; letter-spacing: -0.045em;
 }
 
-/* ---------- the title: the app's icon, the name for this phone, three facts ---------- */
-.dl-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 14px; row-gap: 14px; padding: 10px 0 22px; }
-.dl-icon { width: 60px; height: 60px; border-radius: 16px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06); }
-.dl-hero h1 { color: var(--ink); font-size: clamp(28px, 8.4vw, 36px); line-height: 1.06; font-weight: 700; letter-spacing: -0.035em; text-wrap: balance; }
-/* A phone: three tiles in a row, an icon over a word or two. A wide screen: three labels in a line. */
-.dl-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.fact {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-width: 0; padding: 10px 4px 9px; border-radius: 18px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line);
-  color: var(--ink); font-size: 13.5px; font-weight: 600; line-height: 1.15; text-align: center;
+/* ---------- the button in its rings ---------- */
+.stage { --ring: min(84vw, 46vh, 340px); --a: 180deg; position: relative; width: var(--ring); aspect-ratio: 1; margin: 4px 0 0; }
+.rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.turn, .run { transform-box: view-box; transform-origin: 50% 50%; }
+.turn { transform: rotate(var(--a)); transition: transform 0.9s var(--out); }
+.track, .arc, .lit { fill: none; stroke-width: 12.7; }
+.track.gold { stroke: var(--gold); opacity: 0.14; }
+.track.teal { stroke: var(--teal); opacity: 0.13; }
+.arc { stroke-dasharray: 100 100; stroke-dashoffset: 0; }
+.arc.gold { stroke: url(#dlGold); }
+.arc.teal { stroke: url(#dlTeal); }
+.lit { stroke-dasharray: 100 100; stroke-dashoffset: 100; opacity: 0; stroke-linecap: round; }
+.lit.gold { stroke: #FFF3CF; }
+.lit.teal { stroke: #DFFFF7; }
+
+/* The button: the app's talk button, a polished round object in the look's talk colour. */
+.go {
+  --bevel: inset 0 2px 1px rgba(255, 255, 255, 0.22), inset 0 -9px 16px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --drop: 0 18px 26px -12px rgba(20, 22, 26, 0.6), 0 5px 10px rgba(20, 22, 26, 0.16);
+  position: absolute; inset: 19.65%; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
+  background-color: var(--talk, var(--primary));
+  background-image:
+    radial-gradient(115% 115% at 30% 20%, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.05) 30%, rgba(255, 255, 255, 0) 52%),
+    radial-gradient(55% 55% at 80% 88%, rgba(63, 207, 180, 0.2), rgba(63, 207, 180, 0) 72%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.36) 100%);
+  box-shadow: var(--bevel), var(--drop);
+  color: var(--talk-ink, var(--primary-ink)); text-decoration: none; -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms var(--out);
 }
-.fact-ico { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); flex: none; }
-.fact-ico .ico { width: 18px; height: 18px; }
-/* The tints of the landing page's labels. */
-.i-ink { color: var(--ink); }
-.i-teal { color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, var(--surface)); }
-.i-gold { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--surface)); }
-.i-blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
-.i-green { color: var(--green, var(--teal)); background: color-mix(in srgb, var(--green, var(--teal)) 13%, var(--surface)); }
+.go:focus-visible { outline-offset: 6px; border-radius: 50%; }
+.go:active { transform: scale(0.97); }
+.face { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.face .ico { width: 34px; height: 34px; stroke-width: 2.2; margin-bottom: 4px; }
+.go-word { font-size: clamp(17px, 5.2vw, 21px); font-weight: 750; letter-spacing: -0.015em; line-height: 1.1; }
+.go-sub { font-size: 13.5px; font-weight: 600; line-height: 1.2; color: color-mix(in srgb, var(--talk-ink, var(--primary-ink)) 72%, var(--talk, var(--primary))); }
+.ripple { position: absolute; inset: 19.65%; border-radius: 50%; border: 2px solid var(--teal); opacity: 0; pointer-events: none; }
 
-/* ---------- the cards ---------- */
-.dl-body { display: grid; gap: 14px; }
-.dl-main, .dl-side, .dl-lead { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.dl-side { gap: 14px; }
-
+/* ---------- the ways: a picture and a word each, the one picked lit, a teal line under it ---------- */
+.ways-wrap { width: 100%; max-width: 460px; margin-top: 6px; display: flex; justify-content: center; }
+/* A cell for each way, as wide as the row allows up to 92 px, so two ways sit together and five fill a phone. */
+.ways { --i: 0; --count: 1; position: relative; width: min(100%, calc(var(--count) * 92px)); display: grid; grid-template-columns: repeat(var(--count), minmax(0, 1fr)); }
 .way {
-  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px;
-  min-height: 80px; padding: 14px 16px 14px 14px; border-radius: 22px;
-  background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  color: var(--ink); text-decoration: none; -webkit-tap-highlight-color: transparent;
+  min-width: 0; min-height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 6px 0 14px;
+  border: 0; background: none; color: var(--text-body); cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-a.way:hover { background: var(--surface-2); border-color: var(--line-2); }
-a.way:focus-visible { border-radius: 22px; }
-.way-tile { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--surface-2); box-shadow: var(--shadow-raised-sm); }
-.way-tile .ico { width: 25px; height: 25px; }
-.way-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.way-name { color: inherit; font-size: 17px; font-weight: 650; line-height: 1.2; letter-spacing: -0.01em; }
-.way-sub { color: var(--text-2); font-size: 14px; font-weight: 500; line-height: 1.3; }
-.way-go { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); }
-.way-go .ico { width: 19px; height: 19px; }
-.way .soon, .tag-ready { justify-self: end; white-space: nowrap; line-height: 1.35; }
-.tag-ready { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 7px; border-radius: 999px; background: var(--teal-tint); color: var(--teal); border: 1px solid var(--teal-line); font-size: 13px; font-weight: 700; }
-.tag-ready .ico { width: 14px; height: 14px; stroke-width: 2.6; }
+.way-ico { display: grid; place-items: center; transition: transform 0.45s var(--out); }
+.way-ico .ico { width: 30px; height: 30px; stroke-width: 1.8; }
+.way-word { max-width: 100%; color: var(--text-2); font-size: 13px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; white-space: nowrap; }
+.way[aria-checked="true"] { color: var(--ink); }
+.way[aria-checked="true"] .way-ico { transform: translateY(-2px) scale(1.12); }
+.way[aria-checked="true"] .way-word { color: var(--ink); }
+.way[data-state="soon"] { cursor: default; }
+.way[data-state="soon"] .way-ico { opacity: 0.42; }
+.mark { position: absolute; left: 0; bottom: 6px; width: calc(100% / var(--count)); height: 2px; display: flex; justify-content: center; transform: translateX(calc(var(--i) * 100%)); transition: transform 0.5s var(--out); pointer-events: none; }
+.mark::after { content: ""; width: 22px; height: 2px; background: var(--teal); }
 
-/* A way that is not there yet: no link, a dashed edge, a quiet icon and Soon. Its words stay readable. */
-.way[data-state="soon"] { background: color-mix(in srgb, var(--surface) 45%, transparent); border: 1px dashed var(--line-2); box-shadow: none; }
-.way[data-state="soon"] .way-tile { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-2); }
-.way[data-state="soon"] .way-name { color: var(--text-2); }
+/* ---------- the quiet part: plain small type, a hairline, revealed in place ---------- */
+.more { width: 100%; max-width: 460px; display: grid; gap: 12px; justify-items: center; text-align: center; margin-top: 4px; }
+.line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 4px; }
+.meta { color: var(--text-2); font-size: 14px; font-weight: 550; margin-right: 6px; }
+.quiet {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; min-width: 48px; padding: 0 10px;
+  border: 0; background: none; color: var(--text-body); font-size: 14.5px; font-weight: 650; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.quiet .ico { width: 20px; height: 20px; }
+.quiet:hover, .quiet[aria-expanded="true"] { color: var(--ink); }
+.quiet[aria-expanded="true"] .ico { color: var(--gold); }
+.quiet[data-done] { color: var(--teal); }
+.round { padding: 0; }
+.about { max-width: 30em; margin: -4px 0 0; color: var(--text-body); font-size: 15px; line-height: 1.4; }
+.print { width: 100%; padding-top: 12px; border-top: 1px solid var(--line); }
+.hash {
+  display: grid; grid-template-columns: repeat(4, max-content); justify-content: center; gap: 2px 12px;
+  font-family: var(--mono); font-size: 14px; line-height: 1.65; letter-spacing: 0.03em; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.print-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; text-align: left; }
+.note { color: var(--text-2); font-size: 13.5px; font-weight: 500; line-height: 1.35; }
 
-/* ---------- Android, from this site: the big card ---------- */
-.way-apk {
-  container: apk / inline-size;
-  display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 16px; border-radius: 26px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--teal) 6%, var(--surface)), var(--surface) 160px);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-.way-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; }
-.way-apk .way-name { font-size: 20px; }
-
-/* The choice of two: on a phone one row each, an icon and a word, with the info button at the end;
-   wider, side by side. */
-.apk-pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); }
-.apk-choice { display: flex; align-items: stretch; min-width: 0; border-radius: 16px; }
-.apk-kind {
-  flex: 1; min-width: 0; min-height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 0 4px 0 14px;
-  border: 0; border-radius: 16px 0 0 16px; background: transparent; color: var(--text-2); font-size: 15.5px; font-weight: 650; cursor: pointer;
-}
-.apk-kind span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.apk-kind .ico { width: 21px; height: 21px; }
-@container apk (min-width: 480px) {
-  .apk-pick { grid-template-columns: 1fr 1fr; gap: 6px; }
-  .apk-kind { justify-content: center; gap: 8px; padding: 0 4px 0 10px; font-size: 15px; }
-}
-.apk-info { flex: none; width: 48px; min-height: 52px; display: grid; place-items: center; border: 0; border-radius: 0 16px 16px 0; background: transparent; color: var(--text-2); cursor: pointer; }
-.apk-info .ico { width: 19px; height: 19px; }
-.apk-choice:has([aria-checked="true"]) { background: var(--surface-2); box-shadow: var(--shadow-raised-sm); }
-.apk-kind[aria-checked="true"], .apk-choice:has([aria-checked="true"]) .apk-info { color: var(--ink); }
-.apk-kind[aria-checked="true"] .ico { color: var(--teal); }
-.apk-info[aria-expanded="true"] { color: var(--ink); }
-.dl-about { margin: -6px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); color: var(--text-body); font-size: 15px; line-height: 1.4; }
-
-.dl-get {
-  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 58px; padding: 0 20px; border-radius: 29px;
-  background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary);
-  font-size: 17px; font-weight: 700; text-decoration: none; text-align: center; -webkit-tap-highlight-color: transparent;
-}
-.dl-get .ico { width: 22px; height: 22px; stroke-width: 2.3; }
-.dl-get:hover { filter: brightness(1.04); }
-.dl-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: -4px 0 0; padding: 0; list-style: none; color: var(--text-2); font-size: 14px; font-weight: 550; }
-.dl-meta li { display: inline-flex; align-items: center; gap: 6px; }
-.dl-meta .ico { width: 16px; height: 16px; }
-
-/* The fingerprint: eight groups of eight, four to a row where they fit, and Copy. */
-.dl-check { container-type: inline-size; padding: 12px 14px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); }
-.dl-check-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.dl-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
-.dl-label .ico { width: 18px; height: 18px; color: var(--gold); }
-.dl-label h3 { font-size: 15px; font-weight: 650; letter-spacing: 0; }
-.dl-copy {
-  display: inline-flex; align-items: center; gap: 7px; min-height: 48px; padding: 0 16px; margin-right: -6px; border-radius: 24px;
-  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 14.5px; font-weight: 650; cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.dl-copy .ico { width: 18px; height: 18px; }
-.dl-copy:hover { border-color: var(--text-2); }
-.dl-copy[data-done] { border-color: var(--teal-line); background: var(--teal-tint); color: var(--teal); }
-.dl-hash {
-  display: grid; grid-template-columns: repeat(2, max-content); justify-content: start; gap: 2px 16px; margin: 8px 0 4px;
-  font-family: var(--mono); font-size: 15px; line-height: 1.6; letter-spacing: 0.03em; color: var(--ink); font-variant-numeric: tabular-nums;
-}
-@container (min-width: 280px) { .dl-hash { grid-template-columns: repeat(4, max-content); gap: 2px 10px; font-size: 13px; } }
-@container (min-width: 380px) { .dl-hash { gap: 2px 16px; font-size: 15px; } }
-
-/* The steps, an icon each with its number, then how to update. */
-.dl-install { container-type: inline-size; display: grid; gap: 12px; padding: 2px 2px 0; }
-.dl-steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.dl-steps li { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.step-ico { position: relative; flex: none; width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-raised-sm); }
-.step-ico .ico { width: 22px; height: 22px; }
-.step-n { position: absolute; top: -6px; left: -6px; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 800; line-height: 1; }
-.step-word { color: var(--ink); font-size: 16px; font-weight: 600; line-height: 1.3; }
-@container (min-width: 560px) {
-  .dl-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .dl-steps li { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .step-word { font-size: 15px; }
-}
-
-/* The short notes (core/ui.js say): the first sentence, and the rest behind a round info button. */
-.say { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+/* Numbered pictures, a word or three under each, along one hairline. */
+.steps { --cnt: 4; position: relative; width: 100%; display: grid; grid-template-columns: repeat(var(--cnt), minmax(0, 1fr)); gap: 4px; margin: 4px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); list-style: none; counter-reset: step; }
+.steps.home { --cnt: 3; margin-top: 10px; }
+.steps li { counter-increment: step; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; padding: 0 3px; }
+.step-ico { position: relative; width: 52px; height: 48px; display: grid; place-items: center; color: var(--ink); }
+.step-ico .ico { width: 26px; height: 26px; stroke-width: 1.9; }
+.step-ico::before { content: counter(step); position: absolute; top: -4px; left: 0; color: var(--gold-ink); font-size: 13px; font-weight: 750; }
+.step-word { color: var(--text-body); font-size: 13.5px; font-weight: 600; line-height: 1.25; text-wrap: balance; }
+.steps::after { content: ""; position: absolute; top: -1px; left: 0; width: calc(100% / var(--cnt)); height: 2px; background: linear-gradient(90deg, transparent, var(--teal), transparent); opacity: 0; }
+.say { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: 8px; }
 .say > .ico { flex: none; width: 18px; height: 18px; }
-.say > .say-head { flex: 1 1 0; min-width: 0; }
 .say > .info-btn { margin: -12px -10px -12px 0; }
 .say > .info-more { flex-basis: 100%; order: 5; }
-.info-btn { flex: none; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.info-btn { flex: none; width: 48px; height: 48px; padding: 0; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .info-btn .ico { width: 19px; height: 19px; }
-.info-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--ink); }
-.info-more { display: block; margin: 0 0 4px; font-size: 14.5px; font-weight: 400; line-height: 1.4; color: var(--text-body); }
-.dl-note { color: var(--text-2); font-size: 14px; font-weight: 500; line-height: 1.35; }
+.info-btn[aria-expanded="true"] { color: var(--ink); }
+.info-more { display: block; margin: 0 0 4px; font-size: 14px; line-height: 1.4; color: var(--text-body); }
 
-/* ---------- the web app on an iPhone with nothing else to give: the Home Screen steps ---------- */
-.way-home { display: block; padding: 16px; border-radius: 26px; }
-.way-home .add-home { display: grid; gap: 14px; }
-.way-home .add-home > p { color: var(--ink); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.add-home-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.add-home-step { display: flex; align-items: center; gap: 14px; color: var(--ink); font-size: 17px; font-weight: 600; }
-.add-home-ico { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-raised-sm); }
-.add-home-ico .ico { width: 24px; height: 24px; }
-.way-home .btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 58px; padding: 0 20px; border-radius: 29px;
-  background: var(--primary); color: var(--primary-ink); box-shadow: var(--shadow-primary); font-size: 17px; font-weight: 700; text-decoration: none;
-}
-.way-home .btn .ico { width: 21px; height: 21px; }
-
-/* ---------- Other ways: a quiet label, then the cards ---------- */
-.dl-other { display: grid; gap: 10px; margin-top: 10px; }
-.dl-other-head { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-size: 15px; font-weight: 650; letter-spacing: 0; }
-.dl-other-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.dl-grid { display: grid; gap: 10px; }
-
-/* ---------- a wide screen ---------- */
-@media (min-width: 720px) {
-  .dl-hero { grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; padding: 24px 0 32px; }
-  .dl-icon { width: 76px; height: 76px; border-radius: 20px; }
-  .dl-hero h1 { font-size: clamp(40px, 5vw, 58px); line-height: 1.02; letter-spacing: -0.04em; }
-  .dl-facts { grid-column: 2; display: flex; flex-wrap: wrap; }
-  .fact { flex-direction: row; gap: 8px; padding: 4px 14px 4px 4px; border-radius: 999px; font-size: 14px; white-space: nowrap; }
-  .fact-ico { width: 30px; height: 30px; }
-  .fact-ico .ico { width: 17px; height: 17px; }
-  .dl-lead, .dl-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-  .way-apk { padding: 22px; gap: 18px; }
-}
-@media (min-width: 980px) {
-  .dl-page { padding-top: 8px; }
-  /* The Android card on the left; the rest beside it, in one column. */
-  .dl-body.split { grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 22px; align-items: start; }
-  .dl-body.split .dl-lead, .dl-body.split .dl-grid { grid-template-columns: minmax(0, 1fr); }
-  .dl-body.split .dl-other { margin-top: 8px; }
-  .dl-body:not(.split) .dl-lead { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-  .dl-body:not(.split) .dl-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+/* ---------- a wide screen: the word and the ways on the left, the button on the right ---------- */
+@media (min-width: 900px) {
+  .dl {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); grid-template-rows: minmax(24px, 1fr) auto auto auto minmax(24px, 1fr);
+    grid-template-areas: ". stage" "head stage" "ways stage" "more stage" ". stage";
+    column-gap: clamp(24px, 4vw, 72px); justify-items: start; min-height: min(760px, calc(100dvh - 140px));
+  }
+  .dl h1 { grid-area: head; font-size: clamp(64px, 7vw, 112px); letter-spacing: -0.05em; }
+  .stage { grid-area: stage; --ring: min(42vw, 68vh, 600px); align-self: center; justify-self: center; margin: 0; }
+  .ways-wrap { grid-area: ways; max-width: 520px; margin-top: 28px; justify-content: flex-start; }
+  .ways { width: calc(var(--count) * 100px); margin-left: -30px; }
+  .way-ico .ico { width: 34px; height: 34px; }
+  .way-word { font-size: 14px; }
+  .more { grid-area: more; max-width: 480px; justify-items: start; text-align: left; margin-top: 8px; }
+  .line, .say { justify-content: flex-start; }
+  .line { margin-left: -10px; }
+  .hash { justify-content: start; }
+  .go-word { font-size: clamp(22px, 2.2vw, 34px); }
+  .go-sub { font-size: clamp(14px, 1.1vw, 17px); }
+  .face .ico { width: clamp(38px, 3.2vw, 52px); height: clamp(38px, 3.2vw, 52px); }
 }
 
-/* ---------- motion: the way in ---------- */
+/* ---------- motion ---------- */
 @media (prefers-reduced-motion: no-preference) {
-  .dl-hero { animation: rise 0.9s var(--out) 0.05s both; }
-  .way { animation: rise 0.8s var(--out) both; }
-  .dl-main .way, .dl-lead > :nth-child(1) { animation-delay: 0.12s; }
-  .dl-lead > :nth-child(2) { animation-delay: 0.18s; }
-  .dl-lead > :nth-child(3) { animation-delay: 0.24s; }
-  .dl-other { animation: fade-in 0.8s ease 0.3s both; }
-  .dl-grid .way { animation-delay: 0.32s; }
-  .dl-grid .way:nth-child(2) { animation-delay: 0.38s; }
-  .dl-grid .way:nth-child(3) { animation-delay: 0.44s; }
-  a.way, .apk-kind, .apk-info, .dl-copy, .info-btn { transition: background-color 0.15s, border-color 0.15s, color 0.2s; }
-  .dl-get:active, .dl-copy:active, .way-home .btn:active { transform: scale(0.985); }
+  .dl h1 { animation: rise 0.9s var(--out) 0.05s both; }
+  .arc { animation: draw 1.5s var(--out) 0.15s both; }
+  .arc.teal { animation-delay: 0.32s; }
+  .run { animation: run 1.5s var(--out) 0.15s both; }
+  .run-teal { animation-delay: 0.32s; }
+  .tip { animation: fade-in 0.4s ease 0.15s both; }
+  .go { animation: pop 0.9s var(--out) 0.55s both; }
+  .way { animation: rise 0.8s var(--out) both; animation-delay: calc(0.7s + var(--n, 0) * 0.06s); }
+  .mark { animation: fade-in 0.6s ease 1s both; }
+  .more { animation: fade-in 0.8s ease 1s both; }
+  .way-word, .quiet { transition: color 0.2s; }
+  /* A touch: a ring of light goes out from the button. */
+  .stage.pressed .ripple { animation: ripple 0.7s cubic-bezier(0.2, 0.6, 0.3, 1) both; }
+  /* Started: light runs once round both rings, the teal a moment after the gold. */
+  .dl[data-state="started"] .lit { animation: sweep 1.2s var(--io) both; }
+  .dl[data-state="started"] .lit.teal { animation-delay: 0.12s; }
+  .dl[data-state="started"] .go .face { animation: pop 0.6s var(--out) both; }
+  .print:not([hidden]), .about:not([hidden]) { animation: open 0.45s var(--out) both; }
+  /* The steps, one after another, again and again, while they play. */
+  .steps[data-play] li .step-ico { animation: step-lit calc(var(--cnt) * 1.2s) var(--io) infinite; }
+  .steps[data-play] li:nth-child(2) .step-ico { animation-delay: 1.2s; }
+  .steps[data-play] li:nth-child(3) .step-ico { animation-delay: 2.4s; }
+  .steps[data-play] li:nth-child(4) .step-ico { animation-delay: 3.6s; }
+  .steps.install[data-play]::after { opacity: 1; animation: walk4 4.8s var(--io) infinite; }
+  .steps.home[data-play]::after { opacity: 1; animation: walk3 3.6s var(--io) infinite; }
 }
+@keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes run { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes pop { from { opacity: 0; transform: scale(0.86); } to { opacity: 1; transform: none; } }
+@keyframes ripple { from { opacity: 0.7; transform: scale(1); } to { opacity: 0; transform: scale(1.32); } }
+@keyframes sweep { 0% { opacity: 0.85; stroke-dashoffset: 100; } 75% { opacity: 0.85; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+@keyframes open { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes step-lit { 0% { transform: none; } 6%, 20% { transform: translateY(-4px) scale(1.16); } 27%, 100% { transform: none; } }
+@keyframes walk4 { 0%, 20% { transform: translateX(0); } 25%, 45% { transform: translateX(100%); } 50%, 70% { transform: translateX(200%); } 75%, 95% { transform: translateX(300%); } 100% { transform: translateX(300%); } }
+@keyframes walk3 { 0%, 27% { transform: translateX(0); } 33%, 60% { transform: translateX(100%); } 66%, 94% { transform: translateX(200%); } 100% { transform: translateX(200%); } }

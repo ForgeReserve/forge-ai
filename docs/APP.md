@@ -88,7 +88,7 @@ The site's front page. `public/about/index.html` is a static page that says what
 
 ## The download page (`/download`)
 
-Every way to get Forge, as cards in the landing page's look: Android from this site, Google Play, iPhone, and the web app, each with its state (Ready, or Soon and no link). The ways for the visitor's phone come first. What each card shows and when: [ANDROID.md](ANDROID.md), Install. Tested by `test/unit/download.test.ts` and `test/ui/download.ui.test.ts`.
+One word, **Download**, the app's own button in its gold and teal rings, and a row of ways under it, a picture and a word each: Android and GrapheneOS from this site, Google Play, iPhone and the browser, each there or dim with Soon. Picking one changes what the button does and turns the rings towards it; the version, size, SHA-256 and install steps sit quietly under the row, in plain type, without boxes. What each way does and when: [ANDROID.md](ANDROID.md), Install. Tested by `test/unit/download.test.ts` and `test/ui/download.ui.test.ts`.
 
 ## The privacy page (`/privacy`)
 
