@@ -15,7 +15,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Raise versionCode by one for every APK published at /download, or phones will not update.
-        versionCode 3
+        versionCode 4
         versionName appVersion
         aaptOptions {
             // Files and dirs to omit from the packaged assets dir (Capacitor's default).
